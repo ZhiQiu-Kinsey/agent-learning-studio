@@ -1,26 +1,31 @@
 import { Component, Suspense, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { lessonExtensions } from "./registry";
 import type { LessonExtensionSlots } from "./types";
 
-const labels = { guide: "课程导读", lab: "实验工作台", inspector: "执行观察" };
-
 function Fallback({
-  label,
+  slot,
   reason,
   children,
 }: {
-  label: string;
-  reason: string;
+  slot: keyof LessonExtensionSlots;
+  reason: "unavailable" | "failed";
   children: ReactNode;
 }) {
+  const { t } = useTranslation("lab");
   return (
     <>
       <div className="workspace-error" role="alert">
-        {label}的专属视图{reason}，已显示通用界面。课程内容和运行记录仍可使用。
+        {t(`extension.${reason}`, { slot: t(`extension.slot.${slot}`) })}
       </div>
       {children}
     </>
   );
+}
+
+function ExtensionLoading() {
+  const { t } = useTranslation("lab");
+  return <p role="status">{t("extension.loading")}</p>;
 }
 
 class ExtensionBoundary extends Component<
@@ -50,7 +55,7 @@ export function LessonExtension<Slot extends keyof LessonExtensionSlots>(
     : undefined;
   if (!Extension)
     return (
-      <Fallback label={labels[slot]} reason="暂不可用">
+      <Fallback slot={slot} reason="unavailable">
         {props.children}
       </Fallback>
     );
@@ -58,7 +63,7 @@ export function LessonExtension<Slot extends keyof LessonExtensionSlots>(
     <ExtensionBoundary
       key={`${props.studio.lessonId}:${slot}:${extensionKey}`}
       fallback={
-        <Fallback label={labels[slot]} reason="加载失败">
+        <Fallback slot={slot} reason="failed">
           {props.children}
         </Fallback>
       }
@@ -66,7 +71,7 @@ export function LessonExtension<Slot extends keyof LessonExtensionSlots>(
       <Suspense
         fallback={
           <>
-            <p role="status">正在准备本课专属视图…</p>
+            <ExtensionLoading />
             {props.children}
           </>
         }

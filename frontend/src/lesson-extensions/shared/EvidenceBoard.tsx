@@ -6,6 +6,7 @@ import {
   ExternalLink,
   XCircle,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../../motion";
 import type { InspectorExtensionProps } from "../types";
 import { Button } from "../../components/ui/button";
@@ -25,6 +26,7 @@ export default function EvidenceBoard({
   studio,
   children,
 }: InspectorExtensionProps) {
+  const { t } = useTranslation("lab", { keyPrefix: "evidence" });
   const reduced = useReducedMotion();
   const reports = studio.visible
     .map((event, index) => ({ event, index }))
@@ -50,22 +52,22 @@ export default function EvidenceBoard({
   return (
     <>
       {children}
-      <section className="evidence-board" aria-label="本课实验报告">
+      <section className="evidence-board" aria-label={t("region")}>
         <header className="evidence-board-heading">
           <span>
             <ClipboardCheck size={17} />
-            实验报告
+            {t("title")}
           </span>
-          <small>随运行证据与回放同步</small>
+          <small>{t("sync")}</small>
         </header>
         {!selected || !report ? (
           <p className="evidence-board-empty">
-            运行一个练习，查看本课的检查结果、对照数据和结论。
+            {t("empty")}
           </p>
         ) : (
           <>
             {reports.length > 1 && (
-              <nav className="evidence-report-tabs" aria-label="切换实验报告">
+              <nav className="evidence-report-tabs" aria-label={t("switch")}>
                 {reports.map(({ event, index }, number) => (
                   <button
                     type="button"
@@ -73,7 +75,7 @@ export default function EvidenceBoard({
                     aria-pressed={selected.index === index}
                     onClick={() => studio.selectEvent(index)}
                   >
-                    {text(event.data.title, `报告 ${number + 1}`)}
+                    {text(event.data.title, t("reportN", { n: number + 1 }))}
                   </button>
                 ))}
               </nav>
@@ -88,15 +90,15 @@ export default function EvidenceBoard({
                 transition={{ duration: reduced ? 0 : 0.18 }}
               >
                 <div className="evidence-report-title">
-                  <h3>{text(report.title, "本次实验结果")}</h3>
+                  <h3>{text(report.title, t("defaultTitle"))}</h3>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => studio.selectEvent(selected.index)}
-                    aria-label="查看报告原始事件"
+                    aria-label={t("rawLabel")}
                   >
                     <ExternalLink size={13} />
-                    原始记录
+                    {t("raw")}
                   </Button>
                 </div>
                 {typeof report.summary === "string" && (
@@ -106,8 +108,8 @@ export default function EvidenceBoard({
                   <dl className="evidence-metrics">
                     {metrics.slice(0, 12).map((metric, index) => (
                       <div key={index}>
-                        <dt>{text(metric.label, `指标 ${index + 1}`)}</dt>
-                        <dd>{text(metric.value, "未提供")}</dd>
+                        <dt>{text(metric.label, t("metricN", { n: index + 1 }))}</dt>
+                        <dd>{text(metric.value, t("notProvided"))}</dd>
                       </div>
                     ))}
                   </dl>
@@ -139,7 +141,7 @@ export default function EvidenceBoard({
                           <Icon size={16} aria-hidden="true" />
                           <div>
                             <strong>
-                              {text(check.label, `检查 ${index + 1}`)}
+                              {text(check.label, t("checkN", { n: index + 1 }))}
                             </strong>
                             {typeof check.detail === "string" && (
                               <p>{check.detail}</p>
@@ -147,10 +149,10 @@ export default function EvidenceBoard({
                           </div>
                           <span>
                             {passed === true
-                              ? "通过"
+                              ? t("passed")
                               : passed === false
-                                ? "未通过"
-                                : "未判定"}
+                                ? t("failed")
+                                : t("undecided")}
                           </span>
                         </li>
                       );
@@ -183,7 +185,7 @@ export default function EvidenceBoard({
                   metrics.length > 12 ||
                   checks.length > 24) && (
                   <p className="evidence-report-note">
-                    这里显示摘要，完整数据可在原始记录中查看。
+                    {t("truncated")}
                   </p>
                 )}
               </motion.div>

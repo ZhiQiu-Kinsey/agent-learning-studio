@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Check, LoaderCircle, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { jsonFetch } from "../../api";
 import type { ProviderCatalog, ProviderProfile } from "../../types";
 import { Button } from "../ui/button";
@@ -25,6 +26,7 @@ export function ModelSettings({
   onSaved,
   triggerRef,
 }: Props) {
+  const { t } = useTranslation("settings");
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [providerId, setProviderId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -143,12 +145,12 @@ export function ModelSettings({
         }}
       >
         <div className="connection-dialog-heading">
-          <DialogTitle>模型连接设置</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="关闭连接设置"
+            aria-label={t("close")}
             disabled={saving}
             onClick={close}
           >
@@ -156,32 +158,32 @@ export function ModelSettings({
           </Button>
         </div>
         <DialogDescription>
-          选择服务商与模型，每个服务商分别保存连接配置。
+          {t("description")}
         </DialogDescription>
         {loading && (
           <p className="connection-status" role="status">
             <LoaderCircle size={15} className="connection-spinner" />{" "}
-            正在读取服务商配置…
+            {t("loading")}
           </p>
         )}
         {loadError && (
           <div className="connection-error" role="alert">
-            服务商配置加载失败：{loadError}
+            {t("loadFailed", { reason: loadError })}
             <Button
               type="button"
               variant="ghost"
               onClick={() => setAttempt((value) => value + 1)}
             >
-              重试
+              {t("retry")}
             </Button>
           </div>
         )}
         <form className="connection-form" onSubmit={save}>
           <div className="form-field">
-            <span className="form-field-label">服务商</span>
+            <span className="form-field-label">{t("provider")}</span>
             <GlideSelect
               className="connection-provider"
-              ariaLabel="服务商"
+              ariaLabel={t("provider")}
               value={providerId}
               onChange={changeProvider}
               disabled={disabled}
@@ -197,12 +199,12 @@ export function ModelSettings({
                 value: item.id,
                 label: item.label,
               }))}
-              placeholder="请选择服务商"
+              placeholder={t("providerPlaceholder")}
             />
           </div>
           <div className="form-field">
             <label className="form-field-label" htmlFor="connection-model">
-              模型 ID
+              {t("model")}
             </label>
             <Input
               id="connection-model"
@@ -210,13 +212,13 @@ export function ModelSettings({
               onChange={(event) => setModelId(event.target.value)}
               disabled={disabled}
               autoComplete="off"
-              placeholder="填写服务商提供的模型 ID"
+              placeholder={t("modelPlaceholder")}
             />
           </div>
           {provider?.supports_custom_base_url && (
             <div className="form-field">
               <label className="form-field-label" htmlFor="connection-base">
-                API Base URL（可选）
+                {t("baseUrl")}
               </label>
               <Input
                 id="connection-base"
@@ -227,15 +229,15 @@ export function ModelSettings({
                 autoComplete="off"
                 placeholder={
                   provider.base_url_configured
-                    ? "地址已配置，留空保留已有配置"
-                    : "留空使用服务商默认地址"
+                    ? t("baseUrlConfigured")
+                    : t("baseUrlDefault")
                 }
               />
             </div>
           )}
           <div className="form-field">
             <label className="form-field-label" htmlFor="connection-key">
-              API Key（可选）
+              {t("apiKey")}
             </label>
             <Input
               id="connection-key"
@@ -246,27 +248,27 @@ export function ModelSettings({
               autoComplete="off"
               placeholder={
                 provider?.api_key_configured
-                  ? "密钥已配置，留空保留已有密钥"
-                  : "填写当前服务商的密钥"
+                  ? t("apiKeyConfigured")
+                  : t("apiKeyPlaceholder")
               }
             />
           </div>
           <p className="connection-note">
-            密钥与自定义地址只保存在本次后端进程内存中。留空保留已有配置。
+            {t("storageNote")}
           </p>
           {!modelId.trim() && !loading && (
-            <p className="connection-error">请填写模型 ID，再保存连接配置。</p>
+            <p className="connection-error">{t("modelRequired")}</p>
           )}
           {provider &&
             provider.requires_api_key !== false &&
             !provider.api_key_configured &&
             !apiKey.trim() && (
               <p className="connection-note">
-                当前服务商尚未配置 API Key，填写密钥后才能运行真实模型。
+                {t("keyMissing")}
               </p>
             )}
           {provider?.requires_api_key === false && (
-            <p className="connection-note">此服务无需 API Key，留空即可。</p>
+            <p className="connection-note">{t("keyNotRequired")}</p>
           )}
           {error && (
             <p className="connection-error" role="alert">
@@ -283,7 +285,7 @@ export function ModelSettings({
             ) : (
               <Check size={15} />
             )}
-            保存模型配置
+            {t("save")}
           </Button>
         </form>
       </DialogContent>

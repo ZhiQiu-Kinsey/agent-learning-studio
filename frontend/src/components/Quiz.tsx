@@ -1,15 +1,17 @@
 import { useId, useState } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { QuizQuestion } from "../types";
 import { Button } from "./ui/button";
 import JellyRadio from "./react-bits/JellyRadio";
 
 export function Quiz({ questions }: { questions: QuizQuestion[] }) {
+  const { t } = useTranslation("quiz");
   const quizId = useId();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
   if (!questions.length)
-    return <div className="quiz-empty">这节课暂未提供自测题。</div>;
+    return <div className="quiz-empty">{t("empty")}</div>;
 
   const answered = questions.filter((question) => answers[question.id]).length;
   const correct = questions.filter(
@@ -25,11 +27,9 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
       }}
     >
       <div className="quiz-intro">
-        <div className="quiz-eyebrow">CHECK YOUR UNDERSTANDING</div>
-        <h2>检验你的理解</h2>
-        <p>
-          每题选择一个答案，检查后查看解析。你可以回到导读或源码，再重新作答。
-        </p>
+        <div className="quiz-eyebrow">{t("eyebrow")}</div>
+        <h2>{t("title")}</h2>
+        <p>{t("intro")}</p>
       </div>
       {questions.map((question, index) => {
         const isCorrect = answers[question.id] === question.correct_option;
@@ -91,11 +91,11 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
               >
                 <strong>
                   {isCorrect ? <Check size={15} /> : <X size={15} />}
-                  {isCorrect ? "回答正确" : "这题还需要再想一想"}
+                  {isCorrect ? t("correct") : t("incorrect")}
                 </strong>
                 {!isCorrect && (
                   <p className="quiz-correct-answer">
-                    参考答案：
+                    {t("reference")}
                     {
                       question.options.find(
                         (option) => option.id === question.correct_option,
@@ -112,8 +112,8 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
       <div className="quiz-actions">
         <span className="quiz-status" role="status" aria-live="polite">
           {checked
-            ? `答对 ${correct} / ${questions.length} 题 · 阅读解析，再巩固一次`
-            : `已作答 ${answered} / ${questions.length} 题`}
+            ? t("scored", { correct, total: questions.length })
+            : t("progress", { answered, total: questions.length })}
         </span>
         {checked ? (
           <Button
@@ -125,7 +125,7 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
             }}
           >
             <RotateCcw size={15} />
-            重新作答
+            {t("reset")}
           </Button>
         ) : (
           <Button
@@ -134,7 +134,7 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
             disabled={answered !== questions.length}
           >
             <Check size={15} />
-            检查答案
+            {t("submit")}
           </Button>
         )}
       </div>
