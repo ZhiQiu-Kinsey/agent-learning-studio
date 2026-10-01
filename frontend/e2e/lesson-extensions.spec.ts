@@ -5,6 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 import type { CurriculumData, Detail, Trace } from "../src/types";
+import { mockRunStream, runOffline } from "./runs";
 
 // Fixture courses exist only at the browser's API boundary, never in the catalog.
 async function fixtureLesson(
@@ -105,44 +106,42 @@ test("reusable evidence reports render real checks and tables, select older repo
   request,
 }) => {
   let runs = 0;
-  await page.route("**/api/run", async (route) => {
-    runs++;
-    await route.fulfill({
-      contentType: "text/event-stream",
-      body: stream([
-        { type: "run_start", data: {} },
-        {
-          type: "lesson.report",
-          data: {
-            title: "完整上下文",
-            summary: "保留了来源",
-            checks: [
-              { label: "证据可见", passed: true, detail: "资料包含目标事实" },
-            ],
-            metrics: [{ label: "字符数", value: 120 }],
-            table: { columns: ["策略", "结果"], rows: [["完整", "有依据"]] },
-          },
+  await mockRunStream(
+    page,
+    stream([
+      { type: "run_start", data: {} },
+      {
+        type: "lesson.report",
+        data: {
+          title: "完整上下文",
+          summary: "保留了来源",
+          checks: [
+            { label: "证据可见", passed: true, detail: "资料包含目标事实" },
+          ],
+          metrics: [{ label: "字符数", value: 120 }],
+          table: { columns: ["策略", "结果"], rows: [["完整", "有依据"]] },
         },
-        {
-          type: "lesson.report",
-          data: {
-            title: "窗口上下文",
-            summary: "证据被截断",
-            checks: [
-              {
-                label: "证据可见",
-                passed: false,
-                detail: "最近片段缺少目标事实",
-              },
-            ],
-            metrics: [{ label: "字符数", value: 20 }],
-          },
+      },
+      {
+        type: "lesson.report",
+        data: {
+          title: "窗口上下文",
+          summary: "证据被截断",
+          checks: [
+            {
+              label: "证据可见",
+              passed: false,
+              detail: "最近片段缺少目标事实",
+            },
+          ],
+          metrics: [{ label: "字符数", value: 20 }],
         },
-        { type: "answer", data: { content: "对照完成" } },
-        { type: "done", data: { status: "completed" } },
-      ]),
-    });
-  });
+      },
+      { type: "answer", data: { content: "对照完成" } },
+      { type: "done", data: { status: "completed" } },
+    ]),
+    () => runs++,
+  );
   await fixtureLesson(page, request, {
     ui: { lab: "structured-inputs", inspector: "evidence-board" },
   });
@@ -180,28 +179,26 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   request,
 }) => {
   const payloads: Record<string, unknown>[] = [];
-  await page.route("**/api/run", async (route) => {
-    payloads.push(route.request().postDataJSON());
-    await route.fulfill({
-      contentType: "text/event-stream",
-      body: stream([
-        {
-          type: "run_start",
-          data: { provider_label: "本地 Python", model: "local-python" },
+  await mockRunStream(
+    page,
+    stream([
+      {
+        type: "run_start",
+        data: { provider_label: "本地 Python", model: "local-python" },
+      },
+      {
+        type: "lesson.state_snapshot",
+        data: {
+          title: "状态快照",
+          summary: "参数已传入课程程序",
+          state: { counter: 7 },
         },
-        {
-          type: "lesson.state_snapshot",
-          data: {
-            title: "状态快照",
-            summary: "参数已传入课程程序",
-            state: { counter: 7 },
-          },
-        },
-        { type: "answer", data: { content: "已验证自定义输入" } },
-        { type: "done", data: { status: "completed" } },
-      ]),
-    });
-  });
+      },
+      { type: "answer", data: { content: "已验证自定义输入" } },
+      { type: "done", data: { status: "completed" } },
+    ]),
+    (payload) => payloads.push(payload),
+  );
   await fixtureLesson(page, request);
   await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
   const inputs = page.getByLabel("实验参数 JSON", { exact: true });
@@ -335,16 +332,7 @@ test("lesson three custom inspector follows real tool outcomes, event selection 
     }),
   );
   let runs = 0;
-  await page.route("**/api/run", async (route) => {
-    runs++;
-    const response = await route.fetch({
-      postData: {
-        ...route.request().postDataJSON(),
-        mode: "offline",
-      },
-    });
-    await route.fulfill({ response });
-  });
+  await runOffline(page, () => runs++);
   await page.goto("/");
   await page.getByRole("button", { name: /错误处理与安全边界/ }).click();
   await page.getByRole("tab", { name: "实验工作台", exact: true }).click();

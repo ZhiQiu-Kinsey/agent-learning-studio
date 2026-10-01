@@ -30,13 +30,16 @@ def main():
             if provider_id == "custom":
                 settings.update(model=MODEL, api_base=API_URL, api_key=key)
             request("/api/settings", settings)
-            stream = request("/api/run", {"lesson_id": "1", "mode": "live", "exercise_id": "sum",
-                                           "question": "帮我计算 19 加 23，并说明结果。"})
+            created = json.loads(request("/api/runs", {"lesson_id": "1", "mode": "live", "exercise_id": "sum",
+                                                       "question": "帮我计算 19 加 23，并说明结果。"}))
+            stream = request(f"/api/runs/{created['run_id']}/events")
             events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
             terminal = next((event for event in events if event["type"] == "done"), None)
             tool = next((event for event in events if event["type"] == "tool_result"), None)
             representations = sorted({event["data"].get("representation", "missing")
                                       for event in events if event["type"] in ("request", "response")})
+            envelope = sorted({event.get("representation") or "missing"
+                               for event in events if event["type"] in ("request", "response")})
             result = {"provider_id": provider_id, "model": MODEL,
                       "status": terminal["data"]["status"] if terminal else "missing",
                       "representations": representations,
@@ -48,7 +51,7 @@ def main():
                       "errors": [event["data"]["message"] for event in events if event["type"] == "error"]}
             expected = "http_body" if provider_id == "bailian" else "sdk_standardized"
             result["passed"] = (result["status"] == "completed" and result["tool_result"] == {"ok": True, "result": 42}
-                                and result["representations"] == [expected])
+                                and result["representations"] == [expected] and envelope == [expected])
             results.append(result)
             # 只保存和打印白名单字段；原始请求头、配置值不进入记录。
             print(json.dumps(result, ensure_ascii=False, indent=2))

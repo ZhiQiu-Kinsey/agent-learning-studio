@@ -45,6 +45,8 @@ npm.cmd --prefix frontend run dev              # 启动 Vite，代理 /api 到�
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 # 修改课程目录后重新生成大纲
 .\.venv\Scripts\python.exe scripts/export_curriculum.py
+# 修改事件信封常量表（server/envelope.py）后重新生成前端镜像
+.\.venv\Scripts\python.exe scripts/export_trace_contract.py
 # 新增课程前预览脚手架，课号替换为实际 planned 项
 .\.venv\Scripts\python.exe scripts/new_lesson.py --id 11 --slug document_loading --dry-run
 # 校验所有实现清单和教学内容（包括 planned 草稿，不调用模型）

@@ -10,6 +10,7 @@ from pydantic import Field, ValidationError
 
 from course.execution import LessonInputs, RunContext, execute_lesson, validate_inputs
 from course.runner import RunCancelled
+from run_support import run_and_read, use_temporary_run_store
 
 
 class ExampleInputs(LessonInputs):
@@ -151,6 +152,7 @@ web = importlib.import_module("server.app")
 class CustomRuntimeApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(web.app, base_url="http://localhost")
+        use_temporary_run_store(self)
         self.spec = {
             "id": "custom-test", "title": "Test extension",
             "runtime": {"kind": "custom", "entrypoint": "runtime:run", "requires_model": False},
@@ -164,12 +166,12 @@ class CustomRuntimeApiTests(unittest.TestCase):
                 patch.object(web, "lesson_runtime", return_value=module), \
                 patch.object(web.provider_registry, "resolve", side_effect=AssertionError("local runtime needs no model")), \
                 patch.object(web.provider_registry, "secrets", return_value=["fixture-secret"]):
-            return self.client.post("/api/run", json={"lesson_id": "custom-test", "exercise_id": "same-id",
-                                                      "question": "question", "mode": "live", **body})
+            return run_and_read(self.client, {"lesson_id": "custom-test", "exercise_id": "same-id",
+                                              "question": "question", "mode": "live", **body})
 
     @staticmethod
     def events(response):
-        return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+        return response.events
 
     def test_new_custom_runtime_receives_inputs_without_model_configuration(self):
         def run(context):
@@ -177,10 +179,12 @@ class CustomRuntimeApiTests(unittest.TestCase):
             context.emit("lesson.graph_node", {"title": "Multiply", "value": context.inputs["value"] * 2})
             return "10"
         response = self.run_fixture(run, inputs={"value": 5})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         events = self.events(response)
         self.assertEqual([e["type"] for e in events], ["run_start", "lesson.graph_node", "answer", "done"])
-        self.assertTrue(all(e["schema_version"] == 1 for e in events))
+        self.assertTrue(all(e["schema_version"] == 2 for e in events))
+        self.assertEqual([e["seq"] for e in events], [1, 2, 3, 4])
+        self.assertEqual({e["representation"] for e in events}, {None})
         self.assertEqual(events[0]["data"]["provider_id"], "local")
         self.assertEqual(events[-1]["data"]["status"], "completed")
         self.assertFalse(web.run_lock.locked())
@@ -200,7 +204,7 @@ class CustomRuntimeApiTests(unittest.TestCase):
             seen.append((context.question, context.inputs))
             return "checked"
         response = self.run_fixture(run, question="", inputs={})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
         # INPUT_MODEL supplies 2; the exercise's preset value 3 was explicitly removed.
         self.assertEqual(seen, [("", {"value": 2, "label": "example"})])
 

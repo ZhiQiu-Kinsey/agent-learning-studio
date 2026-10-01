@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { CurriculumData, Lesson } from "../src/types";
+import { isRunCreation, runOffline } from "./runs";
 
 const capture = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -11,7 +12,7 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
 }) => {
   let runs = 0;
   page.on("request", (req) => {
-    if (req.url().endsWith("/api/run")) runs++;
+    if (isRunCreation(req)) runs++;
   });
   await page.goto("/");
   await expect(
@@ -131,7 +132,7 @@ test("interactive lesson explanations are different for all three lessons and ne
   );
   let runs = 0;
   page.on("request", (req) => {
-    if (req.url().endsWith("/api/run")) runs++;
+    if (isRunCreation(req)) runs++;
   });
   await page.goto("/");
   for (const id of ["1", "2", "3"]) {
@@ -182,16 +183,7 @@ test("live signal nodes and tool chips follow execution evidence and replay", as
     });
   });
   let runs = 0;
-  await page.route("**/api/run", async (route) => {
-    runs++;
-    const response = await route.fetch({
-      postData: JSON.stringify({
-        ...route.request().postDataJSON(),
-        mode: "offline",
-      }),
-    });
-    await route.fulfill({ response });
-  });
+  await runOffline(page, () => runs++);
   await page.goto("/");
   await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
   await expect(page.locator(".execution-node:disabled")).toHaveCount(4);
