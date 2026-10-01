@@ -6,6 +6,7 @@ import {
 } from "@playwright/test";
 import type { CurriculumData, Detail, Trace } from "../src/types";
 import { mockRunStream, runOffline } from "./runs";
+import { t, tPattern } from "./i18n";
 
 // Fixture courses exist only at the browser's API boundary, never in the catalog.
 async function fixtureLesson(
@@ -78,8 +79,8 @@ async function fixtureLesson(
   );
   await page.goto("/");
   await page
-    .getByRole("navigation", { name: "课程列表" })
-    .getByRole("button", { name: new RegExp(lesson.title) })
+    .getByTestId("course-nav")
+    .getByRole("button", { name: lesson.title })
     .click();
   await expect(
     page.getByRole("heading", { name: lesson.title, exact: true }),
@@ -106,37 +107,31 @@ test("reusable evidence reports render real checks and tables, select older repo
   request,
 }) => {
   let runs = 0;
+  const full = {
+    title: "完整上下文",
+    summary: "保留了来源",
+    checks: [{ label: "证据可见", passed: true, detail: "资料包含目标事实" }],
+    metrics: [{ label: "字符数", value: 120 }],
+    table: { columns: ["策略", "结果"], rows: [["完整", "有依据"]] },
+  };
+  const windowed = {
+    title: "窗口上下文",
+    summary: "证据被截断",
+    checks: [
+      {
+        label: "证据可见",
+        passed: false,
+        detail: "最近片段缺少目标事实",
+      },
+    ],
+    metrics: [{ label: "字符数", value: 20 }],
+  };
   await mockRunStream(
     page,
     stream([
       { type: "run_start", data: {} },
-      {
-        type: "lesson.report",
-        data: {
-          title: "完整上下文",
-          summary: "保留了来源",
-          checks: [
-            { label: "证据可见", passed: true, detail: "资料包含目标事实" },
-          ],
-          metrics: [{ label: "字符数", value: 120 }],
-          table: { columns: ["策略", "结果"], rows: [["完整", "有依据"]] },
-        },
-      },
-      {
-        type: "lesson.report",
-        data: {
-          title: "窗口上下文",
-          summary: "证据被截断",
-          checks: [
-            {
-              label: "证据可见",
-              passed: false,
-              detail: "最近片段缺少目标事实",
-            },
-          ],
-          metrics: [{ label: "字符数", value: 20 }],
-        },
-      },
+      { type: "lesson.report", data: full },
+      { type: "lesson.report", data: windowed },
       { type: "answer", data: { content: "对照完成" } },
       { type: "done", data: { status: "completed" } },
     ]),
@@ -145,32 +140,34 @@ test("reusable evidence reports render real checks and tables, select older repo
   await fixtureLesson(page, request, {
     ui: { lab: "structured-inputs", inspector: "evidence-board" },
   });
-  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-  await page.getByRole("button", { name: "运行练习", exact: true }).click();
-  const board = page.getByRole("region", { name: "本课实验报告" });
+  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("lab-run-button").click();
+  const board = page.getByRole("region", { name: t("lab:evidence.region") });
   await expect(
-    board.getByRole("heading", { name: "窗口上下文" }),
+    board.getByRole("heading", { name: windowed.title }),
   ).toBeVisible();
   await expect(board.locator('[data-verdict="failed"]')).toContainText(
-    "最近片段缺少目标事实",
+    windowed.checks[0].detail,
   );
-  await board.getByRole("button", { name: "完整上下文", exact: true }).click();
+  await board.getByRole("button", { name: full.title, exact: true }).click();
   await expect(board.locator('[data-verdict="passed"]')).toContainText(
-    "资料包含目标事实",
+    full.checks[0].detail,
   );
   await expect(
-    board.getByRole("cell", { name: "有依据", exact: true }),
+    board.getByRole("cell", { name: full.table.rows[0][1], exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".event-detail pre")).toContainText('"字符数"');
+  await expect(
+    page.getByTestId("lab-event-detail").locator("pre"),
+  ).toContainText(JSON.stringify(full.metrics[0].label));
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   ).toBe(true);
-  await page.getByRole("button", { name: "回到起点" }).click();
-  await expect(board).toContainText("运行一个练习");
-  await expect(board.locator(".evidence-checks")).toHaveCount(0);
+  await page.getByTestId("lab-replay-rewind").click();
+  await expect(board).toContainText(t("lab:evidence.empty"));
+  await expect(board.getByTestId("evidence-checks")).toHaveCount(0);
   expect(runs).toBe(1);
 });
 
@@ -179,6 +176,11 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   request,
 }) => {
   const payloads: Record<string, unknown>[] = [];
+  const snapshot = {
+    title: "状态快照",
+    summary: "参数已传入课程程序",
+    state: { counter: 7 },
+  };
   await mockRunStream(
     page,
     stream([
@@ -186,78 +188,84 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
         type: "run_start",
         data: { provider_label: "本地 Python", model: "local-python" },
       },
-      {
-        type: "lesson.state_snapshot",
-        data: {
-          title: "状态快照",
-          summary: "参数已传入课程程序",
-          state: { counter: 7 },
-        },
-      },
+      { type: "lesson.state_snapshot", data: snapshot },
       { type: "answer", data: { content: "已验证自定义输入" } },
       { type: "done", data: { status: "completed" } },
     ]),
     (payload) => payloads.push(payload),
   );
-  await fixtureLesson(page, request);
-  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-  const inputs = page.getByLabel("实验参数 JSON", { exact: true });
-  const run = page.getByRole("button", { name: "运行练习", exact: true });
+  const lesson = await fixtureLesson(page, request);
+  await page.getByTestId("workspace-tab-lab").click();
+  const inputs = page.getByTestId("lab-inputs-json");
+  const run = page.getByTestId("lab-run-button");
+  const nodes = page.getByTestId("execution-node");
+  const eventJson = page.getByTestId("lab-event-detail").locator("pre");
+  const exercise = page.getByTestId("lab-exercise-field").getByRole("combobox");
   await expect(inputs).toHaveValue(
     JSON.stringify({ strategy: "default", limit: 2 }, null, 2),
   );
   await expect(run).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: "配置模型连接", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByTestId("lab-configure-button")).toHaveCount(0);
 
   await inputs.fill('{"limit":');
-  await expect(page.getByRole("alert")).toContainText("JSON 格式");
+  await expect(page.getByRole("alert")).toHaveText(
+    t("errors:client.inputsSyntax"),
+  );
   await expect(run).toBeDisabled();
   await inputs.fill("[]");
-  await expect(page.getByRole("alert")).toContainText("JSON 对象");
+  await expect(page.getByRole("alert")).toHaveText(
+    t("errors:client.inputsNotObject"),
+  );
   expect(payloads).toHaveLength(0);
 
   await inputs.fill('{"limit":7,"nested":{"enabled":true},"items":[]}');
-  await page.getByLabel("你的问题", { exact: true }).fill("");
+  await page.getByTestId("lab-question-input").fill("");
   await expect(run).toBeEnabled();
   await run.click();
-  await expect(page.locator(".trace-status")).toHaveText("已完成");
-  await expect(
-    page.getByRole("button", { name: "查看模型决策事件" }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "查看课程步骤事件" }).click();
-  await expect(page.locator(".event-detail pre")).toContainText('"counter": 7');
+  await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
+  // 自定义运行器只有“任务输入、课程步骤、课程输出”三个节点，没有模型决策节点。
+  await expect(nodes).toHaveCount(3);
+  await nodes.nth(1).click();
+  await expect(eventJson).toContainText('"counter": 7');
   expect(payloads[0]).toMatchObject({
     lesson_id: "44",
     question: "",
     exercise_id: "custom",
     inputs: { limit: 7, nested: { enabled: true }, items: [] },
   });
-  const customEvent = page.locator(".event").filter({ hasText: "状态快照" });
-  await expect(customEvent).toContainText("参数已传入课程程序");
+  const customEvent = page
+    .getByTestId("lab-timeline")
+    .getByRole("button")
+    .filter({ hasText: snapshot.title });
+  await expect(customEvent).toContainText(snapshot.summary);
   await customEvent.click();
-  await expect(page.locator(".event-detail pre")).toContainText('"counter": 7');
-  await page.getByRole("button", { name: "回到起点" }).click();
-  await expect(page.locator(".event")).toHaveCount(0);
-  await page.getByRole("button", { name: "下一步", exact: true }).click();
-  await page.getByRole("button", { name: "下一步", exact: true }).click();
+  await expect(eventJson).toContainText('"counter": 7');
+  await page.getByTestId("lab-replay-rewind").click();
+  await expect(
+    page.getByTestId("lab-timeline").getByRole("button"),
+  ).toHaveCount(0);
+  await page.getByTestId("lab-replay-step").click();
+  await page.getByTestId("lab-replay-step").click();
   await expect(customEvent).toBeVisible();
   expect(payloads).toHaveLength(1);
 
-  await page.getByRole("combobox", { name: "练习场景" }).click();
-  await page.getByRole("option", { name: "课程默认参数", exact: true }).click();
+  await exercise.click();
+  await page
+    .getByRole("option", { name: lesson.exercises[1].title, exact: true })
+    .click();
   await expect(inputs).toHaveValue(
     JSON.stringify({ strategy: "default" }, null, 2),
   );
-  await page.getByRole("combobox", { name: "练习场景" }).click();
-  await page.getByRole("option", { name: "明确的空对象", exact: true }).click();
+  await exercise.click();
+  await page
+    .getByRole("option", { name: lesson.exercises[2].title, exact: true })
+    .click();
   await expect(inputs).toHaveValue(
     JSON.stringify({ strategy: "default" }, null, 2),
   );
   await inputs.fill("{}");
   await run.click();
-  await expect(page.locator(".trace-status")).toHaveText("已完成");
+  await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   expect(payloads[1].inputs).toEqual({});
 });
 
@@ -270,6 +278,8 @@ test("unknown view keys including URLs and prototype names show the default view
     if (req.url().includes("unknown-extension.invalid"))
       external.push(req.url());
   });
+  const unavailable = (slot: string) =>
+    t("lab:extension.unavailable", { slot: t(`lab:extension.slot.${slot}`) });
   await fixtureLesson(page, request, {
     ui: {
       guide: "https://unknown-extension.invalid/guide.js",
@@ -277,19 +287,17 @@ test("unknown view keys including URLs and prototype names show the default view
       inspector: "constructor",
     },
   });
-  await expect(page.getByRole("alert")).toContainText(
-    "课程导读的专属视图暂不可用",
-  );
-  await expect(page.locator(".reading-document")).toBeVisible();
-  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(unavailable("guide"));
+  await expect(page.getByTestId("learn-reading-document")).toBeVisible();
+  await page.getByTestId("workspace-tab-lab").click();
   await expect(
-    page.getByRole("alert").filter({ hasText: "实验工作台" }),
+    page.getByRole("alert").filter({ hasText: unavailable("lab") }),
   ).toBeVisible();
   await expect(
-    page.getByRole("alert").filter({ hasText: "执行观察" }),
+    page.getByRole("alert").filter({ hasText: unavailable("inspector") }),
   ).toBeVisible();
-  await expect(page.locator(".lab-workspace")).toBeVisible();
-  await expect(page.locator(".execution-flow")).toBeVisible();
+  await expect(page.getByTestId("lab-workspace")).toBeVisible();
+  await expect(page.getByTestId("execution-flow")).toBeVisible();
   expect(external).toEqual([]);
 });
 
@@ -307,21 +315,22 @@ for (const failure of ["load", "render"] as const) {
           }),
     );
     await fixtureLesson(page, request, { ui: { inspector: "tool-outcomes" } });
-    await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText(
-      "执行观察的专属视图加载失败",
+    await page.getByTestId("workspace-tab-lab").click();
+    await expect(page.getByRole("alert")).toHaveText(
+      t("lab:extension.failed", { slot: t("lab:extension.slot.inspector") }),
     );
-    await expect(page.locator(".execution-flow")).toBeVisible();
+    await expect(page.getByTestId("execution-flow")).toBeVisible();
+    await expect(page.getByTestId("lab-run-button")).toBeEnabled();
+    await page.getByTestId("lab-tab-source").click();
     await expect(
-      page.getByRole("button", { name: "运行练习", exact: true }),
-    ).toBeEnabled();
-    await page.getByRole("tab", { name: "Python 源码", exact: true }).click();
-    await expect(page.locator(".lab-source code")).toBeVisible();
+      page.getByTestId("lab-source-panel").locator("code"),
+    ).toBeVisible();
   });
 }
 
 test("lesson three custom inspector follows real tool outcomes, event selection and rewind", async ({
   page,
+  request,
 }) => {
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
@@ -331,27 +340,40 @@ test("lesson three custom inspector follows real tool outcomes, event selection 
       json: { model: "fixture", config_ready: true, api_key_configured: true },
     }),
   );
+  const detail: Detail = await (await request.get("/api/lessons/3")).json();
+  const zero = detail.exercises.find((item) => item.id === "zero")!;
+  const passed = (n: number) => `${t("lab:toolOutcomes.passed")} ${n}`;
+  const failed = (n: number) => `${t("lab:toolOutcomes.failed")} ${n}`;
   let runs = 0;
   await runOffline(page, () => runs++);
   await page.goto("/");
-  await page.getByRole("button", { name: /错误处理与安全边界/ }).click();
-  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-  const inspector = page.getByRole("region", { name: "工具安全边界观察" });
-  await expect(inspector).toContainText("通过 0");
-  await page.getByRole("button", { name: "运行练习", exact: true }).click();
-  await expect(page.locator(".trace-status")).toHaveText("已完成");
-  await expect(inspector).toContainText("通过 1");
-  await expect(inspector).toContainText("失败 0");
-  await page.getByRole("combobox", { name: "练习场景" }).click();
-  await page.getByRole("option", { name: "除数为零", exact: true }).click();
-  await page.getByRole("button", { name: "运行练习", exact: true }).click();
-  await expect(page.locator(".trace-status")).toHaveText("已完成");
-  await expect(inspector).toContainText("通过 0");
-  await expect(inspector).toContainText("失败 1");
-  await inspector.getByRole("button", { name: /定位工具结果/ }).click();
-  await expect(page.locator(".event-detail pre")).toContainText('"ok": false');
-  await page.getByRole("button", { name: "回到起点" }).click();
-  await expect(inspector).toContainText("失败 0");
+  await page
+    .getByTestId("course-nav")
+    .getByRole("button", { name: detail.title })
+    .click();
+  await page.getByTestId("workspace-tab-lab").click();
+  const inspector = page.getByRole("region", {
+    name: t("lab:toolOutcomes.region"),
+  });
+  await expect(inspector).toContainText(passed(0));
+  await page.getByTestId("lab-run-button").click();
+  await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
+  await expect(inspector).toContainText(passed(1));
+  await expect(inspector).toContainText(failed(0));
+  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
+  await page.getByRole("option", { name: zero.title, exact: true }).click();
+  await page.getByTestId("lab-run-button").click();
+  await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
+  await expect(inspector).toContainText(passed(0));
+  await expect(inspector).toContainText(failed(1));
+  await inspector
+    .getByRole("button", { name: tPattern("lab:toolOutcomes.locate") })
+    .click();
+  await expect(
+    page.getByTestId("lab-event-detail").locator("pre"),
+  ).toContainText('"ok": false');
+  await page.getByTestId("lab-replay-rewind").click();
+  await expect(inspector).toContainText(failed(0));
   await expect(inspector.getByRole("button")).toHaveCount(0);
   expect(runs).toBe(2);
 });

@@ -35,6 +35,7 @@ export function LessonHero({
     <section
       ref={ref}
       className={`lesson-hero ${active ? "is-animating" : ""}`}
+      data-testid="lesson-hero"
       aria-label="本课导读概览"
     >
       <div className="lesson-hero-copy">

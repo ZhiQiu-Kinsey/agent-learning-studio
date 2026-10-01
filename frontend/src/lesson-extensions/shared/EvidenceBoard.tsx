@@ -84,6 +84,7 @@ export default function EvidenceBoard({
               <motion.div
                 key={selected.index}
                 className="evidence-report"
+                data-testid="evidence-report"
                 initial={reduced ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduced ? {} : { opacity: 0 }}
@@ -115,7 +116,7 @@ export default function EvidenceBoard({
                   </dl>
                 )}
                 {!!checks.length && (
-                  <ul className="evidence-checks">
+                  <ul className="evidence-checks" data-testid="evidence-checks">
                     {checks.slice(0, 24).map((check, index) => {
                       const passed =
                         typeof check.passed === "boolean"

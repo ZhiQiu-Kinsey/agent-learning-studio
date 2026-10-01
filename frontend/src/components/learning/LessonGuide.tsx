@@ -64,7 +64,11 @@ export function LessonGuide({ detail }: { detail: Detail }) {
           </aside>
         </>
       )}
-      <article className="reading-document" aria-label="课程导读">
+      <article
+        className="reading-document"
+        aria-label="课程导读"
+        data-testid="learn-reading-document"
+      >
         {presentation && (
           <div className="learn-section-kicker">
             <span>03 / GO A LITTLE DEEPER</span>
@@ -74,6 +78,7 @@ export function LessonGuide({ detail }: { detail: Detail }) {
         {view.sections.map((section, index) => (
           <motion.section
             className="reading-section"
+            data-testid="learn-reading-section"
             key={section.id}
             initial={reduced ? false : { opacity: 0.65, y: 14 }}
             animate={reduced ? { opacity: 1, y: 0 } : undefined}
@@ -106,6 +111,7 @@ export function LessonGuide({ detail }: { detail: Detail }) {
             collapsible
             defaultValue="observe"
             className="reading-observations"
+            data-testid="learn-observations"
           >
             <AccordionItem value="observe">
               <AccordionTrigger>

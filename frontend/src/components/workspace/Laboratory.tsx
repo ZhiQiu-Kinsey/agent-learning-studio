@@ -166,7 +166,7 @@ export function Laboratory({
       fillOpacity={0.035}
       animated={active && !reducedMotion}
     >
-      <div className="lab-workspace">
+      <div className="lab-workspace" data-testid="lab-workspace">
         <div className="lab-command-column">
           <section className="lab-composer">
             <div className="pane-heading">
@@ -183,7 +183,7 @@ export function Laboratory({
                   : "修改输入，观察模型如何选择和执行工具。"
                 : "修改输入，观察本课程序的执行过程。"}
             </p>
-            <div className="form-field">
+            <div className="form-field" data-testid="lab-exercise-field">
               <label>练习场景</label>
               <GlideSelect
                 {...pickerColors}
@@ -206,6 +206,7 @@ export function Laboratory({
               </label>
               <Textarea
                 id="lab-question"
+                data-testid="lab-question-input"
                 value={s.question}
                 disabled={s.running}
                 onChange={(e) => s.setQuestion(e.target.value)}
@@ -221,7 +222,11 @@ export function Laboratory({
               )}
             </div>
             {needsConnection && (
-              <Button variant="outline" onClick={onConfigure}>
+              <Button
+                variant="outline"
+                onClick={onConfigure}
+                data-testid="lab-configure-button"
+              >
                 配置模型连接
               </Button>
             )}
@@ -240,6 +245,7 @@ export function Laboratory({
                   </Button>
                 ) : (
                   <Button
+                    data-testid="lab-run-button"
                     onClick={() => {
                       setTab("trace");
                       void s.run();
@@ -322,7 +328,10 @@ export function Laboratory({
               </h2>
               <p>看到每一步，也看到每一步的数据。</p>
             </div>
-            <span className={`trace-status ${s.running ? "is-running" : ""}`}>
+            <span
+              className={`trace-status ${s.running ? "is-running" : ""}`}
+              data-testid="lab-trace-status"
+            >
               <span aria-hidden="true">
                 <StatusMark
                   size={16}
@@ -354,7 +363,9 @@ export function Laboratory({
           <Tabs value={tab} onValueChange={setTab} className="inspector-tabs">
             <TabsList aria-label="实验观察内容" className="inspector-tab-list">
               <TabsTrigger value="trace">执行记录</TabsTrigger>
-              <TabsTrigger value="source">Python 源码</TabsTrigger>
+              <TabsTrigger value="source" data-testid="lab-tab-source">
+                Python 源码
+              </TabsTrigger>
               <TabsTrigger value="prompt">提示词与工具</TabsTrigger>
             </TabsList>
             <TabsContent value="trace" className="inspector-trace">
@@ -373,7 +384,7 @@ export function Laboratory({
                   customRuntime={s.detail?.capabilities?.custom_runtime}
                 />
               </LessonExtension>
-              <div className="inspector-summary">
+              <div className="inspector-summary" data-testid="lab-run-metrics">
                 <span>
                   <RunMetric value={requests} /> 模型请求
                 </span>
@@ -400,11 +411,15 @@ export function Laboratory({
                 />
               )}
               {s.events.length > 0 && (
-                <div className="replay-toolbar">
+                <div
+                  className="replay-toolbar"
+                  data-testid="lab-replay-toolbar"
+                >
                   <Button
                     variant="ghost"
                     size="icon"
                     disabled={s.running}
+                    data-testid="lab-replay-play"
                     aria-label={s.playing ? "暂停回放" : "播放回放"}
                     onClick={s.replay}
                   >
@@ -414,6 +429,7 @@ export function Laboratory({
                     variant="ghost"
                     size="icon"
                     disabled={s.running || s.cursor >= s.events.length}
+                    data-testid="lab-replay-step"
                     aria-label="下一步"
                     onClick={s.step}
                   >
@@ -423,6 +439,7 @@ export function Laboratory({
                     variant="ghost"
                     size="icon"
                     disabled={s.running}
+                    data-testid="lab-replay-rewind"
                     aria-label="回到起点"
                     onClick={() => s.seek(0)}
                   >
@@ -449,6 +466,7 @@ export function Laboratory({
                   <Button
                     variant="ghost"
                     size="icon"
+                    data-testid="lab-download-trace"
                     aria-label="下载本次运行记录"
                     onClick={s.download}
                   >
@@ -457,16 +475,21 @@ export function Laboratory({
                 </div>
               )}
               <div className="trace-split">
-                <div className="trace-list-pane">
+                <div className="trace-list-pane" data-testid="lab-trace-list">
                   <div className="subpane-label">
                     执行顺序 <small>EVENTS</small>
                   </div>
-                  <div className="timeline" ref={list}>
+                  <div
+                    className="timeline"
+                    ref={list}
+                    data-testid="lab-timeline"
+                  >
                     {s.visible.map((event: Trace, index: number) => (
                       <Button
                         key={index}
                         variant="ghost"
                         className={`event event-${event.type} ${s.active === event ? "is-selected" : ""}`}
+                        data-testid={`lab-event-${event.type.replace(/[._]/g, "-")}`}
                         aria-pressed={s.active === event}
                         onClick={() => s.selectEvent(index)}
                       >
@@ -497,7 +520,7 @@ export function Laboratory({
                     )}
                   </div>
                 </div>
-                <div className="event-detail">
+                <div className="event-detail" data-testid="lab-event-detail">
                   <div className="subpane-label">
                     <span>{s.active ? label(s.active) : "请求与响应"}</span>
                     {s.active && (
@@ -572,7 +595,11 @@ export function Laboratory({
                 回放只读取本次记录，不会再次请求模型。
               </p>
             </TabsContent>
-            <TabsContent value="source" className="lab-source source-pane">
+            <TabsContent
+              value="source"
+              className="lab-source source-pane"
+              data-testid="lab-source-panel"
+            >
               <div className="source-toolbar">
                 <Terminal size={16} />
                 <GlideSelect

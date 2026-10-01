@@ -115,6 +115,7 @@ export default function App() {
       <Button
         variant="ghost"
         className={`rail-catalog ${catalog ? "is-active" : ""}`}
+        data-testid="app-curriculum-button"
         aria-pressed={catalog}
         disabled={studio.running}
         onClick={() => {
@@ -211,6 +212,7 @@ export default function App() {
               variant="ghost"
               size="icon"
               className="open-course-menu"
+              data-testid="app-open-course-menu"
               aria-label="打开课程菜单"
               onClick={() => setMenu(true)}
             >
@@ -229,6 +231,7 @@ export default function App() {
               ref={settingsRef}
               variant="outline"
               className="connection-button"
+              data-testid="app-connection-button"
               title="配置模型连接"
               onClick={() => setSettings(true)}
             >
@@ -285,7 +288,10 @@ export default function App() {
                 }}
                 className="workspace-modes"
               >
-                <div className="lesson-masthead">
+                <div
+                  className="lesson-masthead"
+                  data-testid="lesson-masthead"
+                >
                   <div className="masthead-aurora" aria-hidden="true">
                     {!catalog && !intro && (
                       <MotionIntent
@@ -311,7 +317,12 @@ export default function App() {
                     )}
                   </div>
                   <div className="lesson-heading">
-                    <span className="lesson-badge">{number}</span>
+                    <span
+                      className="lesson-badge"
+                      data-testid="lesson-badge"
+                    >
+                      {number}
+                    </span>
                     <div>
                       <p className="masthead-kicker">
                         AGENT LEARNING <span>/</span> 实践课 {number}
@@ -332,7 +343,10 @@ export default function App() {
                     </div>
                   </div>
                   <TabsList className="mode-navigation" aria-label="工作区">
-                    <TabsTrigger value="learn">
+                    <TabsTrigger
+                      value="learn"
+                      data-testid="workspace-tab-learn"
+                    >
                       {mode === "learn" && (
                         <motion.span
                           aria-hidden="true"
@@ -348,7 +362,10 @@ export default function App() {
                       <BookOpen size={16} />
                       学习课程
                     </TabsTrigger>
-                    <TabsTrigger value="lab">
+                    <TabsTrigger
+                      value="lab"
+                      data-testid="workspace-tab-lab"
+                    >
                       {mode === "lab" && (
                         <motion.span
                           aria-hidden="true"

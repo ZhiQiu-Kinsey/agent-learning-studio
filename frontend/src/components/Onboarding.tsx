@@ -85,7 +85,10 @@ export function Onboarding({
         <h1>开始你的 Agent 学习之旅</h1>
         <p>{error ? `导学内容暂时无法读取：${error}` : "正在准备学习导引…"}</p>
         {error && (
-          <Button onClick={() => setAttempt((value) => value + 1)}>
+          <Button
+            data-testid="onboarding-retry"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
             重新加载导学
           </Button>
         )}
@@ -103,9 +106,13 @@ export function Onboarding({
     window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
   }
   return (
-    <div className="onboarding-page">
+    <div
+      className="onboarding-page"
+      data-testid="onboarding-page"
+    >
       <section
         ref={heroRef}
+        data-testid="onboarding-hero"
         className={`onboarding-hero ${heroActive ? "is-animating" : ""}`}
       >
         <div className="onboarding-hero-grid" aria-hidden="true" />
@@ -151,7 +158,10 @@ export function Onboarding({
               探索完整课程
             </Button>
           </div>
-          <div className="onboarding-meta">
+          <div
+            className="onboarding-meta"
+            data-testid="onboarding-meta"
+          >
             <span>
               <BookOpen size={14} />
               {content.chapters.length} 节前置导学
@@ -185,7 +195,11 @@ export function Onboarding({
           <i className="orbit-signal" />
         </div>
       </section>
-      <nav className="onboarding-chapter-tabs" aria-label="前置导学章节">
+      <nav
+        className="onboarding-chapter-tabs"
+        aria-label="前置导学章节"
+        data-testid="onboarding-chapter-tabs"
+      >
         {content.chapters.map((item, index) => (
           <button
             type="button"
@@ -211,6 +225,7 @@ export function Onboarding({
           <motion.article
             key={current.id}
             className="onboarding-chapter"
+            data-testid="onboarding-chapter"
             initial={reduced ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduced ? {} : { opacity: 0, y: -8 }}
@@ -230,6 +245,7 @@ export function Onboarding({
               >
                 <section
                   className={`onboarding-section onboarding-section-${section.kind}`}
+                  data-testid="onboarding-section"
                 >
                   <h3>
                     <span>{String(index + 1).padStart(2, "0")}</span>
@@ -283,7 +299,10 @@ export function Onboarding({
               </div>
               <h3>{current.exercise.title}</h3>
               <p>{current.exercise.prompt}</p>
-              <div className="onboarding-checks">
+              <div
+                className="onboarding-checks"
+                data-testid="onboarding-checks"
+              >
                 {current.exercise.checkpoints.map((point, i) => {
                   const id = `${current.id}-${i}`;
                   return (
@@ -311,7 +330,12 @@ export function Onboarding({
               </div>
               <small>勾选用于确认自己的理解，不是自动评分。</small>
             </section>
-            <Accordion type="single" collapsible className="onboarding-sources">
+            <Accordion
+              type="single"
+              collapsible
+              className="onboarding-sources"
+              data-testid="onboarding-sources"
+            >
               <AccordionItem value="sources">
                 <AccordionTrigger>
                   这一章参考了什么 · {current.references.length} 份资料
@@ -344,6 +368,7 @@ export function Onboarding({
                 上一节
               </Button>
               <Button
+                data-testid="onboarding-next"
                 onClick={() =>
                   chapter < content.chapters.length - 1
                     ? navigate(chapter + 1)

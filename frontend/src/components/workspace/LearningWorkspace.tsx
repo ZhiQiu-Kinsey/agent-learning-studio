@@ -56,20 +56,37 @@ export function LearningWorkspace({
           variant="line"
           className="learn-tab-list"
           aria-label="课程学习内容"
+          data-testid="learn-tabs"
         >
-          <TabsTrigger className="learn-tab" value="guide">
+          <TabsTrigger
+            className="learn-tab"
+            value="guide"
+            data-testid="learn-tab-guide"
+          >
             <BookOpen size={16} />
             课程导读
           </TabsTrigger>
-          <TabsTrigger className="learn-tab" value="source">
+          <TabsTrigger
+            className="learn-tab"
+            value="source"
+            data-testid="learn-tab-source"
+          >
             <Code2 size={16} />
             Python 源码
           </TabsTrigger>
-          <TabsTrigger className="learn-tab" value="reference">
+          <TabsTrigger
+            className="learn-tab"
+            value="reference"
+            data-testid="learn-tab-reference"
+          >
             <Workflow size={16} />
             提示词与工具
           </TabsTrigger>
-          <TabsTrigger className="learn-tab" value="quiz">
+          <TabsTrigger
+            className="learn-tab"
+            value="quiz"
+            data-testid="learn-tab-quiz"
+          >
             <ListChecks size={16} />
             课后自测
           </TabsTrigger>
@@ -82,7 +99,10 @@ export function LearningWorkspace({
           />
         )}
         <div className="learn-layout">
-          <div className="learn-main">
+          <div
+            className="learn-main"
+            data-testid="learn-main"
+          >
             <TabsContent value="guide" className="learn-tab-content">
               <LessonExtension
                 slot="guide"
@@ -121,7 +141,10 @@ export function LearningWorkspace({
                 />
               </div>
               {activeSource ? (
-                <div className="learn-code-frame">
+                <div
+                  className="learn-code-frame"
+                  data-testid="learn-source-code"
+                >
                   <Code
                     content={activeSource.content}
                     language={
@@ -181,7 +204,10 @@ export function LearningWorkspace({
                 </ul>
               </section>
             </StarBorder>
-            <section className="learn-steps">
+            <section
+              className="learn-steps"
+              data-testid="learn-steps"
+            >
               <h3>建议学习顺序</h3>
               <LineSidebar
                 ariaLabel="学习步骤导航"

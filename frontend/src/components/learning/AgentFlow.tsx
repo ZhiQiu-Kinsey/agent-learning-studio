@@ -24,10 +24,14 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
       className="agent-flow"
       id="lesson-flow"
       aria-label="Agent 调用过程教学示意"
+      data-testid="agent-flow"
     >
       <div className="learn-section-kicker">
         <span>01 / EXPLORE THE LOOP</span>
-        <span className="lesson-example-tag">
+        <span
+          className="lesson-example-tag"
+          data-testid="agent-flow-provenance"
+        >
           <Info size={12} />
           {t("provenance.illustration")}
         </span>
@@ -41,6 +45,7 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
           <button
             key={item.id}
             className={`agent-flow-step ${index === selected ? "is-selected" : ""} ${index < selected ? "is-visited" : ""}`}
+            data-testid="agent-flow-step"
             onClick={() => setSelected(index)}
             aria-pressed={index === selected}
             aria-controls="agent-flow-detail"
@@ -73,7 +78,10 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
           exit={reduced ? undefined : { opacity: 0, y: -5 }}
           transition={{ duration: 0.16 }}
         >
-          <div className="agent-flow-explanation">
+          <div
+            className="agent-flow-explanation"
+            data-testid="agent-flow-explanation"
+          >
             <span className="agent-flow-actor">
               <CornerDownRight size={15} />
               {step.actor}
@@ -91,7 +99,7 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
             )}
           </div>
           {step.code && (
-            <div className="agent-flow-code">
+            <div className="agent-flow-code" data-testid="agent-flow-code">
               <div className="agent-code-toolbar">
                 <span>
                   <Code2 size={13} />
