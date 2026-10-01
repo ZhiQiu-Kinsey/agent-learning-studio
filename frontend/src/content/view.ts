@@ -87,7 +87,7 @@ export function chapterView(chapter: Chapter) {
     exercise: {
       title: exercise?.title ?? "",
       prompt: exercise?.prompt ?? "",
-      checkpoints: exercise?.items.map((item) => item.text) ?? [],
+      checkpoints: exercise?.items ?? [],
     },
   };
 }

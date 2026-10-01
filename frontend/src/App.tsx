@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useStudio } from "./hooks/useStudio";
+import { track } from "./progress";
 import { formatLessonNumber } from "./lib/lessonIds";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
@@ -281,7 +282,11 @@ export default function App() {
                 value={mode}
                 onValueChange={(value) => {
                   setMode(value);
-                  if (value === "lab") setHasOpenedLab(true);
+                  if (value === "lab") {
+                    setHasOpenedLab(true);
+                    if (studio.detail)
+                      track.sceneVisited(studio.detail.id, "lab");
+                  }
                 }}
                 className="workspace-modes"
               >
@@ -319,16 +324,16 @@ export default function App() {
                       <MotionIntent
                         name="heading.split"
                         key={`${studio.lessonId}-${title}`}
-                          text={title}
-                          tag="h1"
-                          textAlign="left"
-                          splitType="chars"
-                          delay={45}
-                          duration={0.55}
-                          from={{ opacity: 0, y: 14, rotateX: -25 }}
-                          to={{ opacity: 1, y: 0, rotateX: 0 }}
-                          rootMargin="0px"
-                        />
+                        text={title}
+                        tag="h1"
+                        textAlign="left"
+                        splitType="chars"
+                        delay={45}
+                        duration={0.55}
+                        from={{ opacity: 0, y: 14, rotateX: -25 }}
+                        to={{ opacity: 1, y: 0, rotateX: 0 }}
+                        rootMargin="0px"
+                      />
                     </div>
                   </div>
                   <TabsList className="mode-navigation" aria-label="工作区">

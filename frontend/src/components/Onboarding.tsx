@@ -16,6 +16,7 @@ import {
 import Markdown from "react-markdown";
 import { jsonFetch } from "../api";
 import { chapterView } from "../content/view";
+import { onboardingProgressId, track, useProgress } from "../progress";
 import type { Onboarding as OnboardingContent } from "../content/types.gen";
 import { Button } from "./ui/button";
 import SplitText from "./react-bits/SplitText";
@@ -43,7 +44,9 @@ export function Onboarding({
   const [content, setContent] = useState<OnboardingContent | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  // Self-reported checkpoints persist locally; they are not a score.
+  const checked =
+    useProgress().lessons[onboardingProgressId]?.checkpoints ?? {};
   const reduced = useReducedMotion();
   const heroRef = useRef<HTMLElement>(null);
   const [heroActive, setHeroActive] = useState(false);
@@ -95,7 +98,7 @@ export function Onboarding({
   const current = { ...currentChapter, ...chapterView(currentChapter) };
   const completed = content.chapters.filter((item) =>
     chapterView(item).exercise.checkpoints.every(
-      (_, i) => checked[`${item.id}-${i}`],
+      (point) => checked[`${item.id}/${point.id}`],
     ),
   ).length;
   function navigate(index: number) {
@@ -284,18 +287,19 @@ export function Onboarding({
               <h3>{current.exercise.title}</h3>
               <p>{current.exercise.prompt}</p>
               <div className="onboarding-checks">
-                {current.exercise.checkpoints.map((point, i) => {
-                  const id = `${current.id}-${i}`;
+                {current.exercise.checkpoints.map((point) => {
+                  const id = `${current.id}/${point.id}`;
                   return (
                     <label key={id}>
                       <input
                         type="checkbox"
                         checked={!!checked[id]}
                         onChange={(e) =>
-                          setChecked((previous) => ({
-                            ...previous,
-                            [id]: e.target.checked,
-                          }))
+                          track.checkpointSet(
+                            onboardingProgressId,
+                            id,
+                            e.target.checked,
+                          )
                         }
                       />
                       <span
@@ -304,7 +308,7 @@ export function Onboarding({
                       >
                         {checked[id] && <Check size={13} />}
                       </span>
-                      <span>{point}</span>
+                      <span>{point.text}</span>
                     </label>
                   );
                 })}

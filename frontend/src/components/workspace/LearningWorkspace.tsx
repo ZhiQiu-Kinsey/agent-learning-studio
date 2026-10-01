@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useReducedMotion } from "../../motion";
 import {
   ArrowRight,
@@ -20,7 +20,16 @@ import { LessonHero } from "../learning/LessonHero";
 import { LessonGuide } from "../learning/LessonGuide";
 import { LessonExtension } from "../../lesson-extensions/LessonExtension";
 import { lessonView } from "../../content/view";
+import { track, type Scene } from "../../progress";
 import "../../styles/learning-experience.css";
+
+// Current tabs map onto the planned scenes; Phase 3 replaces the tabs themselves.
+const sceneOfTab: Record<string, Scene> = {
+  guide: "understand",
+  source: "code",
+  reference: "code",
+  quiz: "check",
+};
 
 export function LearningWorkspace({
   studio,
@@ -34,6 +43,10 @@ export function LearningWorkspace({
   const [tab, setTab] = useState("guide");
   const reducedMotion = useReducedMotion();
   const { detail, lessonError, source, setSource } = studio;
+  const lessonId = detail?.id;
+  useEffect(() => {
+    if (lessonId) track.sceneVisited(lessonId, sceneOfTab[tab] ?? "understand");
+  }, [lessonId, tab]);
   if (lessonError)
     return (
       <div className="learn-empty" role="alert">
@@ -166,7 +179,13 @@ export function LearningWorkspace({
               </section>
             </TabsContent>
             <TabsContent value="quiz" className="learn-tab-content" forceMount>
-              <Quiz key={detail.id} questions={lessonView(detail.learning).quiz} />
+              <Quiz
+                key={detail.id}
+                questions={lessonView(detail.learning).quiz}
+                onScored={(correct, total) =>
+                  track.quizScored(detail.id, correct, total)
+                }
+              />
             </TabsContent>
           </div>
           <aside className="learn-sidebar" aria-label="学习路线">

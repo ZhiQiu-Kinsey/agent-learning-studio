@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelRun, createRun, followRunEvents, jsonFetch } from "../api";
 import { resolveLessonId } from "../lib/lessonIds";
 import { clientError } from "../i18n/errors";
+import { track } from "../progress";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
 
 const messageOf = (error: unknown) =>
@@ -62,7 +63,9 @@ export function useStudio() {
       })
       .catch((reason) => {
         if (!abort.signal.aborted)
-          setError(clientError("serviceUnreachable", { reason: messageOf(reason) }));
+          setError(
+            clientError("serviceUnreachable", { reason: messageOf(reason) }),
+          );
       });
     void refreshStatus();
     // 运行在服务端后台执行；页面关闭时沿用旧语义，请求停止后续步骤。
@@ -92,6 +95,7 @@ export function useStudio() {
       .then((value) => {
         if (abort.signal.aborted) return;
         setDetail(value);
+        track.lessonOpened(value.id);
         const exercise = value.exercises.find((item) => !item.offline_only);
         setExerciseId(exercise?.id || "");
         setQuestion(exercise?.question || "");
@@ -221,6 +225,8 @@ export function useStudio() {
       }
       // 断线时按最后收到的 seq 自动续读；服务端存储保证不重不漏。
       await followRunEvents(id, addEvent, { signal: abort.signal });
+      // Reached the server's done event: one real run, counted once per run_id.
+      track.runCompleted(lessonId, id);
     } catch (reason) {
       if (!mounted.current) return;
       if (abort.signal.aborted) {

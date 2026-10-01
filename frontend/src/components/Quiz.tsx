@@ -5,13 +5,18 @@ import type { QuizQuestion } from "../types";
 import { Button } from "./ui/button";
 import JellyRadio from "./react-bits/JellyRadio";
 
-export function Quiz({ questions }: { questions: QuizQuestion[] }) {
+export function Quiz({
+  questions,
+  onScored,
+}: {
+  questions: QuizQuestion[];
+  onScored?: (correct: number, total: number) => void;
+}) {
   const { t } = useTranslation("quiz");
   const quizId = useId();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
-  if (!questions.length)
-    return <div className="quiz-empty">{t("empty")}</div>;
+  if (!questions.length) return <div className="quiz-empty">{t("empty")}</div>;
 
   const answered = questions.filter((question) => answers[question.id]).length;
   const correct = questions.filter(
@@ -23,7 +28,9 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
       className="quiz-pane"
       onSubmit={(event) => {
         event.preventDefault();
-        if (answered === questions.length) setChecked(true);
+        if (answered !== questions.length) return;
+        setChecked(true);
+        onScored?.(correct, questions.length);
       }}
     >
       <div className="quiz-intro">
