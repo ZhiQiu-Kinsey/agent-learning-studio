@@ -1,0 +1,194 @@
+{
+  "sections": [
+    {
+      "title": "持久记忆存在哪里",
+      "body": "本课使用标准库 SQLite。live 运行写入项目固定位置 .runtime/lesson10-memory.sqlite3，同一 namespace/key 的后续 live 运行能取回；offline 运行写入自动清理的临时库，不会污染现场数据。存储是数据库行为，不是模型参数训练，也不会因为页面显示一条对话而自动发生。"
+    },
+    {
+      "title": "只存明确给出的值",
+      "body": "练习的 value 与 source 来自本次输入；程序显式调用 put，保存 namespace、key、value、source、version、updated_at 与可选 expires_at。它没有从模型文本里抽取用户偏好，也不扫描其他会话。保存后关闭第一条数据库连接，再新建连接按相同 namespace/key 检索，恢复结果才算真实跨连接读取。"
+    },
+    {
+      "title": "范围与身份边界",
+      "body": "namespace 是教学分区：按不同 namespace 查询同一 key，应该为空。输入的 namespace/key 只接受有限字符并始终进入参数化 SQL，不能输入数据库路径或 SQL 片段。这个示例没有用户登录与服务端身份绑定；知道某个 namespace 的调用方仍可主动访问它，所以教学分区不能当作生产级权限隔离。"
+    },
+    {
+      "title": "冲突与版本",
+      "body": "同一范围和键的写入带 expected_version。版本不符时抛出冲突错误，不覆盖现值；使用当前版本更新后，version 加一，并保存新的来源。冲突预设先故意提交过时版本，验证拒绝，再做合法更新。如此能区分“资料变了”和“某条旧消息还留在上下文里”。"
+    },
+    {
+      "title": "过期、删除和恢复核对",
+      "body": "带 expires_at 的记录到期后，get 不再返回它；记录此时仍在数据库，直到显式 delete。若以 expected_version=None 重写同一过期键，程序允许恢复可见性，但版本继续递增。删除预设先让记录过期，再执行 SQL DELETE，最后重新打开连接确认不能恢复。过期是读取策略，删除是存储操作，两者的证据必须分开看。"
+    },
+    {
+      "title": "运行边界",
+      "body": "写入类预设会改动选择的 namespace/key；recall_only 只读取，不写入。live 可先保存再跨次运行只读恢复；offline 的只读练习在临时库预置一条受控记录。事件报告分别列出保存、重开、冲突或删除结果；不要把 source 文本的自称当成独立证据验证，本课仅证明输入的来源字段被记录。"
+    }
+  ],
+  "observe": [
+    "查看 saved 事件的 namespace/key、source、version 和存储方式。",
+    "先运行保存，再切换只读恢复预设，核对上次的值、来源和版本；offline 使用临时预置样本。",
+    "切换 conflict 预设，核对过时版本确实被拒绝，之后合法版本递增。",
+    "切换 expiry_delete，分别核对过期不可见和 SQL 删除后重开仍为空。",
+    "比较 live 与 offline：live 固定本地路径，offline 临时库运行后清理。"
+  ],
+  "quiz": [
+    {
+      "id": "persist",
+      "prompt": "什么证明这课发生了持久读取？",
+      "options": [
+        {
+          "id": "a",
+          "text": "页面仍显示上一条消息"
+        },
+        {
+          "id": "b",
+          "text": "关闭旧 SQLite 连接，再新建连接查询出该值"
+        },
+        {
+          "id": "c",
+          "text": "模型回答我记得"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "跨连接查询是对存储的真实检查；聊天显示和模型自述不足以证明数据库保存。"
+    },
+    {
+      "id": "scope",
+      "prompt": "不同 namespace 查询为空，能证明生产级用户权限吗？",
+      "options": [
+        {
+          "id": "a",
+          "text": "能，namespace 就是认证"
+        },
+        {
+          "id": "b",
+          "text": "不能，它只证明按键分区；还需受信任身份绑定"
+        },
+        {
+          "id": "c",
+          "text": "能，参数化 SQL 自动完成身份验证"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "namespace 是查询条件，不是认证凭据。生产系统还须把用户身份与访问范围绑定。"
+    },
+    {
+      "id": "version",
+      "prompt": "使用过时 expected_version 写入同一键应怎样？",
+      "options": [
+        {
+          "id": "a",
+          "text": "覆盖最新值"
+        },
+        {
+          "id": "b",
+          "text": "拒绝冲突并保留现值"
+        },
+        {
+          "id": "c",
+          "text": "自动删除旧行"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "乐观版本比较用于防止陈旧写入悄悄覆盖新数据。"
+    },
+    {
+      "id": "expiry",
+      "prompt": "记录过期和删除是同一回事吗？",
+      "options": [
+        {
+          "id": "a",
+          "text": "是，到期就必然从表中物理移除"
+        },
+        {
+          "id": "b",
+          "text": "不是，读取时隐藏过期记录，删除另执行 SQL DELETE"
+        },
+        {
+          "id": "c",
+          "text": "只要模型不提它就算删除"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "到期检查控制可见性，删除改变存储；需要分别核对。"
+    }
+  ],
+  "presentation": {
+    "eyebrow": "CHAPTER 03 / MEMORY",
+    "headline": "记住一条事实，",
+    "highlight": "也要能更新和删除。",
+    "takeaway": "长期记忆是外部存储和受控读取；来源、范围、版本与过期同样重要。",
+    "concepts": [
+      {
+        "label": "01 / STORE",
+        "title": "持久写入",
+        "description": "SQLite 保存明确输入及来源，重开连接仍可查询。",
+        "token": "SQLite · reopen"
+      },
+      {
+        "label": "02 / SCOPE",
+        "title": "范围与版本",
+        "description": "namespace 限定查询，expected_version 防止陈旧覆盖。",
+        "token": "namespace + version"
+      },
+      {
+        "label": "03 / FORGET",
+        "title": "过期与删除",
+        "description": "到期先隐藏，删除后物理移除并重开核对。",
+        "token": "expire / delete"
+      }
+    ],
+    "flow": {
+      "title": "一次记忆的写、读、更新与遗忘",
+      "description": "这是教学机制示意；实际值来自 lesson.memory 事件。",
+      "steps": [
+        {
+          "label": "01",
+          "actor": "输入",
+          "title": "选择事实",
+          "body": "学习者指定范围、键、值与来源。",
+          "code": "values = Inputs.model_validate(context.inputs)",
+          "language": "python",
+          "evidence": "输入校验"
+        },
+        {
+          "label": "02",
+          "actor": "SQLite",
+          "title": "保存记录",
+          "body": "参数化写入并检查版本。",
+          "code": "saved = store.put(namespace, key, value, source, expected_version)",
+          "language": "python",
+          "evidence": "lesson.memory"
+        },
+        {
+          "label": "03",
+          "actor": "SQLite",
+          "title": "重开读取",
+          "body": "关闭第一连接后建立第二连接。",
+          "code": "store.close()\nrestored = MemoryStore(path).get(namespace, key)",
+          "language": "python",
+          "evidence": "lesson.report"
+        },
+        {
+          "label": "04",
+          "actor": "程序",
+          "title": "处理冲突",
+          "body": "过时版本拒绝，当前版本更新。",
+          "code": "store.put(..., expected_version=saved['version'])",
+          "language": "python",
+          "evidence": "lesson.memory"
+        },
+        {
+          "label": "05",
+          "actor": "SQLite",
+          "title": "过期或删除",
+          "body": "读取隐藏过期记录，显式删除再重开核对。",
+          "code": "store.delete(namespace, key)\nassert MemoryStore(path).get(namespace, key) is None",
+          "language": "python",
+          "evidence": "lesson.memory / lesson.report"
+        }
+      ]
+    }
+  }
+}

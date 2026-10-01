@@ -1,0 +1,151 @@
+{
+  "sections": [
+    {
+      "title": "工具定义告诉模型能做什么",
+      "body": "这课把两个 Python 能力交给模型选择：add_numbers 计算两数之和，get_current_time 读取本机时间。请求里的 tools 只包含名称、用途和参数的 JSON Schema，不包含 Python 函数的执行结果。模型根据问题和这些说明，决定是否提出调用。\n参数 Schema 描述输入应有什么字段和类型；本机的 AVAILABLE_TOOLS 则把允许的工具名映射到真正的函数。看懂这两个位置，就能分清模型看到的接口和 Python 执行的实现。"
+    },
+    {
+      "title": "提出调用、执行、观察是三个步骤",
+      "body": "模型返回 tool_calls 时，只是在提出行动：function.name 说明工具，arguments 是待解析的 JSON 字符串。运行器解析参数、查找已登记函数并执行，然后把结果包装为 ok=true 或 ok=false。比如模型提出 add_numbers(19, 23)，此时尚不能证明已经算出了 42；应继续找 Python 的 tool_result。\n工具结果通过 role=tool 的消息回传，tool_call_id 与原调用 id 配对。下一轮模型才能在请求中看到结果并组织回答。模型选择行动，Python 执行动作，消息历史让两者接成循环。"
+    },
+    {
+      "title": "相同一轮不等于同时执行",
+      "body": "“计算 19 加 23，并告诉我现在几点”有两个独立任务，计算的参数已经由用户给出，不需要等时间结果。模型可以在同一个响应中提出两个调用；当前运行器仍按列表逐个执行，并将各自的结果回传。\n网页接入真实模型，Python 在本机执行工具。比较不同模型或不同输入时，应以实际请求和结果为准，不假定每次调用顺序完全相同。回放只查看已收到的事件，不重新查时间或运行工具。"
+    }
+  ],
+  "observe": [
+    "展开第一轮 request：找到 tools 中的名称、description 和 parameters，再判断用户问题需要哪个工具。",
+    "对照 response 的 tool_calls 与随后的 tool_result：检查调用参数、Python 返回值，以及 id 和 tool_call_id 是否一致。",
+    "展开下一轮 request：找到新增的 assistant 调用消息和 role=tool 结果，再检查最终回答是否依据该结果；回放时观察这些值保持不变。"
+  ],
+  "quiz": [
+    {
+      "id": "proposal-versus-execution",
+      "prompt": "响应里出现 add_numbers 的工具调用，参数是 19 和 23。此时能确定什么？",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python 已经执行加法，结果一定是 42。"
+        },
+        {
+          "id": "b",
+          "text": "模型提出了调用；需要继续查看 Python 执行结果才能确认。"
+        },
+        {
+          "id": "c",
+          "text": "模型把 Python 函数代码上传给服务商运行了。"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "tool_calls 是行动请求，不是执行收据。当前平台由本机运行器解析参数、选择登记函数并执行；tool_result 才记录这次实际执行的结果。"
+    },
+    {
+      "id": "clock-source",
+      "prompt": "工具返回 10:08，并带本机时区。最终回答里的时间应以哪里为依据？",
+      "options": [
+        {
+          "id": "a",
+          "text": "模型训练时记住的当前时间。"
+        },
+        {
+          "id": "b",
+          "text": "浏览器界面上猜测的用户所在时区。"
+        },
+        {
+          "id": "c",
+          "text": "这次 get_current_time 的实际返回值及其时区。"
+        }
+      ],
+      "correct_option": "c",
+      "explanation": "get_current_time 读取运行 Python 的机器时钟。该结果会进入下一轮消息；应保留它的来源和时区，而不是猜测当前时间或换成未经查询的其他时区。"
+    },
+    {
+      "id": "independent-calls",
+      "prompt": "模型在同一响应中提出加法与查时间两个独立调用。对当前实现最准确的描述是什么？",
+      "options": [
+        {
+          "id": "a",
+          "text": "可以同轮提出；Python 按列表逐个执行，再回传各自的结果。"
+        },
+        {
+          "id": "b",
+          "text": "同轮提出就证明两个 Python 函数真实并发执行。"
+        },
+        {
+          "id": "c",
+          "text": "加法一定要等待时间返回，因此必须分成两次模型调用。"
+        }
+      ],
+      "correct_option": "a",
+      "explanation": "两个任务没有数据依赖，所以模型可同轮提出。是否并发取决于运行器的实现；这课的 for 循环逐个执行工具，不能仅凭同轮调用认定真实并发。"
+    }
+  ],
+  "presentation": {
+    "eyebrow": "CHAPTER 01 / TOOL CALLING",
+    "headline": "从一句提问，",
+    "highlight": "到一次真实行动。",
+    "takeaway": "模型选择行动，Python 执行动作，消息历史让两者接成循环。",
+    "concepts": [
+      {
+        "label": "01 / INTERFACE",
+        "title": "先声明能力",
+        "description": "工具定义描述名称、用途和参数。模型看到的是接口说明，具体执行留在 Python。",
+        "token": "tools · JSON Schema"
+      },
+      {
+        "label": "02 / EXECUTION",
+        "title": "再执行行动",
+        "description": "tool_calls 是模型的调用提议。运行器解析参数，在登记的函数中找到并执行工具。",
+        "token": "AVAILABLE_TOOLS"
+      },
+      {
+        "label": "03 / EVIDENCE",
+        "title": "让结果有出处",
+        "description": "通过 tool_call_id 连接调用与返回值。下一轮模型收到结果，才有依据组织回答。",
+        "token": "role=tool · tool_call_id"
+      }
+    ],
+    "flow": {
+      "title": "一次工具调用，是怎样发生的？",
+      "description": "以“19 加 23”为例，点击四个步骤，分清模型决策、Python 执行与结果回传。下方是教学示意，并非本次运行记录。",
+      "steps": [
+        {
+          "label": "理解任务",
+          "actor": "用户 → 模型",
+          "title": "工具说明进入模型上下文",
+          "body": "问题和 tools 一起发给模型。名称、用途与参数 Schema 帮助它判断是否需要加法工具；此时还没有执行 Python。",
+          "code": "{\n  \"role\": \"user\",\n  \"content\": \"帮我计算 19 加 23\"\n}\n\n// tools 中声明可用能力\n{ \"name\": \"add_numbers\" }",
+          "language": "text",
+          "evidence": "展开第一轮 request，确认 tools 包含 add_numbers 及数字参数 a、b。"
+        },
+        {
+          "label": "提出调用",
+          "actor": "模型 → 运行器",
+          "title": "调用提议，还不是执行结果",
+          "body": "模型通过 tool_calls 提出调用，arguments 是 JSON 字符串。示意 id 只用于说明配对关系，实际值由模型响应决定。",
+          "code": "{\n  \"id\": \"call_example\",\n  \"type\": \"function\",\n  \"function\": {\n    \"name\": \"add_numbers\",\n    \"arguments\": \"{\\\"a\\\":19,\\\"b\\\":23}\"\n  }\n}",
+          "language": "json",
+          "evidence": "对照 response 和 tool_call，核对工具名称、实参及调用 id。"
+        },
+        {
+          "label": "执行工具",
+          "actor": "Python 运行器",
+          "title": "在本机运行登记的函数",
+          "body": "运行器解析 JSON，按名称从 AVAILABLE_TOOLS 查找函数，再将参数交给 Python。函数完成后，运行器才包装执行结果。",
+          "code": "arguments = {\"a\": 19, \"b\": 23}\nfunction = AVAILABLE_TOOLS[\"add_numbers\"]\nresult = function(**arguments)\n# 示例输入的预期包装结果\n{\"ok\": True, \"result\": 42}",
+          "language": "python",
+          "evidence": "检查 tool_result 中 ok 与 result；不能仅凭调用提议认定已经执行。"
+        },
+        {
+          "label": "带回结果",
+          "actor": "运行器 → 模型",
+          "title": "把执行证据带入下一轮",
+          "body": "role=tool 消息和原调用通过 tool_call_id 配对，随 messages 进入下一轮请求。模型据此组织最终回答。",
+          "code": "{\n  \"role\": \"tool\",\n  \"tool_call_id\": \"call_example\",\n  \"content\": \"{\\\"ok\\\":true,\\\"result\\\":42}\"\n}",
+          "language": "json",
+          "evidence": "在下一轮 request 找到 tool 消息，再核对最终回答是否引用了该结果。"
+        }
+      ]
+    }
+  }
+}

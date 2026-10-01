@@ -1,0 +1,190 @@
+{
+  "sections": [
+    {
+      "title": "预算量的是哪一种长度",
+      "body": "模型上下文有容量限制，但本课的 char_budget 是本地序列化 JSON 的字符上限，用于直观看到压缩后的大小；它不是模型 tokenizer 的准确 token 数，也不等于服务商账单。响应若提供 usage，报告单独列出返回值；没有返回时写“未知”，不把它记成零。"
+    },
+    {
+      "title": "保留完整历史的代价",
+      "body": "本课先通过真实本地 lookup_lesson 工具取得事实与 source。三组历史均由课程程序组装为受控上下文；其中 assistant 工具调用消息和旁支回复不是前轮模型真实生成。工具回执来自实际 Python 查询，展示合法协议配对。完整请求包含目标、工具对、旁支讨论和共同追问。增加 noise_repeats 后，完整请求的字符数增长。"
+    },
+    {
+      "title": "窗口截取可能丢掉什么",
+      "body": "窗口版本仅保留 system、最近两条旁支消息和相同问题。工具调用及对应回执作为一组移除，所以协议仍合法；代价是早先的目标、来源、事实和未完成事项可能不再可见。若模型给出看似正确的答案，也应检查它是否有来源，而非只按措辞判对。"
+    },
+    {
+      "title": "规则压缩保留关键证据",
+      "body": "压缩版本从本次本地读取结果生成一条结构化任务记录：目标、约束、来源、事实和待办。它是程序明确选择信息的规则摘要，不声称由模型自动理解全文。构造完成后先核对字符预算；若关键证据装不下，抛出错误而不悄悄删掉来源。"
+    },
+    {
+      "title": "报告应如何读",
+      "body": "三种布局各发一次真实模型请求，每次 request 展示最终 messages，response 展示当次模型回答。实验面板的追问文本会用于三组共同追问。报告里的字符数、来源存在与事实存在从已构造请求逐条检查；供应商 usage 只在响应中真实存在时展示。完整和压缩的答案差异也可能来自模型不确定性，因此单次对照不能证明一般性能。"
+    }
+  ],
+  "observe": [
+    "找出本地 tool_call 与 tool_result 的相同 id，确认资料读取真实发生。",
+    "逐一展开三条 request：完整历史含工具对；窗口没有工具对；压缩保留来源和事实。",
+    "将 noise_repeats 从 8 调到 20，比较三种 JSON 字符数，注意压缩记录未随噪声增长。",
+    "查看每条 response 是否返回 usage；没有值时报告应写未知。",
+    "把 char_budget 调小到不足以保留摘要，确认程序拒绝而不是静默裁剪。"
+  ],
+  "quiz": [
+    {
+      "id": "unit",
+      "prompt": "报告里的 JSON 字符数可以直接当作 token 吗？",
+      "options": [
+        {
+          "id": "a",
+          "text": "可以，两者单位相同"
+        },
+        {
+          "id": "b",
+          "text": "不可以，token 要看供应商用量或准确 tokenizer"
+        },
+        {
+          "id": "c",
+          "text": "只要除以四就是精确 token"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "字符数只是本地可复现的大小指标；token 由模型分词与服务商统计决定。"
+    },
+    {
+      "id": "pair",
+      "prompt": "窗口裁掉工具证据时，应该怎样处理工具消息？",
+      "options": [
+        {
+          "id": "a",
+          "text": "只留 tool 回执"
+        },
+        {
+          "id": "b",
+          "text": "调用与回执一起移除"
+        },
+        {
+          "id": "c",
+          "text": "只留 assistant 调用"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "调用与回执必须保持配对；单独留下任一侧可能使协议非法。"
+    },
+    {
+      "id": "source",
+      "prompt": "压缩结果必须优先保留什么？",
+      "options": [
+        {
+          "id": "a",
+          "text": "旁支讨论的每个寒暄"
+        },
+        {
+          "id": "b",
+          "text": "目标、约束、事实、来源与待办"
+        },
+        {
+          "id": "c",
+          "text": "只有最终问题"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "压缩要服务下一步决策；来源与约束丢失会让答案无法核对。"
+    },
+    {
+      "id": "usage",
+      "prompt": "供应商未返回 usage 时应怎样写？",
+      "options": [
+        {
+          "id": "a",
+          "text": "prompt_tokens=0"
+        },
+        {
+          "id": "b",
+          "text": "未知，并保留本地字符数为另一指标"
+        },
+        {
+          "id": "c",
+          "text": "从回答长度推断精确账单"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "没有实测值就不能记成零，估算也必须单独标识。"
+    }
+  ],
+  "presentation": {
+    "eyebrow": "CHAPTER 03 / BUDGET",
+    "headline": "压缩上下文，",
+    "highlight": "不能压掉依据。",
+    "takeaway": "窗口省长度但可能丢事实；规则摘要保留来源、目标与待办，并明确测量单位。",
+    "concepts": [
+      {
+        "label": "01 / FULL",
+        "title": "完整历史",
+        "description": "保存工具证据和旁支消息，长度随对话增长。",
+        "token": "full messages"
+      },
+      {
+        "label": "02 / WINDOW",
+        "title": "截取窗口",
+        "description": "成组移除早期工具交互，可能失去来源。",
+        "token": "recent only"
+      },
+      {
+        "label": "03 / SUMMARY",
+        "title": "规则压缩",
+        "description": "把目标、来源、事实和待办写成可检查记录。",
+        "token": "source + fact"
+      }
+    ],
+    "flow": {
+      "title": "同一问题，三种可见上下文",
+      "description": "代码是机制示意；真实请求与回答以运行事件为准。",
+      "steps": [
+        {
+          "label": "01",
+          "actor": "本地工具",
+          "title": "读取事实",
+          "body": "课程程序调用工具并得到回执。",
+          "code": "result = context.call_tool('lookup_lesson', args, tools)",
+          "language": "python",
+          "evidence": "tool_call / tool_result"
+        },
+        {
+          "label": "02",
+          "actor": "程序",
+          "title": "构造完整历史",
+          "body": "保留调用与回执成组的记录。",
+          "code": "full = [system, goal, call, receipt, *noise, question]",
+          "language": "python",
+          "evidence": "request.messages"
+        },
+        {
+          "label": "03",
+          "actor": "程序",
+          "title": "截取窗口",
+          "body": "舍弃早期记录与工具对。",
+          "code": "window = [system, *recent, question]",
+          "language": "python",
+          "evidence": "request.messages"
+        },
+        {
+          "label": "04",
+          "actor": "程序",
+          "title": "保留证据",
+          "body": "按任务字段组织来源与事实。",
+          "code": "compressed = [system, summary(source, fact), question]",
+          "language": "python",
+          "evidence": "request.messages"
+        },
+        {
+          "label": "05",
+          "actor": "模型",
+          "title": "逐项比较",
+          "body": "每种布局分别调用一次模型。",
+          "code": "answers = [context.complete({'messages': m}) for m in variants]",
+          "language": "python",
+          "evidence": "response / lesson.report"
+        }
+      ]
+    }
+  }
+}

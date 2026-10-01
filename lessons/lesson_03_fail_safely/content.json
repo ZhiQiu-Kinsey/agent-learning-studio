@@ -1,0 +1,151 @@
+{
+  "sections": [
+    {
+      "title": "Schema 说明接口，Python 负责守住边界",
+      "body": "除法工具说明 a、b 应为数字，b 不能为 0。这能帮助模型生成合适的调用，但工具说明不是执行权限，也不能保证模型永远给对参数。Python 函数仍检查数字类型、有限范围和非零除数，运行器只查找 AVAILABLE_TOOLS 中明确登记的名称。\n这课没有让模型返回的任意代码直接执行。未知名称、损坏的 JSON、参数不匹配或除零，会在分派或工具检查中被拒绝。判断安全边界是否成立，要看实际执行路径，不能只看 Prompt 写了什么。"
+    },
+    {
+      "title": "失败也可以作为结构化观察",
+      "body": "正常除法被包装为 ok=true 与 result；失败则返回 ok=false、error_type 和 error。运行器仍生成与原调用配对的 role=tool 消息，让下一轮模型读到具体原因，而不是让这次工具错误直接丢失。\n因此，tool_result 这个事件出现只说明有结果回传，不说明运算成功。要展开内容检查 ok，再决定能否报告 quotient。对于 12 除以 0，正确后续是如实说明错误并请求有效输入，不能编造商。"
+    },
+    {
+      "title": "循环结束与计算成功分开判断",
+      "body": "工具失败后，模型可以给出说明错误的最终回答，整个请求因此正常结束。界面的 done=completed 表示运行循环结束；除法是否成功，仍取决于工具结果中的 ok。对错误进行了正确处理，也可能是这道边界练习的合格表现。\n重复发送同一除零参数不会让数学规则改变。Prompt 要求修正输入，运行器还用有限轮数避免持续调用。未知工具和损坏参数可以通过内部程序测试验证拒绝路径；这些人为构造的输入不能冒充真实模型曾经提出的调用。"
+    }
+  ],
+  "observe": [
+    "先运行正常除法，对照 tool_result 中的 ok=true、result.quotient 和最终回答；再运行除数为零，找出 ok=false 与具体 error。",
+    "展开失败后的下一轮 request：确认 role=tool 的错误已经回传，并用 tool_call_id 找到原调用；检查模型有没有把错误伪装成商或重复同一请求。",
+    "把真实问题从“12 除以 0”改为“12 除以 3”，对照两次 tool_result；区分 done 的运行状态、工具 ok 和最终解释是否正确。"
+  ],
+  "quiz": [
+    {
+      "id": "completion-not-success",
+      "prompt": "除零的 tool_result 是 ok=false，模型随后解释错误，最后 done=completed。该怎样理解？",
+      "options": [
+        {
+          "id": "a",
+          "text": "除法已成功，completed 可以覆盖 ok=false。"
+        },
+        {
+          "id": "b",
+          "text": "模型解释错误，所以工具结果不必再检查。"
+        },
+        {
+          "id": "c",
+          "text": "运行已结束，但除法失败；是否合格还要看模型有没有如实处理错误。"
+        }
+      ],
+      "correct_option": "c",
+      "explanation": "done 描述运行生命周期，ok 描述工具执行结果。正常结束的错误说明不会把失败变成成功；这道练习要求识别错误并正确回传、解释。"
+    },
+    {
+      "id": "invalid-retry",
+      "prompt": "12 除以 0 已被拒绝。下一步最合理的行为是什么？",
+      "options": [
+        {
+          "id": "a",
+          "text": "说明除数不能为零，请用户提供非零除数。"
+        },
+        {
+          "id": "b",
+          "text": "反复用同一参数重试，直到返回结果。"
+        },
+        {
+          "id": "c",
+          "text": "为了完成任务，自行把除数改成 1 并报告商。"
+        }
+      ],
+      "correct_option": "a",
+      "explanation": "这是输入不满足领域规则，不是暂时的网络故障。原样重试无法解决，擅自改数会改变用户任务；应保留失败原因并请求有效输入。"
+    },
+    {
+      "id": "allowlist-boundary",
+      "prompt": "模型请求执行一个未登记的工具，即使它的名称看起来合理，运行器应怎样处理？",
+      "options": [
+        {
+          "id": "a",
+          "text": "自动寻找并执行同名 Python 函数，以免中断任务。"
+        },
+        {
+          "id": "b",
+          "text": "拒绝执行，返回结构化错误，再让模型根据允许的能力继续。"
+        },
+        {
+          "id": "c",
+          "text": "只要 arguments 是合法 JSON，就有权执行这个名称。"
+        }
+      ],
+      "correct_option": "b",
+      "explanation": "合法 JSON 只表示参数可解析，不表示工具被授权。AVAILABLE_TOOLS 是明确的执行白名单；未知名称必须被拒绝，不能由模型的提议扩展程序执行权限。"
+    }
+  ],
+  "presentation": {
+    "eyebrow": "CHAPTER 03 / FAIL SAFELY",
+    "headline": "让失败被看见，",
+    "highlight": "让边界被守住。",
+    "takeaway": "循环结束，不等于工具成功。错误也应该成为可理解、可核对的观察。",
+    "concepts": [
+      {
+        "label": "01 / BOUNDARY",
+        "title": "把权限留给程序",
+        "description": "Schema 说明参数格式，Python 校验真实输入。只有 AVAILABLE_TOOLS 中的名称才允许执行。",
+        "token": "allowlist + validation"
+      },
+      {
+        "label": "02 / FEEDBACK",
+        "title": "把失败说清楚",
+        "description": "ok=false、error_type 与 error 一起回传，让模型看到失败原因，而不是编造一个商。",
+        "token": "ok=false · error"
+      },
+      {
+        "label": "03 / LIFECYCLE",
+        "title": "区分两种状态",
+        "description": "done=completed 表示循环结束。除法是否成功仍看工具 ok，正确解释错误也有价值。",
+        "token": "done ≠ tool success"
+      }
+    ],
+    "flow": {
+      "title": "当除数为零，Agent 该怎么继续？",
+      "description": "沿着“12 除以 0”的拒绝路径，观察输入校验、结构化失败与后续解释。所有片段均是教学示意。",
+      "steps": [
+        {
+          "label": "提出除法",
+          "actor": "模型 → 运行器",
+          "title": "参数合法 JSON，也可能无效",
+          "body": "模型可能提出 a=12、b=0。参数能被解析，不代表满足数学规则，也不代表工具一定能够成功执行。",
+          "code": "{\n  \"function\": {\n    \"name\": \"divide_numbers\",\n    \"arguments\": \"{\\\"a\\\":12,\\\"b\\\":0}\"\n  }\n}",
+          "language": "json",
+          "evidence": "检查 tool_call 的名称及参数；区分 JSON 格式正确与领域规则允许。"
+        },
+        {
+          "label": "守住边界",
+          "actor": "Python 工具",
+          "title": "Python 明确拒绝除零",
+          "body": "工具检查数字类型、有限范围和非零除数。模型提出调用不会绕过这些检查，执行名称也必须在白名单中。",
+          "code": "# divide_numbers 中的实际校验\nif b == 0:\n    raise ValueError(\n        \"除数不能为 0；请提供非零除数。\"\n    )",
+          "language": "python",
+          "evidence": "对照工具源码和实际结果，确认错误来自执行路径中的校验。"
+        },
+        {
+          "label": "回传失败",
+          "actor": "运行器 → 模型",
+          "title": "错误也是一种有结构的结果",
+          "body": "运行器捕获 ValueError 并包装失败，仍通过 role=tool 回传。出现 tool_result 事件只说明有结果返回，应继续展开检查 ok。",
+          "code": "{\n  \"ok\": false,\n  \"error_type\": \"ValueError\",\n  \"error\": \"除数不能为 0；请提供非零除数。\"\n}",
+          "language": "json",
+          "evidence": "找到 ok=false，并用 tool_call_id 对应原调用，再检查错误是否进入下一轮 request。"
+        },
+        {
+          "label": "如实回应",
+          "actor": "模型 → 用户",
+          "title": "解释问题，请求有效输入",
+          "body": "合适的后续是说明不能除零并请求非零除数。正常结束不会把失败变成成功；原样重试也不能改变数学规则。",
+          "code": "// 教学示意：两种状态需分开判断\n工具结果：ok = false\n循环结束：done = completed\n\n// 合理后续行为\n说明错误 → 请求非零除数",
+          "language": "text",
+          "evidence": "检查最终回答是否如实处理错误，且没有编造商、擅自改数或重复同一失败请求。"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,173 @@
+"""第 9–10 课离线回归，不触发付费模型或持久教学库。"""
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from course.execution import RunContext, validate_inputs
+from course.runner import RunCancelled
+from lessons.lesson_09_context_budget import fixtures as budget_fixtures
+from lessons.lesson_09_context_budget import runtime as budget_runtime
+from lessons.lesson_10_persistent_memory import runtime as memory_runtime
+
+
+def context(lesson_id, exercise_id, values, completion=None, mode="offline"):
+    events = []
+    run = RunContext(lesson_id=lesson_id, exercise_id=exercise_id, question="", mode=mode,
+                     model="test-model", representation="offline", inputs=values, api_key="",
+                     completion=completion, emit_event=lambda kind, data, number: events.append((kind, data, number)),
+                     max_model_calls=3)
+    return run, events
+
+
+class BudgetTests(unittest.TestCase):
+    def test_three_legal_variants_and_usage(self):
+        values = validate_inputs(budget_runtime, {})
+        run, events = context("9", "compare", values, budget_fixtures.create_completion("compare", values))
+        budget_runtime.run(run)
+        requests = [data["body"]["messages"] for kind, data, _ in events if kind == "request"]
+        self.assertEqual(len(requests), 3)
+        self.assertTrue(any(m.get("role") == "tool" for m in requests[0]))
+        self.assertFalse(any(m.get("role") == "tool" for m in requests[1]))
+        self.assertIn(budget_runtime.FACTS[values["source_key"]], str(requests[2]))
+        self.assertEqual([kind for kind, _, _ in events].count("response"), 3)
+        report = next(data for kind, data, _ in events if kind == "lesson.report")
+        self.assertEqual(next(item["value"] for item in report["metrics"] if item["label"] == "返回 usage 的请求数"), 3)
+
+    def test_budget_rejects_loss_of_essential_record(self):
+        result = {"ok": True, "result": budget_runtime.lookup_lesson("lesson-07")}
+        with self.assertRaises(ValueError):
+            budget_runtime.build_variants("lesson-07", 8, 1, result)
+
+    def test_summary_uses_actual_tool_receipt_and_common_question(self):
+        result = {"ok": True, "result": {"source": "lesson-07", "fact": "本次真实回执里的特殊事实。"}}
+        variants = budget_runtime.build_variants("lesson-07", 2, 600, result, "同一条自定义追问？")
+        self.assertTrue(budget_runtime._visible(variants["保留证据压缩"], "本次真实回执里的特殊事实。"))
+        self.assertTrue(all(messages[-1]["content"] == "同一条自定义追问？" for messages in variants.values()))
+
+    def test_input_validation(self):
+        for invalid in ({"noise_repeats": 100}, {"char_budget": 20}, {"source_key": "../secret"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
+                validate_inputs(budget_runtime, invalid)
+
+
+class MemoryTests(unittest.TestCase):
+    def test_reopen_scope_conflict_expiry_and_delete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            first = memory_runtime.MemoryStore(path)
+            saved = first.put("learner_a", "goal", "学习状态", "显式输入", None)
+            first.close()
+            second = memory_runtime.MemoryStore(path)
+            self.assertEqual(second.get("learner_a", "goal")["value"], "学习状态")
+            self.assertIsNone(second.get("learner_b", "goal"))
+            with self.assertRaises(ValueError):
+                second.put("learner_a", "goal", "过时值", "旧资料", 0)
+            updated = second.put("learner_a", "goal", "学习记忆", "更新输入", saved["version"])
+            self.assertEqual(updated["version"], 2)
+            second.put("learner_a", "goal", "即将过期", "临时资料", 2, expires_at=1)
+            self.assertIsNone(second.get("learner_a", "goal"))
+            revived = second.put("learner_a", "goal", "恢复后", "新输入", None)
+            self.assertEqual(revived["version"], 4)
+            self.assertEqual(second.get("learner_a", "goal")["value"], "恢复后")
+            self.assertTrue(second.delete("learner_a", "goal"))
+            second.close()
+            third = memory_runtime.MemoryStore(path)
+            self.assertIsNone(third.get("learner_a", "goal"))
+            third.close()
+
+    def test_offline_runtime_uses_temporary_storage(self):
+        values = validate_inputs(memory_runtime, {"scenario": "expiry_delete"})
+        run, events = context("10", "expiry_delete", values)
+        memory_runtime.run(run)
+        report = next(data for kind, data, _ in events if kind == "lesson.report")
+        self.assertTrue(all(check["passed"] for check in report["checks"]))
+        self.assertEqual(next(item["value"] for item in report["metrics"] if item["label"] == "存储方式"), "临时 SQLite")
+
+    def test_recall_only_is_read_only_across_runs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            values = memory_runtime.Inputs.model_validate({"scenario": "reopen"})
+            first, _ = context("10", "reopen", values.model_dump(mode="json"), mode="live")
+            memory_runtime._execute(first, path, values)
+            recalled_values = memory_runtime.Inputs.model_validate({"scenario": "recall_only", "value": "无关的新值"})
+            second, events = context("10", "recall_only", recalled_values.model_dump(mode="json"), mode="live")
+            answer = memory_runtime._execute(second, path, recalled_values)
+            self.assertIn(values.value, answer)
+            self.assertNotIn("无关的新值", answer)
+            store = memory_runtime.MemoryStore(path)
+            self.assertEqual(store.get(values.namespace, values.key)["version"], 1)
+            store.close()
+            self.assertEqual([data["action"] for kind, data, _ in events if kind == "lesson.memory"], ["recall_only"])
+
+    def test_recall_only_missing_database_does_not_create_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "missing.sqlite3"
+            values = memory_runtime.Inputs.model_validate({"scenario": "recall_only"})
+            run, _ = context("10", "recall_only", values.model_dump(mode="json"), mode="live")
+            answer = memory_runtime._execute(run, path, values)
+            self.assertIn("没有可检索记忆", answer)
+            self.assertFalse(path.exists())
+
+    def test_two_connections_cannot_both_commit_same_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            seed = memory_runtime.MemoryStore(path)
+            seed.put("learner_a", "goal", "原值", "输入", None)
+            seed.close()
+            barrier = threading.Barrier(2)
+            outcomes = []
+            def writer(value):
+                store = memory_runtime.MemoryStore(path)
+                try:
+                    barrier.wait(timeout=3)
+                    try:
+                        store.put("learner_a", "goal", value, "并发输入", 1)
+                        outcomes.append("committed")
+                    except ValueError:
+                        outcomes.append("conflict")
+                finally:
+                    store.close()
+            threads = [threading.Thread(target=writer, args=(value,)) for value in ("甲", "乙")]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=5)
+            self.assertEqual(sorted(outcomes), ["committed", "conflict"])
+            final = memory_runtime.MemoryStore(path)
+            self.assertEqual(final.get("learner_a", "goal")["version"], 2)
+            final.close()
+
+    def test_cancel_after_expiry_prevents_delete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            values = memory_runtime.Inputs.model_validate({"scenario": "expiry_delete"})
+            stopped = {"value": False}
+            events = []
+            run = RunContext(lesson_id="10", exercise_id="expiry_delete", question="", mode="live",
+                             model="test-model", representation="offline", inputs=values.model_dump(mode="json"),
+                             api_key="", completion=None,
+                             emit_event=lambda kind, data, number: (events.append((kind, data)),
+                                                                    stopped.__setitem__("value", True) if kind == "lesson.memory" and data.get("action") == "expired" else None),
+                             cancelled=lambda: stopped["value"])
+            with self.assertRaises(RunCancelled):
+                memory_runtime._execute(run, path, values)
+            store = memory_runtime.MemoryStore(path)
+            self.assertEqual(store.connection.execute("SELECT count(*) FROM memories").fetchone()[0], 1)
+            store.close()
+
+    def test_identifiers_and_inputs_are_bounded(self):
+        for invalid in ({"namespace": "../../secret"}, {"key": "a'b"}, {"scenario": "wipe_all"}, {"db_path": "x"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
+                validate_inputs(memory_runtime, invalid)
+        with tempfile.TemporaryDirectory() as directory:
+            store = memory_runtime.MemoryStore(Path(directory) / "x.sqlite3")
+            with self.assertRaises(ValueError):
+                store.get("../bad", "goal")
+            store.close()
+
+
+if __name__ == "__main__":
+    unittest.main()
