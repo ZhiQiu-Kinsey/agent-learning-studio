@@ -136,6 +136,13 @@ class ProviderRegistry:
             values.extend(os.environ.get(entry[1], "") for entry in PROVIDERS.values())
             return [value for value in values if isinstance(value, str) and value]
 
+    def api_keys(self, bailian_key=""):
+        """当前已配置的全部 API Key（不含服务地址）；用于录制的密钥检查。"""
+        with self.lock:
+            values = [bailian_key, *(self.resolve(provider_id, bailian_key).api_key for provider_id in PROVIDERS)]
+            values.extend(os.environ.get(entry[1], "") for entry in PROVIDERS.values())
+            return [value for value in values if isinstance(value, str) and value]
+
 
 def public_profile(profile):
     return {"id": profile.id, "label": profile.label, "model": profile.model,

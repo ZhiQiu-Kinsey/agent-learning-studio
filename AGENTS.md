@@ -49,8 +49,10 @@ npm.cmd --prefix frontend run dev              # 启动 Vite，代理 /api 到�
 .\.venv\Scripts\python.exe scripts/export_trace_contract.py
 # 新增课程前预览脚手架，课号替换为实际 planned 项
 .\.venv\Scripts\python.exe scripts/new_lesson.py --id 11 --slug document_loading --dry-run
-# 校验所有实现清单和教学内容（包括 planned 草稿，不调用模型）
+# 校验所有实现清单和教学内容（包括 planned 草稿与随课录制，不调用模型）
 .\.venv\Scripts\python.exe scripts/validate_lessons.py
+# 把一次真实模型运行原样导出为随课录制（规则见 docs/architecture/event-envelope-v2.md 第 6 节）
+.\.venv\Scripts\python.exe scripts/export_recording.py --run <run_id> --name <kebab-case 名称>
 ```
 
 浏览器测试前先构建前端并启动后端，再进入 `frontend/` 执行 `npx.cmd playwright test`。测试使用已安装的 Chrome；由于后端执行互斥，测试按顺序运行。
