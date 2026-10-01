@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { CurriculumData } from "../src/types";
+import { isRunCreation, mockRunStream, runOffline } from "./runs";
 
 // 学生界面固定真实调用。自动化测试在网络边界改用后端测试适配器，
 // 检查真实 Python 工具与网页行为，不消耗凭据、不产生不稳定的模型费用。
@@ -19,14 +20,7 @@ test.beforeEach(async ({ page }) => {
       },
     });
   });
-  await page.route("**/api/run", async (route) => {
-    const body = route.request().postDataJSON();
-    expect(body.mode).toBe("live");
-    const response = await route.fetch({
-      postData: JSON.stringify({ ...body, mode: "offline" }),
-    });
-    await route.fulfill({ response });
-  });
+  await runOffline(page, (body) => expect(body.mode).toBe("live"));
 });
 
 test("source is served from the lesson, and replay never sends another run", async ({
@@ -37,7 +31,7 @@ test("source is served from the lesson, and replay never sends another run", asy
   page.on("pageerror", (error) => errors.push(error.message));
   let runCount = 0;
   page.on("request", (req) => {
-    if (req.url().endsWith("/api/run")) runCount++;
+    if (isRunCreation(req)) runCount++;
   });
   await page.goto("/");
   await expect(
@@ -114,6 +108,56 @@ test("dependent call receives the real time result, and the full trace can be ex
     a: time.hour,
     b: time.minute,
   });
+  expect(trace.run_id).toMatch(/^[0-9a-f]{32}$/);
+  expect(trace.events.every((e: any) => e.schema_version === 2)).toBe(true);
+});
+
+test("an interrupted event stream resumes from the last received seq without duplicates or gaps", async ({
+  page,
+  request,
+}) => {
+  const fromSeq: (string | null)[] = [];
+  let runId = "";
+  await page.route(
+    (url) => /^\/api\/runs\/[^/]+\/events$/.test(url.pathname),
+    async (route) => {
+      const url = new URL(route.request().url());
+      fromSeq.push(url.searchParams.get("from_seq"));
+      if (fromSeq.length > 1) return route.fallback();
+      runId = url.pathname.split("/")[3];
+      // 只转发真实事件流的前 3 条后断开，模拟网络中断。
+      const frames = (await (await route.fetch()).text())
+        .split("\n\n")
+        .filter((frame) => frame.includes("data: "));
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: frames.slice(0, 3).join("\n\n") + "\n\n",
+      });
+    },
+  );
+  await page.goto("/");
+  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
+  await page.getByRole("button", { name: "运行练习" }).click();
+  await expect(page.locator(".trace-status")).toHaveText("已完成");
+  await expect(page.locator(".answer-content")).toContainText("42");
+  expect(fromSeq).toEqual(["1", "4"]);
+  const stored = (await (await request.get(`/api/runs/${runId}/events`)).text())
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)));
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载本次运行记录" }).click();
+  const download = await downloadPromise;
+  const chunks: Buffer[] = [];
+  for await (const chunk of (await download.createReadStream())!)
+    chunks.push(Buffer.from(chunk));
+  const trace = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  expect(trace.run_id).toBe(runId);
+  expect(trace.events).toEqual(stored);
+  expect(trace.events.map((e: any) => e.seq)).toEqual(
+    stored.map((_: unknown, index: number) => index + 1),
+  );
 });
 
 test("zero division returns an error result and live mode excludes fault injection presets", async ({
@@ -164,30 +208,27 @@ test("small screen opens course navigation and keeps content within viewport", a
 test("answers render Markdown without executing model-supplied HTML", async ({
   page,
 }) => {
-  await page.route("**/api/run", (route) => {
-    const events = [
-      {
-        type: "answer",
-        round: 1,
-        timestamp: new Date().toISOString(),
-        data: {
-          content:
-            '# 计算结果\n\n**42**\n\n```python\nprint(42)\n```\n\n<img src="x" onerror="window.agentInjected=true">\n<script>window.agentInjected=true</script>',
-        },
+  const events = [
+    {
+      type: "answer",
+      round: 1,
+      timestamp: new Date().toISOString(),
+      data: {
+        content:
+          '# 计算结果\n\n**42**\n\n```python\nprint(42)\n```\n\n<img src="x" onerror="window.agentInjected=true">\n<script>window.agentInjected=true</script>',
       },
-      {
-        type: "done",
-        round: null,
-        timestamp: new Date().toISOString(),
-        data: { status: "completed", duration_ms: 1 },
-      },
-    ];
-    return route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
-    });
-  });
+    },
+    {
+      type: "done",
+      round: null,
+      timestamp: new Date().toISOString(),
+      data: { status: "completed", duration_ms: 1 },
+    },
+  ];
+  await mockRunStream(
+    page,
+    events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+  );
   await page.goto("/");
   await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
   await page.getByRole("button", { name: "运行练习" }).click();
@@ -207,7 +248,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
 }) => {
   let runs = 0;
   page.on("request", (req) => {
-    if (req.url().endsWith("/api/run")) runs++;
+    if (isRunCreation(req)) runs++;
   });
   const lesson = await (await request.get("/api/lessons/1")).json();
   await page.goto("/");
@@ -265,7 +306,7 @@ test("the complete curriculum groups real plans and only starts implemented less
   ).json();
   let runs = 0;
   page.on("request", (req) => {
-    if (req.url().endsWith("/api/run")) runs++;
+    if (isRunCreation(req)) runs++;
   });
   await page.goto("/");
   await page.getByRole("button", { name: "完整课程表", exact: true }).click();
@@ -379,44 +420,41 @@ test("provider settings submit only the selected profile and never persist the k
 test("SDK events identify standardized data instead of claiming raw HTTP", async ({
   page,
 }) => {
-  await page.route("**/api/run", (route) => {
-    const events = [
-      {
-        type: "run_start",
-        data: {
-          provider_id: "custom",
-          provider_label: "SDK test",
+  const events = [
+    {
+      type: "run_start",
+      data: {
+        provider_id: "custom",
+        provider_label: "SDK test",
+        model: "test-model",
+        trace_representation: "sdk_standardized",
+      },
+    },
+    {
+      type: "request",
+      data: {
+        representation: "sdk_standardized",
+        body: {
           model: "test-model",
-          trace_representation: "sdk_standardized",
+          messages: [{ role: "user", content: "hello" }],
         },
       },
-      {
-        type: "request",
-        data: {
-          representation: "sdk_standardized",
-          body: {
-            model: "test-model",
-            messages: [{ role: "user", content: "hello" }],
-          },
-        },
+    },
+    {
+      type: "response",
+      data: {
+        representation: "sdk_standardized",
+        body: { choices: [{ message: { content: "hello" } }] },
+        duration_ms: 1,
       },
-      {
-        type: "response",
-        data: {
-          representation: "sdk_standardized",
-          body: { choices: [{ message: { content: "hello" } }] },
-          duration_ms: 1,
-        },
-      },
-      { type: "answer", data: { content: "hello" } },
-      { type: "done", data: { status: "completed", duration_ms: 1 } },
-    ].map((e) => ({ ...e, round: 1, timestamp: new Date().toISOString() }));
-    return route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
-    });
-  });
+    },
+    { type: "answer", data: { content: "hello" } },
+    { type: "done", data: { status: "completed", duration_ms: 1 } },
+  ].map((e) => ({ ...e, round: 1, timestamp: new Date().toISOString() }));
+  await mockRunStream(
+    page,
+    events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+  );
   await page.goto("/");
   await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
   await page.getByRole("button", { name: "运行练习" }).click();
@@ -489,7 +527,7 @@ test("workspace modes preserve answers, inputs and run evidence without new requ
 }) => {
   let runs = 0;
   page.on("request", (request) => {
-    if (request.url().endsWith("/api/run")) runs++;
+    if (isRunCreation(request)) runs++;
   });
   await page.goto("/");
   await page.getByRole("tab", { name: "课后自测", exact: true }).click();

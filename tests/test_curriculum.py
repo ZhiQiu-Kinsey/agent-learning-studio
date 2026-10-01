@@ -59,7 +59,7 @@ class CurriculumTests(unittest.TestCase):
             if lesson["status"] == "planned":
                 self.assertEqual(client.get("/api/lessons/" + lesson["id"]).status_code, 404)
         unavailable = next((lesson["id"] for lesson in catalog["lessons"] if lesson["status"] == "planned"), "unknown-course")
-        response = client.post("/api/run", json={"lesson_id": unavailable, "mode": "offline", "question": "test", "exercise_id": "test"})
+        response = client.post("/api/runs", json={"lesson_id": unavailable, "mode": "offline", "question": "test", "exercise_id": "test"})
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("data:", response.text)
 

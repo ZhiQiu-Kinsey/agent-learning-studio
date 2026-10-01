@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { CurriculumData, CurriculumLesson, Detail } from "../src/types";
+import { runOffline } from "./runs";
 
 const screenshot = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -55,16 +56,7 @@ test("chapters two and three expose complete guides and run every real preset th
       },
     });
   });
-  await page.route("**/api/run", async (route) => {
-    runs++;
-    const response = await route.fetch({
-      postData: JSON.stringify({
-        ...route.request().postDataJSON(),
-        mode: "offline",
-      }),
-    });
-    await route.fulfill({ response });
-  });
+  await runOffline(page, () => runs++);
   await page.goto("/");
   let presets = 0;
   for (const lesson of lessons) {
@@ -139,15 +131,7 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
       json: { model: "", config_ready: false, api_key_configured: false },
     }),
   );
-  await page.route("**/api/run", async (route) => {
-    const response = await route.fetch({
-      postData: JSON.stringify({
-        ...route.request().postDataJSON(),
-        mode: "offline",
-      }),
-    });
-    await route.fulfill({ response });
-  });
+  await runOffline(page);
   await page.goto("/");
   await openLesson(
     page,

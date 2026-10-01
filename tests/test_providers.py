@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from course.providers import ModelProfile, SDKCompletion, load_sdk
 from course.runner import run_agent
 from server.providers import PROVIDERS, ProviderRegistry, normalize_api_base
+from run_support import run_and_read, use_temporary_run_store
 
 web = importlib.import_module("server.app")
 
@@ -23,6 +24,7 @@ class ProviderTests(unittest.TestCase):
         self.previous_registry, self.previous_key = web.provider_registry, web.session_key
         web.provider_registry, web.session_key = ProviderRegistry(), ""
         self.client = TestClient(web.app, base_url="http://localhost")
+        use_temporary_run_store(self)
         environment = {name: "" for fields in PROVIDERS.values() for name in fields[1:] if name}
         environment["DASHSCOPE_API_KEY"] = "bailian-env-secret"
         self.stack.enter_context(patch.dict(os.environ, environment))
@@ -37,7 +39,7 @@ class ProviderTests(unittest.TestCase):
         return {"lesson_id": "1", "mode": "live", "question": "19+23", "exercise_id": "sum"}
 
     def events(self, response):
-        return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+        return response.events
 
     def test_public_profiles_and_default_native_configuration(self):
         response = self.client.get("/api/providers")
@@ -62,7 +64,7 @@ class ProviderTests(unittest.TestCase):
         self.assertFalse(status["api_key_configured"])
         self.assertFalse(status["config_ready"])
         with patch("course.providers.sdk_completion") as sdk:
-            self.assertEqual(self.client.post("/api/run", json=self.exercise()).status_code, 400)
+            self.assertEqual(self.client.post("/api/runs", json=self.exercise()).status_code, 400)
             sdk.assert_not_called()
         self.client.post("/api/settings", json={"model": "gpt-test"})
         self.assertTrue(self.client.get("/api/status").json()["config_ready"])
@@ -111,7 +113,7 @@ class ProviderTests(unittest.TestCase):
             response = self.client.post("/api/settings", json=payload)
             self.assertEqual(response.status_code, 400)
             self.assertNotIn(secret, response.text)
-        response = self.client.post("/api/run", json={"mode": secret})
+        response = self.client.post("/api/runs", json={"mode": secret})
         self.assertEqual(response.status_code, 422)
         self.assertNotIn(secret, response.text)
 
@@ -132,7 +134,7 @@ class ProviderTests(unittest.TestCase):
         payload = self.exercise()
         del payload["mode"]  # 未指定时默认真实模型。
         with patch("course.providers.sdk_completion", fake_sdk):
-            response = self.client.post("/api/run", json=payload)
+            response = run_and_read(self.client, payload)
         events = self.events(response)
         self.assertEqual(events[0]["data"]["provider_id"], "custom")
         self.assertEqual(events[0]["data"]["trace_representation"], "sdk_standardized")
@@ -160,7 +162,7 @@ class ProviderTests(unittest.TestCase):
             sent.append((request.full_url, json.loads(request.data), timeout))
             return Response()
         with patch("urllib.request.urlopen", urlopen), patch("course.providers.sdk_completion") as sdk:
-            response = self.client.post("/api/run", json=self.exercise())
+            response = run_and_read(self.client, self.exercise())
             sdk.assert_not_called()
         events = self.events(response)
         request = next(e for e in events if e["type"] == "request")
@@ -175,7 +177,7 @@ class ProviderTests(unittest.TestCase):
         self.assertTrue(status["config_ready"])
         self.assertFalse(status["api_key_configured"])
         with patch("course.providers.sdk_completion", return_value={"choices": [{"message": {"role": "assistant", "content": "local"}}]}) as sdk:
-            response = self.client.post("/api/run", json=self.exercise())
+            response = run_and_read(self.client, self.exercise())
         self.assertEqual(self.events(response)[-1]["data"]["status"], "completed")
         self.assertEqual(sdk.call_args.kwargs["api_key"], "ollama-local")
         self.assertEqual(sdk.call_args.kwargs["model"], "ollama_chat/local-test")

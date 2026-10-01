@@ -10,6 +10,7 @@ from course.api_client import send_bailian
 from course.runner import RunCancelled, run_agent
 from server.catalog import lesson_runtime, lesson_spec
 from server.offline import completion_for
+from run_support import run_and_read, use_temporary_run_store
 
 web = importlib.import_module("server.app")
 
@@ -102,6 +103,7 @@ class ApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(web.app, base_url="http://localhost")
         self.old_key = web.session_key
+        use_temporary_run_store(self)
 
     def tearDown(self):
         web.session_key = self.old_key
@@ -115,9 +117,9 @@ class ApiTests(unittest.TestCase):
         for spec in web.LESSONS:
             for exercise in spec["exercises"]:
                 with self.subTest(lesson=spec["id"], exercise=exercise["id"]):
-                    response = self.client.post("/api/run", json=self.body(spec["id"], exercise["id"]))
-                    self.assertEqual(response.status_code, 200)
-                    events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+                    response = run_and_read(self.client, self.body(spec["id"], exercise["id"]))
+                    self.assertEqual(response.status_code, 202)
+                    events = response.events
                     self.assertEqual(events[0]["type"], "run_start")
                     self.assertEqual(events[-1]["data"]["status"], "completed")
                     self.assertTrue(any(e["type"] == "answer" for e in events))
@@ -125,12 +127,14 @@ class ApiTests(unittest.TestCase):
     def test_input_guard_and_busy_lock(self):
         body = self.body()
         body["question"] = "free input"
-        self.assertEqual(self.client.post("/api/run", json=body).status_code, 400)
+        self.assertEqual(self.client.post("/api/runs", json=body).status_code, 400)
         body["mode"] = "invalid"
-        self.assertEqual(self.client.post("/api/run", json=body).status_code, 422)
+        self.assertEqual(self.client.post("/api/runs", json=body).status_code, 422)
         with web.run_lock:
-            self.assertEqual(self.client.post("/api/run", json=self.body()).status_code, 409)
-        self.assertEqual(self.client.post("/api/run", json=self.body(), headers={"Origin": "https://foreign.example"}).status_code, 403)
+            busy = self.client.post("/api/runs", json=self.body())
+            self.assertEqual(busy.status_code, 409)
+            self.assertEqual(busy.json()["code"], "run_busy")
+        self.assertEqual(self.client.post("/api/runs", json=self.body(), headers={"Origin": "https://foreign.example"}).status_code, 403)
         self.assertEqual(self.client.get("/api/status", headers={"Host": "evil.example"}).status_code, 400)
         self.assertEqual(self.client.post("/api/settings", content="a" * 33000).status_code, 413)
 
@@ -193,13 +197,13 @@ class ApiTests(unittest.TestCase):
         def echoed_response(body, api_key):
             return {"choices": [{"message": {"role": "assistant", "content": "echo " + secret}}]}
         with patch.object(web, "completion_for", return_value=echoed_response):
-            response = self.client.post("/api/run", json=self.body())
+            response = run_and_read(self.client, self.body())
         self.assertNotIn(secret, response.text)
         self.assertIn("[REDACTED]", response.text)
         def broken_response(body, api_key):
             raise RuntimeError("provider echoed " + secret)
         with patch.object(web, "completion_for", return_value=broken_response):
-            response = self.client.post("/api/run", json=self.body())
+            response = run_and_read(self.client, self.body())
         self.assertNotIn(secret, response.text)
         self.assertIn('"status": "error"', response.text)
         self.assertFalse(web.run_lock.locked())

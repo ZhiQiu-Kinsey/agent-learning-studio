@@ -51,7 +51,7 @@ class OnboardingTests(unittest.TestCase):
             for chapter in chapters:
                 with self.subTest(chapter=chapter["id"]):
                     self.assertEqual(self.client.get("/api/lessons/" + chapter["id"]).status_code, 404)
-                    response = self.client.post("/api/run", json={
+                    response = self.client.post("/api/runs", json={
                         "lesson_id": chapter["id"], "mode": "offline",
                         "question": "test", "exercise_id": "test",
                     })

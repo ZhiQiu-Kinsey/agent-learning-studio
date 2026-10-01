@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { jsonFetch, readEventStream } from "../api";
+import { cancelRun, createRun, followRunEvents, jsonFetch } from "../api";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
 
 const messageOf = (error: unknown) =>
@@ -26,6 +26,9 @@ export function useStudio() {
   const [playing, setPlaying] = useState(false);
   const mounted = useRef(false);
   const runController = useRef<AbortController | null>(null);
+  // 当前运行的服务端 ID；断线续读、停止与页面关闭时的取消都作用于它。
+  const activeRun = useRef<string | null>(null);
+  const [runId, setRunId] = useState("");
   const eventCount = useRef(0);
   const statusRequest = useRef(0);
 
@@ -60,9 +63,17 @@ export function useStudio() {
           setError(`无法连接教学服务：${messageOf(reason)}`);
       });
     void refreshStatus();
+    // 运行在服务端后台执行；页面关闭时沿用旧语义，请求停止后续步骤。
+    const stopActiveRun = () => {
+      if (activeRun.current)
+        void cancelRun(activeRun.current, true).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", stopActiveRun);
     return () => {
       mounted.current = false;
       abort.abort();
+      window.removeEventListener("pagehide", stopActiveRun);
+      stopActiveRun();
       runController.current?.abort();
       ++statusRequest.current;
     };
@@ -173,6 +184,7 @@ export function useStudio() {
     setCursor(0);
     setSelected(-1);
     setError("");
+    setRunId("");
     const addEvent = (event: Trace) => {
       if (
         !mounted.current ||
@@ -186,19 +198,24 @@ export function useStudio() {
       setSelected(index);
     };
     try {
-      const response = await fetch("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lesson_id: lessonId,
-          mode: "live",
-          question,
-          exercise_id: exerciseId,
-          inputs: runInputs,
-        }),
-        signal: abort.signal,
+      // 创建请求不随停止中断：必须拿到 run_id，才能让服务端停止已开始的运行。
+      const id = await createRun({
+        lesson_id: lessonId,
+        mode: "live",
+        question,
+        exercise_id: exerciseId,
+        inputs: runInputs,
       });
-      await readEventStream(response, addEvent);
+      if (abort.signal.aborted) {
+        void cancelRun(id).catch(() => undefined);
+        throw new DOMException("已停止", "AbortError");
+      }
+      if (runController.current === abort) {
+        activeRun.current = id;
+        if (mounted.current) setRunId(id);
+      }
+      // 断线时按最后收到的 seq 自动续读；服务端存储保证不重不漏。
+      await followRunEvents(id, addEvent, { signal: abort.signal });
     } catch (reason) {
       if (!mounted.current) return;
       if (abort.signal.aborted) {
@@ -218,12 +235,15 @@ export function useStudio() {
     } finally {
       if (runController.current === abort) {
         runController.current = null;
+        activeRun.current = null;
         if (mounted.current) setRunning(false);
       }
     }
   }
 
   function cancel() {
+    const id = activeRun.current;
+    if (id) void cancelRun(id).catch(() => undefined);
     runController.current?.abort();
   }
   function selectEvent(index: number) {
@@ -253,7 +273,12 @@ export function useStudio() {
       new Blob(
         [
           JSON.stringify(
-            { lesson_id: lessonId, mode: "live", events },
+            {
+              lesson_id: lessonId,
+              mode: "live",
+              run_id: runId || null,
+              events,
+            },
             null,
             2,
           ),
@@ -300,6 +325,7 @@ export function useStudio() {
     requiresModel,
     cancel,
     running,
+    runId,
     events,
     visible,
     active,

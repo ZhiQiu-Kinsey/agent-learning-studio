@@ -1,3 +1,5 @@
+import type { TRACE_CONTRACT } from "./generated/trace-contract";
+
 export type Exercise = {
   id: string;
   title: string;
@@ -95,12 +97,53 @@ export type ProviderCatalog = {
   active_provider: string;
   providers: ProviderProfile[];
 };
-export type Trace = {
-  schema_version?: number;
+type TraceContract = typeof TRACE_CONTRACT;
+export type Provenance = TraceContract["provenances"][number];
+export type Representation = TraceContract["representations"][number];
+export type SpanKind = TraceContract["span_kinds"][number];
+/** v1 信封：旧记录与部分测试夹具只有这些字段。 */
+export type TraceV1 = {
+  schema_version?: 1;
   type: string;
   round: number | null;
   timestamp: string;
   data: Record<string, unknown>;
+};
+/** v2 信封：字段由服务端填写，含义见 docs/architecture/event-envelope-v2.md。 */
+export type TraceV2 = Omit<TraceV1, "schema_version"> & {
+  schema_version: 2;
+  run_id: string;
+  seq: number;
+  span_id: string;
+  parent_span_id: string | null;
+  span_kind: SpanKind;
+  actor: string;
+  role: string | null;
+  provenance: Provenance;
+  /** 只在承载模型请求/响应的事件上有值。 */
+  representation: Representation | null;
+  /** 只在 sdk_standardized 时有值；测试适配器的 version 为 null。 */
+  sdk: { name: string; version: string | null } | null;
+};
+/** 界面同时接受 v1 与 v2；v2 字段一律按可选读取。 */
+export type Trace = Omit<TraceV1, "schema_version"> & {
+  schema_version?: number;
+} & Partial<Omit<TraceV2, keyof TraceV1>>;
+export type RunRecord = {
+  run_id: string;
+  lesson_id: string;
+  exercise_id: string;
+  mode: string;
+  model: string;
+  provider_id: string;
+  representation: Representation | null;
+  provenance: Provenance;
+  schema_version: number;
+  status: "running" | "completed" | "error" | "cancelled" | "interrupted";
+  created_at: string;
+  finished_at: string | null;
+  event_count: number;
+  last_seq: number;
 };
 export type Roadmap = {
   id: string;

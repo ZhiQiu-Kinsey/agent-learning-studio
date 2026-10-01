@@ -1,13 +1,18 @@
-"""本地 Web API；逐事件推送运行轨迹，不保存密钥或会话内容。"""
+"""本地 Web API；运行是服务端资源，事件脱敏后写入运行存储并通过 SSE 推送。
+
+密钥只存在于后端内存；运行存储（.runtime/runs.sqlite3）只保存脱敏后的事件。
+"""
 import asyncio
 import json
-import queue
+import re
 import threading
 import time
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,14 +25,40 @@ from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
 from server.catalog import ROOT, LESSONS, lesson_detail, lesson_runtime, lesson_spec, public_lesson
 from server.curriculum import public_curriculum, roadmap
+from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.offline import completion_for
 from server.providers import ProviderRegistry
+from server.run_store import RunStore, utc_now
 
 app = FastAPI(title="AgentStart Learning Lab", docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
+# 同一时间只执行一次运行；测试可以持有该锁模拟忙碌状态。
 run_lock = threading.Lock()
 session_key = ""
 provider_registry = ProviderRegistry()
+RUNTIME_DIR = ROOT / ".runtime"
+# 首次需要时才打开，导入模块不会创建数据库文件；测试替换为临时目录中的 RunStore。
+run_store: RunStore | None = None
+_store_lock = threading.Lock()
+RUN_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
+# 确定性测试适配器不是 SDK；如实写出它的名字，版本留空。
+TEST_ADAPTER = {"name": "deterministic-test-adapter", "version": None}
+
+
+def get_run_store() -> RunStore:
+    global run_store
+    with _store_lock:
+        if run_store is None:
+            run_store = RunStore(RUNTIME_DIR / "runs.sqlite3")
+        return run_store
+
+
+class ApiError(Exception):
+    """带稳定错误码的接口错误；detail 保持中文说明，兼容现有前端读取方式。"""
+
+    def __init__(self, status_code: int, code: str, message: str):
+        super().__init__(message)
+        self.status_code, self.code, self.message = status_code, code, message
 
 
 def current_key():
@@ -57,6 +88,11 @@ def scrub(value, secrets):
 async def invalid_request(request: Request, error: RequestValidationError):
     # Pydantic默认422含原始input，可能把误粘贴的Key或URL返回给浏览器。
     return JSONResponse({"detail": "请求参数无效，请检查课程、模式、问题和练习。"}, status_code=422)
+
+
+@app.exception_handler(ApiError)
+async def api_error(request: Request, error: ApiError):
+    return JSONResponse({"detail": error.message, "code": error.code}, status_code=error.status_code)
 
 
 def public_status(profile):
@@ -153,8 +189,26 @@ class RunInput(BaseModel):
     inputs: dict[str, Any] | None = None
 
 
-@app.post("/api/run")
-async def run(body: RunInput, request: Request):
+@dataclass
+class RunPlan:
+    """请求处理阶段完成全部校验与依赖解析；后台线程只执行，不再读取可变的全局配置。"""
+    body: RunInput
+    spec: dict
+    module: Any
+    inputs: dict
+    key: str = field(repr=False)
+    model: str
+    provider_id: str
+    provider_label: str
+    representation: str
+    envelope_representation: str | None
+    sdk: dict | None
+    completion: Callable | None = field(repr=False)
+    completion_error: Exception | None
+    secrets: list = field(repr=False)
+
+
+def prepare_run(body: RunInput) -> RunPlan:
     spec = lesson_spec(body.lesson_id)
     if spec is None:
         raise HTTPException(404, "课程不存在。")
@@ -189,71 +243,230 @@ async def run(body: RunInput, request: Request):
     representation = profile.representation if profile else "sdk_standardized" if requires_model else "local"
     if profile and (not profile.config_ready or profile.requires_key and not key):
         raise HTTPException(400, "真实模式需要已配置的模型、服务地址和所选服务商 API Key；本地 Ollama 无需 Key。")
-    if not run_lock.acquire(blocking=False):
-        raise HTTPException(409, "上一次运行尚未结束，请等待网络请求返回（网络超时 60 秒）。")
-    events = queue.Queue()
-    cancelled = threading.Event()
-    started = time.perf_counter()
-    secrets = provider_registry.secrets(session_key)
+    # 信封如实标注表示层级：百炼原生 HTTP 是 http_body；LiteLLM 是 sdk_standardized 并附 SDK 版本；
+    # 离线测试适配器返回标准化形状的字典，标注为测试适配器而不是 SDK；本地课程没有模型数据。
+    if profile:
+        sdk = sdk_identity("litellm") if representation == "sdk_standardized" else None
+    else:
+        sdk = dict(TEST_ADAPTER) if requires_model else None
+    completion, completion_error = None, None
+    try:
+        completion = (completion_for(spec, body.exercise_id, inputs) if body.mode == "offline" and requires_model
+                      else send_bailian if profile and profile.id == "bailian"
+                      else SDKCompletion(profile) if profile else None)
+    except Exception as error:  # 与原行为一致：作为运行中的 error 事件报告。
+        completion_error = error
+    return RunPlan(
+        body=body, spec=spec, module=module, inputs=inputs, key=key, model=model,
+        provider_id=profile.id if profile else "testing" if requires_model else "local",
+        provider_label=profile.label if profile else "确定性测试" if requires_model else "本地 Python",
+        representation=representation,
+        envelope_representation=representation if representation in ("http_body", "sdk_standardized") else None,
+        sdk=sdk, completion=completion, completion_error=completion_error,
+        secrets=provider_registry.secrets(session_key),
+    )
 
-    def emit(kind, data, round_number=None):
-        event = {"schema_version": 1, "type": kind, "round": round_number,
-                 "timestamp": datetime.now(timezone.utc).isoformat(), "data": data}
+
+class ActiveRun:
+    """正在执行的运行：串行分配 seq、先脱敏再写库，published 之前的事件才对读者可见。"""
+
+    def __init__(self, run_id: str, store: RunStore, builder: EnvelopeBuilder, secrets: list):
+        self.run_id, self.store, self.builder = run_id, store, builder
+        self._secrets = secrets
+        self._lock = threading.Lock()
+        self.cancelled = threading.Event()
+        self.published = 0
+        # 审批骨架：目前没有课程请求审批，因此始终为空。
+        self.pending_approvals: dict[str, dict] = {}
+
+    def _build(self, kind, data, round_number):
+        timestamp = datetime.now(timezone.utc).isoformat()
+        event = self.builder.build(kind, scrub(data, self._secrets), round_number, timestamp)
         # 序列化即时形成不可变快照，后续追加消息不会改变先前请求。
-        events.put(json.dumps(scrub(event, secrets), ensure_ascii=False))
+        return event, json.dumps(event, ensure_ascii=False)
+
+    def emit(self, kind, data, round_number=None):
+        with self._lock:
+            event, text = self._build(kind, data, round_number)
+            self.store.append(self.run_id, event["seq"], kind, text)
+            self.published = event["seq"]
+
+    def finish(self, status, duration_ms):
+        """done 与运行状态同一事务提交；读者在运行退出活动表后才会读到 done。"""
+        with self._lock:
+            event, text = self._build("done", {"status": status, "duration_ms": duration_ms}, None)
+            self.store.finish(self.run_id, event["seq"], "done", text, status, utc_now())
+
+
+active_runs: dict[str, ActiveRun] = {}
+_active_lock = threading.Lock()
+
+
+def active_run(run_id: str) -> ActiveRun | None:
+    with _active_lock:
+        return active_runs.get(run_id)
+
+
+def start_run(plan: RunPlan) -> str:
+    """调用方已持有 run_lock；线程结束时释放。"""
+    body, spec = plan.body, plan.spec
+    run_id = uuid.uuid4().hex
+    store = get_run_store()
+    builder = EnvelopeBuilder(run_id, provenance="real_run", representation=plan.envelope_representation,
+                              sdk=plan.sdk)
+    store.create_run(run_id=run_id, lesson_id=body.lesson_id, exercise_id=body.exercise_id, mode=body.mode,
+                     model=scrub(plan.model, plan.secrets), provider_id=plan.provider_id,
+                     representation=plan.envelope_representation, provenance="real_run",
+                     schema_version=SCHEMA_VERSION, created_at=utc_now())
+    active = ActiveRun(run_id, store, builder, plan.secrets)
+    with _active_lock:
+        active_runs[run_id] = active
+    started = time.perf_counter()
 
     def work():
         final_status = "completed"
         try:
-            emit("run_start", {"lesson_id": body.lesson_id, "mode": body.mode, "model": model,
-                               "question": body.question, "inputs": inputs,
-                               "runtime_kind": spec["runtime"]["kind"],
-                               "provider_id": profile.id if profile else "testing" if requires_model else "local",
-                               "provider_label": profile.label if profile else "确定性测试" if requires_model else "本地 Python",
-                               "trace_representation": representation})
-            completion = (completion_for(spec, body.exercise_id, inputs) if body.mode == "offline" and requires_model
-                          else send_bailian if profile and profile.id == "bailian"
-                          else SDKCompletion(profile) if profile else None)
+            active.emit("run_start", {"lesson_id": body.lesson_id, "mode": body.mode, "model": plan.model,
+                                      "question": body.question, "inputs": plan.inputs,
+                                      "runtime_kind": spec["runtime"]["kind"],
+                                      "provider_id": plan.provider_id, "provider_label": plan.provider_label,
+                                      "trace_representation": plan.representation})
+            if plan.completion_error is not None:
+                raise plan.completion_error
             context = RunContext(
                 lesson_id=body.lesson_id, exercise_id=body.exercise_id, question=body.question,
-                mode=body.mode, model=model, representation=representation, inputs=inputs,
-                api_key=key, completion=completion, emit_event=emit, cancelled=cancelled.is_set,
-                max_model_calls=spec["runtime"].get("max_rounds", 3),
+                mode=body.mode, model=plan.model, representation=plan.representation, inputs=plan.inputs,
+                api_key=plan.key, completion=plan.completion, emit_event=active.emit,
+                cancelled=active.cancelled.is_set, max_model_calls=spec["runtime"].get("max_rounds", 3),
             )
-            execute_lesson(spec, module, context)
+            execute_lesson(spec, plan.module, context)
         except RunCancelled:
             final_status = "cancelled"
         except Exception as error:
             final_status = "error"
-            emit("error", {"message": str(error), "error_type": type(error).__name__})
+            active.emit("error", {"message": str(error), "error_type": type(error).__name__})
         finally:
-            emit("done", {"status": final_status, "duration_ms": round((time.perf_counter()-started)*1000)})
-            run_lock.release()
+            try:
+                active.finish(final_status, round((time.perf_counter() - started) * 1000))
+            finally:
+                # 先释放执行互斥再公开 done：客户端收到 done 时即可开始下一次运行。
+                run_lock.release()
+                with _active_lock:
+                    active_runs.pop(run_id, None)
 
-    worker = threading.Thread(target=work, name="agent-course-run", daemon=True)
-    worker.start()
+    try:
+        threading.Thread(target=work, name="agent-course-run", daemon=True).start()
+    except BaseException:
+        with _active_lock:
+            active_runs.pop(run_id, None)
+        raise
+    return run_id
+
+
+def stored_run(run_id: str) -> dict:
+    run = get_run_store().get_run(run_id) if RUN_ID_PATTERN.fullmatch(run_id) else None
+    if run is None:
+        raise ApiError(404, "run_not_found", "运行记录不存在或已被清除。")
+    return run
+
+
+@app.post("/api/runs", status_code=202)
+def create_run(body: RunInput):
+    plan = prepare_run(body)
+    if not run_lock.acquire(blocking=False):
+        raise ApiError(409, "run_busy", "上一次运行尚未结束，请等待网络请求返回（网络超时 60 秒）。")
+    try:
+        run_id = start_run(plan)
+    except BaseException:
+        run_lock.release()
+        raise
+    return {"run_id": run_id}
+
+
+@app.get("/api/runs")
+def list_runs(limit: int = Query(50, ge=1, le=500)):
+    return {"runs": get_run_store().list_runs(limit)}
+
+
+@app.delete("/api/runs")
+def clear_runs():
+    """一键清除全部运行记录；有运行在执行时拒绝，避免删除仍在写入的记录。"""
+    if not run_lock.acquire(blocking=False):
+        raise ApiError(409, "run_active", "有运行尚未结束，请在运行结束后再清除记录。")
+    try:
+        return {"deleted": get_run_store().clear()}
+    finally:
+        run_lock.release()
+
+
+@app.get("/api/runs/{run_id}")
+def run_metadata(run_id: str):
+    return stored_run(run_id)
+
+
+@app.get("/api/runs/{run_id}/events")
+async def run_events(run_id: str, request: Request, from_seq: int | None = Query(None, ge=1, le=10**9),
+                     last_event_id: str | None = Header(None)):
+    """先回放存储中 seq ≥ from_seq 的事件，再接续实时事件，直到 done。断线后带 from_seq 续读。"""
+    stored_run(run_id)
+    if from_seq is None:
+        # 兼容浏览器 EventSource 的自动重连头；无效值从头读取。
+        from_seq = int(last_event_id) + 1 if last_event_id and last_event_id.isdigit() else 1
+    store = get_run_store()
 
     async def stream():
+        next_seq = from_seq
         heartbeat = time.monotonic()
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = events.get_nowait()
-                except queue.Empty:
-                    if time.monotonic() - heartbeat > 10:
-                        yield ": waiting\n\n"
-                        heartbeat = time.monotonic()
-                    await asyncio.sleep(0.05)
-                    continue
-                yield "data: " + event + "\n\n"
-                if json.loads(event)["type"] == "done":
-                    break
-        finally:
-            cancelled.set()
+        while True:
+            if await request.is_disconnected():
+                return
+            active = active_run(run_id)
+            # 运行中只读到已公开的水位；读库放到线程池，避免写入时的 fsync 阻塞事件循环。
+            rows = await asyncio.to_thread(store.events, run_id, next_seq, active.published if active else None)
+            for seq, kind, text in rows:
+                yield f"id: {seq}\ndata: {text}\n\n"
+                next_seq = seq + 1
+                if kind == "done":
+                    return
+            if rows:
+                heartbeat = time.monotonic()
+                continue
+            if active is None:
+                return  # 已结束且读完；异常中断的运行没有 done，也在此结束。
+            if time.monotonic() - heartbeat > 10:
+                yield ": waiting\n\n"
+                heartbeat = time.monotonic()
+            await asyncio.sleep(0.05)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
+
+
+@app.post("/api/runs/{run_id}/cancel", status_code=202)
+def cancel_run(run_id: str):
+    """停止指定运行的后续步骤；已经发出的模型请求仍受网络超时约束。"""
+    stored_run(run_id)
+    active = active_run(run_id)
+    if active is None:
+        raise ApiError(409, "run_not_active", "该运行已经结束，无需停止。")
+    active.cancelled.set()
+    return {"run_id": run_id, "status": "cancelling"}
+
+
+class ApprovalInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approval_id: str = Field(min_length=1, max_length=64)
+    decision: Literal["approve", "reject"]
+    note: str | None = Field(None, max_length=2000)
+
+
+@app.post("/api/runs/{run_id}/approvals")
+def submit_approval(run_id: str, body: ApprovalInput):
+    """审批接口骨架：当前没有课程发出 approval.requested，因此总是没有待审批项。"""
+    stored_run(run_id)
+    active = active_run(run_id)
+    if active is None or body.approval_id not in active.pending_approvals:
+        raise ApiError(409, "no_pending_approval", "该运行没有等待处理的审批。")
+    raise ApiError(501, "approval_not_supported", "当前版本尚未支持处理审批。")
 
 
 # 前端先构建；只公开 dist，不暴露项目、配置或 Python 文件目录。
