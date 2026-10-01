@@ -1,7 +1,8 @@
 import type { Trace } from "./types";
 import { createParser } from "eventsource-parser";
+import { clientError, errorMessage } from "./i18n/errors";
 
-/** 服务端返回的错误；code 为稳定错误码（新接口提供），detail 为中文说明。 */
+/** Server error: `code` is stable and translated by the UI; `detail` is the server fallback. */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -16,19 +17,26 @@ export class ApiError extends Error {
 /** 事件流在收到 done 之前结束；可以按最后收到的 seq 续读。 */
 export class StreamInterrupted extends Error {
   constructor() {
-    super("连接提前结束，未收到完成事件。请检查后端状态。");
+    super(clientError("streamEnded"));
     this.name = "StreamInterrupted";
   }
 }
 
-async function errorFrom(response: Response, fallback: string) {
+async function errorFrom(
+  response: Response,
+  fallback: "requestFailed" | "runFailed",
+) {
   const data = await response.json().catch(() => ({}));
+  const code = typeof data.code === "string" ? data.code : undefined;
   return new ApiError(
-    typeof data.detail === "string"
-      ? data.detail
-      : `${fallback}（${response.status}）`,
+    errorMessage(
+      code,
+      data.params && typeof data.params === "object" ? data.params : undefined,
+      typeof data.detail === "string" ? data.detail : undefined,
+      clientError(fallback, { status: response.status }),
+    ),
     response.status,
-    typeof data.code === "string" ? data.code : undefined,
+    code,
   );
 }
 
@@ -37,7 +45,7 @@ export async function jsonFetch<T>(
   init?: RequestInit,
 ): Promise<T> {
   const response = await fetch(path, init);
-  if (!response.ok) throw await errorFrom(response, "请求失败");
+  if (!response.ok) throw await errorFrom(response, "requestFailed");
   return response.json();
 }
 
@@ -46,8 +54,8 @@ export async function readEventStream(
   response: Response,
   onEvent: (event: Trace) => void,
 ) {
-  if (!response.ok) throw await errorFrom(response, "运行失败");
-  if (!response.body) throw new Error("浏览器未能读取事件流。");
+  if (!response.ok) throw await errorFrom(response, "runFailed");
+  if (!response.body) throw new Error(clientError("noStream"));
   const reader = response.body.getReader(),
     decoder = new TextDecoder();
   let sawDone = false;
@@ -155,9 +163,7 @@ export async function followRunEvents(
       if (signal?.aborted || !retryable(reason)) throw reason;
       failures = lastSeq > before ? 1 : failures + 1;
       if (failures > retries)
-        throw new Error(
-          "事件流多次中断，未收到完成事件。运行记录仍保存在本机服务端，请检查后端状态。",
-        );
+        throw new Error(clientError("streamRetriesExhausted"));
       await wait(retryDelayMs * failures, signal);
     }
   }

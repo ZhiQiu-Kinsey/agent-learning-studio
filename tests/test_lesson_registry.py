@@ -113,6 +113,21 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(LessonValidationError, "课程 id 不能重复"):
             self.load()
 
+    def test_manifest_must_use_slug_and_spec_carries_number_and_aliases(self):
+        first, manifest = self.course("one")
+        self.course("two")
+        self.catalog["lessons"][0]["aliases"] = ["1"]
+        self.catalog["lessons"][1]["aliases"] = ["2", "old-two"]
+        one, two = self.load()
+        self.assertEqual((one["id"], one["number"], one["aliases"]), ("one", 1, ["1"]))
+        self.assertEqual((two["number"], two["aliases"]), (2, ["2", "old-two"]))
+        self.assertEqual({key: public_lesson(two)[key] for key in ("id", "number", "aliases")},
+                         {"id": "two", "number": 2, "aliases": ["2", "old-two"]})
+        manifest["id"] = "1"
+        self.write_json(first / "lesson.json", manifest)
+        with self.assertRaisesRegex(LessonValidationError, "slug「one」"):
+            self.load()
+
     def test_invalid_manifest_schema_and_metadata_drift_are_rejected(self):
         directory, baseline = self.course()
         cases = [

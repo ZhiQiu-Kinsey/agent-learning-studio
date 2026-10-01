@@ -4,38 +4,79 @@
 
 ## 最短接入流程
 
-`curriculum/catalog.json` 是课号、标题、简介、学习目标、层级、先修和状态的唯一来源。`lessons/lesson_*/lesson.json` 描述实现位置；后端自动发现清单，不再编辑 `server/catalog.py` 加分支。
+`curriculum/catalog.json` 是课程 ID、别名、标题、简介、学习目标、层级、先修和状态的唯一来源；显示课号由它的目录顺序计算（见下一节）。`lessons/lesson_*/lesson.json` 描述实现位置；后端自动发现清单，不再编辑 `server/catalog.py` 加分支。
 
-以下使用仍处于规划中的第 11 课演示命令。课号和目录后缀应按实际课程替换。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
+以下使用仍处于规划中的 `document-loading`（第 11 课，别名 `11`）演示命令，按实际课程替换。`--id` 接受课程 slug 或旧数字别名；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
 
 ```powershell
 # 先预览文件清单，不写文件
-.\.venv\Scripts\python.exe scripts/new_lesson.py --id 11 --slug context_budget --dry-run
-# 创建使用通用 Agent 循环的课程
-.\.venv\Scripts\python.exe scripts/new_lesson.py --id 11 --slug context_budget
+.\.venv\Scripts\python.exe scripts/new_lesson.py --id document-loading --dry-run
+# 创建使用通用 Agent 循环的课程（--id 11 效果相同）
+.\.venv\Scripts\python.exe scripts/new_lesson.py --id document-loading
 # 复杂流程可以改用 --kind custom（同一目录只能创建一次）
 ```
 
-生成目录包含 `lesson.json`、`content.json`、`README.md`、`__init__.py` 和冒烟测试 `test_lesson.py`。原生课程另有 `main.py`、`tools.py`、`fixtures.py`；定制课程另有 `runtime.py`。示例只验证接入通路，正文与练习明确标记待编写。
+生成目录为 `lessons/lesson_document_loading/`，包含 `lesson.json`、`content.json`、`README.md`、`__init__.py` 和冒烟测试 `test_lesson.py`。原生课程另有 `main.py`、`tools.py`、`fixtures.py`；定制课程另有 `runtime.py`。示例只验证接入通路，正文与练习明确标记待编写。
 
 1. 根据目录中的学习目标与验收要求实现本课。补齐引言、机制、示例、实验、观察点和自测，保留“概念 → 最小实现 → 运行证据 → 实验 → 自检”的顺序。
-2. 运行课程自己的测试，例如 `python -m unittest lessons.lesson_11_context_budget.test_lesson -v`。补充真实 Python 行为、错误处理、输入与停止等测试；冒烟示例通过不代表课程完成。
+2. 运行课程自己的测试，例如 `python -m unittest lessons.lesson_document_loading.test_lesson -v`。补充真实 Python 行为、错误处理、输入与停止等测试；冒烟示例通过不代表课程完成。
 3. 执行 `python scripts/validate_lessons.py`，检查所有实现清单，包括仍为 `planned` 的作者草稿。校验不调用模型；结构校验通过也不代表教学验收完成。
 4. 课程验收通过后，才把 `curriculum/catalog.json` 中的状态改为 `available`，再执行 `python scripts/export_curriculum.py`、完整后端测试并重启服务。
 5. 在网页检查导航、导读、源码、实际运行、停止和回放；若新增前端组件，还需构建前端并运行相应浏览器测试。
 
 `planned` 即使有完整实现目录，也不会出现在可执行 API 中；`available` 必须有有效清单。校验错误在开发终端显示课程与本地路径，不能直接把异常堆栈展示给学生。
 
+## 课程 ID、别名与显示课号
+
+| 概念 | 规则 |
+| --- | --- |
+| 课程 ID（主 ID） | `catalog.json` 中每课的 `id`，稳定的 kebab-case slug，如 `tool-selection`；正则 `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`，不超过 48 字符。接口、事件、链接、前端状态都只用它 |
+| 别名 | 每课的 `aliases`：旧数字 ID（如 `"1"`），以及将来改名前的旧 slug。只用于解析旧请求，接口从不以别名作为返回的 `id` |
+| 显示课号 | `number`，按 `lessons` 数组顺序从 1 计算，不写进 JSON。插入新课只会改变其后课程的显示课号，不改变任何 ID |
+| 目录内引用 | 模块 `lesson_ids`、`prerequisites`、选修 `prerequisites` 一律写 slug；误写别名时校验会提示应改成哪个 slug |
+
+校验（`server/curriculum.py` 的 `index_catalog`，由课程加载、`validate_lessons.py`、`export_curriculum.py` 和 `new_lesson.py` 共用）：
+
+- slug 格式合法且唯一；别名格式合法（不以 0 开头的数字或 kebab-case），不与任何 slug 或其他别名冲突，也不等于本课 slug。
+- 先修引用的课程必须存在，并且排在本课之前（同时排除循环）；选修的先修也必须存在。
+- 大类 → 模块 → 课程的遍历顺序必须与 `lessons` 顺序一致，每课只登记在一个模块中，使导航与显示课号不会错位。
+
+**实现目录映射规则：** `lessons/*/lesson.json` 的 `id` 必须等于 catalog 中的课程 slug（不能写别名），这是课程与实现之间唯一的映射；目录名只决定 Python 包名，不参与身份判断。已有第 1–10 课沿用 `lesson_NN_<slug 的下划线形式>`（如 `lesson_01_tool_selection` ↔ `tool-selection`），目录暂不改名；新课由生成器创建为 `lesson_<slug 的下划线形式>`（如 `lesson_document_loading`），不再带课号前缀。
+
+**接口行为：**
+
+- `GET /api/lessons`、`GET /api/lessons/{id}`、`GET /api/curriculum` 中每课都返回 slug `id`、`number` 与 `aliases`。
+- `GET /api/lessons/{id}` 与 `POST /api/run` 的 `lesson_id` 接受 slug 或别名，内部统一解析为 slug；`run_start` 事件与 `RunContext.lesson_id` 记录的始终是 slug。
+- 无法解析的 ID 返回 404，响应体为 `{"detail": "...", "code": "lesson_not_found"}`；目录中已登记但仍为 `planned` 的课程返回 404 与 `lesson_not_available`。错误信息不回显请求中的原始 ID。
+- 前端以 slug 作为 `lessonId`，课号显示使用接口返回的 `number`。来自旧链接、旧导出或本机存储的课程 ID 先经过 `frontend/src/lib/lessonIds.ts` 的 `resolveLessonId` 迁移为 slug（当前 localStorage 中没有保存课程 ID 的键，后续学习进度等新键必须走这一步）。
+
+## 术语表
+
+`curriculum/glossary.json` 是术语的单一来源，`GET /api/glossary` 只读返回，`scripts/validate_lessons.py` 负责校验。每条术语：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `id` | 是 | kebab-case，全表唯一；将来内容块用 `term_id` 引用 |
+| `zh` | 是 | 中文写法；已直接使用英文的词（Agent、Token、JSON Schema）与 `en` 相同 |
+| `en` | 是 | 英文原词 |
+| `definition` | 是 | 简短中文释义，不超过 160 字符 |
+| `aliases` | 否 | 正文中的其他写法，如 `RAG`、`验收`；中文名与别名在全表唯一 |
+| `first_lesson` | 否 | 该术语首次作为知识点出现的课程 slug，必须是已登记课程且不能写别名；只在导学出现（如运行层）或对应课程尚未登记（如提示缓存、沙箱）时省略 |
+
+界面统一显示为“中文（English）”，`zh` 与 `en` 相同时只显示一次；接口返回的每条术语附带计算出的 `display` 与 `first_lesson_number`。测试会检查 `first_lesson` 指向的课程目录条目或教学内容中确实出现该术语，避免登记课程中并不存在的知识点。
+
+**多语言预留（本阶段未实现合并）：** 术语映射字段 `id`、`zh`、`en`、`first_lesson` 只在源文件中维护，译文层不得改动；可译文本字段是 `definition` 与 `aliases`（`server/glossary.py` 的 `TRANSLATABLE_FIELDS`）。将来的 `curriculum/glossary.{locale}.json` 以术语 `id` 为键，只提供这些字段及该语言的显示名 `term`，按 id 覆盖源文件；缺失的条目回退到 zh-CN 源文本。英文界面只显示 `en`，不附中文。
+
 ## 一个实现清单
 
 ```json
 {
   "schema_version": 1,
-  "id": "11",
+  "id": "document-loading",
   "content": "content.json",
   "sources": [
-    { "path": "lessons/lesson_11_context_budget/main.py", "language": "python" },
-    { "path": "lessons/lesson_11_context_budget/tools.py", "language": "python" },
+    { "path": "lessons/lesson_document_loading/main.py", "language": "python" },
+    { "path": "lessons/lesson_document_loading/tools.py", "language": "python" },
     { "path": "course/runner.py", "language": "python" }
   ],
   "exercises": [
@@ -99,7 +140,7 @@ def run(context: RunContext):
 
 运行器可以是同步或异步函数。返回字符串时平台自动记录最终回答；也可以自行发布 `answer` 后返回 `None`。开始、结束和执行锁由平台管理，课程不能自行伪造生命周期事件。共享服务统一保留模型连接、事件快照、脱敏与回放；不要从课程另建 SSE、绕过连接管理直读密钥，或从回放触发执行。
 
-停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。第 10 课已提供教学用 SQLite 持久记忆实现，可参考其跨运行读取、版本冲突和过期处理；共享扩展接口本身不提供通用记忆服务。
+停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。第 10 课（`persistent-memory`）已提供教学用 SQLite 持久记忆实现，可参考其跨运行读取、版本冲突和过期处理；共享扩展接口本身不提供通用记忆服务。
 
 ## 独立页面与可视化
 
@@ -123,4 +164,4 @@ def run(context: RunContext):
 
 ## 工具限制
 
-`--root` 用于指向另一份项目或测试根目录，目录必须含 `curriculum/catalog.json`。生成器拒绝无效 slug、未知或已可用课号、重复课程清单和已存在的目标；通过链接跳出项目的目录同样拒绝。写入中断时可能留下新建的部分目录，工具会报告错误并保留文件供检查，不删除或覆盖已有工作。
+`--root` 用于指向另一份项目或测试根目录，目录必须含 `curriculum/catalog.json`。生成器拒绝无效 slug、与目录不一致的 `--slug`、未知或已可用的课程、重复课程清单（无论清单写的是 slug 还是别名）和已存在的目标；通过链接跳出项目的目录同样拒绝。写入中断时可能留下新建的部分目录，工具会报告错误并保留文件供检查，不删除或覆盖已有工作。

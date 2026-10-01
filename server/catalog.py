@@ -5,6 +5,9 @@ import re
 from importlib import import_module
 from pathlib import Path, PurePosixPath
 
+# LessonValidationError 定义在 server.curriculum，这里继续导出以保持原有导入路径。
+from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
+
 ROOT = Path(__file__).resolve().parents[1]
 _MANIFEST_FIELDS = {
     "schema_version", "id", "subtitle", "content", "sources", "exercises",
@@ -12,15 +15,6 @@ _MANIFEST_FIELDS = {
 }
 _SOURCE_EXTENSIONS = {".py", ".json", ".md", ".txt", ".ts", ".tsx", ".js", ".jsx"}
 _PRIVATE_NAMES = {"local_config", "secrets", "credentials", "credential", "tokens", "token", "api_keys"}
-
-
-class LessonValidationError(ValueError):
-    """课程声明错误；消息定位到文件及字段，不展示文件内容。"""
-
-
-def _require(condition, location, message):
-    if not condition:
-        raise LessonValidationError(f"{location}: {message}")
 
 
 def _object(value, location, allowed=None):
@@ -198,7 +192,8 @@ def _manifest(root, path, catalog_lesson):
         else:
             _require(isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]*", value), path, f"ui.{key} 必须为扩展键")
     defaults = _object(data.get("input_defaults", {}), str(path) + ": input_defaults")
-    return {"id": data["id"], "title": catalog_lesson["title"], "description": catalog_lesson["summary"],
+    return {"id": data["id"], "number": catalog_lesson["number"], "aliases": list(catalog_lesson.get("aliases", [])),
+            "title": catalog_lesson["title"], "description": catalog_lesson["summary"],
             "objectives": catalog_lesson["objectives"], "subtitle": subtitle, "exercises": exercises,
             "runtime": runtime, "testing": testing, "ui": ui, "input_defaults": defaults,
             "status": catalog_lesson["status"], "available": catalog_lesson["status"] == "available",
@@ -208,16 +203,17 @@ def _manifest(root, path, catalog_lesson):
 
 
 def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
-    """按课程规划顺序加载声明；计划中的实现也校验，但默认不会获得执行权限。"""
+    """按课程规划顺序加载声明；计划中的实现也校验，但默认不会获得执行权限。
+
+    映射规则：lessons/*/lesson.json 的 id 必须等于 catalog 中的课程 slug（不能写别名）；
+    目录名只决定 Python 包名，不参与课程身份判断。
+    """
     root = Path(root).resolve()
     curriculum = _object(curriculum if curriculum is not None else _json(root / "curriculum" / "catalog.json"), "curriculum")
-    entries = curriculum.get("lessons")
-    _require(isinstance(entries, list), "curriculum", "lessons 必须是数组")
+    index = index_catalog(curriculum)
     catalog = {}
-    for entry in entries:
-        _object(entry, "curriculum.lessons")
-        identifier = _text(entry.get("id"), "curriculum.lessons.id")
-        _require(identifier not in catalog, "curriculum", "课程 id 不能重复")
+    for identifier in index.order:
+        entry = index.entries[identifier]
         _require(entry.get("status") in ("available", "planned"), "curriculum", "课程状态必须为 available 或 planned")
         _text(entry.get("title"), "curriculum.lessons.title")
         _text(entry.get("summary"), "curriculum.lessons.summary")
@@ -225,11 +221,14 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
         _require(isinstance(objectives, list) and objectives, "curriculum", "objectives 必须为非空数组")
         for objective in objectives:
             _text(objective, "curriculum.lessons.objectives")
-        catalog[identifier] = entry
+        catalog[identifier] = {**entry, "number": index.numbers[identifier], "aliases": index.aliases(identifier)}
     found = {}
     for path in sorted((root / "lessons").glob("lesson_*/lesson.json")):
         declaration = _object(_json(path), path)
         identifier = _text(declaration.get("id"), str(path) + ": id")
+        canonical = index.resolve(identifier)
+        _require(canonical is None or canonical == identifier, path,
+                 f"id 必须使用课程 slug「{canonical}」，不能使用别名")
         _require(identifier in catalog, path, "课程 id 未登记在 curriculum/catalog.json")
         _require(identifier not in found, path, "课程实现 id 重复")
         found[identifier] = _manifest(root, path, catalog[identifier])
@@ -243,12 +242,24 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
 LESSONS = load_lessons()
 
 
+CATALOG_INDEX = index_catalog(_json(ROOT / "curriculum" / "catalog.json"))
+
+
 def lesson_spec(lesson_id):
-    return next((item for item in LESSONS if item["id"] == lesson_id), None)
+    """按 slug 或别名查找可执行课程；返回的 spec["id"] 始终是 slug。"""
+    if not isinstance(lesson_id, str):
+        return None
+    return next((item for item in LESSONS if lesson_id == item["id"] or lesson_id in item["aliases"]), None)
+
+
+def catalog_lesson(lesson_id):
+    """按 slug 或别名查找目录登记（含 planned）；用于区分“未开放”和“不存在”。"""
+    slug = CATALOG_INDEX.resolve(lesson_id)
+    return None if slug is None else {**CATALOG_INDEX.entries[slug], "number": CATALOG_INDEX.numbers[slug]}
 
 
 def public_lesson(spec):
-    return {key: spec[key] for key in ("id", "title", "description", "objectives", "subtitle",
+    return {key: spec[key] for key in ("id", "number", "aliases", "title", "description", "objectives", "subtitle",
                                       "exercises", "available", "ui", "capabilities", "input_defaults")}
 
 

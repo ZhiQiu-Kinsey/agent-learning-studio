@@ -14,10 +14,12 @@ import { sourceResources } from "./resources";
 
 export { locales, sourceLocale, type Locale } from "./locales";
 
-// Other locales load on demand; the source locale ships with the bundle.
-const loaders = import.meta.glob<{ default: Record<string, unknown> }>(
+// Other locales load on demand; the source locale (zh-CN) ships with the bundle,
+// so it is excluded here (glob patterns must be literals).
+const loaders = import.meta.glob<{ default: Record<string, unknown> }>([
   "./locales/*/*.json",
-);
+  "!./locales/zh-CN/*.json",
+]);
 
 function savedLocale() {
   try {

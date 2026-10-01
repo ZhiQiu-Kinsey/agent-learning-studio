@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,9 +23,11 @@ from course.runner import RunCancelled
 from course.api_client import send_bailian
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
-from server.catalog import ROOT, LESSONS, lesson_detail, lesson_runtime, lesson_spec, public_lesson
+from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_detail,
+                            lesson_runtime, lesson_spec, public_lesson)
 from server.curriculum import public_curriculum, roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
+from server.glossary import public_glossary
 from server.offline import completion_for
 from server.providers import ProviderRegistry
 from server.run_store import RunStore, utc_now
@@ -54,11 +56,11 @@ def get_run_store() -> RunStore:
 
 
 class ApiError(Exception):
-    """带稳定错误码的接口错误；detail 保持中文说明，兼容现有前端读取方式。"""
+    """带稳定错误码的接口错误。前端按 code 翻译（可用 params 插值）；没有对应译文时显示 detail。"""
 
-    def __init__(self, status_code: int, code: str, message: str):
+    def __init__(self, status_code: int, code: str, message: str, params: dict | None = None):
         super().__init__(message)
-        self.status_code, self.code, self.message = status_code, code, message
+        self.status_code, self.code, self.message, self.params = status_code, code, message, params
 
 
 def current_key():
@@ -84,15 +86,32 @@ def scrub(value, secrets):
     return value
 
 
+def require_lesson(lesson_id: str):
+    """接受 slug 或旧数字别名，统一解析为可执行课程；不回显请求中的原始 id。"""
+    spec = lesson_spec(lesson_id)
+    if spec is not None:
+        return spec
+    planned = catalog_lesson(lesson_id)
+    if planned is not None:
+        raise ApiError(404, "lesson_not_available",
+                       f"第 {planned['number']} 课「{planned['title']}」仍在规划中，暂不能打开或运行。",
+                       {"number": planned["number"], "title": planned["title"]})
+    raise ApiError(404, "lesson_not_found", "课程不存在。")
+
+
 @app.exception_handler(RequestValidationError)
 async def invalid_request(request: Request, error: RequestValidationError):
     # Pydantic默认422含原始input，可能把误粘贴的Key或URL返回给浏览器。
-    return JSONResponse({"detail": "请求参数无效，请检查课程、模式、问题和练习。"}, status_code=422)
+    return JSONResponse({"detail": "请求参数无效，请检查课程、模式、问题和练习。", "code": "invalid_request"},
+                        status_code=422)
 
 
 @app.exception_handler(ApiError)
 async def api_error(request: Request, error: ApiError):
-    return JSONResponse({"detail": error.message, "code": error.code}, status_code=error.status_code)
+    body = {"detail": error.message, "code": error.code}
+    if error.params:
+        body["params"] = error.params
+    return JSONResponse(body, status_code=error.status_code)
 
 
 def public_status(profile):
@@ -143,11 +162,11 @@ async def settings(request: Request):
     try:
         body = await request.json()
     except (ValueError, UnicodeDecodeError):
-        raise HTTPException(400, "请提交有效 JSON。") from None
+        raise ApiError(400, "invalid_json", "请提交有效 JSON。") from None
     try:
         provider_id, updates = provider_registry.update(body)
     except ValueError as error:
-        raise HTTPException(400, str(error)) from None
+        raise ApiError(400, "settings_invalid", str(error)) from None
     if provider_id == "bailian" and "api_key" in updates:
         session_key = updates["api_key"]
     return public_status(provider_registry.resolve(bailian_key=session_key))
@@ -169,20 +188,26 @@ def onboarding():
     try:
         return json.loads((ROOT / "curriculum" / "onboarding.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        raise HTTPException(503, "前置学习内容暂时不可用，请稍后重试。") from None
+        raise ApiError(503, "onboarding_unavailable", "前置学习内容暂时不可用，请稍后重试。") from None
+
+
+@app.get("/api/glossary")
+def glossary():
+    """术语表单一来源；只读 JSON，不加载课程运行器。"""
+    try:
+        return public_glossary(ROOT, CATALOG_INDEX)
+    except (OSError, LessonValidationError):
+        raise ApiError(503, "glossary_unavailable", "术语表暂时不可用，请稍后重试。") from None
 
 
 @app.get("/api/lessons/{lesson_id}")
 def detail(lesson_id: str):
-    spec = lesson_spec(lesson_id)
-    if spec is None:
-        raise HTTPException(404, "课程不存在。")
-    return lesson_detail(spec)
+    return lesson_detail(require_lesson(lesson_id))
 
 
 class RunInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    lesson_id: str = Field(max_length=32)
+    lesson_id: str = Field(max_length=64)
     mode: Literal["offline", "live"] = "live"
     question: str = Field(max_length=8000)
     exercise_id: str = Field(max_length=32)
@@ -209,18 +234,16 @@ class RunPlan:
 
 
 def prepare_run(body: RunInput) -> RunPlan:
-    spec = lesson_spec(body.lesson_id)
-    if spec is None:
-        raise HTTPException(404, "课程不存在。")
+    spec = require_lesson(body.lesson_id)  # 别名请求也以 slug 记录，事件与回放只出现一种课程 ID。
     exercise = next((e for e in spec["exercises"] if e["id"] == body.exercise_id), None)
     if exercise is None:
-        raise HTTPException(400, "练习不存在。")
+        raise ApiError(400, "exercise_not_found", "练习不存在。")
     if not body.question.strip() and spec["runtime"]["kind"] == "native":
-        raise HTTPException(400, "请输入问题。")
+        raise ApiError(400, "question_required", "请输入问题。")
     if body.mode == "offline" and body.question.strip() != exercise["question"]:
-        raise HTTPException(400, "离线模式只运行预设练习；自由输入请切换真实模型模式。")
+        raise ApiError(400, "offline_requires_preset", "离线模式只运行预设练习；自由输入请切换真实模型模式。")
     if body.mode == "live" and exercise.get("offline_only"):
-        raise HTTPException(400, "该练习是离线故障注入，请切换离线模式。")
+        raise ApiError(400, "fault_injection_offline_only", "该练习是离线故障注入，请切换离线模式。")
     defaults = {**spec.get("input_defaults", {}), **exercise.get("inputs", {})}
     # Explicit input (including {}) is authoritative; never add hidden presets
     # after a student has edited the JSON. Omitted inputs use declared defaults.
@@ -229,20 +252,20 @@ def prepare_run(body: RunInput) -> RunPlan:
         module = lesson_runtime(spec)
         inputs = validate_inputs(module, values)
         if body.mode == "offline" and inputs != validate_inputs(module, defaults):
-            raise HTTPException(400, "测试模式只接受该练习预设的结构化输入。")
+            raise ApiError(400, "test_inputs_fixed", "测试模式只接受该练习预设的结构化输入。")
     except (ValidationError, ValueError):
-        raise HTTPException(422, "课程输入无效，请检查本课要求的字段、类型和范围。") from None
+        raise ApiError(422, "inputs_invalid", "课程输入无效，请检查本课要求的字段、类型和范围。") from None
     except (ImportError, AttributeError, TypeError):
-        raise HTTPException(503, "课程运行组件暂时不可用，请检查课程配置。") from None
+        raise ApiError(503, "runtime_unavailable", "课程运行组件暂时不可用，请检查课程配置。") from None
     requires_model = spec["runtime"].get("requires_model", True)
     if body.mode == "offline" and requires_model and not spec.get("testing", {}).get("completion_factory"):
-        raise HTTPException(400, "本课未提供确定性模型测试场景。")
+        raise ApiError(400, "no_offline_fixture", "本课未提供确定性模型测试场景。")
     profile = provider_registry.resolve(bailian_key=session_key) if body.mode == "live" and requires_model else None
     key = profile.api_key if profile else ""
     model = profile.model if profile else "offline-script" if requires_model else "local-python"
     representation = profile.representation if profile else "sdk_standardized" if requires_model else "local"
     if profile and (not profile.config_ready or profile.requires_key and not key):
-        raise HTTPException(400, "真实模式需要已配置的模型、服务地址和所选服务商 API Key；本地 Ollama 无需 Key。")
+        raise ApiError(400, "live_not_configured", "真实模式需要已配置的模型、服务地址和所选服务商 API Key；本地 Ollama 无需 Key。")
     # 信封如实标注表示层级：百炼原生 HTTP 是 http_body；LiteLLM 是 sdk_standardized 并附 SDK 版本；
     # 离线测试适配器返回标准化形状的字典，标注为测试适配器而不是 SDK；本地课程没有模型数据。
     if profile:
@@ -314,7 +337,7 @@ def start_run(plan: RunPlan) -> str:
     store = get_run_store()
     builder = EnvelopeBuilder(run_id, provenance="real_run", representation=plan.envelope_representation,
                               sdk=plan.sdk)
-    store.create_run(run_id=run_id, lesson_id=body.lesson_id, exercise_id=body.exercise_id, mode=body.mode,
+    store.create_run(run_id=run_id, lesson_id=spec["id"], exercise_id=body.exercise_id, mode=body.mode,
                      model=scrub(plan.model, plan.secrets), provider_id=plan.provider_id,
                      representation=plan.envelope_representation, provenance="real_run",
                      schema_version=SCHEMA_VERSION, created_at=utc_now())
@@ -326,7 +349,7 @@ def start_run(plan: RunPlan) -> str:
     def work():
         final_status = "completed"
         try:
-            active.emit("run_start", {"lesson_id": body.lesson_id, "mode": body.mode, "model": plan.model,
+            active.emit("run_start", {"lesson_id": spec["id"], "mode": body.mode, "model": plan.model,
                                       "question": body.question, "inputs": plan.inputs,
                                       "runtime_kind": spec["runtime"]["kind"],
                                       "provider_id": plan.provider_id, "provider_label": plan.provider_label,
@@ -334,7 +357,7 @@ def start_run(plan: RunPlan) -> str:
             if plan.completion_error is not None:
                 raise plan.completion_error
             context = RunContext(
-                lesson_id=body.lesson_id, exercise_id=body.exercise_id, question=body.question,
+                lesson_id=spec["id"], exercise_id=body.exercise_id, question=body.question,
                 mode=body.mode, model=plan.model, representation=plan.representation, inputs=plan.inputs,
                 api_key=plan.key, completion=plan.completion, emit_event=active.emit,
                 cancelled=active.cancelled.is_set, max_model_calls=spec["runtime"].get("max_rounds", 3),

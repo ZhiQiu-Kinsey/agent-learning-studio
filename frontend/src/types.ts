@@ -8,7 +8,12 @@ export type Exercise = {
   inputs?: Record<string, unknown>;
 };
 export type Lesson = {
+  /** Stable slug, e.g. "tool-selection". */
   id: string;
+  /** Display number computed by the server from catalog order. */
+  number: number;
+  /** Legacy ids (old numeric ids) that the server still resolves. */
+  aliases: string[];
   title: string;
   subtitle?: string;
   description: string;
@@ -153,6 +158,8 @@ export type Roadmap = {
 };
 export type CurriculumLesson = {
   id: string;
+  number: number;
+  aliases: string[];
   title: string;
   category_id: string;
   module_id: string;

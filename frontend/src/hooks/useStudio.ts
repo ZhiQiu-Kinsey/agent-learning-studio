@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelRun, createRun, followRunEvents, jsonFetch } from "../api";
+import { resolveLessonId } from "../lib/lessonIds";
+import { clientError } from "../i18n/errors";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
 
 const messageOf = (error: unknown) =>
@@ -60,7 +62,7 @@ export function useStudio() {
       })
       .catch((reason) => {
         if (!abort.signal.aborted)
-          setError(`无法连接教学服务：${messageOf(reason)}`);
+          setError(clientError("serviceUnreachable", { reason: messageOf(reason) }));
       });
     void refreshStatus();
     // 运行在服务端后台执行；页面关闭时沿用旧语义，请求停止后续步骤。
@@ -114,9 +116,12 @@ export function useStudio() {
     return () => window.clearInterval(timer);
   }, [playing, running, events.length]);
 
-  function selectLesson(id: string) {
+  function selectLesson(requested: string) {
+    // Legacy numeric ids still work; state always holds the canonical slug.
+    const id = resolveLessonId(requested, lessons);
     if (
       runController.current ||
+      !id ||
       id === lessonId ||
       !lessons.some((lesson) => lesson.id === id && lesson.available)
     )
@@ -156,13 +161,13 @@ export function useStudio() {
     try {
       const value: unknown = JSON.parse(text);
       if (!value || typeof value !== "object" || Array.isArray(value))
-        throw new Error('请输入 JSON 对象，例如 {} 或 {"limit": 3}。');
+        throw new Error(clientError("inputsNotObject"));
       setRunInputs(value as Record<string, unknown>);
       setInputError("");
     } catch (reason) {
       setInputError(
         reason instanceof SyntaxError
-          ? "JSON 格式不完整或有误，请检查引号、逗号和括号后再运行。"
+          ? clientError("inputsSyntax")
           : messageOf(reason),
       );
     }
@@ -208,7 +213,7 @@ export function useStudio() {
       });
       if (abort.signal.aborted) {
         void cancelRun(id).catch(() => undefined);
-        throw new DOMException("已停止", "AbortError");
+        throw new DOMException(clientError("stopped"), "AbortError");
       }
       if (runController.current === abort) {
         activeRun.current = id;
@@ -219,9 +224,7 @@ export function useStudio() {
     } catch (reason) {
       if (!mounted.current) return;
       if (abort.signal.aborted) {
-        setError(
-          "已停止接收并请求取消后续步骤。已经发出的模型请求可能仍在完成，稍后可再次运行。",
-        );
+        setError(clientError("stoppedNotice"));
       } else {
         const message = messageOf(reason);
         setError(message);

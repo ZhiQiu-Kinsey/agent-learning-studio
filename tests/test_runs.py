@@ -309,7 +309,7 @@ class StorageTests(RunApiTestCase):
         meta = self.client.get(f"/api/runs/{first.run_id}").json()
         self.assertEqual({key: meta[key] for key in ("lesson_id", "exercise_id", "mode", "status", "provenance",
                                                      "schema_version", "event_count", "last_seq")},
-                         {"lesson_id": "1", "exercise_id": "sum", "mode": "offline", "status": "completed",
+                         {"lesson_id": "tool-selection", "exercise_id": "sum", "mode": "offline", "status": "completed",
                           "provenance": "real_run", "schema_version": 2, "event_count": len(first.events),
                           "last_seq": len(first.events)})
         self.assertTrue(meta["finished_at"])
