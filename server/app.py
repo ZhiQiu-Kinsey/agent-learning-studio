@@ -26,6 +26,7 @@ from course.providers import SDKCompletion
 from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_detail,
                             lesson_runtime, lesson_spec, public_lesson)
 from server.content import load_onboarding
+from server.content_overlay import LOCALE
 from server.curriculum import public_curriculum, roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
@@ -85,6 +86,13 @@ def scrub(value, secrets):
     if isinstance(value, dict):
         return {scrub(k, secrets): scrub(v, secrets) for k, v in value.items()}
     return value
+
+
+def require_locale(lang: str | None) -> str | None:
+    """?lang= 选择内容译文层；不存在的译文回落到源语言，格式不合法才报错。"""
+    if lang is None or LOCALE.fullmatch(lang):
+        return lang
+    raise ApiError(400, "invalid_locale", "语言代码格式无效。")
 
 
 def require_lesson(lesson_id: str):
@@ -184,10 +192,11 @@ def curriculum():
 
 
 @app.get("/api/onboarding")
-def onboarding():
+def onboarding(lang: str | None = None):
     """提供独立的前置阅读内容；不加载课程运行器或调用模型。"""
+    locale = require_locale(lang)
     try:
-        return load_onboarding(ROOT / "curriculum" / "onboarding.json")
+        return load_onboarding(ROOT / "curriculum" / "onboarding.json", locale)
     except LessonValidationError:
         raise ApiError(503, "onboarding_unavailable", "前置学习内容暂时不可用，请稍后重试。") from None
 
@@ -202,8 +211,8 @@ def glossary():
 
 
 @app.get("/api/lessons/{lesson_id}")
-def detail(lesson_id: str):
-    return lesson_detail(require_lesson(lesson_id))
+def detail(lesson_id: str, lang: str | None = None):
+    return lesson_detail(require_lesson(lesson_id), require_locale(lang))
 
 
 class RunInput(BaseModel):

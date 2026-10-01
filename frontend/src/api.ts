@@ -1,5 +1,6 @@
 import type { Trace } from "./types";
 import { createParser } from "eventsource-parser";
+import i18n, { sourceLocale } from "./i18n";
 import { clientError, errorMessage } from "./i18n/errors";
 
 /** Server error: `code` is stable and translated by the UI; `detail` is the server fallback. */
@@ -40,11 +41,19 @@ async function errorFrom(
   );
 }
 
+/** Content endpoints serve translation overlays; the source locale needs no parameter. */
+const localizedPaths = /^\/api\/(lessons\/[^/?]+|onboarding)(\?|$)/;
+export function withLocale(path: string) {
+  const language = i18n.resolvedLanguage ?? sourceLocale;
+  if (language === sourceLocale || !localizedPaths.test(path)) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}lang=${encodeURIComponent(language)}`;
+}
+
 export async function jsonFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await fetch(withLocale(path), init);
   if (!response.ok) throw await errorFrom(response, "requestFailed");
   return response.json();
 }

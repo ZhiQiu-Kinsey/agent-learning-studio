@@ -6,7 +6,7 @@ from importlib import import_module
 from pathlib import Path, PurePosixPath
 
 # LessonValidationError 定义在 server.curriculum，这里继续导出以保持原有导入路径。
-from server.content import load_lesson_content
+from server.content import lesson_content_model, load_lesson_content
 from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -136,7 +136,7 @@ def _manifest(root, path, catalog_lesson):
         else:
             _require(isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]*", value), path, f"ui.{key} 必须为扩展键")
     defaults = _object(data.get("input_defaults", {}), str(path) + ": input_defaults")
-    load_lesson_content(content_path, {"id": data["id"], "subtitle": subtitle, "exercises": exercises})
+    lesson_content_model(content_path, {"id": data["id"], "subtitle": subtitle, "exercises": exercises})
     return {"id": data["id"], "number": catalog_lesson["number"], "aliases": list(catalog_lesson.get("aliases", [])),
             "title": catalog_lesson["title"], "description": catalog_lesson["summary"],
             "objectives": catalog_lesson["objectives"], "subtitle": subtitle, "exercises": exercises,
@@ -222,7 +222,7 @@ def lesson_callable(spec, reference):
     return function
 
 
-def lesson_detail(spec):
+def lesson_detail(spec, locale=None):
     from course.execution import validate_inputs
     module = lesson_runtime(spec)
     content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
@@ -232,8 +232,10 @@ def lesson_detail(spec):
         sources.append({**source, "content": path.read_text(encoding="utf-8")})
     # Publish actual validated presets, including model defaults, so the parameter
     # editor shows every value the lesson will receive rather than hidden values.
+    learning, learning_i18n = load_lesson_content(content_path, spec, locale)
     exercises = [{**exercise, "inputs": validate_inputs(module, {**spec["input_defaults"], **exercise.get("inputs", {})})}
                  for exercise in spec["exercises"]]
     return {**public_lesson(spec), "exercises": exercises, "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
-            "tools": getattr(module, "TOOLS", []), "learning": load_lesson_content(content_path, spec), "sources": sources}
+            "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
+            "sources": sources}
 
