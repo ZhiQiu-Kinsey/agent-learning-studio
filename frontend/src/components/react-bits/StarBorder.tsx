@@ -1,7 +1,7 @@
 // React Bits StarBorder, adapted from https://reactbits.dev/r/StarBorder-TS-CSS.json.
 // Copyright (c) 2026 David Haz. See LICENSE.md. Decorations pause when hidden.
 import type { ReactNode } from "react";
-import { useExperienceMotion } from "../learning/useExperienceMotion";
+import { useMotionBudget } from "../../motion";
 
 export default function StarBorder({
   children,
@@ -14,7 +14,7 @@ export default function StarBorder({
   color?: string;
   speed?: string;
 }) {
-  const { ref, active } = useExperienceMotion<HTMLDivElement>();
+  const { ref, active } = useMotionBudget<HTMLDivElement>();
   const style = {
     background: `radial-gradient(circle, ${color}, transparent 15%)`,
     animationDuration: speed,

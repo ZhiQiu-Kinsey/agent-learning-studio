@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { useExperienceMotion } from "../learning/useExperienceMotion";
+import { useMotionBudget } from "../../motion";
 import {
   motion,
   useMotionValue,
@@ -36,7 +36,7 @@ const ShinyText: React.FC<ShinyTextProps> = ({
   direction = "left",
   delay = 0,
 }) => {
-  const { ref, active } = useExperienceMotion<HTMLSpanElement>();
+  const { ref, active } = useMotionBudget<HTMLSpanElement>();
   const [isPaused, setIsPaused] = useState(false);
   const progress = useMotionValue(0);
   const elapsedRef = useRef(0);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import BorderGlow from "../react-bits/BorderGlow";
 import CountUp from "../react-bits/CountUp";
 import ClickSpark from "../react-bits/ClickSpark";

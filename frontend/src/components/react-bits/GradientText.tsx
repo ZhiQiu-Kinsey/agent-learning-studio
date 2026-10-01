@@ -1,7 +1,7 @@
 // React Bits GradientText, adapted from https://reactbits.dev/r/GradientText-TS-CSS.json.
 // Copyright (c) 2026 David Haz. See LICENSE.md. CSS loop pauses outside the viewport.
 import type { ReactNode } from "react";
-import { useExperienceMotion } from "../learning/useExperienceMotion";
+import { useMotionBudget } from "../../motion";
 
 export default function GradientText({
   children,
@@ -14,7 +14,7 @@ export default function GradientText({
   colors?: string[];
   animationSpeed?: number;
 }) {
-  const { ref, active } = useExperienceMotion<HTMLSpanElement>();
+  const { ref, active } = useMotionBudget<HTMLSpanElement>();
   return (
     <span
       ref={ref}

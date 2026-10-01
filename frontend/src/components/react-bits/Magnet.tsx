@@ -1,7 +1,7 @@
 // React Bits Magnet, adapted from https://reactbits.dev/r/Magnet-TS-CSS.json.
 // Copyright (c) 2026 David Haz. See LICENSE.md. Fine pointers only; bounded displacement.
 import { useEffect, useState, type ReactNode } from "react";
-import { useExperienceMotion } from "../learning/useExperienceMotion";
+import { useMotionBudget } from "../../motion";
 
 export default function Magnet({
   children,
@@ -14,7 +14,7 @@ export default function Magnet({
   padding?: number;
   magnetStrength?: number;
 }) {
-  const { ref, active, reduced } = useExperienceMotion<HTMLDivElement>();
+  const { ref, active, reduced } = useMotionBudget<HTMLDivElement>();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   useEffect(() => {
     if (!active || !matchMedia("(pointer: fine)").matches) return;

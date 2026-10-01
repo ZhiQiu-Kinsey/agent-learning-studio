@@ -17,7 +17,7 @@ import {
   type HTMLMotionProps,
   type MotionValue,
 } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 
 export type JellyRadioItem =
   | string

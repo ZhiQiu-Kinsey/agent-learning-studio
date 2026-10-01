@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import {
   ArrowLeft,
   ArrowRight,

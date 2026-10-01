@@ -35,7 +35,7 @@ import AnimatedContent from "./react-bits/AnimatedContent";
 import CountUp from "./react-bits/CountUp";
 import ShinyText from "./react-bits/ShinyText";
 import SquishSwitch from "./react-bits/SquishSwitch";
-import { useMotionPreference } from "../hooks/useMotionPreference";
+import { useReducedMotion } from "../motion";
 import RotatingText from "./curriculum/RotatingText";
 import GlareHover from "./curriculum/GlareHover";
 
@@ -70,7 +70,7 @@ function MapMetric({
   label: string;
   index: number;
 }) {
-  const reducedMotion = useMotionPreference();
+  const reducedMotion = useReducedMotion();
   return (
     <div className="curriculum-metric">
       <strong>
@@ -231,7 +231,7 @@ export function Curriculum({
 }: {
   onSelectLesson: (id: string) => void;
 }) {
-  const reduceMotion = useMotionPreference();
+  const reduceMotion = useReducedMotion();
   const [curriculum, setCurriculum] = useState<CurriculumData | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);

@@ -1,8 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "./hooks/useMotionPreference";
-import DotGrid from "./components/react-bits/DotGrid";
-import SplitText from "./components/react-bits/SplitText";
+import { MotionIntent, useReducedMotion } from "./motion";
 import ShinyText from "./components/react-bits/ShinyText";
 import {
   ArrowUpRight,
@@ -18,6 +16,7 @@ import {
 import { useStudio } from "./hooks/useStudio";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
+import { MotionSwitch } from "./components/MotionSwitch";
 import { CourseNavigation } from "./components/CourseNavigation";
 import { LessonExtension } from "./lesson-extensions/LessonExtension";
 import { Button } from "./components/ui/button";
@@ -29,7 +28,6 @@ import {
   SheetDescription,
 } from "./components/ui/sheet";
 
-const Aurora = lazy(() => import("./components/react-bits/Aurora"));
 const Onboarding = lazy(() =>
   import("./components/Onboarding").then((module) => ({
     default: module.Onboarding,
@@ -222,6 +220,7 @@ export default function App() {
             </strong>
           </div>
           <div className="app-preferences">
+            <MotionSwitch />
             <ThemeSwitch />
             <Button
               ref={settingsRef}
@@ -285,20 +284,20 @@ export default function App() {
               >
                 <div className="lesson-masthead">
                   <div className="masthead-aurora" aria-hidden="true">
-                    {!catalog && !intro && !reducedMotion && (
-                      <Suspense fallback={null}>
-                        <Aurora
-                          colorStops={["#6d5dfc", "#49dec6", "#b98aff"]}
-                          amplitude={0.65}
-                          blend={0.65}
-                          speed={0.55}
-                        />
-                      </Suspense>
+                    {!catalog && !intro && (
+                      <MotionIntent
+                        name="ambient.aurora"
+                        colorStops={["#6d5dfc", "#49dec6", "#b98aff"]}
+                        amplitude={0.65}
+                        blend={0.65}
+                        speed={0.55}
+                      />
                     )}
                   </div>
                   <div className="masthead-texture" aria-hidden="true">
-                    {!catalog && !intro && !reducedMotion && (
-                      <DotGrid
+                    {!catalog && !intro && (
+                      <MotionIntent
+                        name="ambient.dot-grid"
                         dotSize={2}
                         gap={17}
                         baseColor="#a2a4bb"
@@ -314,11 +313,9 @@ export default function App() {
                       <p className="masthead-kicker">
                         AGENT LEARNING <span>/</span> 实践课 {number}
                       </p>
-                      {reducedMotion ? (
-                        <h1>{title}</h1>
-                      ) : (
-                        <SplitText
-                          key={`${studio.lessonId}-${title}`}
+                      <MotionIntent
+                        name="heading.split"
+                        key={`${studio.lessonId}-${title}`}
                           text={title}
                           tag="h1"
                           textAlign="left"
@@ -329,7 +326,6 @@ export default function App() {
                           to={{ opacity: 1, y: 0, rotateX: 0 }}
                           rootMargin="0px"
                         />
-                      )}
                     </div>
                   </div>
                   <TabsList className="mode-navigation" aria-label="工作区">

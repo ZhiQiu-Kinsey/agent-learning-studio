@@ -1,6 +1,6 @@
 import Markdown from "react-markdown";
 import { motion } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import { Braces, Cpu, Eye, Network, Quote } from "lucide-react";
 import type { Detail } from "../../types";
 import SpotlightCard from "../react-bits/SpotlightCard";

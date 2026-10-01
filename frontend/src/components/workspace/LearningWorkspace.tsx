@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import {
   ArrowRight,
   BookOpen,

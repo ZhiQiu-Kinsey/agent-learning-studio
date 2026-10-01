@@ -17,7 +17,7 @@ import {
   useTransform,
   useVelocity,
 } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 export interface SquishSwitchProps {
   checked?: boolean;
   defaultChecked?: boolean;

@@ -6,7 +6,7 @@ import {
   ExternalLink,
   XCircle,
 } from "lucide-react";
-import { useMotionPreference } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import type { InspectorExtensionProps } from "../types";
 import { Button } from "../../components/ui/button";
 import "./evidence-board.css";
@@ -25,7 +25,7 @@ export default function EvidenceBoard({
   studio,
   children,
 }: InspectorExtensionProps) {
-  const reduced = useMotionPreference();
+  const reduced = useReducedMotion();
   const reports = studio.visible
     .map((event, index) => ({ event, index }))
     .filter(({ event }) => event.type === "lesson.report");

@@ -3,7 +3,7 @@
 import React, { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useMotionPreference } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -49,7 +49,7 @@ const AnimatedContent: React.FC<AnimatedContentProps> = ({
   ...props
 }) => {
   const ref = useRef<HTMLDivElement>(null);
-  const reducedMotion = useMotionPreference();
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const el = ref.current;

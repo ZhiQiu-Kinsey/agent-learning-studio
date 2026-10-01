@@ -10,6 +10,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { prefersReducedMotionNow } from "../../motion/level";
 import {
   CommandLineIcon,
   File02Icon,
@@ -65,8 +66,7 @@ const WORDS: Record<CallChipStatus, string> = {
 
 const fmt = (ms: number) =>
   ms < 10000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
-const reduceMotion = () =>
-  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+const reduceMotion = prefersReducedMotionNow;
 const glyphOf = (s: CallChipStatus): Glyph =>
   s === "done" ? "check" : s === "error" ? "retry" : "tool";
 

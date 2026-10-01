@@ -11,7 +11,7 @@ import BlurText from "../react-bits/BlurText";
 import GradientText from "../react-bits/GradientText";
 import DecryptedText from "../react-bits/DecryptedText";
 import Magnet from "../react-bits/Magnet";
-import { useExperienceMotion } from "./useExperienceMotion";
+import { prefersReducedMotionNow, useMotionBudget } from "../../motion";
 
 export function LessonHero({
   detail,
@@ -21,7 +21,7 @@ export function LessonHero({
   onSource: () => void;
 }) {
   const presentation = detail.learning?.presentation;
-  const { ref, active } = useExperienceMotion<HTMLElement>();
+  const { ref, active } = useMotionBudget<HTMLElement>();
   if (!presentation)
     return (
       <div className="reading-intro">
@@ -54,10 +54,7 @@ export function LessonHero({
                 document
                   .getElementById("lesson-flow")
                   ?.scrollIntoView({
-                    behavior: matchMedia("(prefers-reduced-motion: reduce)")
-                      .matches
-                      ? "instant"
-                      : "smooth",
+                    behavior: prefersReducedMotionNow() ? "instant" : "smooth",
                     block: "start",
                   })
               }

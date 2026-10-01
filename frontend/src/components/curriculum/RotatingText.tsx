@@ -22,7 +22,7 @@ import {
 } from "motion/react";
 
 import "./RotatingText.css";
-import { useMotionPreference } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 
 function cn(...classes: (string | undefined | null | boolean)[]): string {
   return classes.filter(Boolean).join(" ");
@@ -84,7 +84,7 @@ const RotatingText = forwardRef<RotatingTextRef, RotatingTextProps>(
     const [currentTextIndex, setCurrentTextIndex] = useState<number>(0);
     const viewRef = useRef<HTMLSpanElement>(null);
     const inView = useInView(viewRef);
-    const reducedMotion = useMotionPreference();
+    const reducedMotion = useReducedMotion();
     const [pageVisible, setPageVisible] = useState(true);
 
     useEffect(() => {

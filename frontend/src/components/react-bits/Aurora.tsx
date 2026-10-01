@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useMotionBudget } from "../../motion";
 import { Renderer, Program, Mesh, Color, Triangle } from "ogl";
 
 import "./Aurora.css";
@@ -123,7 +123,7 @@ void main() {
 }
 `;
 
-interface AuroraProps {
+export interface AuroraProps {
   active?: boolean;
   colorStops?: string[];
   amplitude?: number;
@@ -134,7 +134,8 @@ interface AuroraProps {
 }
 
 export default function Aurora(props: AuroraProps) {
-  const reducedMotion = useReducedMotion();
+  // Holds the single WebGL slot; the render loop below pauses offscreen itself.
+  const { ref: ctnDom, granted } = useMotionBudget<HTMLDivElement>("webgl");
   const [isLight, setIsLight] = useState(
     document.documentElement.dataset.theme !== "dark",
   );
@@ -157,11 +158,9 @@ export default function Aurora(props: AuroraProps) {
   const propsRef = useRef<AuroraProps>(props);
   propsRef.current = props;
 
-  const ctnDom = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const ctn = ctnDom.current;
-    if (!ctn || reducedMotion || props.active === false) return;
+    if (!ctn || !granted || props.active === false) return;
 
     let renderer: Renderer;
     try {
@@ -281,7 +280,7 @@ export default function Aurora(props: AuroraProps) {
       }
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [amplitude, reducedMotion, props.active, lightMode]);
+  }, [amplitude, granted, props.active, lightMode, ctnDom]);
 
   return <div ref={ctnDom} className="aurora-container" />;
 }

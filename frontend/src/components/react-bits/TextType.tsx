@@ -11,7 +11,7 @@ import {
   useCallback,
 } from "react";
 import { gsap } from "gsap";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import "./TextType.css";
 
 interface TextTypeProps {

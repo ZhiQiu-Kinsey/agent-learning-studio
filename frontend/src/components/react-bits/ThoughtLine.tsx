@@ -9,7 +9,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { animate, type AnimationPlaybackControls } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,

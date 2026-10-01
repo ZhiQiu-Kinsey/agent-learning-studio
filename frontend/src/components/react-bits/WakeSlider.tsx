@@ -16,7 +16,7 @@ import {
   useSpring,
   useVelocity,
 } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 
 const SETTLE = 9.23;
 const FULL_SPEED = 320;

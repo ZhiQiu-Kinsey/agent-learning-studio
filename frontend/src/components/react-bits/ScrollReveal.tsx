@@ -1,7 +1,7 @@
 // React Bits ScrollReveal, adapted from https://reactbits.dev/r/ScrollReveal-TS-CSS.json.
 // Copyright (c) 2026 David Haz. See LICENSE.md. Local GSAP cleanup and Chinese segmentation.
 import { useEffect, useRef } from "react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 gsap.registerPlugin(ScrollTrigger);

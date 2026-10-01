@@ -1,7 +1,7 @@
 // React Bits BlurText, adapted from https://reactbits.dev/r/BlurText-TS-CSS.json.
 // Copyright (c) 2026 David Haz. See LICENSE.md. Adds semantic text and reduced motion.
 import { motion, useInView } from "motion/react";
-import { useMotionPreference as useReducedMotion } from "../../hooks/useMotionPreference";
+import { useReducedMotion } from "../../motion";
 import { useRef } from "react";
 
 export default function BlurText({

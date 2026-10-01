@@ -1,7 +1,7 @@
 // React Bits DecryptedText, adapted from https://reactbits.dev/r/DecryptedText-TS-CSS.json.
 // Copyright (c) 2026 David Haz. See LICENSE.md. Stable screen-reader text; finite view reveal.
 import { useEffect, useState } from "react";
-import { useExperienceMotion } from "../learning/useExperienceMotion";
+import { useMotionBudget } from "../../motion";
 
 export default function DecryptedText({
   text,
@@ -14,7 +14,7 @@ export default function DecryptedText({
   speed?: number;
   characters?: string;
 }) {
-  const { ref, active, reduced } = useExperienceMotion<HTMLSpanElement>();
+  const { ref, active, reduced } = useMotionBudget<HTMLSpanElement>();
   const [display, setDisplay] = useState(text);
   const [completed, setCompleted] = useState(false);
   useEffect(() => {
