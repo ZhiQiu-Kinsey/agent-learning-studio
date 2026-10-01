@@ -3,6 +3,7 @@ import { cancelRun, createRun, followRunEvents, jsonFetch } from "../api";
 import { resolveLessonId } from "../lib/lessonIds";
 import { clientError } from "../i18n/errors";
 import { track } from "../progress";
+import { createReplayClock, type ReplayOptions } from "../stage/replay";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
 
 const messageOf = (error: unknown) =>
@@ -27,6 +28,10 @@ export function useStudio() {
   const [source, setSource] = useState(0);
   const [running, setRunning] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [replayOptions, setReplayOptions] = useState<ReplayOptions>({
+    pacing: "uniform",
+    speed: 1,
+  });
   const mounted = useRef(false);
   const runController = useRef<AbortController | null>(null);
   // 当前运行的服务端 ID；断线续读、停止与页面关闭时的取消都作用于它。
@@ -107,18 +112,25 @@ export function useStudio() {
     return () => abort.abort();
   }, [lessonId]);
 
+  // Replay only steps through recorded events. Any change of play state, events or
+  // pacing disposes the clock, whose generation token drops stale timers.
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
   useEffect(() => {
     if (!playing || running) return;
-    const timer = window.setInterval(() => {
-      setCursor((value) => {
-        const next = Math.min(value + 1, events.length);
-        setSelected(next - 1);
-        if (next >= events.length) setPlaying(false);
-        return next;
-      });
-    }, 950);
-    return () => window.clearInterval(timer);
-  }, [playing, running, events.length]);
+    const clock = createReplayClock(
+      events.map((event) => event.timestamp),
+      (state) => {
+        setCursor(state.cursor);
+        setSelected(state.cursor - 1);
+        if (!state.playing) setPlaying(false);
+      },
+      undefined,
+      { cursor: cursorRef.current, options: replayOptions },
+    );
+    clock.play();
+    return () => clock.dispose();
+  }, [playing, running, events, replayOptions]);
 
   function selectLesson(requested: string) {
     // Legacy numeric ids still work; state always holds the canonical slug.
@@ -345,6 +357,8 @@ export function useStudio() {
     replay,
     step,
     playing,
+    replayOptions,
+    setReplayOptions,
     download,
     source,
     setSource,
