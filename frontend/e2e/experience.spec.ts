@@ -205,7 +205,7 @@ test("stage nodes and tool cards follow execution evidence and replay", async ({
     "[data-testid^='stage-node-']:not([data-state='dormant'])",
   );
   await page.goto("/");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   // Before any run the stage shows no topology at all, not a placeholder run.
   await expect(nodes).toHaveCount(0);
   await page.getByTestId("lab-run-button").click();

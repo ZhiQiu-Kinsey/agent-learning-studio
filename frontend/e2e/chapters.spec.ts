@@ -79,11 +79,11 @@ test("chapters two and three expose complete guides and run every real preset th
     await expect(page.getByTestId("agent-flow-step")).toHaveCount(
       lessonView(detail.learning).walkthrough!.steps.length,
     );
-    await page.getByTestId("learn-tab-quiz").click();
+    await page.getByTestId("scene-tab-check").click();
     await expect(page.getByTestId("quiz-question")).toHaveCount(
       lessonView(detail.learning).quiz.length,
     );
-    await page.getByTestId("workspace-tab-lab").click();
+    await page.getByTestId("scene-tab-lab").click();
     // Controls are generated from the input schema; JSON stays available as the advanced mode.
     await expect(page.getByTestId("schema-inputs")).toBeVisible();
     await page.getByTestId("lab-inputs-mode").click();
@@ -127,8 +127,8 @@ test("chapters two and three expose complete guides and run every real preset th
     await page.getByTestId("lab-replay-rewind").click();
     await expect(page.getByTestId("evidence-report")).toHaveCount(0);
     expect(runs).toBe(before);
-    await page.getByTestId("workspace-tab-learn").click();
-    await page.getByTestId("learn-tab-guide").click();
+    await page.getByTestId("scene-tab-understand").click();
+    await page.getByTestId("scene-tab-understand").click();
   }
   expect(runs).toBe(presets);
   expect(errors).toEqual([]);
@@ -157,7 +157,7 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
     catalog,
     catalog.lessons.find((lesson) => lesson.id === "persistent-memory")!,
   );
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await expect(page.getByTestId("lab-configure-button")).toHaveCount(0);
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");

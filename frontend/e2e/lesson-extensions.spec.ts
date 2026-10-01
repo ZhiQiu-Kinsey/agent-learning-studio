@@ -140,7 +140,7 @@ test("reusable evidence reports render real checks and tables, select older repo
   await fixtureLesson(page, request, {
     ui: { lab: "structured-inputs", inspector: "evidence-board" },
   });
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   const board = page.getByRole("region", { name: t("lab:evidence.region") });
   await expect(
@@ -195,7 +195,7 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
     (payload) => payloads.push(payload),
   );
   const lesson = await fixtureLesson(page, request);
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   const inputs = page.getByTestId("lab-inputs-json");
   const run = page.getByTestId("lab-run-button");
   const eventJson = page.getByTestId("lab-event-detail").locator("pre");
@@ -287,7 +287,7 @@ test("unknown view keys including URLs and prototype names show the default view
   });
   await expect(page.getByRole("alert")).toHaveText(unavailable("guide"));
   await expect(page.getByTestId("learn-reading-document")).toBeVisible();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await expect(
     page.getByRole("alert").filter({ hasText: unavailable("lab") }),
   ).toBeVisible();
@@ -313,7 +313,7 @@ for (const failure of ["load", "render"] as const) {
           }),
     );
     await fixtureLesson(page, request, { ui: { inspector: "tool-outcomes" } });
-    await page.getByTestId("workspace-tab-lab").click();
+    await page.getByTestId("scene-tab-lab").click();
     await expect(page.getByRole("alert")).toHaveText(
       t("lab:extension.failed", { slot: t("lab:extension.slot.inspector") }),
     );
@@ -349,7 +349,7 @@ test("lesson three custom inspector follows real tool outcomes, event selection 
     .getByTestId("course-nav")
     .getByRole("button", { name: detail.title })
     .click();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   const inspector = page.getByRole("region", {
     name: t("lab:toolOutcomes.region"),
   });

@@ -36,7 +36,7 @@ test("themes persist, follow system changes, sync tabs and cover mobile screens"
     animations: "disabled",
     path: capture("theme-dark.png"),
   });
-  await page.getByTestId("learn-tab-source").click();
+  await page.getByTestId("scene-tab-code").click();
   await expect(
     page.getByTestId("learn-source-code").locator("code"),
   ).toBeVisible();

@@ -1,12 +1,10 @@
 import { lazy, Suspense, useRef, useState } from "react";
-import { motion } from "motion/react";
-import { MotionIntent, useReducedMotion } from "./motion";
+import { useReducedMotion } from "./motion";
 import ShinyText from "./components/react-bits/ShinyText";
 import {
   ArrowUpRight,
   BookOpen,
   ChevronRight,
-  FlaskConical,
   Layers3,
   Menu,
   Settings2,
@@ -14,15 +12,11 @@ import {
   X,
 } from "lucide-react";
 import { useStudio } from "./hooks/useStudio";
-import { track } from "./progress";
-import { formatLessonNumber } from "./lib/lessonIds";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { MotionSwitch } from "./components/MotionSwitch";
 import { CourseNavigation } from "./components/CourseNavigation";
-import { LessonExtension } from "./lesson-extensions/LessonExtension";
 import { Button } from "./components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs";
 import {
   Sheet,
   SheetContent,
@@ -40,14 +34,9 @@ const Curriculum = lazy(() =>
     default: module.Curriculum,
   })),
 );
-const LearningWorkspace = lazy(() =>
-  import("./components/workspace/LearningWorkspace").then((module) => ({
-    default: module.LearningWorkspace,
-  })),
-);
-const Laboratory = lazy(() =>
-  import("./components/workspace/Laboratory").then((module) => ({
-    default: module.Laboratory,
+const LessonScenes = lazy(() =>
+  import("./scenes/LessonScenes").then((module) => ({
+    default: module.LessonScenes,
   })),
 );
 const loadingPanel = (
@@ -59,7 +48,6 @@ const loadingPanel = (
 export default function App() {
   const reducedMotion = useReducedMotion();
   const studio = useStudio();
-  const [mode, setMode] = useState("learn");
   const [catalog, setCatalog] = useState(false);
   const [intro, setIntro] = useState(() => {
     try {
@@ -70,17 +58,10 @@ export default function App() {
   });
   const [introChapter, setIntroChapter] = useState(0);
   const [hasOpenedLesson, setHasOpenedLesson] = useState(!intro);
-  const [hasOpenedLab, setHasOpenedLab] = useState(false);
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLButtonElement>(null);
-  const title =
-    studio.detail?.title.replace(/^第\s*\d+\s*课[：:]?\s*/, "") ||
-    "准备学习环境";
-  const number = formatLessonNumber(
-    studio.lessons.find((lesson) => lesson.id === studio.lessonId)?.number,
-  );
   function choose(id: string) {
     if (studio.running) return;
     studio.selectLesson(id);
@@ -92,7 +73,6 @@ export default function App() {
       /* Session navigation still works. */
     }
     setCatalog(false);
-    setMode("learn");
     setMenu(false);
   }
   const navigation = (
@@ -281,156 +261,13 @@ export default function App() {
           )}
           <div hidden={catalog || intro}>
             {hasOpenedLesson && (
-              <Tabs
-                value={mode}
-                onValueChange={(value) => {
-                  setMode(value);
-                  if (value === "lab") {
-                    setHasOpenedLab(true);
-                    if (studio.detail)
-                      track.sceneVisited(studio.detail.id, "lab");
-                  }
-                }}
-                className="workspace-modes"
-              >
-                <div
-                  className="lesson-masthead"
-                  data-testid="lesson-masthead"
-                >
-                  <div className="masthead-aurora" aria-hidden="true">
-                    {!catalog && !intro && (
-                      <MotionIntent
-                        name="ambient.aurora"
-                        colorStops={["#6d5dfc", "#49dec6", "#b98aff"]}
-                        amplitude={0.65}
-                        blend={0.65}
-                        speed={0.55}
-                      />
-                    )}
-                  </div>
-                  <div className="masthead-texture" aria-hidden="true">
-                    {!catalog && !intro && (
-                      <MotionIntent
-                        name="ambient.dot-grid"
-                        dotSize={2}
-                        gap={17}
-                        baseColor="#a2a4bb"
-                        activeColor="#7d73cb"
-                        proximity={70}
-                        shockStrength={1}
-                      />
-                    )}
-                  </div>
-                  <div className="lesson-heading">
-                    <span
-                      className="lesson-badge"
-                      data-testid="lesson-badge"
-                    >
-                      {number}
-                    </span>
-                    <div>
-                      <p className="masthead-kicker">
-                        AGENT LEARNING <span>/</span> 实践课 {number}
-                      </p>
-                      <MotionIntent
-                        name="heading.split"
-                        key={`${studio.lessonId}-${title}`}
-                        text={title}
-                        tag="h1"
-                        textAlign="left"
-                        splitType="chars"
-                        delay={45}
-                        duration={0.55}
-                        from={{ opacity: 0, y: 14, rotateX: -25 }}
-                        to={{ opacity: 1, y: 0, rotateX: 0 }}
-                        rootMargin="0px"
-                      />
-                    </div>
-                  </div>
-                  <TabsList className="mode-navigation" aria-label="工作区">
-                    <TabsTrigger
-                      value="learn"
-                      data-testid="workspace-tab-learn"
-                    >
-                      {mode === "learn" && (
-                        <motion.span
-                          aria-hidden="true"
-                          className="mode-active-pill"
-                          layoutId="workspace-mode"
-                          transition={{
-                            type: "spring",
-                            bounce: 0.15,
-                            duration: reducedMotion ? 0 : 0.4,
-                          }}
-                        />
-                      )}
-                      <BookOpen size={16} />
-                      学习课程
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="lab"
-                      data-testid="workspace-tab-lab"
-                    >
-                      {mode === "lab" && (
-                        <motion.span
-                          aria-hidden="true"
-                          className="mode-active-pill"
-                          layoutId="workspace-mode"
-                          transition={{
-                            type: "spring",
-                            bounce: 0.15,
-                            duration: reducedMotion ? 0 : 0.4,
-                          }}
-                        />
-                      )}
-                      <FlaskConical size={16} />
-                      实验工作台
-                      {studio.running && <i className="live-indicator" />}
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent
-                  forceMount
-                  hidden={mode !== "learn"}
-                  value="learn"
-                  className="mode-panel motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300"
-                >
-                  <Suspense fallback={loadingPanel}>
-                    <LearningWorkspace
-                      studio={studio}
-                      active={mode === "learn" && !catalog && !intro}
-                      onStartLab={() => {
-                        setMode("lab");
-                        setHasOpenedLab(true);
-                      }}
-                    />
-                  </Suspense>
-                </TabsContent>
-                <TabsContent
-                  forceMount
-                  hidden={mode !== "lab"}
-                  value="lab"
-                  className="mode-panel motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300"
-                >
-                  {hasOpenedLab && (
-                    <Suspense fallback={loadingPanel}>
-                      <LessonExtension
-                        slot="lab"
-                        extensionKey={studio.detail?.ui?.lab}
-                        studio={studio}
-                        active={mode === "lab" && !catalog && !intro}
-                        onConfigure={() => setSettings(true)}
-                      >
-                        <Laboratory
-                          studio={studio}
-                          active={mode === "lab" && !catalog && !intro}
-                          onConfigure={() => setSettings(true)}
-                        />
-                      </LessonExtension>
-                    </Suspense>
-                  )}
-                </TabsContent>
-              </Tabs>
+              <Suspense fallback={loadingPanel}>
+                <LessonScenes
+                  studio={studio}
+                  visible={!catalog && !intro}
+                  onConfigure={() => setSettings(true)}
+                />
+              </Suspense>
             )}
           </div>
         </main>

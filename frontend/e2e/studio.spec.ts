@@ -40,11 +40,11 @@ test("source is served from the lesson, and replay never sends another run", asy
   await expect(
     page.getByRole("heading", { name: detail.title, exact: true }),
   ).toBeVisible();
-  await page.getByTestId("learn-tab-source").click();
+  await page.getByTestId("scene-tab-code").click();
   await expect(page.getByTestId("learn-source-code").locator("pre")).toHaveText(
     detail.sources[0].content,
   );
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   const answer = page.getByTestId("lab-answer");
   const events = page.getByTestId("lab-timeline").getByRole("button");
@@ -90,11 +90,11 @@ test("dependent call receives the real time result, and the full trace can be ex
     .getByTestId("course-nav")
     .getByRole("button", { name: detail.title })
     .click();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await expect(
     page.getByTestId("lab-exercise-field").getByRole("combobox"),
   ).toHaveText(detail.exercises.find((item) => !item.offline_only)!.title);
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await expect(page.getByTestId("lab-event-request")).toHaveCount(3);
@@ -145,7 +145,7 @@ test("an interrupted event stream resumes from the last received seq without dup
     },
   );
   await page.goto("/");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await expect(page.getByTestId("lab-answer")).toContainText("42");
@@ -183,10 +183,10 @@ test("zero division returns an error result and live mode excludes fault injecti
     .getByTestId("course-nav")
     .getByRole("button", { name: detail.title })
     .click();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await exercise.getByRole("combobox").click();
   await page.getByRole("option", { name: zero.title, exact: true }).click();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await page.getByTestId("lab-event-tool-result").click();
@@ -194,7 +194,7 @@ test("zero division returns an error result and live mode excludes fault injecti
     page.getByTestId("lab-event-detail").locator("pre"),
   ).toContainText('"ok": false');
   await expect(page.getByTestId("lab-answer")).toContainText("0");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await exercise.getByRole("combobox").click();
   await expect(exercise.getByRole("listbox").getByRole("option")).toHaveCount(
     live.length,
@@ -225,7 +225,7 @@ test("small screen opens course navigation and keeps content within viewport", a
   await expect(
     page.getByRole("heading", { name: detail.title, exact: true }),
   ).toBeVisible();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await expect(page.getByTestId("lab-run-button")).toBeEnabled();
   expect(
     await page.evaluate(
@@ -259,7 +259,7 @@ test("answers render Markdown without executing model-supplied HTML", async ({
     events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
   );
   await page.goto("/");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   const answer = page.getByTestId("lab-answer");
   await expect(answer.locator("strong")).toHaveText("42");
@@ -285,7 +285,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   });
   const feedback = page.getByTestId("quiz-feedback");
   await page.goto("/");
-  await page.getByTestId("learn-tab-quiz").click();
+  await page.getByTestId("scene-tab-check").click();
   await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
   await expect(submit).toBeDisabled();
   for (const [index, question] of lessonView(lesson.learning).quiz.entries()) {
@@ -485,7 +485,7 @@ test("SDK events identify standardized data instead of claiming raw HTTP", async
     events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
   );
   await page.goto("/");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   // 事件标签仍硬编码在 Laboratory.tsx，抽取进 locales 后改为按键读取。
   await expect(page.getByTestId("lab-event-request")).toContainText(
@@ -534,14 +534,15 @@ test("settings dialog traps keyboard focus and Escape restores the opener", asyn
   await expect(opener).toBeFocused();
 });
 
-test("course tabs support arrow keys, Home and End with matching content", async ({
+test("lesson scenes support arrow keys, Home and End with matching content", async ({
   page,
 }) => {
   await page.goto("/");
-  const tabs = page.getByTestId("learn-tabs");
-  const guide = tabs.getByTestId("learn-tab-guide");
-  const source = tabs.getByTestId("learn-tab-source");
-  const quiz = tabs.getByTestId("learn-tab-quiz");
+  const tabs = page.getByTestId("scene-tabs");
+  const guide = tabs.getByTestId("scene-tab-understand");
+  const source = tabs.getByTestId("scene-tab-code");
+  const quiz = tabs.getByTestId("scene-tab-check");
+  const review = tabs.getByTestId("scene-tab-review");
   await expect(tabs).toHaveRole("tablist");
   await guide.focus();
   await page.keyboard.press("ArrowRight");
@@ -551,6 +552,9 @@ test("course tabs support arrow keys, Home and End with matching content", async
     page.getByTestId("learn-source-code").locator("code"),
   ).toBeVisible();
   await page.keyboard.press("End");
+  await expect(review).toBeFocused();
+  await expect(page.getByTestId("scene-review")).toBeVisible();
+  await page.keyboard.press("ArrowLeft");
   await expect(quiz).toBeFocused();
   await expect(quiz).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("quiz-pane")).toBeVisible();
@@ -560,7 +564,7 @@ test("course tabs support arrow keys, Home and End with matching content", async
   await expect(page.getByTestId("learn-reading-document")).toBeVisible();
 });
 
-test("workspace modes preserve answers, inputs and run evidence without new requests", async ({
+test("switching scenes preserves answers, inputs and run evidence without new requests", async ({
   page,
 }) => {
   let runs = 0;
@@ -568,10 +572,10 @@ test("workspace modes preserve answers, inputs and run evidence without new requ
     if (isRunCreation(request)) runs++;
   });
   await page.goto("/");
-  await page.getByTestId("learn-tab-quiz").click();
+  await page.getByTestId("scene-tab-check").click();
   const firstAnswer = page.getByRole("radio").first();
   await firstAnswer.click();
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   const answer = page.getByTestId("lab-answer");
   const events = page.getByTestId("lab-timeline").getByRole("button");
@@ -579,29 +583,27 @@ test("workspace modes preserve answers, inputs and run evidence without new requ
   await expect(answer).toContainText("42");
   const question = await input.inputValue();
   const count = await events.count();
-  await page.getByTestId("workspace-tab-learn").click();
+  await page.getByTestId("scene-tab-understand").click();
+  await page.getByTestId("scene-tab-check").click();
   await expect(firstAnswer).toHaveAttribute("aria-checked", "true");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await expect(input).toHaveValue(question);
   await expect(events).toHaveCount(count);
   await expect(answer).toContainText("42");
   expect(runs).toBe(1);
 });
 
-test("React Bits learning navigation works by keyboard and metrics settle on real counts", async ({
+test("understand scene leads into the lab by keyboard and metrics settle on real counts", async ({
   page,
 }) => {
   await page.goto("/");
-  // 步骤顺序固定：读懂原理、对照源码、运行与观察、自测与复盘。
-  const steps = page.getByTestId("learn-steps").getByRole("navigation");
-  const code = steps.getByRole("button").nth(1);
-  await code.focus();
-  await code.press("Enter");
-  await expect(
-    page.getByTestId("learn-source-code").locator("code"),
-  ).toBeVisible();
-  await expect(code).toHaveAttribute("aria-current", "step");
-  await steps.getByRole("button").nth(2).click();
+  const start = page.getByTestId("understand-start-lab");
+  await start.focus();
+  await start.press("Enter");
+  await expect(page.getByTestId("scene-tab-lab")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(page.getByTestId("lab-workspace")).toBeVisible();
   await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
   await expect(page.getByRole("option").first()).toBeVisible();
@@ -625,7 +627,7 @@ test("new layouts use normal reading flow and side-by-side execution evidence", 
   const header = page.getByTestId("learn-observations").locator("h3");
   await expect(header).toHaveCSS("margin-top", "0px");
   await expect(header).toHaveCSS("margin-bottom", "0px");
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   const list = await page.getByTestId("lab-trace-list").boundingBox();
   const detail = await page.getByTestId("lab-event-detail").boundingBox();
   expect(detail!.x).toBeGreaterThanOrEqual(list!.x + list!.width - 1);
@@ -636,7 +638,7 @@ test("new layouts use normal reading flow and side-by-side execution evidence", 
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   ).toBeTruthy();
-  await page.getByTestId("workspace-tab-learn").click();
+  await page.getByTestId("scene-tab-understand").click();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth + 1,

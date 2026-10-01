@@ -37,7 +37,7 @@ test("progress records only real local actions and survives a reload", async ({
   expect(lesson.quiz).toBeUndefined();
 
   // A completed self-check stores the score that was actually shown.
-  await page.getByTestId("learn-tab-quiz").click();
+  await page.getByTestId("scene-tab-check").click();
   const questions = lessonView(detail.learning).quiz;
   for (const [index, question] of questions.entries()) {
     const option = question.options.find((item) =>
@@ -60,7 +60,7 @@ test("progress records only real local actions and survives a reload", async ({
   });
 
   // One finished run counts once; replaying it does not count again.
-  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect
     .poll(async () => (await progressOf(page)).lessons[detail.id].runs.count)
