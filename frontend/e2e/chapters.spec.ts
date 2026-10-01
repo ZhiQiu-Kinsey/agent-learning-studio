@@ -39,7 +39,7 @@ test("chapters two and three expose complete guides and run every real preset th
     await request.get("/api/curriculum")
   ).json();
   const lessons = catalog.lessons.filter((lesson) =>
-    ["4", "5", "6", "7", "8", "9", "10"].includes(lesson.id),
+    ["4", "5", "6", "7", "8", "9", "10"].includes(lesson.aliases[0]),
   );
   expect(lessons).toHaveLength(7);
   expect(lessons.every((lesson) => lesson.status === "available")).toBe(true);
@@ -72,6 +72,10 @@ test("chapters two and three expose complete guides and run every real preset th
       await request.get(`/api/lessons/${lesson.id}`)
     ).json();
     await openLesson(page, catalog, lesson);
+    // The badge shows the server-computed display number, not the slug id.
+    await expect(page.locator(".lesson-badge")).toHaveText(
+      String(lesson.number).padStart(2, "0"),
+    );
     await expect(page.locator(".reading-section")).toHaveCount(
       detail.learning!.sections.length,
     );
@@ -152,7 +156,7 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
   await openLesson(
     page,
     catalog,
-    catalog.lessons.find((lesson) => lesson.id === "10")!,
+    catalog.lessons.find((lesson) => lesson.id === "persistent-memory")!,
   );
   await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
   await expect(

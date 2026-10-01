@@ -2,24 +2,36 @@
 import argparse
 import json
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from server.curriculum import index_catalog  # noqa: E402
 
 
 def render(catalog):
+    # 显示课号由目录顺序计算；同时完成 slug、别名与先修引用的校验。
+    numbers = index_catalog(catalog).numbers
     lessons = {item["id"]: item for item in catalog["lessons"]}
     sources = {item["id"]: item for item in catalog["sources"]}
-    available = [f"第 {item['id']} 课" for item in catalog["lessons"] if item["status"] == "available"]
+
+    def label(lesson_id):
+        return f"第 {numbers[lesson_id]} 课"
+
+    available = [label(item["id"]) for item in catalog["lessons"] if item["status"] == "available"]
     availability = ("当前可运行课程：" + "、".join(available) + "；其余课程只登记教学计划，后续逐课补充。"
                     if available else "当前课程均为教学计划，尚未开放运行。")
     lines = [f"# {catalog['title']}", "", f"版本：{catalog['version']}。适用环境：Python、多供应商模型接入、本地网页教学平台；百炼是当前已验证配置。", "",
              "> 此文档由 `curriculum/catalog.json` 生成。课程目录、网页和文档使用同一份数据；修改后运行 `python scripts/export_curriculum.py`。", "",
+             "> 课号按目录顺序计算，仅用于显示；接口与链接使用课程 ID（slug），旧数字编号作为别名继续可用。", "",
              "课程按 **大类 → 模块 → 课次 → 知识点 → 实验 → 验收** 组织。" + availability, "",
              "## 学习原则", ""]
     lines.extend(f"- {item}" for item in catalog["principles"])
     lines.extend(["", "## 分类总览", "", "| 大类 | 小模块 | 课号 |", "| --- | --- | --- |"])
     for category in catalog["categories"]:
-        ids = [lesson_id for module in category["modules"] for lesson_id in module["lesson_ids"]]
+        ids = [str(numbers[lesson_id]) for module in category["modules"] for lesson_id in module["lesson_ids"]]
         lines.append(f"| {category['title']} | {'；'.join(m['title'] for m in category['modules'])} | {', '.join(ids)} |")
     for category in catalog["categories"]:
         lines.extend(["", f"## {category['id']} · {category['title']}", "", category["description"]])
@@ -28,8 +40,10 @@ def render(catalog):
             for lesson_id in module["lesson_ids"]:
                 item = lessons[lesson_id]
                 state = "已可运行" if item["status"] == "available" else "规划中"
-                prerequisites = "、".join(f"第 {p} 课 {lessons[p]['title']}" for p in item["prerequisites"]) or "Python 函数、字典、异常与 JSON 基础"
-                lines.extend(["", f"#### 第 {lesson_id} 课 · {item['title']}", "",
+                prerequisites = "、".join(f"{label(p)} {lessons[p]['title']}" for p in item["prerequisites"]) or "Python 函数、字典、异常与 JSON 基础"
+                aliases = "、".join(f"`{alias}`" for alias in item.get("aliases", []))
+                lines.extend(["", f"#### {label(lesson_id)} · {item['title']}", "",
+                              f"**课程 ID：** `{lesson_id}`" + (f"（别名 {aliases}）" if aliases else ""), "",
                               f"**层级：** {item['level']}　**状态：** {state}", "",
                               f"**先修：** {prerequisites}", "", item["summary"], "", "**学习目标**", ""])
                 lines.extend(f"- {value}" for value in item["objectives"])
@@ -50,7 +64,7 @@ def render(catalog):
     lines.extend(["", "## 选修分支", "", "选修不占用主线课号，根据兴趣与项目需求增加。", ""])
     for item in catalog["electives"]:
         lines.extend([f"### {item['id']} · {item['title']}", "", item["description"], "",
-                      "先修：" + "、".join(item["prerequisites"]), ""])
+                      "先修：" + "、".join(label(p) for p in item["prerequisites"]), ""])
         lines.extend(f"- {topic}" for topic in item["topics"])
         lines.append("")
     lines.extend(["## 课程参考资料的分工", ""])
@@ -58,7 +72,7 @@ def render(catalog):
         lines.extend([f"### [{source['title']}]({source['url']})", "", f"借鉴重点：{source['role']}", "",
                       f"适配取舍：{source['adaptation']}", "", f"参考快照：`{source['commit']}`。", ""])
     next_lesson = next((item for item in catalog["lessons"] if item["status"] == "planned"), None)
-    next_step = (f"下一课从第 {next_lesson['id']} 课的{next_lesson['title']}开始。" if next_lesson else "当前登记课程均已实现。")
+    next_step = (f"下一课从{label(next_lesson['id'])}的{next_lesson['title']}开始。" if next_lesson else "当前登记课程均已实现。")
     lines.extend(["## 下一步", "", "先核对目录与课程计划，再按学习进度逐课实现。" + next_step + "计划中课程的具体库版本和框架 API 在制作该课时重新核对。", ""])
     return "\n".join(lines)
 

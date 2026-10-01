@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { jsonFetch } from "../api";
+import { formatLessonNumber } from "../lib/lessonIds";
 import type { CurriculumData, CurriculumLesson } from "../types";
 import {
   Accordion,
@@ -132,7 +133,7 @@ function LessonPlan({
           <span className="curriculum-lesson-title">
             <strong>{lesson.title}</strong>
             <small>
-              第 {lesson.id.padStart(2, "0")} 课 · {lesson.level}
+              第 {formatLessonNumber(lesson.number)} 课 · {lesson.level}
             </small>
           </span>
           <span className={`curriculum-status ${lesson.status}`}>
@@ -213,7 +214,7 @@ function LessonPlan({
               className="primary-button"
               onClick={() => onSelectLesson(lesson.id)}
             >
-              开始第 {lesson.id} 课<ArrowRight size={14} />
+              开始第 {lesson.number} 课<ArrowRight size={14} />
             </Button>
           ) : (
             <p className="curriculum-planned-note">
@@ -369,7 +370,7 @@ export function Curriculum({
                   className="curriculum-start-button"
                   onClick={() => onSelectLesson(firstAvailable.id)}
                 >
-                  从第 {firstAvailable.id} 课启程
+                  从第 {firstAvailable.number} 课启程
                   <ArrowUpRight size={16} />
                 </Button>
               )}

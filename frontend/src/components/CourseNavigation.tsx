@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { BookOpen, ChevronRight, LockKeyhole } from "lucide-react";
 import { jsonFetch } from "../api";
+import { formatLessonNumber } from "../lib/lessonIds";
 import type { CurriculumData, Lesson } from "../types";
 import { Button } from "./ui/button";
 
@@ -51,7 +52,7 @@ export function CourseNavigation({
       );
   }, [current, data]);
   const renderLesson = (
-    lesson: { id: string; title: string; status?: string },
+    lesson: { id: string; number?: number; title: string; status?: string },
     available: boolean,
   ) => (
     <Button
@@ -64,7 +65,9 @@ export function CourseNavigation({
       onClick={() => onSelect(lesson.id)}
       title={!available ? "计划中：本课尚未实现" : lesson.title}
     >
-      <span className="nav-lesson-number">{lesson.id.padStart(2, "0")}</span>
+      <span className="nav-lesson-number">
+        {formatLessonNumber(lesson.number)}
+      </span>
       <span className="nav-lesson-title">
         {lesson.title.replace(/^第\s*\d+\s*课[：:]?\s*/, "")}
       </span>

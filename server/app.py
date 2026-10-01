@@ -18,8 +18,10 @@ from course.runner import RunCancelled
 from course.api_client import send_bailian
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
-from server.catalog import ROOT, LESSONS, lesson_detail, lesson_runtime, lesson_spec, public_lesson
+from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_detail,
+                            lesson_runtime, lesson_spec, public_lesson)
 from server.curriculum import public_curriculum, roadmap
+from server.glossary import public_glossary
 from server.offline import completion_for
 from server.providers import ProviderRegistry
 
@@ -51,6 +53,31 @@ def scrub(value, secrets):
     if isinstance(value, dict):
         return {scrub(k, secrets): scrub(v, secrets) for k, v in value.items()}
     return value
+
+
+class ApiError(HTTPException):
+    """带稳定错误码的接口错误；detail 仍是可直接展示的中文说明。"""
+
+    def __init__(self, status_code: int, code: str, detail: str):
+        super().__init__(status_code, detail)
+        self.code = code
+
+
+@app.exception_handler(ApiError)
+async def api_error(request: Request, error: ApiError):
+    return JSONResponse({"detail": error.detail, "code": error.code}, status_code=error.status_code)
+
+
+def require_lesson(lesson_id: str):
+    """接受 slug 或旧数字别名，统一解析为可执行课程；不回显请求中的原始 id。"""
+    spec = lesson_spec(lesson_id)
+    if spec is not None:
+        return spec
+    planned = catalog_lesson(lesson_id)
+    if planned is not None:
+        raise ApiError(404, "lesson_not_available",
+                       f"第 {planned['number']} 课「{planned['title']}」仍在规划中，暂不能打开或运行。")
+    raise ApiError(404, "lesson_not_found", "课程不存在。")
 
 
 @app.exception_handler(RequestValidationError)
@@ -136,17 +163,23 @@ def onboarding():
         raise HTTPException(503, "前置学习内容暂时不可用，请稍后重试。") from None
 
 
+@app.get("/api/glossary")
+def glossary():
+    """术语表单一来源；只读 JSON，不加载课程运行器。"""
+    try:
+        return public_glossary(ROOT, CATALOG_INDEX)
+    except (OSError, LessonValidationError):
+        raise ApiError(503, "glossary_unavailable", "术语表暂时不可用，请稍后重试。") from None
+
+
 @app.get("/api/lessons/{lesson_id}")
 def detail(lesson_id: str):
-    spec = lesson_spec(lesson_id)
-    if spec is None:
-        raise HTTPException(404, "课程不存在。")
-    return lesson_detail(spec)
+    return lesson_detail(require_lesson(lesson_id))
 
 
 class RunInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    lesson_id: str = Field(max_length=32)
+    lesson_id: str = Field(max_length=64)
     mode: Literal["offline", "live"] = "live"
     question: str = Field(max_length=8000)
     exercise_id: str = Field(max_length=32)
@@ -155,9 +188,8 @@ class RunInput(BaseModel):
 
 @app.post("/api/run")
 async def run(body: RunInput, request: Request):
-    spec = lesson_spec(body.lesson_id)
-    if spec is None:
-        raise HTTPException(404, "课程不存在。")
+    spec = require_lesson(body.lesson_id)
+    lesson_id = spec["id"]  # 别名请求也以 slug 记录，事件与回放只出现一种课程 ID。
     exercise = next((e for e in spec["exercises"] if e["id"] == body.exercise_id), None)
     if exercise is None:
         raise HTTPException(400, "练习不存在。")
@@ -205,7 +237,7 @@ async def run(body: RunInput, request: Request):
     def work():
         final_status = "completed"
         try:
-            emit("run_start", {"lesson_id": body.lesson_id, "mode": body.mode, "model": model,
+            emit("run_start", {"lesson_id": lesson_id, "mode": body.mode, "model": model,
                                "question": body.question, "inputs": inputs,
                                "runtime_kind": spec["runtime"]["kind"],
                                "provider_id": profile.id if profile else "testing" if requires_model else "local",
@@ -215,7 +247,7 @@ async def run(body: RunInput, request: Request):
                           else send_bailian if profile and profile.id == "bailian"
                           else SDKCompletion(profile) if profile else None)
             context = RunContext(
-                lesson_id=body.lesson_id, exercise_id=body.exercise_id, question=body.question,
+                lesson_id=lesson_id, exercise_id=body.exercise_id, question=body.question,
                 mode=body.mode, model=model, representation=representation, inputs=inputs,
                 api_key=key, completion=completion, emit_event=emit, cancelled=cancelled.is_set,
                 max_model_calls=spec["runtime"].get("max_rounds", 3),

@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useStudio } from "./hooks/useStudio";
+import { formatLessonNumber } from "./lib/lessonIds";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { CourseNavigation } from "./components/CourseNavigation";
@@ -78,7 +79,9 @@ export default function App() {
   const title =
     studio.detail?.title.replace(/^第\s*\d+\s*课[：:]?\s*/, "") ||
     "准备学习环境";
-  const number = studio.lessonId ? studio.lessonId.padStart(2, "0") : "—";
+  const number = formatLessonNumber(
+    studio.lessons.find((lesson) => lesson.id === studio.lessonId)?.number,
+  );
   function choose(id: string) {
     if (studio.running) return;
     studio.selectLesson(id);

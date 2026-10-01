@@ -9,37 +9,53 @@ import textwrap
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from server.curriculum import index_catalog  # noqa: E402
 
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
-def build_scaffold(root, lesson_id, slug, kind="native"):
-    """先验证所有输入并生成内存中的文件计划，不写文件。"""
+def lesson_directory(slug):
+    """新课目录名：lesson_ + slug 的 snake_case 形式，例如 document-loading → lesson_document_loading。"""
+    return "lesson_" + slug.replace("-", "_")
+
+
+def build_scaffold(root, lesson_id, slug=None, kind="native"):
+    """先验证所有输入并生成内存中的文件计划，不写文件。
+
+    lesson_id 可以是课程 slug 或旧数字别名；slug 参数可省略，提供时必须与目录中的 slug 一致
+    （允许写成 snake_case），仅为兼容旧命令保留。
+    """
     root = Path(root).resolve()
     if kind not in {"native", "custom"}:
         raise ValueError("kind 只能是 native 或 custom。")
-    if not re.fullmatch(r"[1-9][0-9]*", str(lesson_id)):
-        raise ValueError("id 必须是课程目录中已规划的正整数课号。")
-    if not re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", slug):
-        raise ValueError("slug 只允许小写字母、数字和单个下划线，例如 task_contract。")
+    if slug is not None and not re.fullmatch(r"[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*", slug):
+        raise ValueError("slug 只允许小写字母、数字和单个连字符或下划线，例如 task-contract。")
     catalog_path = root / "curriculum" / "catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    matches = [item for item in catalog["lessons"] if item["id"] == str(lesson_id)]
-    if len(matches) != 1:
-        raise ValueError(f"{catalog_path}: 必须先唯一登记课程 {lesson_id}。")
-    lesson = matches[0]
+    index = index_catalog(catalog, str(catalog_path))
+    canonical = index.resolve(str(lesson_id))
+    if canonical is None:
+        raise ValueError(f"{catalog_path}: 必须先登记课程 {lesson_id}（课程 slug 或数字别名）。")
+    if slug is not None and slug.replace("_", "-") != canonical:
+        raise ValueError(f"--slug 与目录中的课程 slug「{canonical}」不一致；可以省略 --slug。")
+    lesson = index.entries[canonical]
+    number = index.numbers[canonical]
     if lesson.get("status") != "planned":
-        raise ValueError(f"第 {lesson_id} 课不是 planned，拒绝为已可用课程生成模板。")
+        raise ValueError(f"第 {number} 课（{canonical}）不是 planned，拒绝为已可用课程生成模板。")
     lessons_path = root / "lessons"
     if lessons_path.is_symlink() or lessons_path.resolve() != lessons_path:
         raise ValueError("lessons 目录必须位于项目根目录内，不能通过链接跳转。")
+    known_ids = {canonical, *index.aliases(canonical)}
     for existing in lessons_path.glob("lesson_*/lesson.json"):
         manifest = json.loads(existing.read_text(encoding="utf-8"))
-        if manifest.get("id") == str(lesson_id):
-            raise ValueError(f"第 {lesson_id} 课已有实现清单：{existing}")
-    directory = f"lesson_{int(lesson_id):02d}_{slug}"
+        if manifest.get("id") in known_ids:
+            raise ValueError(f"第 {number} 课（{canonical}）已有实现清单：{existing}")
+    directory = lesson_directory(canonical)
     target = lessons_path / directory
     if target.exists() or target.is_symlink():
         raise ValueError(f"目标已存在，拒绝覆盖：{target}")
@@ -48,7 +64,7 @@ def build_scaffold(root, lesson_id, slug, kind="native"):
     prefix = f"lessons/{directory}"
     manifest = {
         "schema_version": 1,
-        "id": str(lesson_id),
+        "id": canonical,
         "content": "content.json",
         "sources": [
             {"path": f"{prefix}/{'main.py' if kind == 'native' else 'runtime.py'}", "language": "python"},
@@ -102,7 +118,8 @@ def build_scaffold(root, lesson_id, slug, kind="native"):
         "lesson.json": _json(manifest),
         "content.json": _json(content),
         "README.md": (
-            f"# 第 {lesson_id} 课 · {lesson['title']}（待实现）\n\n"
+            f"# 第 {number} 课 · {lesson['title']}（待实现）\n\n"
+            f"课程 ID：`{canonical}`。课号按目录顺序计算，只用于显示；代码与链接使用课程 ID。\n\n"
             "这是作者脚手架，课程仍为 `planned`，网页继续置灰。\n\n"
             "1. 以 `curriculum/catalog.json` 的目标与验收为准，替换占位实验和示例运行器。\n"
             "2. 完成 `content.json` 的引言、机制解释、观察点、自测，并替换 presentation 动效占位内容。\n"
@@ -270,8 +287,8 @@ def write_scaffold(target, files):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--id", required=True, help="curriculum/catalog.json 中已有的 planned 课号")
-    parser.add_argument("--slug", required=True, help="小写 snake_case 目录后缀")
+    parser.add_argument("--id", required=True, help="curriculum/catalog.json 中已有 planned 课程的 slug 或数字别名")
+    parser.add_argument("--slug", help="可选；兼容旧命令，必须与目录中的课程 slug 一致（可写成 snake_case）")
     parser.add_argument("--kind", choices=("native", "custom"), default="native")
     parser.add_argument("--root", type=Path, default=ROOT, help="项目根目录，默认当前脚本所属项目")
     parser.add_argument("--dry-run", action="store_true", help="仅验证并列出将生成的文件")

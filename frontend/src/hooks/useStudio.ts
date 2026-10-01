@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { jsonFetch, readEventStream } from "../api";
+import { resolveLessonId } from "../lib/lessonIds";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
 
 const messageOf = (error: unknown) =>
@@ -103,9 +104,12 @@ export function useStudio() {
     return () => window.clearInterval(timer);
   }, [playing, running, events.length]);
 
-  function selectLesson(id: string) {
+  function selectLesson(requested: string) {
+    // Legacy numeric ids still work; state always holds the canonical slug.
+    const id = resolveLessonId(requested, lessons);
     if (
       runController.current ||
+      !id ||
       id === lessonId ||
       !lessons.some((lesson) => lesson.id === id && lesson.available)
     )
