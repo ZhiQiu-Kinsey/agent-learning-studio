@@ -70,10 +70,12 @@ function ToolCard({
   span,
   events,
   defaultOpen,
+  onSelect,
 }: {
   span: StageSpan;
   events: readonly Trace[];
   defaultOpen: boolean;
+  onSelect?: (eventIndex: number) => void;
 }) {
   const { t, i18n } = useTranslation("stage", { keyPrefix: "tool" });
   const call = events[span.startIndex];
@@ -117,6 +119,16 @@ function ToolCard({
         )}
       </summary>
       <div className="tool-body">
+        {onSelect && (
+          <button
+            type="button"
+            className="tool-inspect"
+            data-testid="tool-card-inspect"
+            onClick={() => onSelect(span.endIndex ?? span.startIndex)}
+          >
+            {t("inspect")}
+          </button>
+        )}
         <h4>{t("arguments")}</h4>
         {!args.parsed && <p className="tool-truncated">{t("unparsable")}</p>}
         <Truncated text={args.text} />
@@ -139,10 +151,12 @@ export function ToolCards({
   spans,
   events,
   live,
+  onSelect,
 }: {
   spans: StageSpan[];
   events: readonly Trace[];
   live: boolean;
+  onSelect?: (eventIndex: number) => void;
 }) {
   const { t } = useTranslation("stage", { keyPrefix: "tool" });
   const tools = spans.filter((span) => span.kind === "tool");
@@ -160,6 +174,7 @@ export function ToolCards({
           span={span}
           events={events}
           defaultOpen={live && index === tools.length - 1}
+          onSelect={onSelect}
         />
       ))}
     </section>

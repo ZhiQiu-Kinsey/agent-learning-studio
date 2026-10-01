@@ -3,7 +3,11 @@ import { cancelRun, createRun, followRunEvents, jsonFetch } from "../api";
 import { resolveLessonId } from "../lib/lessonIds";
 import { clientError } from "../i18n/errors";
 import { track } from "../progress";
-import { createReplayClock, type ReplayOptions } from "../stage/replay";
+import {
+  createReplayClock,
+  type Gap,
+  type ReplayOptions,
+} from "../stage/replay";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
 
 const messageOf = (error: unknown) =>
@@ -32,6 +36,7 @@ export function useStudio() {
     pacing: "uniform",
     speed: 1,
   });
+  const [replayGap, setReplayGap] = useState<Gap | null>(null);
   const mounted = useRef(false);
   const runController = useRef<AbortController | null>(null);
   // 当前运行的服务端 ID；断线续读、停止与页面关闭时的取消都作用于它。
@@ -123,13 +128,17 @@ export function useStudio() {
       (state) => {
         setCursor(state.cursor);
         setSelected(state.cursor - 1);
+        setReplayGap(state.waiting);
         if (!state.playing) setPlaying(false);
       },
       undefined,
       { cursor: cursorRef.current, options: replayOptions },
     );
     clock.play();
-    return () => clock.dispose();
+    return () => {
+      clock.dispose();
+      setReplayGap(null);
+    };
   }, [playing, running, events, replayOptions]);
 
   function selectLesson(requested: string) {
@@ -359,6 +368,7 @@ export function useStudio() {
     playing,
     replayOptions,
     setReplayOptions,
+    replayGap,
     download,
     source,
     setSource,

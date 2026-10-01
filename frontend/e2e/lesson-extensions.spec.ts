@@ -198,7 +198,6 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   await page.getByTestId("workspace-tab-lab").click();
   const inputs = page.getByTestId("lab-inputs-json");
   const run = page.getByTestId("lab-run-button");
-  const nodes = page.getByTestId("execution-node");
   const eventJson = page.getByTestId("lab-event-detail").locator("pre");
   const exercise = page.getByTestId("lab-exercise-field").getByRole("combobox");
   await expect(inputs).toHaveValue(
@@ -223,10 +222,9 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   await expect(run).toBeEnabled();
   await run.click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
-  // 自定义运行器只有“任务输入、课程步骤、课程输出”三个节点，没有模型决策节点。
-  await expect(nodes).toHaveCount(3);
-  await nodes.nth(1).click();
-  await expect(eventJson).toContainText('"counter": 7');
+  // 自定义运行器不调用模型：舞台上没有模型节点。
+  await expect(page.getByTestId("agent-stage")).toBeVisible();
+  await expect(page.getByTestId("stage-node-model")).toHaveCount(0);
   expect(payloads[0]).toMatchObject({
     lesson_id: "44",
     question: "",
@@ -297,7 +295,7 @@ test("unknown view keys including URLs and prototype names show the default view
     page.getByRole("alert").filter({ hasText: unavailable("inspector") }),
   ).toBeVisible();
   await expect(page.getByTestId("lab-workspace")).toBeVisible();
-  await expect(page.getByTestId("execution-flow")).toBeVisible();
+  await expect(page.getByTestId("agent-stage")).toBeVisible();
   expect(external).toEqual([]);
 });
 
@@ -319,7 +317,7 @@ for (const failure of ["load", "render"] as const) {
     await expect(page.getByRole("alert")).toHaveText(
       t("lab:extension.failed", { slot: t("lab:extension.slot.inspector") }),
     );
-    await expect(page.getByTestId("execution-flow")).toBeVisible();
+    await expect(page.getByTestId("agent-stage")).toBeVisible();
     await expect(page.getByTestId("lab-run-button")).toBeEnabled();
     await page.getByTestId("lab-tab-source").click();
     await expect(

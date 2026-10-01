@@ -180,7 +180,7 @@ test("interactive lesson explanations are different for all three lessons and ne
   expect(runs).toBe(0);
 });
 
-test("live signal nodes and tool chips follow execution evidence and replay", async ({
+test("stage nodes and tool cards follow execution evidence and replay", async ({
   page,
 }) => {
   await page.addInitScript(() =>
@@ -199,25 +199,34 @@ test("live signal nodes and tool chips follow execution evidence and replay", as
   });
   let runs = 0;
   await runOffline(page, () => runs++);
-  const disabledNodes = page
-    .getByTestId("execution-node")
-    .and(page.locator(":disabled"));
+  const stage = page.getByTestId("agent-stage");
+  const nodes = stage.locator("[data-testid^='stage-node-']");
+  const lit = stage.locator(
+    "[data-testid^='stage-node-']:not([data-state='dormant'])",
+  );
   await page.goto("/");
   await page.getByTestId("workspace-tab-lab").click();
-  await expect(disabledNodes).toHaveCount(4);
+  // Before any run the stage shows no topology at all, not a placeholder run.
+  await expect(nodes).toHaveCount(0);
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
-  await expect(disabledNodes).toHaveCount(0);
-  await page
-    .getByTestId("execution-tool-done")
-    .filter({ hasText: "add_numbers" })
-    .click();
+  await expect(stage).toHaveAttribute("data-provenance", "real_run");
+  await expect(stage).toHaveAttribute("data-status", "completed");
+  await expect(
+    stage.getByTestId("stage-node-tool:add_numbers"),
+  ).toHaveAttribute("data-state", "idle");
+  await expect(lit).toHaveCount(await nodes.count());
+  const card = page.getByTestId("tool-card").filter({ hasText: "add_numbers" });
+  await card.locator("summary").click();
+  await card.getByTestId("tool-card-inspect").click();
   await expect(
     page.getByTestId("lab-event-detail").locator("pre"),
   ).toContainText("42");
   await page.getByTestId("lab-replay-rewind").click();
-  await expect(disabledNodes).toHaveCount(4);
-  await expect(page.getByTestId("execution-tools")).toHaveCount(0);
+  // Rewinding keeps the run's topology but nothing is reached yet.
+  await expect(nodes).not.toHaveCount(0);
+  await expect(lit).toHaveCount(0);
+  await expect(page.getByTestId("tool-card")).toHaveCount(0);
   expect(runs).toBe(1);
 });
 

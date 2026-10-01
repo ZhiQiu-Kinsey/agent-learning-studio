@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../../motion";
 import BorderGlow from "../react-bits/BorderGlow";
 import CountUp from "../react-bits/CountUp";
 import ClickSpark from "../react-bits/ClickSpark";
 import TextType from "../react-bits/TextType";
 import StatusMark from "../react-bits/StatusMark";
-import { ExecutionFlow } from "./ExecutionFlow";
+import { AgentStage } from "../../stage/AgentStage";
+import { ContextFilm } from "../../stage/ContextFilm";
+import { Timeline } from "../../stage/Timeline";
+import { ToolCards } from "../../stage/ToolCards";
+import { deriveStage } from "../../stage/derive";
+import RubberSegment from "../react-bits/RubberSegment";
 import { LessonExtension } from "../../lesson-extensions/LessonExtension";
 import {
   ArrowRight,
@@ -123,7 +129,23 @@ export function Laboratory({
   active: boolean;
 }) {
   const reducedMotion = useReducedMotion();
+  const { t } = useTranslation("stage");
   const [tab, setTab] = useState("trace");
+  // One projection of the real events feeds the stage, film, cards and timeline.
+  const stage = useMemo(
+    () => deriveStage(s.events, s.cursor),
+    [s.events, s.cursor],
+  );
+  const finalSpans = useMemo(
+    () => deriveStage(s.events, s.events.length).spans,
+    [s.events],
+  );
+  const pacing =
+    s.replayOptions.pacing === "uniform"
+      ? "uniform"
+      : s.replayOptions.speed === 2
+        ? "real2"
+        : "real1";
   const [copied, setCopied] = useState(false);
   const list = useRef<HTMLDivElement>(null);
   const last = s.events.at(-1);
@@ -375,13 +397,10 @@ export function Laboratory({
                 studio={s}
                 active={active}
               >
-                <ExecutionFlow
-                  events={s.visible}
-                  running={s.running}
-                  active={active}
-                  onSelect={s.selectEvent}
-                  requiresModel={s.requiresModel}
-                  customRuntime={s.detail?.capabilities?.custom_runtime}
+                <AgentStage
+                  events={s.events}
+                  cursor={s.cursor}
+                  live={s.running && s.cursor === s.events.length}
                 />
               </LessonExtension>
               <div className="inspector-summary" data-testid="lab-run-metrics">
@@ -463,6 +482,29 @@ export function Laboratory({
                   <span>
                     {s.cursor}/{s.events.length}
                   </span>
+                  <RubberSegment
+                    aria-label={t("replay.pacing")}
+                    size="sm"
+                    items={(["uniform", "real1", "real2"] as const).map(
+                      (value) => ({ value, label: t(`replay.${value}`) }),
+                    )}
+                    value={pacing}
+                    disabled={s.running}
+                    onChange={(value) =>
+                      s.setReplayOptions(
+                        value === "uniform"
+                          ? { pacing: "uniform", speed: 1 }
+                          : {
+                              pacing: "realtime",
+                              speed: value === "real2" ? 2 : 1,
+                            },
+                      )
+                    }
+                    trackColor="var(--surface-muted)"
+                    thumbColor="var(--surface)"
+                    textColor="var(--text-muted)"
+                    activeTextColor="var(--text)"
+                  />
                   <Button
                     variant="ghost"
                     size="icon"
@@ -472,6 +514,30 @@ export function Laboratory({
                   >
                     <Download size={16} />
                   </Button>
+                </div>
+              )}
+              {s.events.length > 1 && (
+                <Timeline
+                  events={s.events}
+                  spans={finalSpans}
+                  cursor={s.cursor}
+                  onSeek={s.seek}
+                />
+              )}
+              {s.replayGap?.compressed && (
+                <p className="replay-footnote" role="status">
+                  {t("replay.compressed")}
+                </p>
+              )}
+              {s.events.length > 0 && (
+                <div className="stage-detail-grid">
+                  <ContextFilm film={stage.film} onSelect={s.selectEvent} />
+                  <ToolCards
+                    spans={stage.spans}
+                    events={s.events}
+                    live={s.running}
+                    onSelect={s.selectEvent}
+                  />
                 </div>
               )}
               <div className="trace-split">

@@ -27,15 +27,15 @@ export function Timeline({
   const marker = cursor > 0 ? ticks[cursor - 1] : 0;
   return (
     <section
-      className="timeline"
+      className="run-timeline"
       aria-label={t("region")}
-      data-testid="timeline"
+      data-testid="run-timeline"
     >
       <header>
         <div
           role="radiogroup"
           aria-label={t("scale")}
-          className="timeline-scale"
+          className="run-timeline-scale"
         >
           {(["time", "uniform"] as const).map((option) => (
             <button
@@ -58,22 +58,22 @@ export function Timeline({
         )}
         {fellBack && <small>{t("unreadable")}</small>}
       </header>
-      <div className="timeline-lanes">
+      <div className="run-timeline-lanes">
         {lanes.map((lane) => (
-          <div className="timeline-lane" key={lane.id} data-kind={lane.kind}>
-            <span className="timeline-lane-label">
+          <div className="run-timeline-lane" key={lane.id} data-kind={lane.kind}>
+            <span className="run-timeline-lane-label">
               {lane.kind === "llm"
                 ? t("lane.llm")
                 : t("lane.tool", { name: lane.name })}
             </span>
-            <div className="timeline-track">
+            <div className="run-timeline-track">
               {lane.bars.map(({ span, left, width }) => {
                 const target = (span.endIndex ?? span.startIndex) + 1;
                 return (
                   <button
                     key={`${span.id}-${span.startIndex}`}
                     type="button"
-                    className="timeline-bar"
+                    className="run-timeline-bar"
                     data-status={span.status}
                     data-reached={span.startIndex < cursor || undefined}
                     style={{ left: `${left}%`, width: `${width}%` }}
@@ -83,7 +83,7 @@ export function Timeline({
                 );
               })}
               <span
-                className="timeline-cursor"
+                className="run-timeline-cursor"
                 style={{ left: `${marker}%` }}
                 aria-hidden="true"
               />

@@ -1,3 +1,4 @@
+import type { InputSchema } from "./components/lab/SchemaInputs";
 import type { LessonContent } from "./content/types.gen";
 import type { TRACE_CONTRACT } from "./generated/trace-contract";
 
@@ -35,6 +36,8 @@ export type Lesson = {
     supports_inputs: boolean;
   };
   input_defaults?: Record<string, unknown>;
+  /** JSON Schema of a custom runtime's INPUT_MODEL; null for standard lessons. */
+  input_schema?: InputSchema | null;
 };
 export type Detail = Lesson & {
   sources: { path: string; language: string; content: string }[];

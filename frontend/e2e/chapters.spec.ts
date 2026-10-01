@@ -84,6 +84,9 @@ test("chapters two and three expose complete guides and run every real preset th
       lessonView(detail.learning).quiz.length,
     );
     await page.getByTestId("workspace-tab-lab").click();
+    // Controls are generated from the input schema; JSON stays available as the advanced mode.
+    await expect(page.getByTestId("schema-inputs")).toBeVisible();
+    await page.getByTestId("lab-inputs-mode").click();
     const inputs = page.getByTestId("lab-inputs-json");
     for (const exercise of detail.exercises.filter(
       (item) => !item.offline_only,
