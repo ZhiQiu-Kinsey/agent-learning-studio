@@ -1,4 +1,5 @@
 """标准库 SQLite 的有来源、版本和到期时间的教学记忆。"""
+from typing import Literal
 import re
 import sqlite3
 import tempfile
@@ -19,7 +20,7 @@ class Inputs(LessonInputs):
     key: str = Field(default="learning_goal", min_length=1, max_length=32, pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
     value: str = Field(default="理解 Agent 的消息与状态", min_length=1, max_length=200)
     source: str = Field(default="本次学习者显式输入", min_length=1, max_length=120)
-    scenario: str = Field(default="reopen", pattern="^(reopen|conflict|expiry_delete|recall_only)$")
+    scenario: Literal["reopen", "conflict", "expiry_delete", "recall_only"] = "reopen"
 
 
 INPUT_MODEL = Inputs

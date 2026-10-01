@@ -1,4 +1,5 @@
 """对同一追问发送完整历史与合法的消融历史。"""
+from typing import Literal
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
@@ -7,7 +8,7 @@ from course.execution import LessonInputs, RunContext
 class Inputs(LessonInputs):
     fact: str = Field(default="课程代号是 QH-731。", min_length=4, max_length=160)
     follow_up: str = Field(default="课程代号是什么？", min_length=4, max_length=160)
-    comparison: str = Field(default="omit", pattern="^(omit|full_only)$")
+    comparison: Literal["omit", "full_only"] = "omit"
 
 
 INPUT_MODEL = Inputs

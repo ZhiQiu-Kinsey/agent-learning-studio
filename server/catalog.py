@@ -235,7 +235,11 @@ def lesson_detail(spec, locale=None):
     learning, learning_i18n = load_lesson_content(content_path, spec, locale)
     exercises = [{**exercise, "inputs": validate_inputs(module, {**spec["input_defaults"], **exercise.get("inputs", {})})}
                  for exercise in spec["exercises"]]
-    return {**public_lesson(spec), "exercises": exercises, "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
+    # 自定义运行器的输入模型导出 JSON Schema，前端据此生成参数控件；最终仍由后端校验。
+    input_model = getattr(module, "INPUT_MODEL", None)
+    input_schema = input_model.model_json_schema() if spec["capabilities"]["supports_inputs"] and input_model else None
+    return {**public_lesson(spec), "exercises": exercises, "input_schema": input_schema,
+            "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
             "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
             "sources": sources}
 

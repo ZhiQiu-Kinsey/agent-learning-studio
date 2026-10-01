@@ -314,6 +314,7 @@ export interface LabScene {
    * @minItems 1
    */
   experiments: [Experiment, ...Experiment[]];
+  inputs: InputField[];
   blocks: (
     | Hero
     | Prose
@@ -381,6 +382,19 @@ export interface Seek {
 export interface Conclusion {
   proves: string[];
   does_not_prove: string[];
+}
+/**
+ * 为 INPUT_MODEL 的字段提供可翻译的标签；控件类型由后端导出的 JSON Schema 决定。
+ */
+export interface InputField {
+  name: string;
+  label: string;
+  help: string | null;
+  options: InputOption[];
+}
+export interface InputOption {
+  value: string;
+  label: string;
 }
 export interface Illustration {
   provenance: "illustration";

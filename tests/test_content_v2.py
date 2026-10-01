@@ -131,5 +131,24 @@ class LockstepTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class InputLabelTests(unittest.TestCase):
+    def test_lab_inputs_describe_exactly_the_input_model(self):
+        from server.catalog import LESSONS, lesson_detail
+        for spec in LESSONS:
+            with self.subTest(spec["id"]):
+                detail = lesson_detail(spec)
+                schema = detail["input_schema"]
+                inputs = detail["learning"]["scenes"]["lab"]["inputs"]
+                if schema is None:
+                    self.assertEqual(inputs, [])
+                    continue
+                properties = schema["properties"]
+                self.assertEqual([field["name"] for field in inputs], list(properties), "每个输入都要有标签，顺序同模型")
+                for field in inputs:
+                    enum = properties[field["name"]].get("enum")
+                    self.assertEqual([option["value"] for option in field["options"]], enum or [],
+                                     f"{field['name']} 的选项必须与模型枚举一致")
+
+
 if __name__ == "__main__":
     unittest.main()

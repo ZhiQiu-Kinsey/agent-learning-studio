@@ -1,4 +1,5 @@
 """无模型的类型化教学状态机；消息和状态分别保存。"""
+from typing import Literal
 from dataclasses import asdict, dataclass, field
 from uuid import uuid4
 
@@ -21,8 +22,8 @@ TRANSITIONS = {
 
 class Inputs(LessonInputs):
     goal: str = Field(default="说明消息与应用状态的区别", min_length=4, max_length=160)
-    source_key: str = Field(default="lesson-07", pattern="^(lesson-07|lesson-08|missing)$")
-    scenario: str = Field(default="success", pattern="^(success|missing|budget)$")
+    source_key: Literal["lesson-07", "lesson-08", "missing"] = "lesson-07"
+    scenario: Literal["success", "missing", "budget"] = "success"
     step_budget: int = Field(default=3, ge=1, le=5)
 
 

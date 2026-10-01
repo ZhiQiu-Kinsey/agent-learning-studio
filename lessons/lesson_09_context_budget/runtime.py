@@ -1,4 +1,5 @@
 """三种合法消息布局的真实模型对照；长度指标为字符数。"""
+from typing import Literal
 import json
 
 from pydantic import Field
@@ -8,7 +9,7 @@ from lessons.lesson_07_messages_context.runtime import validate_tool_history
 
 
 class Inputs(LessonInputs):
-    source_key: str = Field(default="lesson-07", pattern="^(lesson-07|lesson-08)$")
+    source_key: Literal["lesson-07", "lesson-08"] = "lesson-07"
     noise_repeats: int = Field(default=8, ge=2, le=25)
     char_budget: int = Field(default=600, ge=400, le=4000)
 

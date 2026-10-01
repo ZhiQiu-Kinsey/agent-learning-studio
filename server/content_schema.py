@@ -384,9 +384,37 @@ class BlockScene(Strict):
     blocks: list[AnyBlock] = Field(min_length=1)
 
 
+class InputOption(Strict):
+    value: Fact
+    label: Text
+
+
+class InputField(Strict):
+    """为 INPUT_MODEL 的字段提供可翻译的标签；控件类型由后端导出的 JSON Schema 决定。"""
+    name: Fact  # INPUT_MODEL 字段名
+    label: Text
+    help: Text | None = None
+    options: list[InputOption] = []
+
+    @model_validator(mode="after")
+    def _options(self):
+        values = [option.value for option in self.options]
+        if len(values) != len(set(values)):
+            raise ValueError(f"输入 {self.name} 的选项值重复")
+        return self
+
+
 class LabScene(Strict):
     experiments: list[Experiment] = Field(min_length=1)
+    inputs: list[InputField] = []
     blocks: list[AnyBlock] = []
+
+    @model_validator(mode="after")
+    def _inputs(self):
+        names = [field.name for field in self.inputs]
+        if len(names) != len(set(names)):
+            raise ValueError("lab.inputs 的字段名重复")
+        return self
 
 
 class Scenes(Strict):

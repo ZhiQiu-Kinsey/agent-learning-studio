@@ -5,7 +5,8 @@
     {"schema_version": 1, "locale": "en-US",
      "texts": {"hero.headline": {"text": "...", "source": "<源文本摘要>"}}}
 
-路径规则：带 id 的对象用 id 作为路径段（块 id 在文档内唯一、条目 id 在块内唯一），
+路径规则：带 id 的对象用 id 作为路径段（块 id 在文档内唯一、条目 id 在块内唯一；
+没有 id 的输入说明与选项用“列表字段名.name/value”，如 inputs.char_budget.label），
 场景、blocks、experiments 等容器不占路径段；没有 id 的子对象用字段名；字符串数组用下标。
 只有 Text 类型字段可译；带 x-fact 标记的字段（id、正确答案、练习引用、代码、选择器、URL 等）
 和 Literal 字段不可译。source 是译者翻译时源文本的摘要，源文本变化后该条译文视为过期，
@@ -94,9 +95,13 @@ def _walk(model: BaseModel, data: dict[str, Any], prefix: str, out: dict[str, Sl
             for index, (item, item_raw) in enumerate(zip(value, raw)):
                 if not isinstance(item, BaseModel):
                     continue
+                # 稳定键优先：id（全局或块内唯一，直接作路径段）；其次输入字段名 name、选项值 value
+                # （只在所属列表内唯一，前面带上列表字段名）；都没有才用下标。
                 item_id = getattr(item, "id", None)
-                segment = f"{item_id}." if item_id else f"{name}.{index}."
-                _walk(item, item_raw, prefix if name in _TRANSPARENT and not item_id else prefix + segment, out)
+                local = next((key for key in (getattr(item, "name", None), getattr(item, "value", None))
+                              if isinstance(key, str)), None)
+                segment = f"{item_id}." if isinstance(item_id, str) else f"{name}.{local if local else index}."
+                _walk(item, item_raw, prefix + segment, out)
 
 
 def text_slots(model: BaseModel, data: dict[str, Any]) -> dict[str, Slot]:
