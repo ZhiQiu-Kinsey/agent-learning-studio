@@ -19,6 +19,7 @@ test("motion setting merges the OS preference with the learner's choice", async 
   await page.goto("/");
   await expect(root).toHaveAttribute("data-motion", "full");
   await expect(root).toHaveAttribute("data-motion-preference", "system");
+  await expect(root).toHaveAttribute("lang", "zh-CN");
   await expect(
     page.getByRole("heading", { name: "工具选择", exact: true }),
   ).toBeVisible();

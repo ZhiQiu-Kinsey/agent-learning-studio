@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import GlideSelect from "./react-bits/GlideSelect";
 
 type Theme = "light" | "dark" | "system";
@@ -8,6 +9,7 @@ const parseTheme = (value: string | null | undefined): Theme =>
   value === "light" || value === "dark" ? value : "system";
 
 export function ThemeSwitch() {
+  const { t } = useTranslation();
   const [preference, setPreference] = useState<Theme>(() =>
     parseTheme(document.documentElement.dataset.themePreference),
   );
@@ -44,16 +46,15 @@ export function ThemeSwitch() {
   const Icon =
     preference === "dark" ? Moon : preference === "light" ? Sun : Monitor;
   return (
-    <div className="theme-control" title="切换页面主题">
+    <div className="theme-control" title={t("theme.control")}>
       <Icon size={16} aria-hidden="true" />
       <GlideSelect
-        ariaLabel="页面主题"
+        ariaLabel={t("theme.label")}
         value={preference}
-        options={[
-          { value: "system", label: "跟随系统" },
-          { value: "light", label: "浅色" },
-          { value: "dark", label: "深色" },
-        ]}
+        options={(["system", "light", "dark"] as const).map((value) => ({
+          value,
+          label: t(`theme.${value}`),
+        }))}
         size="sm"
         align="right"
         menuWidth={136}
