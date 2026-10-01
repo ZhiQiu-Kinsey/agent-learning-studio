@@ -1,3 +1,4 @@
+import type { LessonContent } from "./content/types.gen";
 import type { TRACE_CONTRACT } from "./generated/trace-contract";
 
 export type Exercise = {
@@ -39,46 +40,9 @@ export type Detail = Lesson & {
   sources: { path: string; language: string; content: string }[];
   system_prompt: string;
   tools: unknown;
-  learning?: LearningContent;
+  learning?: LessonContent;
 };
-export type QuizQuestion = {
-  id: string;
-  prompt: string;
-  options: { id: string; text: string }[];
-  correct_option: string;
-  explanation: string;
-};
-export type LearningContent = {
-  sections: { title: string; body: string }[];
-  observe: string[];
-  quiz: QuizQuestion[];
-  presentation?: LearningPresentation;
-};
-export type LearningPresentation = {
-  eyebrow: string;
-  headline: string;
-  highlight: string;
-  takeaway: string;
-  concepts: {
-    label: string;
-    title: string;
-    description: string;
-    token: string;
-  }[];
-  flow: {
-    title: string;
-    description: string;
-    steps: {
-      label: string;
-      actor: string;
-      title: string;
-      body: string;
-      code: string;
-      language: string;
-      evidence: string;
-    }[];
-  };
-};
+export type { LessonContent, QuizQuestion } from "./content/types.gen";
 export type Status = {
   model: string;
   api_key_configured: boolean;

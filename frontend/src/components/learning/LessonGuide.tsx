@@ -12,30 +12,33 @@ import {
   AccordionTrigger,
 } from "../ui/accordion";
 import { AgentFlow } from "./AgentFlow";
+import { lessonView } from "../../content/view";
 
 const conceptIcons = [Braces, Cpu, Network];
 
 export function LessonGuide({ detail }: { detail: Detail }) {
   const reduced = useReducedMotion();
-  const learning = detail.learning;
-  const presentation = learning?.presentation;
+  const view = lessonView(detail.learning);
+  const presentation = view.hero;
   return (
     <div className="lesson-guide">
       {presentation && (
         <>
-          <AgentFlow key={detail.id} flow={presentation.flow} />
+          {view.walkthrough && (
+            <AgentFlow key={detail.id} flow={view.walkthrough} />
+          )}
           <section className="learn-concepts" aria-label="核心概念速览">
             <div className="learn-section-kicker">
               <span>02 / CONNECT THE IDEAS</span>
               <span>把关键关系记清楚</span>
             </div>
             <div className="learn-concept-grid">
-              {presentation.concepts.map((concept, index) => {
+              {view.concepts.map((concept, index) => {
                 const Icon = conceptIcons[index % conceptIcons.length];
                 return (
                   <SpotlightCard
                     className="learn-concept"
-                    key={concept.title}
+                    key={concept.id}
                     spotlightColor="rgba(135, 110, 240, 0.16)"
                   >
                     <div className="learn-concept-top">
@@ -46,7 +49,7 @@ export function LessonGuide({ detail }: { detail: Detail }) {
                     </div>
                     <h3>{concept.title}</h3>
                     <p>{concept.description}</p>
-                    <code>{concept.token}</code>
+                    {concept.token && <code>{concept.token}</code>}
                   </SpotlightCard>
                 );
               })}
@@ -56,7 +59,7 @@ export function LessonGuide({ detail }: { detail: Detail }) {
             <Quote size={24} aria-hidden="true" />
             <div>
               <span>记住这个思路</span>
-              <ScrollReveal>{presentation.takeaway}</ScrollReveal>
+              <ScrollReveal>{presentation.takeaway ?? ""}</ScrollReveal>
             </div>
           </aside>
         </>
@@ -68,10 +71,10 @@ export function LessonGuide({ detail }: { detail: Detail }) {
             <span>逐层理解，保留每一处细节</span>
           </div>
         )}
-        {learning?.sections.map((section, index) => (
+        {view.sections.map((section, index) => (
           <motion.section
             className="reading-section"
-            key={`${index}-${section.title}`}
+            key={section.id}
             initial={reduced ? false : { opacity: 0.65, y: 14 }}
             animate={reduced ? { opacity: 1, y: 0 } : undefined}
             whileInView={reduced ? undefined : { opacity: 1, y: 0 }}
@@ -82,20 +85,22 @@ export function LessonGuide({ detail }: { detail: Detail }) {
               <span aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <h2>{section.title}</h2>
+              {section.title && <h2>{section.title}</h2>}
             </div>
             <div className="reading-prose">
-              <Markdown>{section.body}</Markdown>
+              {section.paragraphs.map((paragraph, paragraphIndex) => (
+                <Markdown key={paragraphIndex}>{paragraph}</Markdown>
+              ))}
             </div>
           </motion.section>
         ))}
-        {!learning?.sections.length && (
+        {!view.sections.length && (
           <p className="reading-prose">
             从右侧学习目标出发，阅读本课 Python
             源码，再进入实验工作台观察运行过程。
           </p>
         )}
-        {!!learning?.observe.length && (
+        {!!view.observe.length && (
           <Accordion
             type="single"
             collapsible
@@ -111,8 +116,8 @@ export function LessonGuide({ detail }: { detail: Detail }) {
               </AccordionTrigger>
               <AccordionContent>
                 <ol>
-                  {learning.observe.map((point, index) => (
-                    <li key={index}>{point}</li>
+                  {view.observe.map((point) => (
+                    <li key={point.id}>{point.text}</li>
                   ))}
                 </ol>
               </AccordionContent>

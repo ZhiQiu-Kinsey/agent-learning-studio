@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { CurriculumData, CurriculumLesson, Detail } from "../src/types";
 import { runOffline } from "./runs";
+import { lessonView } from "../src/content/view";
 
 const screenshot = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -69,14 +70,14 @@ test("chapters two and three expose complete guides and run every real preset th
       String(lesson.number).padStart(2, "0"),
     );
     await expect(page.locator(".reading-section")).toHaveCount(
-      detail.learning!.sections.length,
+      lessonView(detail.learning).sections.length,
     );
     await expect(page.locator(".agent-flow-step")).toHaveCount(
-      detail.learning!.presentation!.flow.steps.length,
+      lessonView(detail.learning).walkthrough!.steps.length,
     );
     await page.getByRole("tab", { name: "课后自测", exact: true }).click();
     await expect(page.locator(".quiz-question")).toHaveCount(
-      detail.learning!.quiz.length,
+      lessonView(detail.learning).quiz.length,
     );
     await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
     const inputs = page.getByLabel("实验参数 JSON", { exact: true });

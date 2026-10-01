@@ -1,188 +1,280 @@
 {
-  "sections": [
-    {
-      "title": "消息和状态各管什么",
-      "body": "messages 是发给模型的对话资料，应用 state 是程序用于协调任务的结构化记录。本课只在 messages 中保存用户目标；读取资料、更新进度与写入终态都发生在 TaskState，不能因为界面显示了若干消息就推断任务完成。此课不调用模型，避免把程序状态机伪装成模型行为。"
-    },
-    {
-      "title": "任务状态要有来源",
-      "body": "TaskState 保存本次 run_id、goal、status、evidence、steps、used_steps、result 和 terminal_reason。goal 来自通过校验的输入；evidence 只从本地 SOURCES 中读取并附上 source 键。读取、核对、生成课内要点三个步骤每次都在执行前消耗预算。每次 lesson.state 是状态快照，能看到值怎样随实际步骤改变。"
-    },
-    {
-      "title": "转换规则守住边界",
-      "body": "ready 只能进入 running 或 cancelled，running 可等待、完成、失败或取消，终态不能再跳回运行。transition 会真的检查允许的边；完成还要求已有证据和实际 result 产物，终态必须有原因。这里的 completed 只表示课内资料归纳流程完成，不自动证明输入的任意自由目标达成。把模型的一句“我已经完成”直接映射成 completed 会绕过这些检查，因此本课没有这样的转移。"
-    },
-    {
-      "title": "等待、失败和预算结束",
-      "body": "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed；预算预设的 step_budget=2，只能执行读取和核对，第三步生成产物前真实耗尽。它们和 completed 都是明确终态，但原因与验收结果不同。可在事件序列中核对 used_steps 和预算，确认失败时证据仍保留。"
-    },
-    {
-      "title": "会话隔离与取消",
-      "body": "每次 run 创建新的 TaskState 和 run_id，不使用全局可变任务状态。取消由平台在步骤边界检查；若用户停止，抛出 RunCancelled，平台记录停止，不会伪造 completed。内存状态会随本次运行结束消失；跨运行保存属于后续持久记忆课。"
-    }
-  ],
-  "observe": [
-    "查看第一条 lesson.state：状态为 ready，run_id 与 goal 从本次输入生成。",
-    "沿事件顺序核对 running 后哪一步真的读取到 source；消息数是否变化？",
-    "切换资料缺失预设，寻找 waiting 与 failed 的两个独立快照及终态原因。",
-    "切换预算预设，检查已有证据仍在，但 status 没有被标为 completed。",
-    "尝试把非法状态转换写在测试里，检查程序抛出 ValueError，而非默默更新。"
-  ],
-  "quiz": [
-    {
-      "id": "source",
-      "prompt": "什么可以使本课的 status 变为 completed？",
-      "options": [
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "application-state",
+  "source_language": "zh-CN",
+  "scenes": {
+    "understand": {
+      "blocks": [
         {
-          "id": "a",
-          "text": "assistant 文本自称完成"
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "CHAPTER 03 / STATE",
+          "headline": "任务的进度，",
+          "highlight": "由程序事件决定。",
+          "takeaway": "消息是本次模型可见资料；state 是应用对目标、证据和生命周期的结构化记录。"
         },
         {
-          "id": "b",
-          "text": "程序已取得来源证据，并经过合法转换"
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-input",
+              "label": "01 / INPUT",
+              "title": "目标与会话",
+              "description": "新 run_id 隔离每次任务，输入给出可校验的目标。",
+              "token": "run_id · goal"
+            },
+            {
+              "id": "02-evidence",
+              "label": "02 / EVIDENCE",
+              "title": "来源证据",
+              "description": "状态证据由真实本地资料读取产生。",
+              "token": "source → evidence"
+            },
+            {
+              "id": "03-terminal",
+              "label": "03 / TERMINAL",
+              "title": "终态约束",
+              "description": "完成、失败和取消都有允许的入口与原因。",
+              "token": "transition()"
+            }
+          ]
         },
         {
-          "id": "c",
-          "text": "消息数超过三条"
+          "id": "section-1",
+          "type": "prose",
+          "title": "消息和状态各管什么",
+          "paragraphs": [
+            "messages 是发给模型的对话资料，应用 state 是程序用于协调任务的结构化记录。本课只在 messages 中保存用户目标；读取资料、更新进度与写入终态都发生在 TaskState，不能因为界面显示了若干消息就推断任务完成。此课不调用模型，避免把程序状态机伪装成模型行为。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "任务状态要有来源",
+          "paragraphs": [
+            "TaskState 保存本次 run_id、goal、status、evidence、steps、used_steps、result 和 terminal_reason。goal 来自通过校验的输入；evidence 只从本地 SOURCES 中读取并附上 source 键。读取、核对、生成课内要点三个步骤每次都在执行前消耗预算。每次 lesson.state 是状态快照，能看到值怎样随实际步骤改变。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "转换规则守住边界",
+          "paragraphs": [
+            "ready 只能进入 running 或 cancelled，running 可等待、完成、失败或取消，终态不能再跳回运行。transition 会真的检查允许的边；完成还要求已有证据和实际 result 产物，终态必须有原因。这里的 completed 只表示课内资料归纳流程完成，不自动证明输入的任意自由目标达成。把模型的一句“我已经完成”直接映射成 completed 会绕过这些检查，因此本课没有这样的转移。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "等待、失败和预算结束",
+          "paragraphs": [
+            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed；预算预设的 step_budget=2，只能执行读取和核对，第三步生成产物前真实耗尽。它们和 completed 都是明确终态，但原因与验收结果不同。可在事件序列中核对 used_steps 和预算，确认失败时证据仍保留。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "会话隔离与取消",
+          "paragraphs": [
+            "每次 run 创建新的 TaskState 和 run_id，不使用全局可变任务状态。取消由平台在步骤边界检查；若用户停止，抛出 RunCancelled，平台记录停止，不会伪造 completed。内存状态会随本次运行结束消失；跨运行保存属于后续持久记忆课。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "从输入走到终态",
+          "description": "下面是教学示意；本次实际状态快照见 lesson.state。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "01",
+              "actor": "程序",
+              "title": "新建状态",
+              "body": "每次运行创建独立状态。",
+              "code": "state = TaskState(run_id=uuid4().hex, goal=goal)",
+              "language": "python",
+              "evidence": "lesson.state"
+            },
+            {
+              "id": "step-2",
+              "label": "02",
+              "actor": "程序",
+              "title": "进入执行",
+              "body": "合法转换才能开始。",
+              "code": "state.transition('running')",
+              "language": "python",
+              "evidence": "lesson.state"
+            },
+            {
+              "id": "step-3",
+              "label": "03",
+              "actor": "资料源",
+              "title": "读取证据",
+              "body": "只有真实返回的资料进入 evidence。",
+              "code": "source = SOURCES.get(source_key)\nstate.evidence.append({'source': source_key, 'excerpt': source})",
+              "language": "python",
+              "evidence": "lesson.state"
+            },
+            {
+              "id": "step-4",
+              "label": "04",
+              "actor": "状态机",
+              "title": "判定终态",
+              "body": "第三步执行前先扣预算，再生成课内要点并判定终态。",
+              "code": "if state.consume_step('生成课内资料要点', budget):\n    state.result = make_summary(source)\n    state.transition('completed', reason)",
+              "language": "python",
+              "evidence": "lesson.state"
+            },
+            {
+              "id": "step-5",
+              "label": "05",
+              "actor": "验证器",
+              "title": "发布报告",
+              "body": "比较终态、证据与消息。",
+              "code": "context.emit('lesson.report', report)",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
         }
-      ],
-      "correct_option": "b",
-      "explanation": "完成由 transition 检查，并要求 evidence 与实际 result 产物；回答文字本身不是验收证明。"
+      ]
     },
-    {
-      "id": "terminal",
-      "prompt": "资料不存在时，合法的生命周期是什么？",
-      "options": [
+    "lab": {
+      "experiments": [
         {
-          "id": "a",
-          "text": "ready → completed"
-        },
-        {
-          "id": "b",
-          "text": "ready → running → waiting → failed"
-        },
-        {
-          "id": "c",
-          "text": "failed → running → completed"
+          "id": "explore",
+          "title": "用程序维护任务事实与可验证终态",
+          "arms": [
+            {
+              "id": "success",
+              "exercise": "success",
+              "label": "有证据地完成"
+            },
+            {
+              "id": "missing",
+              "exercise": "missing",
+              "label": "资料缺失"
+            },
+            {
+              "id": "budget",
+              "exercise": "budget",
+              "label": "预算耗尽"
+            }
+          ],
+          "observe": [
+            {
+              "id": "observe-1",
+              "text": "查看第一条 lesson.state：状态为 ready，run_id 与 goal 从本次输入生成。"
+            },
+            {
+              "id": "observe-2",
+              "text": "沿事件顺序核对 running 后哪一步真的读取到 source；消息数是否变化？"
+            },
+            {
+              "id": "observe-3",
+              "text": "切换资料缺失预设，寻找 waiting 与 failed 的两个独立快照及终态原因。"
+            },
+            {
+              "id": "observe-4",
+              "text": "切换预算预设，检查已有证据仍在，但 status 没有被标为 completed。"
+            },
+            {
+              "id": "observe-5",
+              "text": "尝试把非法状态转换写在测试里，检查程序抛出 ValueError，而非默默更新。"
+            }
+          ]
         }
-      ],
-      "correct_option": "b",
-      "explanation": "执行先开始，缺资料时等待，确认本次无法继续后失败；终态不能恢复为 running。"
+      ]
     },
-    {
-      "id": "state-message",
-      "prompt": "状态新增证据后，messages 会怎样？",
-      "options": [
+    "check": {
+      "blocks": [
         {
-          "id": "a",
-          "text": "自动追加 role=tool"
-        },
-        {
-          "id": "b",
-          "text": "仍是单条用户目标，除非程序显式改写"
-        },
-        {
-          "id": "c",
-          "text": "自动清空"
-        }
-      ],
-      "correct_option": "b",
-      "explanation": "应用状态和模型消息是不同容器，状态更新不会自动变成模型可见消息。"
-    },
-    {
-      "id": "budget",
-      "prompt": "已取得一条资料但步骤预算耗尽，合理结果是什么？",
-      "options": [
-        {
-          "id": "a",
-          "text": "有 evidence 就必须成功"
-        },
-        {
-          "id": "b",
-          "text": "保留 evidence，并以预算原因失败"
-        },
-        {
-          "id": "c",
-          "text": "删除 evidence 后假装完成"
-        }
-      ],
-      "correct_option": "b",
-      "explanation": "证据存在不等于目标已完成；预算终止应保留已有事实与原因。"
-    }
-  ],
-  "presentation": {
-    "eyebrow": "CHAPTER 03 / STATE",
-    "headline": "任务的进度，",
-    "highlight": "由程序事件决定。",
-    "takeaway": "消息是本次模型可见资料；state 是应用对目标、证据和生命周期的结构化记录。",
-    "concepts": [
-      {
-        "label": "01 / INPUT",
-        "title": "目标与会话",
-        "description": "新 run_id 隔离每次任务，输入给出可校验的目标。",
-        "token": "run_id · goal"
-      },
-      {
-        "label": "02 / EVIDENCE",
-        "title": "来源证据",
-        "description": "状态证据由真实本地资料读取产生。",
-        "token": "source → evidence"
-      },
-      {
-        "label": "03 / TERMINAL",
-        "title": "终态约束",
-        "description": "完成、失败和取消都有允许的入口与原因。",
-        "token": "transition()"
-      }
-    ],
-    "flow": {
-      "title": "从输入走到终态",
-      "description": "下面是教学示意；本次实际状态快照见 lesson.state。",
-      "steps": [
-        {
-          "label": "01",
-          "actor": "程序",
-          "title": "新建状态",
-          "body": "每次运行创建独立状态。",
-          "code": "state = TaskState(run_id=uuid4().hex, goal=goal)",
-          "language": "python",
-          "evidence": "lesson.state"
-        },
-        {
-          "label": "02",
-          "actor": "程序",
-          "title": "进入执行",
-          "body": "合法转换才能开始。",
-          "code": "state.transition('running')",
-          "language": "python",
-          "evidence": "lesson.state"
-        },
-        {
-          "label": "03",
-          "actor": "资料源",
-          "title": "读取证据",
-          "body": "只有真实返回的资料进入 evidence。",
-          "code": "source = SOURCES.get(source_key)\nstate.evidence.append({'source': source_key, 'excerpt': source})",
-          "language": "python",
-          "evidence": "lesson.state"
-        },
-        {
-          "label": "04",
-          "actor": "状态机",
-          "title": "判定终态",
-          "body": "第三步执行前先扣预算，再生成课内要点并判定终态。",
-          "code": "if state.consume_step('生成课内资料要点', budget):\n    state.result = make_summary(source)\n    state.transition('completed', reason)",
-          "language": "python",
-          "evidence": "lesson.state"
-        },
-        {
-          "label": "05",
-          "actor": "验证器",
-          "title": "发布报告",
-          "body": "比较终态、证据与消息。",
-          "code": "context.emit('lesson.report', report)",
-          "language": "python",
-          "evidence": "lesson.report"
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "source",
+              "prompt": "什么可以使本课的 status 变为 completed？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "assistant 文本自称完成"
+                },
+                {
+                  "id": "b",
+                  "text": "程序已取得来源证据，并经过合法转换"
+                },
+                {
+                  "id": "c",
+                  "text": "消息数超过三条"
+                }
+              ],
+              "correct": "b",
+              "explanation": "完成由 transition 检查，并要求 evidence 与实际 result 产物；回答文字本身不是验收证明。"
+            },
+            {
+              "id": "terminal",
+              "prompt": "资料不存在时，合法的生命周期是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "ready → completed"
+                },
+                {
+                  "id": "b",
+                  "text": "ready → running → waiting → failed"
+                },
+                {
+                  "id": "c",
+                  "text": "failed → running → completed"
+                }
+              ],
+              "correct": "b",
+              "explanation": "执行先开始，缺资料时等待，确认本次无法继续后失败；终态不能恢复为 running。"
+            },
+            {
+              "id": "state-message",
+              "prompt": "状态新增证据后，messages 会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "自动追加 role=tool"
+                },
+                {
+                  "id": "b",
+                  "text": "仍是单条用户目标，除非程序显式改写"
+                },
+                {
+                  "id": "c",
+                  "text": "自动清空"
+                }
+              ],
+              "correct": "b",
+              "explanation": "应用状态和模型消息是不同容器，状态更新不会自动变成模型可见消息。"
+            },
+            {
+              "id": "budget",
+              "prompt": "已取得一条资料但步骤预算耗尽，合理结果是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "有 evidence 就必须成功"
+                },
+                {
+                  "id": "b",
+                  "text": "保留 evidence，并以预算原因失败"
+                },
+                {
+                  "id": "c",
+                  "text": "删除 evidence 后假装完成"
+                }
+              ],
+              "correct": "b",
+              "explanation": "证据存在不等于目标已完成；预算终止应保留已有事实与原因。"
+            }
+          ]
         }
       ]
     }

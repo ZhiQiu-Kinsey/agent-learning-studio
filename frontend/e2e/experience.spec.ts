@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { CurriculumData, Lesson } from "../src/types";
 import { isRunCreation, runOffline } from "./runs";
+import { chapterView, lessonView } from "../src/content/view";
 
 const capture = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -48,7 +49,7 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
   const content = await (await request.get("/api/onboarding")).json();
   await page.locator(".onboarding-sources").getByRole("button").click();
   await expect(page.locator(".onboarding-sources a")).toHaveCount(
-    content.chapters[0].references.length,
+    chapterView(content.chapters[0]).references.length,
   );
   const chapterNav = page.getByRole("navigation", { name: "前置导学章节" });
   for (const chapter of content.chapters) {
@@ -59,7 +60,7 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
       chapter.title,
     );
     await expect(page.locator(".onboarding-section")).toHaveCount(
-      chapter.sections.length,
+      chapterView(chapter).sections.length,
     );
     const checks = page.locator(".onboarding-checks input");
     for (let index = 0; index < (await checks.count()); index++)
@@ -142,24 +143,25 @@ test("interactive lesson explanations are different for all three lessons and ne
       .getByRole("button", { name: new RegExp(detail.title) })
       .click();
     await expect(page.locator(".lesson-hero h2")).toContainText(
-      detail.learning.presentation.highlight,
+      lessonView(detail.learning).hero!.highlight!,
     );
     const steps = page.locator(".agent-flow-step");
     await expect(steps).toHaveCount(
-      detail.learning.presentation.flow.steps.length,
+      lessonView(detail.learning).walkthrough!.steps.length,
     );
-    for (let i = 0; i < detail.learning.presentation.flow.steps.length; i++) {
+    const flowSteps = lessonView(detail.learning).walkthrough!.steps;
+    for (let i = 0; i < flowSteps.length; i++) {
       await steps.nth(i).click();
       await expect(page.locator(".agent-flow-explanation h3")).toHaveText(
-        detail.learning.presentation.flow.steps[i].title,
+        flowSteps[i].title,
       );
       await expect(page.locator(".agent-flow-code code")).toHaveText(
-        detail.learning.presentation.flow.steps[i].code,
+        flowSteps[i].code!,
       );
     }
     await expect(page.locator(".agent-flow")).toContainText("教学示意");
     await expect(page.locator(".reading-section")).toHaveCount(
-      detail.learning.sections.length,
+      lessonView(detail.learning).sections.length,
     );
   }
   expect(runs).toBe(0);

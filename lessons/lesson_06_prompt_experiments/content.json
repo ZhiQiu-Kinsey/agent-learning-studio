@@ -1,155 +1,244 @@
 {
-  "sections": [
-    {
-      "title": "先写清楚比较什么",
-      "body": "每个预设有固定用户任务和两个版本。两次请求使用当前同一模型、相同 temperature=0 与相同调用预算；工具预设只改 function.description，其他预设只改 system 规则。temperature=0 不保证完全可复现，还需重复多次才能估计波动。"
-    },
-    {
-      "title": "工具描述是决策输入",
-      "body": "工具名称、职责和参数含义会影响模型如何构造调用提议。tool-description 预设把相同工具 Schema 交给真实模型，两轮只改 description，再检查响应里的 tool_calls 名称和实参。这里观察提议，不执行该工具；真正可调用范围仍由 Python 登记表决定。"
-    },
-    {
-      "title": "流程规则要可观察",
-      "body": "flow-rule 预设比较简短指令和明确的识别、计算、核对、回答顺序。检查器只做关键词初筛：查看回答是否包含独立数字 42 且没有明确否定它；这不能证明整句算术语义正确，也不能反推出模型内部是否按步骤推理。应逐条人工阅读原始响应。"
-    },
-    {
-      "title": "缺参时不要编造",
-      "body": "missing-input 预设没有给两个加数。改写版要求索取缺失输入。初筛只查是否像在询问数字、且文本中没有数字；“需要计算1+1=2”会被拦下，但仍不能证明所有含糊请求都处理正确。"
-    },
-    {
-      "title": "配对报告保留退化",
-      "body": "真实 tools Schema 的 tool-description 预设只改 function.description；另两个预设只改 system 规则。两个响应与初筛结果都进报告。初筛命中不是语义验收：基线命中而改写未命中是一条退化线索，双方命中也不证明普遍有效。问题栏作为学习者备注进入报告，不改变固定任务；重复实验还需固定更多案例并人工复核。"
-    }
-  ],
-  "observe": [
-    "比较两个 request 的 model、temperature 与 user 内容；工具预设还要确认只有 function.description 不同，其他预设确认只有 system 不同。",
-    "对照两个 response 原文和 report 初筛；检查“不是42而是43”或含数字的缺参回答为何不能算命中，并手动核读命中项。",
-    "重跑同一预设并记录差异；不要把一次通过率写成普遍结论。",
-    "修改问题栏备注并在报告中找到它；预设任务和两次模型请求保持固定。"
-  ],
-  "quiz": [
-    {
-      "id": "q1",
-      "prompt": "一次配对中改写版通过，能断言它普遍优于基线吗？",
-      "options": [
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "prompt-experiments",
+  "source_language": "zh-CN",
+  "scenes": {
+    "understand": {
+      "blocks": [
         {
-          "id": "a",
-          "text": "能，改写版本次通过就说明所有任务都会更好。"
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "CHAPTER 02 / LESSON 06",
+          "headline": "先写清楚比较什么",
+          "highlight": "同题同模型的提示与工具描述配对实验",
+          "takeaway": "固定同题、同模型、同配置，两次真实响应按同一规则比较；单次结果只是一条观察。"
         },
         {
-          "id": "b",
-          "text": "不能，还要看独立检查与更多证据。"
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-goal",
+              "label": "01 / GOAL",
+              "title": "先写清楚比较什么",
+              "description": "固定任务、模型和采样配置；工具预设只改 function.description，其他预设只改 system 规则。",
+              "token": "task · contract"
+            },
+            {
+              "id": "02-check",
+              "label": "02 / CHECK",
+              "title": "工具描述是决策输入",
+              "description": "真实模型返回 tool_calls 提议；本实验检查工具名称与参数，不执行工具。",
+              "token": "validation · evidence"
+            },
+            {
+              "id": "03-evidence",
+              "label": "03 / EVIDENCE",
+              "title": "流程规则要可观察",
+              "description": "关键词初筛不能证明整句正确；命中和未命中都要对照原始响应人工复核。",
+              "token": "trace · report"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "先写清楚比较什么",
+          "paragraphs": [
+            "每个预设有固定用户任务和两个版本。两次请求使用当前同一模型、相同 temperature=0 与相同调用预算；工具预设只改 function.description，其他预设只改 system 规则。temperature=0 不保证完全可复现，还需重复多次才能估计波动。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "工具描述是决策输入",
+          "paragraphs": [
+            "工具名称、职责和参数含义会影响模型如何构造调用提议。tool-description 预设把相同工具 Schema 交给真实模型，两轮只改 description，再检查响应里的 tool_calls 名称和实参。这里观察提议，不执行该工具；真正可调用范围仍由 Python 登记表决定。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "流程规则要可观察",
+          "paragraphs": [
+            "flow-rule 预设比较简短指令和明确的识别、计算、核对、回答顺序。检查器只做关键词初筛：查看回答是否包含独立数字 42 且没有明确否定它；这不能证明整句算术语义正确，也不能反推出模型内部是否按步骤推理。应逐条人工阅读原始响应。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "缺参时不要编造",
+          "paragraphs": [
+            "missing-input 预设没有给两个加数。改写版要求索取缺失输入。初筛只查是否像在询问数字、且文本中没有数字；“需要计算1+1=2”会被拦下，但仍不能证明所有含糊请求都处理正确。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "配对报告保留退化",
+          "paragraphs": [
+            "真实 tools Schema 的 tool-description 预设只改 function.description；另两个预设只改 system 规则。两个响应与初筛结果都进报告。初筛命中不是语义验收：基线命中而改写未命中是一条退化线索，双方命中也不证明普遍有效。问题栏作为学习者备注进入报告，不改变固定任务；重复实验还需固定更多案例并人工复核。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "从任务到可检查结果",
+          "description": "以下代码是跨课概念示意；本次执行证据请查看右侧事件。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "限定输入",
+              "actor": "Python / 模型",
+              "title": "任务/事实进入运行器",
+              "body": "任务/事实进入运行器；示意不代替本次运行记录。",
+              "code": "task, baseline, variant = TASKS[scenario]",
+              "language": "python",
+              "evidence": "检查输入范围与默认值"
+            },
+            {
+              "id": "step-2",
+              "label": "执行或生成",
+              "actor": "Python / 模型",
+              "title": "程序调用本地工具或真实模型",
+              "body": "程序调用本地工具或真实模型；示意不代替本次运行记录。",
+              "code": "left = context.complete(body_with_baseline_description, 1)",
+              "language": "python",
+              "evidence": "在事件中查看真实调用"
+            },
+            {
+              "id": "step-3",
+              "label": "独立检查",
+              "actor": "Python / 模型",
+              "title": "把输出交给验证代码",
+              "body": "把输出交给验证代码；示意不代替本次运行记录。",
+              "code": "right = context.complete(body_with_variant_description, 2)",
+              "language": "python",
+              "evidence": "查看每项 passed 和 detail"
+            },
+            {
+              "id": "step-4",
+              "label": "形成证据",
+              "actor": "Python / 模型",
+              "title": "报告由检查结果生成",
+              "body": "报告由检查结果生成；示意不代替本次运行记录。",
+              "code": "context.emit(\"lesson.report\", {\"checks\": heuristic_checks, \"table\": paired_rows})",
+              "language": "python",
+              "evidence": "对照 report 与两份真实 response"
+            },
+            {
+              "id": "step-5",
+              "label": "作出结论",
+              "actor": "Python / 模型",
+              "title": "报告初筛并保留原文",
+              "body": "报告两份模型输出和有限初筛；命中仍需人工复核，示意不代替本次运行记录。",
+              "code": "return \"配对记录已生成；请人工复核\"",
+              "language": "python",
+              "evidence": "最终回答只是提示；两次响应和报告才是本次证据"
+            }
+          ]
         }
-      ],
-      "correct_option": "b",
-      "explanation": "单个样本不能排除偶然性和场景差异，必须保留完整配对记录并扩大样本。"
+      ]
     },
-    {
-      "id": "q2",
-      "prompt": "两次请求若换了模型，还算只修改提示词吗？",
-      "options": [
+    "lab": {
+      "experiments": [
         {
-          "id": "a",
-          "text": "不算；模型变化是额外变量，无法只归因于提示词。"
-        },
-        {
-          "id": "b",
-          "text": "算；只要两次都回答同一问题即可。"
+          "id": "explore",
+          "title": "同题同模型的提示与工具描述配对实验",
+          "arms": [
+            {
+              "id": "tool-description",
+              "exercise": "tool-description",
+              "label": "工具描述：模糊与明确"
+            },
+            {
+              "id": "flow-rule",
+              "exercise": "flow-rule",
+              "label": "流程规则：答案与核对"
+            },
+            {
+              "id": "missing-input",
+              "exercise": "missing-input",
+              "label": "失败边界：缺少加数"
+            }
+          ],
+          "observe": [
+            {
+              "id": "observe-1",
+              "text": "比较两个 request 的 model、temperature 与 user 内容；工具预设还要确认只有 function.description 不同，其他预设确认只有 system 不同。"
+            },
+            {
+              "id": "observe-2",
+              "text": "对照两个 response 原文和 report 初筛；检查“不是42而是43”或含数字的缺参回答为何不能算命中，并手动核读命中项。"
+            },
+            {
+              "id": "observe-3",
+              "text": "重跑同一预设并记录差异；不要把一次通过率写成普遍结论。"
+            },
+            {
+              "id": "observe-4",
+              "text": "修改问题栏备注并在报告中找到它；预设任务和两次模型请求保持固定。"
+            }
+          ]
         }
-      ],
-      "correct_option": "a",
-      "explanation": "配对实验必须固定模型、用户任务、采样配置与预算；换模型后至少有两个变量变化。"
+      ]
     },
-    {
-      "id": "q3",
-      "prompt": "工具描述写得精确，是否就能授权模型执行任何本地函数？",
-      "options": [
+    "check": {
+      "blocks": [
         {
-          "id": "a",
-          "text": "可以；描述本身就是执行权限。"
-        },
-        {
-          "id": "b",
-          "text": "不能；执行仍受 Python 允许列表约束。"
-        }
-      ],
-      "correct_option": "b",
-      "explanation": "提示与描述影响提议，程序允许列表才决定真实执行范围。"
-    }
-  ],
-  "presentation": {
-    "eyebrow": "CHAPTER 02 / LESSON 06",
-    "headline": "先写清楚比较什么",
-    "highlight": "同题同模型的提示与工具描述配对实验",
-    "takeaway": "固定同题、同模型、同配置，两次真实响应按同一规则比较；单次结果只是一条观察。",
-    "concepts": [
-      {
-        "label": "01 / GOAL",
-        "title": "先写清楚比较什么",
-        "description": "固定任务、模型和采样配置；工具预设只改 function.description，其他预设只改 system 规则。",
-        "token": "task · contract"
-      },
-      {
-        "label": "02 / CHECK",
-        "title": "工具描述是决策输入",
-        "description": "真实模型返回 tool_calls 提议；本实验检查工具名称与参数，不执行工具。",
-        "token": "validation · evidence"
-      },
-      {
-        "label": "03 / EVIDENCE",
-        "title": "流程规则要可观察",
-        "description": "关键词初筛不能证明整句正确；命中和未命中都要对照原始响应人工复核。",
-        "token": "trace · report"
-      }
-    ],
-    "flow": {
-      "title": "从任务到可检查结果",
-      "description": "以下代码是跨课概念示意；本次执行证据请查看右侧事件。",
-      "steps": [
-        {
-          "label": "限定输入",
-          "actor": "Python / 模型",
-          "title": "任务/事实进入运行器",
-          "body": "任务/事实进入运行器；示意不代替本次运行记录。",
-          "code": "task, baseline, variant = TASKS[scenario]",
-          "language": "python",
-          "evidence": "检查输入范围与默认值"
-        },
-        {
-          "label": "执行或生成",
-          "actor": "Python / 模型",
-          "title": "程序调用本地工具或真实模型",
-          "body": "程序调用本地工具或真实模型；示意不代替本次运行记录。",
-          "code": "left = context.complete(body_with_baseline_description, 1)",
-          "language": "python",
-          "evidence": "在事件中查看真实调用"
-        },
-        {
-          "label": "独立检查",
-          "actor": "Python / 模型",
-          "title": "把输出交给验证代码",
-          "body": "把输出交给验证代码；示意不代替本次运行记录。",
-          "code": "right = context.complete(body_with_variant_description, 2)",
-          "language": "python",
-          "evidence": "查看每项 passed 和 detail"
-        },
-        {
-          "label": "形成证据",
-          "actor": "Python / 模型",
-          "title": "报告由检查结果生成",
-          "body": "报告由检查结果生成；示意不代替本次运行记录。",
-          "code": "context.emit(\"lesson.report\", {\"checks\": heuristic_checks, \"table\": paired_rows})",
-          "language": "python",
-          "evidence": "对照 report 与两份真实 response"
-        },
-        {
-          "label": "作出结论",
-          "actor": "Python / 模型",
-          "title": "报告初筛并保留原文",
-          "body": "报告两份模型输出和有限初筛；命中仍需人工复核，示意不代替本次运行记录。",
-          "code": "return \"配对记录已生成；请人工复核\"",
-          "language": "python",
-          "evidence": "最终回答只是提示；两次响应和报告才是本次证据"
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "一次配对中改写版通过，能断言它普遍优于基线吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "能，改写版本次通过就说明所有任务都会更好。"
+                },
+                {
+                  "id": "b",
+                  "text": "不能，还要看独立检查与更多证据。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "单个样本不能排除偶然性和场景差异，必须保留完整配对记录并扩大样本。"
+            },
+            {
+              "id": "q2",
+              "prompt": "两次请求若换了模型，还算只修改提示词吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不算；模型变化是额外变量，无法只归因于提示词。"
+                },
+                {
+                  "id": "b",
+                  "text": "算；只要两次都回答同一问题即可。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "配对实验必须固定模型、用户任务、采样配置与预算；换模型后至少有两个变量变化。"
+            },
+            {
+              "id": "q3",
+              "prompt": "工具描述写得精确，是否就能授权模型执行任何本地函数？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "可以；描述本身就是执行权限。"
+                },
+                {
+                  "id": "b",
+                  "text": "不能；执行仍受 Python 允许列表约束。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "提示与描述影响提议，程序允许列表才决定真实执行范围。"
+            }
+          ]
         }
       ]
     }

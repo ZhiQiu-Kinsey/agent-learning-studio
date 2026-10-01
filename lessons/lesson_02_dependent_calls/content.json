@@ -1,149 +1,219 @@
 {
-  "sections": [
-    {
-      "title": "先看数据依赖，再安排步骤",
-      "body": "“把现在的小时和分钟相加”看起来只有一句话，却需要两个能力：读取时间和计算加法。加法的 a、b 不在用户输入里，而在 get_current_time 返回的 hour、minute 中。因此先获取时间，才能确定下一次调用的参数。\n这与“计算 19 加 23，并查时间”不同：后者的数字一开始就已知。判断能否同轮提出多个调用，要看后一步输入是否依赖前一步实际输出，而不是看工具名是不是不同。"
-    },
-    {
-      "title": "消息历史把结果送到下一次决策",
-      "body": "第一轮模型提出 get_current_time；Python 执行后，将实际时间和调用 id 对应的 tool 消息追加到 messages。第二轮请求再次发送这段历史，模型才有依据提出 add_numbers，并把 hour、minute 放进 a、b。\n当前运行器按模型给出的实参执行，不会自动把占位符替换成另一工具的结果。因此把两个有依赖的调用塞在同一个响应里，即使 Python 按顺序执行，也不能保证后一个参数正确。执行顺序和数据传递都必须成立。"
-    },
-    {
-      "title": "检验参数来源，而不只看最终数字",
-      "body": "假设时间工具返回 hour=11、minute=33，下一次加法应传 a=11、b=33，结果才是 44。只看到最终的 44 仍不够：模型可能猜对，也可能使用了旧时间。沿 trace 逐步核对输入来源，才能解释这次答案为什么可信。\n典型成功轨迹包含“查时间 → 加法 → 回答”三次模型响应，中间两个工具在本机执行。真实模型可能走不同轨迹，应核对实际事件与参数来源。每次请求重新携带历史只是为本次任务提供上下文，不代表模型参数发生了学习，也不代表已有跨会话记忆。"
-    }
-  ],
-  "observe": [
-    "运行“小时与分钟相加”，检查第一轮 tool_call 是否先请求 get_current_time，记录工具实际返回的 hour、minute 和调用 id。",
-    "展开第二轮 request：确认上轮 tool 结果已经进入 messages；再对照本轮 add_numbers 的 a、b 是否等于刚才记录的 hour、minute。",
-    "对照加法 tool_result 和最终回答，再运行“两个独立任务”：解释两种输入为什么允许不同的调用安排，而不靠轮数判断对错。"
-  ],
-  "quiz": [
-    {
-      "id": "dependent-input",
-      "prompt": "查时间返回 hour=11、minute=33。哪条后续调用能证明加法使用了本次工具结果？",
-      "options": [
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "dependent-calls",
+  "source_language": "zh-CN",
+  "scenes": {
+    "understand": {
+      "blocks": [
         {
-          "id": "a",
-          "text": "add_numbers(a=19, b=23)，因为结果也可能看起来合理。"
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "CHAPTER 02 / DEPENDENT CALLS",
+          "headline": "让上一步的观察，",
+          "highlight": "成为下一步的依据。",
+          "takeaway": "执行顺序不能代替数据传递。先收到真实结果，再确定下一步参数。"
         },
         {
-          "id": "b",
-          "text": "add_numbers(a=11, b=33)，并能在上轮 tool 消息中找到这两个值。"
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-dependency",
+              "label": "01 / DEPENDENCY",
+              "title": "先找到依赖",
+              "description": "小时与分钟最初并不在问题里。加法的输入，要从时间工具的实际输出中取得。",
+              "token": "hour + minute"
+            },
+            {
+              "id": "02-context",
+              "label": "02 / CONTEXT",
+              "title": "历史携带观察",
+              "description": "运行器把 tool 结果加入 messages。下一次请求带上这些结果，模型才知道该传什么。",
+              "token": "messages → next request"
+            },
+            {
+              "id": "03-provenance",
+              "label": "03 / PROVENANCE",
+              "title": "沿参数找来源",
+              "description": "最终数字正确还不够。核对上轮返回值与本轮实参，才能解释答案为什么可信。",
+              "token": "tool_result → arguments"
+            }
+          ]
         },
         {
-          "id": "c",
-          "text": "不用调用加法，只要最终答案写成 44 就已证明。"
+          "id": "section-1",
+          "type": "prose",
+          "title": "先看数据依赖，再安排步骤",
+          "paragraphs": [
+            "“把现在的小时和分钟相加”看起来只有一句话，却需要两个能力：读取时间和计算加法。加法的 a、b 不在用户输入里，而在 get_current_time 返回的 hour、minute 中。因此先获取时间，才能确定下一次调用的参数。\n这与“计算 19 加 23，并查时间”不同：后者的数字一开始就已知。判断能否同轮提出多个调用，要看后一步输入是否依赖前一步实际输出，而不是看工具名是不是不同。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "消息历史把结果送到下一次决策",
+          "paragraphs": [
+            "第一轮模型提出 get_current_time；Python 执行后，将实际时间和调用 id 对应的 tool 消息追加到 messages。第二轮请求再次发送这段历史，模型才有依据提出 add_numbers，并把 hour、minute 放进 a、b。\n当前运行器按模型给出的实参执行，不会自动把占位符替换成另一工具的结果。因此把两个有依赖的调用塞在同一个响应里，即使 Python 按顺序执行，也不能保证后一个参数正确。执行顺序和数据传递都必须成立。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "检验参数来源，而不只看最终数字",
+          "paragraphs": [
+            "假设时间工具返回 hour=11、minute=33，下一次加法应传 a=11、b=33，结果才是 44。只看到最终的 44 仍不够：模型可能猜对，也可能使用了旧时间。沿 trace 逐步核对输入来源，才能解释这次答案为什么可信。\n典型成功轨迹包含“查时间 → 加法 → 回答”三次模型响应，中间两个工具在本机执行。真实模型可能走不同轨迹，应核对实际事件与参数来源。每次请求重新携带历史只是为本次任务提供上下文，不代表模型参数发生了学习，也不代表已有跨会话记忆。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "从一个结果，走向下一次决策。",
+          "description": "“把现在的小时和分钟相加”需要先取时间。这里假设 hour=11、minute=33，仅用于讲解数据依赖，不代表当前时间。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "先查时间",
+              "actor": "模型 → Python",
+              "title": "先补齐当前缺失的信息",
+              "body": "用户没有给出小时与分钟。模型应先提出 get_current_time，由 Python 读取进程所在机器的本地时间。",
+              "code": "{\n  \"function\": {\n    \"name\": \"get_current_time\",\n    \"arguments\": \"{}\"\n  }\n}",
+              "language": "json",
+              "evidence": "检查第一轮调用名称，并记录实际 tool_result 中的 hour、minute。"
+            },
+            {
+              "id": "step-2",
+              "label": "传递观察",
+              "actor": "运行器 → 下一轮",
+              "title": "把返回值加入消息历史",
+              "body": "假设工具返回 11 点 33 分。运行器把结果加入 role=tool 消息，第二轮请求重新携带这段历史。这里只展示与计算相关的字段。",
+              "code": "// 假设返回值，仅展示相关字段\n{\n  \"ok\": true,\n  \"result\": {\n    \"hour\": 11,\n    \"minute\": 33\n  }\n}",
+              "evidence": "展开第二轮 request，确认上一轮真实时间结果已经出现在 messages。"
+            },
+            {
+              "id": "step-3",
+              "label": "再做加法",
+              "actor": "模型 → Python",
+              "title": "从观察中确定下一次实参",
+              "body": "模型已经看到了工具结果，才能用 hour、minute 填入 a、b。运行器按实参执行，不会自动替换占位符或修正猜测的数字。",
+              "code": "{\n  \"function\": {\n    \"name\": \"add_numbers\",\n    \"arguments\": \"{\\\"a\\\":11,\\\"b\\\":33}\"\n  }\n}",
+              "language": "json",
+              "evidence": "逐项核对 a=hour、b=minute，验证两个值都来自本轮任务的时间结果。"
+            },
+            {
+              "id": "step-4",
+              "label": "核对回答",
+              "actor": "工具 → 模型",
+              "title": "答案背后，要有完整数据流",
+              "body": "示例输入得到 44。最后还要核对加法工具返回与模型回答。真实轨迹可能不同，轮数本身不能证明数据依赖成立。",
+              "code": "// 假设 11:33 对应的计算结果\n{ \"ok\": true, \"result\": 44 }\n\n// 应逐步核对的链路\ntime.hour   → a\ntime.minute → b\ntool_result → 最终回答",
+              "evidence": "确认最终答案依据实际加法结果，再与两个独立任务的调用安排作对比。"
+            }
+          ]
         }
-      ],
-      "correct_option": "b",
-      "explanation": "依赖调用需要同时核对参数值与来源。最终数字正确不能证明走过正确的数据流；trace 中的上轮实际结果和本轮实参才提供可检查的证据。"
+      ]
     },
-    {
-      "id": "ordering-not-enough",
-      "prompt": "模型同轮提出查时间和加法，加法参数却是事先猜的 10、20。Python 先查时间、后加法，能让依赖自动正确吗？",
-      "options": [
+    "lab": {
+      "experiments": [
         {
-          "id": "a",
-          "text": "能，按顺序执行就会自动改写加法的参数。"
-        },
-        {
-          "id": "b",
-          "text": "能，只要两个工具名称正确。"
-        },
-        {
-          "id": "c",
-          "text": "不能，运行器按给定参数执行；需要把真实结果送到下一轮再确定实参。"
+          "id": "explore",
+          "title": "把上一步的输出变成下一步的输入",
+          "arms": [
+            {
+              "id": "chain",
+              "exercise": "chain",
+              "label": "小时与分钟相加"
+            },
+            {
+              "id": "both",
+              "exercise": "both",
+              "label": "对比独立调用"
+            }
+          ],
+          "observe": [
+            {
+              "id": "observe-1",
+              "text": "运行“小时与分钟相加”，检查第一轮 tool_call 是否先请求 get_current_time，记录工具实际返回的 hour、minute 和调用 id。"
+            },
+            {
+              "id": "observe-2",
+              "text": "展开第二轮 request：确认上轮 tool 结果已经进入 messages；再对照本轮 add_numbers 的 a、b 是否等于刚才记录的 hour、minute。"
+            },
+            {
+              "id": "observe-3",
+              "text": "对照加法 tool_result 和最终回答，再运行“两个独立任务”：解释两种输入为什么允许不同的调用安排，而不靠轮数判断对错。"
+            }
+          ]
         }
-      ],
-      "correct_option": "c",
-      "explanation": "执行顺序不能代替数据传递。当前运行器不会根据前一工具输出改写另一个调用的 arguments。模型应先收到时间结果，再提出带真实 hour、minute 的加法调用。"
+      ]
     },
-    {
-      "id": "context-versus-learning",
-      "prompt": "第二轮请求含上轮时间结果，模型据此继续计算。这说明什么？",
-      "options": [
+    "check": {
+      "blocks": [
         {
-          "id": "a",
-          "text": "应用通过消息历史为当前决策提供了上下文。"
-        },
-        {
-          "id": "b",
-          "text": "模型参数已经自动训练，永久记住这次时间。"
-        },
-        {
-          "id": "c",
-          "text": "所有新会话都会自动读到这条时间结果。"
-        }
-      ],
-      "correct_option": "a",
-      "explanation": "messages 是应用构造的本次运行历史。再次发送工具结果，让模型能够使用已有观察；它不等于修改模型参数，也不等于实现跨会话持久记忆。"
-    }
-  ],
-  "presentation": {
-    "eyebrow": "CHAPTER 02 / DEPENDENT CALLS",
-    "headline": "让上一步的观察，",
-    "highlight": "成为下一步的依据。",
-    "takeaway": "执行顺序不能代替数据传递。先收到真实结果，再确定下一步参数。",
-    "concepts": [
-      {
-        "label": "01 / DEPENDENCY",
-        "title": "先找到依赖",
-        "description": "小时与分钟最初并不在问题里。加法的输入，要从时间工具的实际输出中取得。",
-        "token": "hour + minute"
-      },
-      {
-        "label": "02 / CONTEXT",
-        "title": "历史携带观察",
-        "description": "运行器把 tool 结果加入 messages。下一次请求带上这些结果，模型才知道该传什么。",
-        "token": "messages → next request"
-      },
-      {
-        "label": "03 / PROVENANCE",
-        "title": "沿参数找来源",
-        "description": "最终数字正确还不够。核对上轮返回值与本轮实参，才能解释答案为什么可信。",
-        "token": "tool_result → arguments"
-      }
-    ],
-    "flow": {
-      "title": "从一个结果，走向下一次决策。",
-      "description": "“把现在的小时和分钟相加”需要先取时间。这里假设 hour=11、minute=33，仅用于讲解数据依赖，不代表当前时间。",
-      "steps": [
-        {
-          "label": "先查时间",
-          "actor": "模型 → Python",
-          "title": "先补齐当前缺失的信息",
-          "body": "用户没有给出小时与分钟。模型应先提出 get_current_time，由 Python 读取进程所在机器的本地时间。",
-          "code": "{\n  \"function\": {\n    \"name\": \"get_current_time\",\n    \"arguments\": \"{}\"\n  }\n}",
-          "language": "json",
-          "evidence": "检查第一轮调用名称，并记录实际 tool_result 中的 hour、minute。"
-        },
-        {
-          "label": "传递观察",
-          "actor": "运行器 → 下一轮",
-          "title": "把返回值加入消息历史",
-          "body": "假设工具返回 11 点 33 分。运行器把结果加入 role=tool 消息，第二轮请求重新携带这段历史。这里只展示与计算相关的字段。",
-          "code": "// 假设返回值，仅展示相关字段\n{\n  \"ok\": true,\n  \"result\": {\n    \"hour\": 11,\n    \"minute\": 33\n  }\n}",
-          "language": "text",
-          "evidence": "展开第二轮 request，确认上一轮真实时间结果已经出现在 messages。"
-        },
-        {
-          "label": "再做加法",
-          "actor": "模型 → Python",
-          "title": "从观察中确定下一次实参",
-          "body": "模型已经看到了工具结果，才能用 hour、minute 填入 a、b。运行器按实参执行，不会自动替换占位符或修正猜测的数字。",
-          "code": "{\n  \"function\": {\n    \"name\": \"add_numbers\",\n    \"arguments\": \"{\\\"a\\\":11,\\\"b\\\":33}\"\n  }\n}",
-          "language": "json",
-          "evidence": "逐项核对 a=hour、b=minute，验证两个值都来自本轮任务的时间结果。"
-        },
-        {
-          "label": "核对回答",
-          "actor": "工具 → 模型",
-          "title": "答案背后，要有完整数据流",
-          "body": "示例输入得到 44。最后还要核对加法工具返回与模型回答。真实轨迹可能不同，轮数本身不能证明数据依赖成立。",
-          "code": "// 假设 11:33 对应的计算结果\n{ \"ok\": true, \"result\": 44 }\n\n// 应逐步核对的链路\ntime.hour   → a\ntime.minute → b\ntool_result → 最终回答",
-          "language": "text",
-          "evidence": "确认最终答案依据实际加法结果，再与两个独立任务的调用安排作对比。"
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "dependent-input",
+              "prompt": "查时间返回 hour=11、minute=33。哪条后续调用能证明加法使用了本次工具结果？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "add_numbers(a=19, b=23)，因为结果也可能看起来合理。"
+                },
+                {
+                  "id": "b",
+                  "text": "add_numbers(a=11, b=33)，并能在上轮 tool 消息中找到这两个值。"
+                },
+                {
+                  "id": "c",
+                  "text": "不用调用加法，只要最终答案写成 44 就已证明。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "依赖调用需要同时核对参数值与来源。最终数字正确不能证明走过正确的数据流；trace 中的上轮实际结果和本轮实参才提供可检查的证据。"
+            },
+            {
+              "id": "ordering-not-enough",
+              "prompt": "模型同轮提出查时间和加法，加法参数却是事先猜的 10、20。Python 先查时间、后加法，能让依赖自动正确吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "能，按顺序执行就会自动改写加法的参数。"
+                },
+                {
+                  "id": "b",
+                  "text": "能，只要两个工具名称正确。"
+                },
+                {
+                  "id": "c",
+                  "text": "不能，运行器按给定参数执行；需要把真实结果送到下一轮再确定实参。"
+                }
+              ],
+              "correct": "c",
+              "explanation": "执行顺序不能代替数据传递。当前运行器不会根据前一工具输出改写另一个调用的 arguments。模型应先收到时间结果，再提出带真实 hour、minute 的加法调用。"
+            },
+            {
+              "id": "context-versus-learning",
+              "prompt": "第二轮请求含上轮时间结果，模型据此继续计算。这说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "应用通过消息历史为当前决策提供了上下文。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型参数已经自动训练，永久记住这次时间。"
+                },
+                {
+                  "id": "c",
+                  "text": "所有新会话都会自动读到这条时间结果。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "messages 是应用构造的本次运行历史。再次发送工具结果，让模型能够使用已有观察；它不等于修改模型参数，也不等于实现跨会话持久记忆。"
+            }
+          ]
         }
       ]
     }

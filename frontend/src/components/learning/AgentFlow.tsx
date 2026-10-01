@@ -9,10 +9,12 @@ import {
   CornerDownRight,
   Info,
 } from "lucide-react";
-import type { LearningPresentation } from "../../types";
+import { useTranslation } from "react-i18next";
+import type { Walkthrough } from "../../content/types.gen";
 import { Code } from "../Code";
 
-export function AgentFlow({ flow }: { flow: LearningPresentation["flow"] }) {
+export function AgentFlow({ flow }: { flow: Walkthrough }) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState(0);
   const reduced = useReducedMotion();
   const step = flow.steps[selected];
@@ -27,17 +29,17 @@ export function AgentFlow({ flow }: { flow: LearningPresentation["flow"] }) {
         <span>01 / EXPLORE THE LOOP</span>
         <span className="lesson-example-tag">
           <Info size={12} />
-          教学示意
+          {t("provenance.illustration")}
         </span>
       </div>
       <div className="agent-flow-heading">
         <h2>{flow.title}</h2>
-        <p>{flow.description}</p>
+        {flow.description && <p>{flow.description}</p>}
       </div>
       <div className="agent-flow-steps" aria-label="选择调用过程步骤">
         {flow.steps.map((item, index) => (
           <button
-            key={item.label}
+            key={item.id}
             className={`agent-flow-step ${index === selected ? "is-selected" : ""} ${index < selected ? "is-visited" : ""}`}
             onClick={() => setSelected(index)}
             aria-pressed={index === selected}
@@ -78,24 +80,28 @@ export function AgentFlow({ flow }: { flow: LearningPresentation["flow"] }) {
             </span>
             <h3>{step.title}</h3>
             <p>{step.body}</p>
-            <div className="agent-flow-evidence">
-              <EyeIcon />
-              <div>
-                <strong>你要核对的证据</strong>
-                <p>{step.evidence}</p>
+            {step.evidence && (
+              <div className="agent-flow-evidence">
+                <EyeIcon />
+                <div>
+                  <strong>你要核对的证据</strong>
+                  <p>{step.evidence}</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-          <div className="agent-flow-code">
-            <div className="agent-code-toolbar">
-              <span>
-                <Code2 size={13} />
-                {step.language === "python" ? "Python" : "消息结构"}
-              </span>
-              <span>示意片段 · 非运行记录</span>
+          {step.code && (
+            <div className="agent-flow-code">
+              <div className="agent-code-toolbar">
+                <span>
+                  <Code2 size={13} />
+                  {step.language === "python" ? "Python" : "消息结构"}
+                </span>
+                <span>示意片段 · 非运行记录</span>
+              </div>
+              <Code content={step.code} language={step.language} />
             </div>
-            <Code content={step.code} language={step.language} />
-          </div>
+          )}
         </motion.div>
       </AnimatePresence>
       <div className="agent-flow-footer">

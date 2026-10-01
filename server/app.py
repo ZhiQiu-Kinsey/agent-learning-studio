@@ -25,6 +25,7 @@ from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
 from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_detail,
                             lesson_runtime, lesson_spec, public_lesson)
+from server.content import load_onboarding
 from server.curriculum import public_curriculum, roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
@@ -186,8 +187,8 @@ def curriculum():
 def onboarding():
     """提供独立的前置阅读内容；不加载课程运行器或调用模型。"""
     try:
-        return json.loads((ROOT / "curriculum" / "onboarding.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return load_onboarding(ROOT / "curriculum" / "onboarding.json")
+    except LessonValidationError:
         raise ApiError(503, "onboarding_unavailable", "前置学习内容暂时不可用，请稍后重试。") from None
 
 

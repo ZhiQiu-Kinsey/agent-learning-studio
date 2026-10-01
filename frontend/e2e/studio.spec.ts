@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { CurriculumData } from "../src/types";
 import { isRunCreation, mockRunStream, runOffline } from "./runs";
+import { lessonView } from "../src/content/view";
 
 // 学生界面固定真实调用。自动化测试在网络边界改用后端测试适配器，
 // 检查真实 Python 工具与网页行为，不消耗凭据、不产生不稳定的模型费用。
@@ -257,11 +258,11 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   await expect(
     page.getByRole("button", { name: "检查答案", exact: true }),
   ).toBeDisabled();
-  for (const [index, question] of lesson.learning.quiz.entries()) {
+  for (const [index, question] of lessonView(lesson.learning).quiz.entries()) {
     const option = question.options.find((option: any) =>
       index === 0
-        ? option.id !== question.correct_option
-        : option.id === question.correct_option,
+        ? option.id !== question.correct
+        : option.id === question.correct,
     );
     await page
       .getByRole("group", { name: question.prompt, exact: true })
@@ -273,9 +274,9 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   }
   await page.getByRole("button", { name: "检查答案", exact: true }).click();
   await expect(page.locator(".quiz-feedback")).toHaveCount(
-    lesson.learning.quiz.length,
+    lessonView(lesson.learning).quiz.length,
   );
-  for (const [index, question] of lesson.learning.quiz.entries()) {
+  for (const [index, question] of lessonView(lesson.learning).quiz.entries()) {
     await expect(page.locator(".quiz-feedback").nth(index)).toContainText(
       question.explanation,
     );
@@ -286,7 +287,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   await expect(
     page.getByRole("button", { name: "检查答案", exact: true }),
   ).toBeDisabled();
-  const firstQuestion = lesson.learning.quiz[0];
+  const firstQuestion = lessonView(lesson.learning).quiz[0];
   const firstOption = page
     .getByRole("group", { name: firstQuestion.prompt, exact: true })
     .getByRole("radio", { name: firstQuestion.options[0].text, exact: true });

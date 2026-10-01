@@ -11,6 +11,7 @@ import BlurText from "../react-bits/BlurText";
 import GradientText from "../react-bits/GradientText";
 import DecryptedText from "../react-bits/DecryptedText";
 import Magnet from "../react-bits/Magnet";
+import { lessonView } from "../../content/view";
 import { prefersReducedMotionNow, useMotionBudget } from "../../motion";
 
 export function LessonHero({
@@ -20,7 +21,8 @@ export function LessonHero({
   detail: Detail;
   onSource: () => void;
 }) {
-  const presentation = detail.learning?.presentation;
+  const view = lessonView(detail.learning);
+  const presentation = view.hero;
   const { ref, active } = useMotionBudget<HTMLElement>();
   if (!presentation)
     return (
@@ -43,7 +45,9 @@ export function LessonHero({
         <h2>
           <BlurText text={presentation.headline} />
           <br />
-          <GradientText>{presentation.highlight}</GradientText>
+          {presentation.highlight && (
+            <GradientText>{presentation.highlight}</GradientText>
+          )}
         </h2>
         <p className="lesson-hero-description">{detail.description}</p>
         <div className="lesson-hero-actions">
@@ -51,12 +55,10 @@ export function LessonHero({
             <button
               className="lesson-hero-explore"
               onClick={() =>
-                document
-                  .getElementById("lesson-flow")
-                  ?.scrollIntoView({
-                    behavior: prefersReducedMotionNow() ? "instant" : "smooth",
-                    block: "start",
-                  })
+                document.getElementById("lesson-flow")?.scrollIntoView({
+                  behavior: prefersReducedMotionNow() ? "instant" : "smooth",
+                  block: "start",
+                })
               }
             >
               探索调用过程
@@ -73,7 +75,7 @@ export function LessonHero({
             <Sparkles size={13} />
             理解原理，再动手验证
           </span>
-          <span>{detail.learning?.sections.length ?? 0} 个核心概念</span>
+          <span>{view.sections.length} 个核心概念</span>
         </div>
       </div>
       <div className="lesson-orbit" aria-hidden="true">

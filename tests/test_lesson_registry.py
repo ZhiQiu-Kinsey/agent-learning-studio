@@ -155,7 +155,7 @@ class RegistryTests(unittest.TestCase):
         learning = json.loads((directory / "content.json").read_text(encoding="utf-8"))
         learning["quiz"][0]["correct_option"] = "missing"
         self.write_json(directory / "content.json", learning)
-        with self.assertRaisesRegex(LessonValidationError, "content.json.*correct_option"):
+        with self.assertRaisesRegex(LessonValidationError, "content.json.*correct"):
             self.load()
 
     def test_source_paths_reject_private_files_and_escaping_paths(self):

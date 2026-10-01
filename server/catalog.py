@@ -6,6 +6,7 @@ from importlib import import_module
 from pathlib import Path, PurePosixPath
 
 # LessonValidationError 定义在 server.curriculum，这里继续导出以保持原有导入路径。
+from server.content import load_lesson_content
 from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,62 +83,6 @@ def _reference(root, module, reference, location, *, callable_required):
     return reference
 
 
-def _content(path):
-    content = _object(_json(path), path)
-    sections = content.get("sections")
-    _require(isinstance(sections, list) and sections, path, "sections 必须包含至少一个讲解段落")
-    for index, section in enumerate(sections):
-        location = f"{path}: sections[{index}]"
-        _object(section, location)
-        _text(section.get("title"), location + ".title")
-        _text(section.get("body"), location + ".body")
-    observe = content.get("observe")
-    _require(isinstance(observe, list) and observe, path, "observe 必须包含观察提示")
-    for point in observe:
-        _text(point, str(path) + ": observe")
-    quiz = content.get("quiz")
-    _require(isinstance(quiz, list) and quiz, path, "quiz 必须包含自检问题")
-    seen = set()
-    for item in quiz:
-        _object(item, str(path) + ": quiz")
-        identifier = _text(item.get("id"), str(path) + ": quiz.id")
-        _require(identifier not in seen, path, "quiz.id 不能重复")
-        seen.add(identifier)
-        _text(item.get("prompt"), str(path) + ": quiz.prompt")
-        _text(item.get("explanation"), str(path) + ": quiz.explanation")
-        options = item.get("options")
-        _require(isinstance(options, list) and len(options) >= 2, path, "自检至少需要两个选项")
-        option_ids = set()
-        for option in options:
-            _object(option, str(path) + ": quiz.options")
-            option_id = _text(option.get("id"), str(path) + ": quiz.options.id")
-            _require(option_id not in option_ids, path, "自检选项 id 不能重复")
-            option_ids.add(option_id)
-            _text(option.get("text"), str(path) + ": quiz.options.text")
-        _require(isinstance(item.get("correct_option"), str) and item["correct_option"] in option_ids,
-                 path, "correct_option 必须引用已有选项")
-    if "presentation" in content:
-        presentation = _object(content["presentation"], str(path) + ": presentation")
-        for key in ("eyebrow", "headline", "highlight", "takeaway"):
-            _text(presentation.get(key), f"{path}: presentation.{key}")
-        concepts = presentation.get("concepts")
-        _require(isinstance(concepts, list), path, "presentation.concepts 必须是数组")
-        for concept in concepts:
-            _object(concept, str(path) + ": presentation.concepts")
-            for key in ("label", "title", "description", "token"):
-                _text(concept.get(key), f"{path}: concepts.{key}")
-        flow = _object(presentation.get("flow"), str(path) + ": presentation.flow")
-        for key in ("title", "description"):
-            _text(flow.get(key), f"{path}: flow.{key}")
-        steps = flow.get("steps")
-        _require(isinstance(steps, list) and steps, path, "flow.steps 必须至少包含一个步骤")
-        for step in steps:
-            _object(step, str(path) + ": flow.steps")
-            for key in ("label", "actor", "title", "body", "code", "language", "evidence"):
-                _text(step.get(key), f"{path}: flow.steps.{key}")
-    return content
-
-
 def _manifest(root, path, catalog_lesson):
     data = _object(_json(path), path, _MANIFEST_FIELDS)
     _require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
@@ -149,7 +94,6 @@ def _manifest(root, path, catalog_lesson):
     subtitle = _text(data.get("subtitle", catalog_lesson["summary"]), str(path) + ": subtitle")
     content_relative = _text(data.get("content"), str(path) + ": content")
     content_path = _safe_file(root / "lessons" / module, content_relative, str(path) + ": content")
-    _content(content_path)
     sources = data.get("sources")
     _require(isinstance(sources, list) and sources, path, "sources 必须显式列出教学源码")
     source_paths = set()
@@ -192,6 +136,7 @@ def _manifest(root, path, catalog_lesson):
         else:
             _require(isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]*", value), path, f"ui.{key} 必须为扩展键")
     defaults = _object(data.get("input_defaults", {}), str(path) + ": input_defaults")
+    load_lesson_content(content_path, {"id": data["id"], "subtitle": subtitle, "exercises": exercises})
     return {"id": data["id"], "number": catalog_lesson["number"], "aliases": list(catalog_lesson.get("aliases", [])),
             "title": catalog_lesson["title"], "description": catalog_lesson["summary"],
             "objectives": catalog_lesson["objectives"], "subtitle": subtitle, "exercises": exercises,
@@ -290,5 +235,5 @@ def lesson_detail(spec):
     exercises = [{**exercise, "inputs": validate_inputs(module, {**spec["input_defaults"], **exercise.get("inputs", {})})}
                  for exercise in spec["exercises"]]
     return {**public_lesson(spec), "exercises": exercises, "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
-            "tools": getattr(module, "TOOLS", []), "learning": _content(content_path), "sources": sources}
+            "tools": getattr(module, "TOOLS", []), "learning": load_lesson_content(content_path, spec), "sources": sources}
 

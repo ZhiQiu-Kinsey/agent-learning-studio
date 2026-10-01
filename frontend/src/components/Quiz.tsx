@@ -15,7 +15,7 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
 
   const answered = questions.filter((question) => answers[question.id]).length;
   const correct = questions.filter(
-    (question) => answers[question.id] === question.correct_option,
+    (question) => answers[question.id] === question.correct,
   ).length;
 
   return (
@@ -32,7 +32,7 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
         <p>{t("intro")}</p>
       </div>
       {questions.map((question, index) => {
-        const isCorrect = answers[question.id] === question.correct_option;
+        const isCorrect = answers[question.id] === question.correct;
         const feedbackId = `${quizId}-${question.id}-feedback`;
         return (
           <fieldset
@@ -98,7 +98,7 @@ export function Quiz({ questions }: { questions: QuizQuestion[] }) {
                     {t("reference")}
                     {
                       question.options.find(
-                        (option) => option.id === question.correct_option,
+                        (option) => option.id === question.correct,
                       )?.text
                     }
                   </p>

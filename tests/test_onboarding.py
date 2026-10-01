@@ -26,16 +26,21 @@ class OnboardingTests(unittest.TestCase):
         source_projects = set()
         for chapter in data["chapters"]:
             with self.subTest(chapter=chapter["id"]):
-                self.assertTrue(chapter["learning_objectives"])
-                self.assertTrue(chapter["exercise"]["checkpoints"])
-                self.assertGreaterEqual(len(chapter["sections"]), 3)
-                for section in chapter["sections"]:
-                    self.assertIn(section["kind"], {"explanation", "comparison", "steps", "warning"})
+                self.assertIsNone(chapter["scenes"].get("code"))
+                self.assertIsNone(chapter["scenes"].get("lab"))
+                blocks = {block["type"]: block for block in chapter["scenes"]["understand"]["blocks"]}
+                self.assertTrue(blocks["objectives"]["items"])
+                exercise = chapter["scenes"]["check"]["blocks"][0]
+                self.assertEqual(exercise["type"], "checkpoint")
+                self.assertTrue(exercise["items"])
+                sections = [block for block in chapter["scenes"]["understand"]["blocks"]
+                            if block["type"] in {"prose", "compare", "steps", "callout"}]
+                self.assertGreaterEqual(len(sections), 3)
+                for section in sections:
                     self.assertTrue(section["paragraphs"])
-                    if "table" in section:
-                        for row in section["table"]["rows"]:
-                            self.assertEqual(len(row), len(section["table"]["columns"]))
-                for reference in chapter["references"]:
+                    for row in section.get("rows", []):
+                        self.assertEqual(len(row), len(section["columns"]))
+                for reference in blocks["references"]["items"]:
                     parsed = urlparse(reference["url"])
                     self.assertEqual(parsed.scheme, "https")
                     self.assertEqual(parsed.hostname, "github.com")

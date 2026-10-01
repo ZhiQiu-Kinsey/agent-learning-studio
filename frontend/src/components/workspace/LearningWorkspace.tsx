@@ -19,6 +19,7 @@ import Magnet from "../react-bits/Magnet";
 import { LessonHero } from "../learning/LessonHero";
 import { LessonGuide } from "../learning/LessonGuide";
 import { LessonExtension } from "../../lesson-extensions/LessonExtension";
+import { lessonView } from "../../content/view";
 import "../../styles/learning-experience.css";
 
 export function LearningWorkspace({
@@ -165,7 +166,7 @@ export function LearningWorkspace({
               </section>
             </TabsContent>
             <TabsContent value="quiz" className="learn-tab-content" forceMount>
-              <Quiz key={detail.id} questions={detail.learning?.quiz ?? []} />
+              <Quiz key={detail.id} questions={lessonView(detail.learning).quiz} />
             </TabsContent>
           </div>
           <aside className="learn-sidebar" aria-label="学习路线">

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { jsonFetch } from "../api";
+import { chapterView } from "../content/view";
+import type { Onboarding as OnboardingContent } from "../content/types.gen";
 import { Button } from "./ui/button";
 import SplitText from "./react-bits/SplitText";
 import ShinyText from "./react-bits/ShinyText";
@@ -26,33 +28,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "./ui/accordion";
-
-type Chapter = {
-  id: string;
-  order: number;
-  title: string;
-  eyebrow: string;
-  summary: string;
-  estimated_minutes: number;
-  learning_objectives: string[];
-  sections: {
-    id: string;
-    title: string;
-    kind: string;
-    paragraphs: string[];
-    bullets?: string[];
-    table?: { columns: string[]; rows: string[][] };
-  }[];
-  exercise: { title: string; prompt: string; checkpoints: string[] };
-  references: { title: string; url: string }[];
-  next_label: string;
-};
-type OnboardingContent = {
-  version: number;
-  title: string;
-  description: string;
-  chapters: Chapter[];
-};
 
 export function Onboarding({
   chapter,
@@ -116,9 +91,12 @@ export function Onboarding({
         )}
       </div>
     );
-  const current = content.chapters[chapter] || content.chapters[0];
+  const currentChapter = content.chapters[chapter] || content.chapters[0];
+  const current = { ...currentChapter, ...chapterView(currentChapter) };
   const completed = content.chapters.filter((item) =>
-    item.exercise.checkpoints.every((_, i) => checked[`${item.id}-${i}`]),
+    chapterView(item).exercise.checkpoints.every(
+      (_, i) => checked[`${item.id}-${i}`],
+    ),
   ).length;
   function navigate(index: number) {
     onChapterChange(index);
@@ -388,7 +366,7 @@ export function Onboarding({
             <Compass size={25} />
             <h3>读完这一节，你将理解</h3>
             <ul>
-              {current.learning_objectives.map((item) => (
+              {current.objectives.map((item) => (
                 <li key={item}>
                   <Check size={14} />
                   {item}

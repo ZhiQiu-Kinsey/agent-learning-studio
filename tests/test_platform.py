@@ -161,22 +161,23 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 detail = response.json()
                 learning = detail["learning"]
-                self.assertGreaterEqual(len(learning["sections"]), 2)
-                for section in learning["sections"]:
+                self.assertEqual((learning["schema_version"], learning["lesson"]), (2, spec["id"]))
+                prose = [block for block in learning["scenes"]["understand"]["blocks"] if block["type"] == "prose"]
+                self.assertGreaterEqual(len(prose), 2)
+                for section in prose:
                     self.assertTrue(section["title"].strip())
-                    self.assertTrue(section["body"].strip())
-                self.assertGreaterEqual(len(learning["observe"]), 1)
-                self.assertTrue(all(point.strip() for point in learning["observe"]))
-                self.assertGreaterEqual(len(learning["quiz"]), 2)
-                quiz_ids = [question["id"] for question in learning["quiz"]]
-                self.assertEqual(len(quiz_ids), len(set(quiz_ids)))
-                for question in learning["quiz"]:
+                    self.assertTrue(all(paragraph.strip() for paragraph in section["paragraphs"]))
+                experiment = learning["scenes"]["lab"]["experiments"][0]
+                self.assertGreaterEqual(len(experiment["observe"]), 1)
+                self.assertEqual({arm["exercise"] for arm in experiment["arms"]},
+                                 {exercise["id"] for exercise in detail["exercises"]})
+                questions = learning["scenes"]["check"]["blocks"][0]["questions"]
+                self.assertGreaterEqual(len(questions), 2)
+                for question in questions:
                     self.assertTrue(question["prompt"].strip())
                     self.assertTrue(question["explanation"].strip())
                     option_ids = [option["id"] for option in question["options"]]
-                    self.assertGreaterEqual(len(option_ids), 2)
-                    self.assertEqual(len(option_ids), len(set(option_ids)))
-                    self.assertIn(question["correct_option"], option_ids)
+                    self.assertIn(question["correct"], option_ids)
                     self.assertTrue(all(option["text"].strip() for option in question["options"]))
                 self.assertTrue(detail["sources"])
                 if not spec["capabilities"]["custom_runtime"]:
