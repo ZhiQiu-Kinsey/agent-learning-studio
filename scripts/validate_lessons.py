@@ -1,4 +1,4 @@
-"""检查全部课程实现清单、课程 ID 与术语表，包含 planned 草稿，不调用模型。"""
+"""检查全部课程实现清单、课程 ID、术语表与随课录制，包含 planned 草稿，不调用模型。"""
 
 import argparse
 from pathlib import Path
@@ -30,6 +30,28 @@ def validate_glossary(root):
     return len(load_glossary(root, index)["terms"])
 
 
+def validate_recordings(root, specs):
+    """随课录制（lessons/*/recordings/）的完整校验；规则见 server/recordings.py。"""
+    from scripts.validate_recordings import collect
+
+    return collect(root, specs)
+
+
+def validate_overlays(root, specs):
+    """内容译文层：结构与可译路径错误直接失败，缺失与过期只报告覆盖率。"""
+    from server.content import lesson_content_model, onboarding_model, overlay_locales, overlay_report
+
+    documents = [(spec["content_path"], lesson_content_model(spec["content_path"], spec)) for spec in specs]
+    onboarding = Path(root) / "curriculum" / "onboarding.json"
+    if onboarding.is_file():
+        documents.append((onboarding, onboarding_model(onboarding)))
+    reports = []
+    for path, model in documents:
+        for locale in overlay_locales(path):
+            reports.append((path, overlay_report(path, model, locale)))
+    return reports
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT, help="包含 curriculum/catalog.json 的项目根目录")
@@ -43,6 +65,17 @@ def main(argv=None):
             aliases = "、".join(spec.get("aliases", [])) or "无"
             print(f"  第 {spec['number']} 课 {spec['id']}（别名：{aliases}）[{spec['status']}] {spec['title']}")
         print(f"术语表：{terms} 条。" if terms is not None else "术语表：未找到 curriculum/glossary.json，已跳过。")
+        passed, failures = validate_recordings(args.root, specs)
+        print(f"随课录制：{passed} 份通过，{len(failures)} 份未通过。")
+        if failures:
+            for path, message in failures:
+                print(f"录制无效 {path}：{message}", file=sys.stderr)
+            return 1
+        reports = validate_overlays(args.root, specs)
+        print(f"内容译文层：{len(reports)} 份。")
+        for path, report in reports:
+            print(f"  {Path(path).relative_to(args.root.resolve()).as_posix()} [{report['locale']}] "
+                  f"{report['translated']}/{report['total']}，缺失 {len(report['missing'])}，过期 {len(report['stale'])}")
         print("未调用模型；结构校验不代替课程测试与教学验收，planned 课程不会因此解锁。")
         return 0
     except (OSError, ValueError, KeyError, TypeError, ImportError) as error:

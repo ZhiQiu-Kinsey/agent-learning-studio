@@ -32,6 +32,7 @@ from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
 from server.offline import completion_for
 from server.providers import ProviderRegistry
+from server.recordings import RecordingInvalid, RecordingStale, list_recordings, read_recording
 from server.run_store import RunStore, utc_now
 
 app = FastAPI(title="AgentStart Learning Lab", docs_url=None, redoc_url=None)
@@ -213,6 +214,30 @@ def glossary():
 @app.get("/api/lessons/{lesson_id}")
 def detail(lesson_id: str, lang: str | None = None):
     return lesson_detail(require_lesson(lesson_id), require_locale(lang))
+
+
+# 随课录制是只读的课程资源，与 /api/runs（学习者自己的运行）完全分开，不写入运行存储。
+@app.get("/api/lessons/{lesson_id}/recordings")
+def lesson_recordings(lesson_id: str):
+    """列出本课录制的元数据；校验失败的录制只返回名称与错误码。"""
+    spec = require_lesson(lesson_id)
+    return {"lesson_id": spec["id"],
+            "recordings": list_recordings(spec, provider_registry.api_keys(session_key))}
+
+
+@app.get("/api/lessons/{lesson_id}/recordings/{name}")
+def lesson_recording(lesson_id: str, name: str):
+    """返回通过完整校验的录制；校验失败时不返回事件。"""
+    spec = require_lesson(lesson_id)
+    try:
+        metadata, events = read_recording(spec, name, provider_registry.api_keys(session_key))
+    except FileNotFoundError:
+        raise ApiError(404, "recording_not_found", "录制不存在。") from None
+    except RecordingStale:
+        raise ApiError(409, "recording_stale", "课程源码已变化，这份录制已过期，请重新录制。") from None
+    except RecordingInvalid:
+        raise ApiError(422, "recording_invalid", "录制未通过校验，已拒绝加载。") from None
+    return {"lesson_id": spec["id"], "name": name, "metadata": metadata, "events": events}
 
 
 class RunInput(BaseModel):
