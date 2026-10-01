@@ -156,6 +156,16 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 6. 学习进度 localStorage 记录。
 7. 浏览器测试选择器迁移到角色与 `data-testid`；补充 schema、示意契约、预测计算、事件映射测试。
 
+执行记录（并行开发：主目录做 1、2、6，独立工作树代理做 3、4）：
+
+| 子任务 | 状态 | 说明 |
+| --- | --- | --- |
+| 1 动效层 | 已完成 `9b44be3` | `src/motion/`；OS 减少动画在“跟随系统”下映射为 static；CSS 统一用 `:root:not([data-motion="full"])`；vitest 引入做纯逻辑单测 |
+| 2 多语言 | 基础设施完成 `379647b`、`1222f97` | 只抽取会保留的组件（模型设置、自测、课程插件、实验报告）；实验台、执行流、学习页等第二、三阶段重写时直接用翻译键，旧组件删除后基线自然下降；后端错误码待子任务 3 合并后做 |
+| 3 信封 v2 + 运行存储 | 代理进行中 | provenance 取值采用 curriculum-research.md 6.5：`real_run / recorded_run / offline_recompute / illustration` |
+| 4 slug + 术语表 | 代理进行中 | recorded_run 依赖运行存储，合并 3 后再做 |
+| 6 学习进度 | 存储与测试完成，待接入 | `src/progress/`；接入点在 App、useStudio、Quiz，等 3、4 合并后接 |
+
 ## 9. 现状速查（重建上下文用）
 
 - 后端：`server/app.py`（SSE `/api/run`、执行互斥、脱敏）、`server/catalog.py`（课程发现与 `_content` 手写校验）、`course/execution.py`（`RunContext`）、`course/runner.py`（原生循环）。事件类型：`run_start/request/response/tool_call/tool_result/answer/error/done` + `lesson.*`。
