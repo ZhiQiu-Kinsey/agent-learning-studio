@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LessonHero } from "../components/learning/LessonHero";
-import { LessonGuide } from "../components/learning/LessonGuide";
+import { UnderstandBlocks } from "../content/blocks/UnderstandBlocks";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
 import { Button } from "../components/ui/button";
 import type { SceneProps } from "./types";
@@ -30,7 +30,11 @@ export function UnderstandScene({ studio, active, goTo }: SceneProps) {
             active={active}
             onStartLab={() => goTo("lab")}
           >
-            <LessonGuide detail={detail} />
+            <UnderstandBlocks
+              detail={detail}
+              events={studio.events}
+              onRun={() => goTo("lab")}
+            />
           </LessonExtension>
         </div>
         <aside className="learn-sidebar" aria-label={t("objectives.eyebrow")}>
