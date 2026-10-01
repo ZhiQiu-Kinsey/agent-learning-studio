@@ -406,6 +406,12 @@ class Illustration(Strict):
     provenance: Literal["illustration"] = "illustration"
     events: list[IllustrationEvent] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _contract(self):
+        from server.illustrations import validate_illustration  # 契约规则见该模块
+        validate_illustration([event.model_dump() for event in self.events])
+        return self
+
 
 def _block_ids(blocks: list[Any]) -> list[str]:
     return [block.id for block in blocks]
