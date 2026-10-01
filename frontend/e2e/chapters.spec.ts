@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { CurriculumData, CurriculumLesson, Detail } from "../src/types";
 import { runOffline } from "./runs";
+import { t } from "./i18n";
 import { lessonView } from "../src/content/view";
 
 const screenshot = (name: string) =>
@@ -12,16 +13,19 @@ async function openLesson(
   catalog: CurriculumData,
   lesson: CurriculumLesson,
 ) {
-  const nav = page.getByRole("navigation", { name: "课程列表" });
+  const nav = page.getByTestId("course-nav");
   const category = catalog.categories.find(
     (item) => item.id === lesson.category_id,
   )!;
   const toggle = nav
-    .locator(".nav-category-toggle")
+    .getByTestId("course-nav-category-toggle")
     .filter({ hasText: category.title });
   if ((await toggle.getAttribute("aria-expanded")) !== "true")
     await toggle.click();
-  await nav.locator(".nav-lesson").filter({ hasText: lesson.title }).click();
+  await nav
+    .getByTestId("course-nav-lesson")
+    .filter({ hasText: lesson.title })
+    .click();
   await expect(
     page.getByRole("heading", { name: lesson.title, exact: true, level: 1 }),
   ).toBeVisible();
@@ -66,25 +70,28 @@ test("chapters two and three expose complete guides and run every real preset th
     ).json();
     await openLesson(page, catalog, lesson);
     // The badge shows the server-computed display number, not the slug id.
-    await expect(page.locator(".lesson-badge")).toHaveText(
+    await expect(page.getByTestId("lesson-badge")).toHaveText(
       String(lesson.number).padStart(2, "0"),
     );
-    await expect(page.locator(".reading-section")).toHaveCount(
+    await expect(page.getByTestId("learn-reading-section")).toHaveCount(
       lessonView(detail.learning).sections.length,
     );
-    await expect(page.locator(".agent-flow-step")).toHaveCount(
+    await expect(page.getByTestId("agent-flow-step")).toHaveCount(
       lessonView(detail.learning).walkthrough!.steps.length,
     );
-    await page.getByRole("tab", { name: "课后自测", exact: true }).click();
-    await expect(page.locator(".quiz-question")).toHaveCount(
+    await page.getByTestId("learn-tab-quiz").click();
+    await expect(page.getByTestId("quiz-question")).toHaveCount(
       lessonView(detail.learning).quiz.length,
     );
-    await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-    const inputs = page.getByLabel("实验参数 JSON", { exact: true });
+    await page.getByTestId("workspace-tab-lab").click();
+    const inputs = page.getByTestId("lab-inputs-json");
     for (const exercise of detail.exercises.filter(
       (item) => !item.offline_only,
     )) {
-      await page.getByRole("combobox", { name: "练习场景" }).click();
+      await page
+        .getByTestId("lab-exercise-field")
+        .getByRole("combobox")
+        .click();
       await page
         .getByRole("option", { name: exercise.title, exact: true })
         .click();
@@ -95,14 +102,18 @@ test("chapters two and three expose complete guides and run every real preset th
           2,
         ),
       );
-      await page.getByRole("button", { name: "运行练习", exact: true }).click();
-      await expect(page.locator(".trace-status")).toHaveText("已完成");
-      await expect(page.locator(".evidence-report h3")).toBeVisible();
-      await expect(page.locator(".answer-content")).not.toBeEmpty();
+      await page.getByTestId("lab-run-button").click();
+      await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
+      await expect(
+        page.getByTestId("evidence-report").getByRole("heading", { level: 3 }),
+      ).toBeVisible();
+      await expect(page.getByTestId("lab-answer")).not.toBeEmpty();
       await page
-        .getByRole("button", { name: "查看报告原始事件", exact: true })
+        .getByRole("button", { name: t("lab:evidence.rawLabel"), exact: true })
         .click();
-      await expect(page.locator(".event-detail pre")).toContainText('"checks"');
+      await expect(
+        page.getByTestId("lab-event-detail").locator("pre"),
+      ).toContainText('"checks"');
       presets++;
     }
     await page.screenshot({
@@ -110,11 +121,11 @@ test("chapters two and three expose complete guides and run every real preset th
       animations: "disabled",
     });
     const before = runs;
-    await page.getByRole("button", { name: "回到起点", exact: true }).click();
-    await expect(page.locator(".evidence-report")).toHaveCount(0);
+    await page.getByTestId("lab-replay-rewind").click();
+    await expect(page.getByTestId("evidence-report")).toHaveCount(0);
     expect(runs).toBe(before);
-    await page.getByRole("tab", { name: "学习课程", exact: true }).click();
-    await page.getByRole("tab", { name: "课程导读", exact: true }).click();
+    await page.getByTestId("workspace-tab-learn").click();
+    await page.getByTestId("learn-tab-guide").click();
   }
   expect(runs).toBe(presets);
   expect(errors).toEqual([]);
@@ -143,12 +154,10 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
     catalog,
     catalog.lessons.find((lesson) => lesson.id === "persistent-memory")!,
   );
-  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "配置模型连接", exact: true }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "运行练习", exact: true }).click();
-  await expect(page.locator(".trace-status")).toHaveText("已完成");
+  await page.getByTestId("workspace-tab-lab").click();
+  await expect(page.getByTestId("lab-configure-button")).toHaveCount(0);
+  await page.getByTestId("lab-run-button").click();
+  await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   for (const width of [390, 1440, 2560]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1100 });
     expect(
@@ -156,8 +165,12 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
         () => document.documentElement.scrollWidth <= innerWidth + 1,
       ),
     ).toBe(true);
-    await page.locator(".evidence-board").scrollIntoViewIfNeeded();
-    await expect(page.locator(".evidence-report h3")).toBeVisible();
+    await page
+      .getByRole("region", { name: t("lab:evidence.region") })
+      .scrollIntoViewIfNeeded();
+    await expect(
+      page.getByTestId("evidence-report").getByRole("heading", { level: 3 }),
+    ).toBeVisible();
     await page.screenshot({
       path: screenshot(`chapter-memory-${width}-dark.png`),
       animations: "disabled",

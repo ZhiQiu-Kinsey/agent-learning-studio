@@ -65,7 +65,11 @@ export function ExecutionFlow({
     .filter(({ event }) => event.type === "tool_result")
     .slice(-3);
   return (
-    <section className="execution-flow" aria-label="实时消息流">
+    <section
+      className="execution-flow"
+      aria-label="实时消息流"
+      data-testid="execution-flow"
+    >
       <div className="execution-flow-heading">
         <span>FOLLOW THE SIGNAL</span>
         <small>
@@ -99,6 +103,7 @@ export function ExecutionFlow({
               <motion.button
                 type="button"
                 className={`execution-node ${current ? "is-current" : ""} ${eventIndex >= 0 ? "is-reached" : ""}`}
+                data-testid="execution-node"
                 disabled={eventIndex < 0}
                 onClick={() => onSelect(eventIndex)}
                 whileHover={reduced ? {} : { y: -3 }}
@@ -130,7 +135,11 @@ export function ExecutionFlow({
         })}
       </div>
       {!!results.length && (
-        <div className="execution-tools" aria-label="最近工具结果">
+        <div
+          className="execution-tools"
+          aria-label="最近工具结果"
+          data-testid="execution-tools"
+        >
           {results.map(({ event, index }) => {
             const result = event.data.result as { ok?: boolean } | undefined;
             const failed = result?.ok === false;
@@ -140,6 +149,9 @@ export function ExecutionFlow({
                 key={index}
                 type="button"
                 onClick={() => onSelect(index)}
+                data-testid={
+                  failed ? "execution-tool-failed" : "execution-tool-done"
+                }
                 aria-label={`查看 ${name} ${failed ? "失败" : "完成"}结果`}
               >
                 <CallChip

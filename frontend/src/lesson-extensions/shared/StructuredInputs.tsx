@@ -18,6 +18,7 @@ export default function StructuredInputs({
         </div>
         <Textarea
           id="lesson-inputs"
+          data-testid="lab-inputs-json"
           value={studio.inputText}
           onChange={(event) => studio.editInputs(event.target.value)}
           disabled={studio.running}

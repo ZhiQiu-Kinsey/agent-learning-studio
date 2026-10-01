@@ -1,51 +1,59 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
+import type { Detail } from "../src/types";
+import { t } from "./i18n";
 const capture = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
 
 test("themes persist, follow system changes, sync tabs and cover mobile screens", async ({
   page,
   context,
+  request,
 }) => {
   const errors: string[] = [];
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   page.on("pageerror", (error) => errors.push(error.message));
+  const detail: Detail = await (await request.get("/api/lessons/1")).json();
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
   const root = page.locator("html");
-  const picker = page.getByRole("combobox", { name: "页面主题" });
+  const picker = page.getByRole("combobox", { name: t("theme.label") });
   await expect(root).toHaveAttribute("data-theme", "light");
   await picker.click();
-  await page.getByRole("option", { name: "深色", exact: true }).click();
+  await page
+    .getByRole("option", { name: t("theme.dark"), exact: true })
+    .click();
   await expect(root).toHaveAttribute("data-theme", "dark");
   await page.reload();
-  await expect(picker).toHaveText("深色");
+  await expect(picker).toHaveText(t("theme.dark"));
   await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(
-    page.getByRole("heading", { name: "工具选择", exact: true }),
+    page.getByRole("heading", { name: detail.title, exact: true }),
   ).toBeVisible();
   await page.screenshot({
     animations: "disabled",
     path: capture("theme-dark.png"),
   });
-  await page.getByRole("tab", { name: "Python 源码" }).click();
-  await expect(page.locator(".learn-code-frame code")).toBeVisible();
+  await page.getByTestId("learn-tab-source").click();
+  await expect(
+    page.getByTestId("learn-source-code").locator("code"),
+  ).toBeVisible();
   await page.screenshot({
     animations: "disabled",
     path: capture("theme-code.png"),
   });
-  await page.getByRole("button", { name: "完整课程表", exact: true }).click();
-  await expect(page.locator(".curriculum-category")).toHaveCount(8);
+  await page.getByTestId("app-curriculum-button").click();
+  await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(8);
   await page.screenshot({
     animations: "disabled",
     path: capture("theme-curriculum.png"),
   });
-  await page.getByTitle("配置模型连接", { exact: true }).click();
+  await page.getByTestId("app-connection-button").click();
   await expect(page.getByRole("dialog")).toBeVisible();
   const inputColors = await page
-    .getByLabel("模型 ID", { exact: true })
+    .getByLabel(t("settings:model"), { exact: true })
     .evaluate((element) => {
       const probe = document.createElement("span");
       probe.style.backgroundColor = "var(--surface)";
@@ -90,21 +98,27 @@ test("themes persist, follow system changes, sync tabs and cover mobile screens"
     animations: "disabled",
     path: capture("theme-settings.png"),
   });
-  await page.getByRole("button", { name: "关闭连接设置" }).click();
+  await page.getByRole("button", { name: t("settings:close") }).click();
   await page.emulateMedia({ colorScheme: "dark" });
   await picker.click();
-  await page.getByRole("option", { name: "浅色", exact: true }).click();
+  await page
+    .getByRole("option", { name: t("theme.light"), exact: true })
+    .click();
   await expect(root).toHaveAttribute("data-theme", "light");
   await picker.click();
-  await page.getByRole("option", { name: "跟随系统", exact: true }).click();
+  await page
+    .getByRole("option", { name: t("theme.system"), exact: true })
+    .click();
   await expect(root).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light" });
   await expect(root).toHaveAttribute("data-theme", "light");
   const second = await context.newPage();
   await second.goto("/");
-  await second.getByRole("combobox", { name: "页面主题" }).click();
-  await second.getByRole("option", { name: "深色", exact: true }).click();
-  await expect(picker).toHaveText("深色");
+  await second.getByRole("combobox", { name: t("theme.label") }).click();
+  await second
+    .getByRole("option", { name: t("theme.dark"), exact: true })
+    .click();
+  await expect(picker).toHaveText(t("theme.dark"));
   await expect(root).toHaveAttribute("data-theme", "dark");
   await second.close();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -123,27 +137,27 @@ test("themes persist, follow system changes, sync tabs and cover mobile screens"
 
 test("reduced motion keeps learning and curriculum headings visible", async ({
   page,
+  request,
 }) => {
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
+  const detail: Detail = await (await request.get("/api/lessons/1")).json();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "工具选择", exact: true }),
+    page.getByRole("heading", { name: detail.title, exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".lesson-masthead")).toHaveCSS("opacity", "1");
-  await page.getByRole("button", { name: "完整课程表", exact: true }).click();
-  const heading = page.getByRole("heading", {
-    name: "完整课程表",
-    exact: true,
-  });
+  await expect(page.getByTestId("lesson-masthead")).toHaveCSS("opacity", "1");
+  await page.getByTestId("app-curriculum-button").click();
+  const heading = page.getByTestId("curriculum-title");
+  await expect(heading).toHaveRole("heading");
   await expect(heading).toBeVisible();
   await expect(heading.locator("..").locator("..").locator("..")).toHaveCSS(
     "opacity",
     "1",
   );
-  await expect(page.locator(".curriculum-category")).toHaveCount(8);
+  await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(8);
 });
 
 test("changing reduced motion immediately restores offscreen lesson text", async ({
@@ -154,7 +168,7 @@ test("changing reduced motion immediately restores offscreen lesson text", async
   );
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
-  const sections = page.locator(".reading-section");
+  const sections = page.getByTestId("learn-reading-section");
   await expect(sections.last()).toBeAttached();
   await expect(sections.last()).not.toBeInViewport();
   await expect(sections.last()).toHaveCSS("opacity", "0.65");
@@ -166,6 +180,7 @@ test("changing reduced motion immediately restores offscreen lesson text", async
     await expect(section).toHaveCSS("opacity", "1");
     await expect(section).toHaveCSS("transform", "none");
   }
-  await expect(page.locator(".lesson-hero")).not.toHaveClass(/is-animating/);
+  await expect(page.getByTestId("lesson-hero")).not.toHaveClass(/is-animating/);
+  // 检查 BlurText 是否已停止逐词拆分的动画结构，属于动效断言，保留类名。
   await expect(page.locator(".rb-blur-text > span")).toHaveCount(0);
 });

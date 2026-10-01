@@ -26,6 +26,7 @@ export function Quiz({
   return (
     <form
       className="quiz-pane"
+      data-testid="quiz-pane"
       onSubmit={(event) => {
         event.preventDefault();
         if (answered !== questions.length) return;
@@ -44,6 +45,7 @@ export function Quiz({
         return (
           <fieldset
             className="quiz-question"
+            data-testid="quiz-question"
             key={question.id}
             disabled={checked}
           >
@@ -95,6 +97,7 @@ export function Quiz({
               <div
                 className={`quiz-feedback ${isCorrect ? "is-correct" : "is-incorrect"}`}
                 id={feedbackId}
+                data-testid="quiz-feedback"
               >
                 <strong>
                   {isCorrect ? <Check size={15} /> : <X size={15} />}

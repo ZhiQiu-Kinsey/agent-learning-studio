@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import quiz from "../src/i18n/locales/zh-CN/quiz.json" with { type: "json" };
+import { t } from "./i18n";
 import { lessonView } from "../src/content/view";
 import { runOffline } from "./runs";
 
@@ -37,7 +37,7 @@ test("progress records only real local actions and survives a reload", async ({
   expect(lesson.quiz).toBeUndefined();
 
   // A completed self-check stores the score that was actually shown.
-  await page.getByRole("tab", { name: "课后自测" }).click();
+  await page.getByTestId("learn-tab-quiz").click();
   const questions = lessonView(detail.learning).quiz;
   for (const [index, question] of questions.entries()) {
     const option = question.options.find((item) =>
@@ -48,7 +48,9 @@ test("progress records only real local actions and survives a reload", async ({
       .getByRole("radio", { name: option.text, exact: true })
       .click();
   }
-  await page.getByRole("button", { name: quiz.submit, exact: true }).click();
+  await page
+    .getByRole("button", { name: t("quiz:submit"), exact: true })
+    .click();
   lesson = (await progressOf(page)).lessons[detail.id];
   expect(lesson.scenes.check).toBeTruthy();
   expect(lesson.quiz).toMatchObject({
@@ -58,15 +60,15 @@ test("progress records only real local actions and survives a reload", async ({
   });
 
   // One finished run counts once; replaying it does not count again.
-  await page.getByRole("tab", { name: "实验工作台", exact: true }).click();
-  await page.getByRole("button", { name: "运行练习" }).click();
+  await page.getByTestId("workspace-tab-lab").click();
+  await page.getByTestId("lab-run-button").click();
   await expect
     .poll(async () => (await progressOf(page)).lessons[detail.id].runs.count)
     .toBe(1);
   lesson = (await progressOf(page)).lessons[detail.id];
   expect(lesson.scenes.lab).toBeTruthy();
   expect(lesson.runs.lastRunId).toMatch(/\S/);
-  await page.getByRole("button", { name: "回到起点" }).click();
+  await page.getByTestId("lab-replay-rewind").click();
   await page.reload();
   expect((await progressOf(page)).lessons[detail.id].runs.count).toBe(1);
 });
@@ -78,13 +80,24 @@ test("onboarding checkpoints are self-reported and persist locally", async ({
   await page.addInitScript(() => localStorage.removeItem("agent-lab-entry"));
   await page.goto("/");
   const content = await (await request.get("/api/onboarding")).json();
-  const first = page.locator(".onboarding-checks input").first();
+  const first = page
+    .getByTestId("onboarding-checks")
+    .getByRole("checkbox")
+    .first();
   await first.check();
   const stored = (await progressOf(page)).lessons.onboarding.checkpoints;
   const checkpoint = content.chapters[0].scenes.check.blocks[0].items[0].id;
-  expect(Object.keys(stored)).toEqual([`${content.chapters[0].id}/${checkpoint}`]);
+  expect(Object.keys(stored)).toEqual([
+    `${content.chapters[0].id}/${checkpoint}`,
+  ]);
   await page.reload();
-  await expect(page.locator(".onboarding-checks input").first()).toBeChecked();
-  await page.locator(".onboarding-checks input").first().uncheck();
+  await expect(
+    page.getByTestId("onboarding-checks").getByRole("checkbox").first(),
+  ).toBeChecked();
+  await page
+    .getByTestId("onboarding-checks")
+    .getByRole("checkbox")
+    .first()
+    .uncheck();
   expect((await progressOf(page)).lessons.onboarding.checkpoints).toEqual({});
 });

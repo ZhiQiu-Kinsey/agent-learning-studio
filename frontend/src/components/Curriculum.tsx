@@ -128,8 +128,12 @@ function LessonPlan({
         value={lesson.id}
         className="curriculum-lesson"
         data-status={lesson.status}
+        data-testid="curriculum-lesson"
       >
-        <AccordionTrigger className="curriculum-lesson-trigger">
+        <AccordionTrigger
+          className="curriculum-lesson-trigger"
+          data-testid="curriculum-lesson-trigger"
+        >
           <span className="curriculum-lesson-title">
             <strong>{lesson.title}</strong>
             <small>
@@ -164,7 +168,10 @@ function LessonPlan({
               </div>
             </section>
           </div>
-          <section className="curriculum-experiments">
+          <section
+            className="curriculum-experiments"
+            data-testid="curriculum-lesson-experiments"
+          >
             <h4>实验计划</h4>
             {lesson.experiments.map((experiment, index) => (
               <div className="curriculum-experiment" key={index}>
@@ -212,6 +219,7 @@ function LessonPlan({
           {lesson.status === "available" ? (
             <Button
               className="primary-button"
+              data-testid="curriculum-lesson-start"
               onClick={() => onSelectLesson(lesson.id)}
             >
               开始第 {lesson.number} 课<ArrowRight size={14} />
@@ -343,7 +351,9 @@ export function Curriculum({
                 disabled={!!reduceMotion}
               />
             </div>
-            <h1 id="curriculum-title">完整课程表</h1>
+            <h1 id="curriculum-title" data-testid="curriculum-title">
+              完整课程表
+            </h1>
             <h2
               className="curriculum-hero-statement"
               aria-label="从第一行代码，走向可靠的 Agent、可控的工作流、真实的应用"
@@ -527,7 +537,10 @@ export function Curriculum({
           </button>
         )}
       </div>
-      <div className="panel curriculum-controls">
+      <div
+        className="panel curriculum-controls"
+        data-testid="curriculum-controls"
+      >
         <div className="curriculum-search">
           <label className="field-label" htmlFor="curriculum-search">
             搜索课程
@@ -536,6 +549,7 @@ export function Curriculum({
             <Search size={16} aria-hidden="true" />
             <Input
               id="curriculum-search"
+              data-testid="curriculum-search-input"
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -581,7 +595,10 @@ export function Curriculum({
             key={category.id}
             spotlightColor="rgba(139, 120, 230, 0.12)"
           >
-            <div className="curriculum-category-heading">
+            <div
+              className="curriculum-category-heading"
+              data-testid="curriculum-category-heading"
+            >
               <span className="curriculum-category-number" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
@@ -595,7 +612,11 @@ export function Curriculum({
               </span>
             </div>
             {modules.map((module) => (
-              <div className="curriculum-module" key={module.id}>
+              <div
+                className="curriculum-module"
+                key={module.id}
+                data-testid="curriculum-module"
+              >
                 <div className="curriculum-module-intro">
                   <span className="curriculum-module-kicker">
                     MODULE {module.id}

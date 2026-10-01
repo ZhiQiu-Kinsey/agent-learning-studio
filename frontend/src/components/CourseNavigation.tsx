@@ -61,6 +61,7 @@ export function CourseNavigation({
       variant="ghost"
       disabled={disabled || !available}
       className={`nav-lesson ${current === lesson.id ? "is-active" : ""}`}
+      data-testid="course-nav-lesson"
       aria-current={current === lesson.id ? "page" : undefined}
       onClick={() => onSelect(lesson.id)}
       title={!available ? "计划中：本课尚未实现" : lesson.title}
@@ -80,7 +81,7 @@ export function CourseNavigation({
     </Button>
   );
   return (
-    <nav className="course-tree" aria-label="课程列表">
+    <nav className="course-tree" aria-label="课程列表" data-testid="course-nav">
       <div className="course-tree-heading">
         <span>课程导航</span>
         <small>
@@ -91,9 +92,14 @@ export function CourseNavigation({
       </div>
       {data ? (
         data.categories.map((category, index) => (
-          <section className="nav-category" key={category.id}>
+          <section
+            className="nav-category"
+            key={category.id}
+            data-testid="course-nav-category"
+          >
             <button
               className="nav-category-toggle"
+              data-testid="course-nav-category-toggle"
               type="button"
               aria-expanded={expanded.includes(category.id)}
               aria-controls={`${treeId}-${category.id}`}
@@ -119,7 +125,11 @@ export function CourseNavigation({
               className="nav-category-content"
             >
               {category.modules.map((module) => (
-                <div className="nav-module" key={module.id}>
+                <div
+                  className="nav-module"
+                  key={module.id}
+                  data-testid="course-nav-module"
+                >
                   <h3>{module.title}</h3>
                   {module.lesson_ids.map((id) => {
                     const lesson = data.lessons.find((item) => item.id === id);
@@ -137,7 +147,7 @@ export function CourseNavigation({
           </section>
         ))
       ) : (
-        <div className="nav-module">
+        <div className="nav-module" data-testid="course-nav-module">
           {lessons.map((lesson) => renderLesson(lesson, lesson.available))}
         </div>
       )}
