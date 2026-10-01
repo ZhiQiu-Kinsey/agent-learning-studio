@@ -82,9 +82,17 @@ export function SchemaInputs({
             data-control={kind}
             data-testid={`input-${name}`}
           >
-            <label htmlFor={id} className="schema-input-label">
-              {label}
-            </label>
+            {/* Text inputs get a real <label>; ScrubField labels its own input; the
+                rest name themselves via aria-label, so the heading is plain text. */}
+            {kind === "text" || kind === "textarea" ? (
+              <label htmlFor={id} className="schema-input-label">
+                {label}
+              </label>
+            ) : kind !== "scrub" ? (
+              <span className="schema-input-label" aria-hidden="true">
+                {label}
+              </span>
+            ) : null}
             {kind === "segment" && (
               <RubberSegment
                 aria-label={label}
@@ -140,6 +148,7 @@ export function SchemaInputs({
                   max={property.maximum}
                   step={property.type === "integer" ? 1 : 0.1}
                   size="md"
+                  className="schema-scrub"
                   showDelta={false}
                   accent="var(--role-runtime)"
                   chipColor="var(--surface-muted)"
