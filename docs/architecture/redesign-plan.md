@@ -166,9 +166,9 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 | 4 slug + 术语表 + 录制 | 完成（合并 `ff36842`、`aea399c`） | 录制只能从 live 运行原样导出；仓库内暂无录制文件，需用户用真实模型运行后导出 |
 | 5 content v2 | 完成 | `server/content_schema.py`（含 `lab.inputs` 输入标签）、迁移阶梯、TS 类型生成与同步检查、译文层 `content_overlay.py`（`?lang=`）、示意契约 `server/illustrations.py` |
 | 6 学习进度 | 完成 `e4ff0cf` | `src/progress/`；导学检查点改为持久化自报记录 |
-| 7 测试 | 进行中 | 选择器迁移由代理在工作树中进行；示意契约、预测计算（`src/content/predict.ts`）、选择器引擎（`src/content/selector.ts`）已有测试 |
+| 7 测试 | 完成（合并 `65be488`） | 浏览器测试用角色、locales 文案键（`e2e/i18n.ts`）与 `data-testid` 定位，选择器基线只降；示意契约、预测计算、选择器引擎有单测 |
 
-第二阶段已完成、待接入实验台的部件（`frontend/src/stage/`、`components/lab/`）：`deriveStage`、回放时钟（版本令牌）、`AgentStage`、`ContextFilm`、`ToolCards`、`Timeline`、`SchemaInputs`（React Bits ScrubField/RubberSegment/SquishSwitch）。接入方式：实验台用它们替换 `ExecutionFlow`、事件列表与 JSON 参数框，`useStudio` 的 950ms 定时器换成 `createReplayClock`。
+第二阶段已接入实验台（`9913202`、`3ecd2b1`）：`AgentStage` 取代静态四步流程；回放用 `createReplayClock`（等距 / 真实 1× / 2×，长等待压缩时注明）；时间线、上下文胶片、工具卡片；有输入模型的课默认显示 schema 生成的参数控件，JSON 为高级模式。截图检查：`node frontend/scripts/capture-lab.mjs <url> .runtime`。
 
 后续：观察点与导览的选择器写入内容后，用各练习的确定性运行夹具在测试中校验所有目标都能命中（第三阶段）。
 
