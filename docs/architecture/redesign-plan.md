@@ -156,15 +156,21 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 6. 学习进度 localStorage 记录。
 7. 浏览器测试选择器迁移到角色与 `data-testid`；补充 schema、示意契约、预测计算、事件映射测试。
 
-执行记录（并行开发：主目录做 1、2、6，独立工作树代理做 3、4）：
+执行记录（并行开发：主目录 + 独立工作树代理，代理完成后合并到 main）：
 
 | 子任务 | 状态 | 说明 |
 | --- | --- | --- |
-| 1 动效层 | 已完成 `9b44be3` | `src/motion/`；OS 减少动画在“跟随系统”下映射为 static；CSS 统一用 `:root:not([data-motion="full"])`；vitest 引入做纯逻辑单测 |
-| 2 多语言 | 基础设施完成 `379647b`、`1222f97` | 只抽取会保留的组件（模型设置、自测、课程插件、实验报告）；实验台、执行流、学习页等第二、三阶段重写时直接用翻译键，旧组件删除后基线自然下降；后端错误码待子任务 3 合并后做 |
-| 3 信封 v2 + 运行存储 | 代理进行中 | provenance 取值采用 curriculum-research.md 6.5：`real_run / recorded_run / offline_recompute / illustration` |
-| 4 slug + 术语表 | 代理进行中 | recorded_run 依赖运行存储，合并 3 后再做 |
-| 6 学习进度 | 存储与测试完成，待接入 | `src/progress/`；接入点在 App、useStudio、Quiz，等 3、4 合并后接 |
+| 1 动效层 | 完成 `9b44be3` | `src/motion/`；OS 减少动画在“跟随系统”下映射为 static；CSS 统一用 `:root:not([data-motion="full"])`；vitest 做纯逻辑单测 |
+| 2 多语言 | 完成 | i18n 基础设施、键检查、硬编码中文基线（只降）；只抽取会保留的组件，第二、三阶段重写的组件直接用翻译键；后端全部错误带 `code`，前端按码翻译，`tests/test_error_codes.py` 保证前后端一致 |
+| 3 信封 v2 + 运行存储 | 完成（合并 `d3deb70`） | 见 `event-envelope-v2.md`；旧 `/api/run` 已删除；provenance 取值 `real_run / recorded_run / offline_recompute / illustration` |
+| 4 slug + 术语表 + 录制 | 完成（合并 `ff36842`、`aea399c`） | 录制只能从 live 运行原样导出；仓库内暂无录制文件，需用户用真实模型运行后导出 |
+| 5 content v2 | 完成 | `server/content_schema.py`（含 `lab.inputs` 输入标签）、迁移阶梯、TS 类型生成与同步检查、译文层 `content_overlay.py`（`?lang=`）、示意契约 `server/illustrations.py` |
+| 6 学习进度 | 完成 `e4ff0cf` | `src/progress/`；导学检查点改为持久化自报记录 |
+| 7 测试 | 进行中 | 选择器迁移由代理在工作树中进行；示意契约、预测计算（`src/content/predict.ts`）、选择器引擎（`src/content/selector.ts`）已有测试 |
+
+第二阶段已完成、待接入实验台的部件（`frontend/src/stage/`、`components/lab/`）：`deriveStage`、回放时钟（版本令牌）、`AgentStage`、`ContextFilm`、`ToolCards`、`Timeline`、`SchemaInputs`（React Bits ScrubField/RubberSegment/SquishSwitch）。接入方式：实验台用它们替换 `ExecutionFlow`、事件列表与 JSON 参数框，`useStudio` 的 950ms 定时器换成 `createReplayClock`。
+
+后续：观察点与导览的选择器写入内容后，用各练习的确定性运行夹具在测试中校验所有目标都能命中（第三阶段）。
 
 ## 9. 现状速查（重建上下文用）
 
