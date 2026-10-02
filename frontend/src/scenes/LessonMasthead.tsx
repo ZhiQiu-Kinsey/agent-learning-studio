@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState, type ComponentType } from "react";
-import { AnimatePresence, motion, useScroll, useTransform } from "motion/react";
+import { useCallback, useRef, useState } from "react";
+import { motion, useScroll, useTransform } from "motion/react";
+import { ArrowUpRight, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../motion";
 import { useResolvedTheme } from "../hooks/useTheme";
@@ -72,35 +73,41 @@ function BandTitle({ text }: { text: string }) {
 }
 
 /**
- * Lesson hero band: living backdrop for the lesson's domain, glowing lesson
- * badge, entrance title, glass capability chips and the floating scene dock.
+ * Lesson masthead, shared by all five scenes: the domain backdrop, the lesson
+ * number once, title, subtitle and description, the lesson's objectives, and
+ * underline scene tabs with the capability chips and a way to the source.
  * Follows the theme (band tokens); scroll parallax only at full motion.
  */
 export function LessonMasthead({
   lessonId,
   number,
   title,
+  subtitle,
+  description,
+  objectives,
   capabilities,
   category,
   categoryTitle,
+  moduleTitle,
   scene,
-  icons,
   running,
   visible,
+  onSource,
 }: {
   lessonId: string;
   number: string;
   title: string;
+  subtitle?: string;
+  description: string;
+  objectives: string[];
   capabilities: LessonContent["capabilities"];
   category?: string;
   categoryTitle?: string;
+  moduleTitle?: string;
   scene: SceneId;
-  icons: Record<
-    SceneId,
-    ComponentType<{ size?: number; "aria-hidden"?: boolean | "true" }>
-  >;
   running: boolean;
   visible: boolean;
+  onSource: () => void;
 }) {
   const { t } = useTranslation("lesson");
   const reduced = useReducedMotion();
@@ -112,9 +119,16 @@ export function LessonMasthead({
   });
   const layerY = useTransform(scrollYProgress, [0, 1], [0, 90]);
   const layerScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
-  const bodyY = useTransform(scrollYProgress, [0, 1], [0, 40]);
-  const bodyOpacity = useTransform(scrollYProgress, [0, 0.85], [1, 0.2]);
-  const index = sceneIds.indexOf(scene);
+  const bodyY = useTransform(scrollYProgress, [0, 1], [0, 30]);
+  const bodyOpacity = useTransform(scrollYProgress, [0, 0.85], [1, 0.25]);
+  const rise = (step: number) =>
+    reduced
+      ? {}
+      : {
+          initial: { opacity: 0, y: 10, filter: "blur(6px)" },
+          animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+          transition: { delay: 0.3 + step * 0.08, duration: 0.55, ease },
+        };
 
   return (
     <header
@@ -144,91 +158,63 @@ export function LessonMasthead({
         className="band-body"
         style={reduced ? undefined : { y: bodyY, opacity: bodyOpacity }}
       >
-        <div className="lesson-heading">
-          <motion.div
-            className="band-badge-wrap"
-            key={`badge-${lessonId}`}
-            initial={reduced ? false : { opacity: 0, scale: 0.6, rotate: -12 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={{ type: "spring", bounce: 0.45, duration: 0.9 }}
-          >
-            <span className="band-badge-halo" aria-hidden="true" />
-            <StarBorder className="band-badge" color="#49dec6" speed="5s">
-              <span className="lesson-badge" data-testid="lesson-badge">
-                {number}
-              </span>
-            </StarBorder>
-          </motion.div>
-          <div className="band-copy">
-            <p className="masthead-kicker">
-              <ShinyText
-                text={t("kicker", { number })}
-                color={dark ? "#b7b0e8" : "#4b4668"}
-                shineColor={dark ? "#ffffff" : "#6d5dfc"}
-                speed={2.6}
-                delay={2.4}
-                className="band-kicker-text"
-              />
-              {categoryTitle && (
-                <span className="band-category">{categoryTitle}</span>
-              )}
-            </p>
-            <BandTitle key={`${lessonId}-${title}`} text={title} />
-            {capabilities.length > 0 && (
-              <ul
-                className="lesson-capabilities band-chips"
-                aria-label={t("capabilities.region")}
-                key={`chips-${lessonId}`}
-              >
-                {capabilities.map((capability, chip) => (
-                  <motion.li
-                    key={capability}
-                    data-capability={capability}
-                    initial={
-                      reduced
-                        ? false
-                        : { opacity: 0, y: 12, scale: 0.9, filter: "blur(6px)" }
-                    }
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                      scale: 1,
-                      filter: "blur(0px)",
-                    }}
-                    transition={{
-                      delay: 0.45 + chip * 0.08,
-                      duration: 0.55,
-                      ease,
-                    }}
-                  >
-                    {t(`capabilities.${capability}`)}
-                  </motion.li>
-                ))}
-              </ul>
+        <motion.div
+          className="band-badge-wrap"
+          key={`badge-${lessonId}`}
+          initial={reduced ? false : { opacity: 0, scale: 0.6, rotate: -12 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={{ type: "spring", bounce: 0.45, duration: 0.9 }}
+        >
+          <span className="band-badge-halo" aria-hidden="true" />
+          <StarBorder className="band-badge" color="#49dec6" speed="5s">
+            <span className="lesson-badge" data-testid="lesson-badge">
+              {number}
+            </span>
+          </StarBorder>
+        </motion.div>
+        <div className="band-copy" key={`copy-${lessonId}`}>
+          <p className="masthead-kicker">
+            <ShinyText
+              text={t("kicker")}
+              color={dark ? "#b7b0e8" : "#4b4668"}
+              shineColor={dark ? "#ffffff" : "#6d5dfc"}
+              speed={2.6}
+              delay={2.4}
+              className="band-kicker-text"
+            />
+            {categoryTitle && (
+              <span className="band-category">{categoryTitle}</span>
             )}
-          </div>
+            {moduleTitle && <span className="band-module">{moduleTitle}</span>}
+          </p>
+          <BandTitle key={`${lessonId}-${title}`} text={title} />
+          {subtitle && (
+            <motion.p className="band-subtitle" {...rise(0)}>
+              {subtitle}
+            </motion.p>
+          )}
+          <motion.p className="band-description" {...rise(1)}>
+            {description}
+          </motion.p>
         </div>
-        <div className="band-scene-meta" aria-hidden="true">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={scene}
-              initial={
-                reduced ? false : { opacity: 0, y: 10, filter: "blur(8px)" }
-              }
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={
-                reduced ? undefined : { opacity: 0, y: -8, filter: "blur(8px)" }
-              }
-              transition={{ duration: 0.32, ease }}
-            >
-              <span className="band-scene-index">
-                {String(index + 1).padStart(2, "0")}
-                <small>/{String(sceneIds.length).padStart(2, "0")}</small>
-              </span>
-              <span className="band-scene-hint">{t(`sceneHint.${scene}`)}</span>
-            </motion.div>
-          </AnimatePresence>
-        </div>
+        {objectives.length > 0 && (
+          <motion.aside
+            className="band-goals"
+            aria-label={t("objectives.eyebrow")}
+            key={`goals-${lessonId}`}
+            {...rise(2)}
+          >
+            <h2>{t("objectives.title")}</h2>
+            <ul>
+              {objectives.map((objective, item) => (
+                <li key={item}>
+                  <Check size={14} aria-hidden="true" />
+                  {objective}
+                </li>
+              ))}
+            </ul>
+          </motion.aside>
+        )}
       </motion.div>
 
       <div className="band-dock">
@@ -237,39 +223,56 @@ export function LessonMasthead({
           aria-label={t("scenes.region")}
           data-testid="scene-tabs"
         >
-          {sceneIds.map((id) => {
-            const Icon = icons[id];
-            return (
-              <TabsTrigger
-                key={id}
-                value={id}
-                data-testid={`scene-tab-${id}`}
-                title={t(`sceneHint.${id}`)}
-              >
-                {scene === id && (
-                  <motion.span
-                    aria-hidden="true"
-                    className="mode-active-pill"
-                    layoutId="lesson-scene"
-                    transition={{
-                      type: "spring",
-                      bounce: 0.25,
-                      duration: reduced ? 0 : 0.5,
-                    }}
-                  />
-                )}
-                <Icon size={16} aria-hidden="true" />
-                <span className="band-tab-label">{t(`scenes.${id}`)}</span>
-                {id === "lab" && running && (
-                  <span className="live-indicator band-live">
-                    <i aria-hidden="true" />
-                    <span>{t("live")}</span>
-                  </span>
-                )}
-              </TabsTrigger>
-            );
-          })}
+          {sceneIds.map((id, index) => (
+            <TabsTrigger
+              key={id}
+              value={id}
+              data-testid={`scene-tab-${id}`}
+              title={t(`sceneHint.${id}`)}
+            >
+              <span className="band-tab-index" aria-hidden="true">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="band-tab-label">{t(`scenes.${id}`)}</span>
+              {id === "lab" && running && (
+                <span className="live-indicator band-live">
+                  <i aria-hidden="true" />
+                  <span>{t("live")}</span>
+                </span>
+              )}
+              {scene === id && (
+                <motion.span
+                  aria-hidden="true"
+                  className="band-tab-underline"
+                  layoutId="lesson-scene"
+                  transition={{
+                    type: "spring",
+                    bounce: 0.2,
+                    duration: reduced ? 0 : 0.45,
+                  }}
+                />
+              )}
+            </TabsTrigger>
+          ))}
         </TabsList>
+        <div className="band-dock-side">
+          {capabilities.length > 0 && (
+            <ul
+              className="lesson-capabilities band-chips"
+              aria-label={t("capabilities.region")}
+            >
+              {capabilities.map((capability) => (
+                <li key={capability} data-capability={capability}>
+                  {t(`capabilities.${capability}`)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="band-source" onClick={onSource}>
+            {t("source")}
+            <ArrowUpRight size={15} aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </header>
   );

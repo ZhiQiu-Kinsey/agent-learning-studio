@@ -154,9 +154,10 @@ test("interactive lesson explanations are different for all three lessons and ne
       .getByTestId("course-nav")
       .getByRole("button", { name: detail.title })
       .click();
-    await expect(
-      page.getByTestId("lesson-hero").getByRole("heading", { level: 2 }),
-    ).toContainText(lessonView(detail.learning).hero!.highlight!);
+    // 课程头部带本课副标题，换课后随之更新。
+    await expect(page.getByTestId("lesson-masthead")).toContainText(
+      detail.subtitle,
+    );
     const steps = page.getByTestId("agent-flow-step");
     await expect(steps).toHaveCount(
       lessonView(detail.learning).walkthrough!.steps.length,

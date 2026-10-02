@@ -191,7 +191,10 @@ test("changing reduced motion immediately restores offscreen lesson text", async
     await expect(section).toHaveCSS("opacity", "1");
     await expect(section).toHaveCSS("transform", "none");
   }
-  await expect(page.getByTestId("lesson-hero")).not.toHaveClass(/is-animating/);
+  // 课程标题的描边入场在静态动效下退回纯文本标题。
+  await expect(
+    page.getByTestId("lesson-masthead").getByRole("heading", { level: 1 }),
+  ).not.toHaveAttribute("data-effect", /./);
   // 检查 BlurText 是否已停止逐词拆分的动画结构，属于动效断言，保留类名。
   await expect(page.locator(".rb-blur-text > span")).toHaveCount(0);
 });

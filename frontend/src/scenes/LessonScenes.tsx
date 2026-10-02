@@ -1,12 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  BookOpen,
-  Code2,
-  FlaskConical,
-  ListChecks,
-  NotebookPen,
-} from "lucide-react";
 import { useReducedMotion } from "../motion";
 import { formatLessonNumber } from "../lib/lessonIds";
 import { useCurriculum } from "../hooks/useCurriculum";
@@ -33,14 +26,6 @@ const scenes: Record<SceneId, ComponentType<SceneProps>> = {
     import("./ReviewScene").then((m) => ({ default: m.ReviewScene })),
   ),
 };
-const icons = {
-  understand: BookOpen,
-  code: Code2,
-  lab: FlaskConical,
-  check: ListChecks,
-  review: NotebookPen,
-};
-
 /** Other parts of the app (command palette, CTAs) can ask for a scene. */
 export const SCENE_EVENT = "agent-lab:scene";
 export function requestScene(scene: SceneId) {
@@ -86,9 +71,15 @@ function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
   const category = curriculum?.lessons.find(
     (lesson) => lesson.id === lessonId,
   )?.category_id;
-  const categoryTitle = curriculum?.categories.find(
+  const categoryEntry = curriculum?.categories.find(
     (item) => item.id === category,
-  )?.title;
+  );
+  const categoryTitle = categoryEntry?.title;
+  const moduleTitle = lessonId
+    ? categoryEntry?.modules.find((module) =>
+        module.lesson_ids.includes(lessonId),
+      )?.title
+    : undefined;
 
   const goTo = (next: SceneId) => {
     setScene(next);
@@ -151,13 +142,17 @@ function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
         lessonId={detail.id}
         number={number}
         title={title}
+        subtitle={detail.subtitle}
+        description={detail.description}
+        objectives={detail.objectives}
         capabilities={capabilities}
         category={category}
         categoryTitle={categoryTitle}
+        moduleTitle={moduleTitle}
         scene={scene}
-        icons={icons}
         running={studio.running}
         visible={visible}
+        onSource={() => goTo("code")}
       />
       {sceneIds.map((id) => {
         const Scene = scenes[id];

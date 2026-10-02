@@ -37,7 +37,8 @@ const conceptIcons = [Braces, Cpu, Network];
 
 /**
  * 理解 scene body: blocks render in the order the lesson authored them.
- * The hero is shown by LessonHero above; its takeaway follows the concepts.
+ * The hero block itself is not drawn (the masthead carries the lesson);
+ * its takeaway follows the concepts.
  */
 export function UnderstandBlocks({
   detail,
@@ -184,7 +185,7 @@ export function UnderstandBlocks({
       case "references":
         return reveal(block.id, <ReferencesBlock block={block} />);
       default:
-        return null; // hero is rendered by LessonHero; scene-specific blocks live in their scenes
+        return null; // hero: only its takeaway is shown; scene-specific blocks live in their scenes
     }
   };
 
