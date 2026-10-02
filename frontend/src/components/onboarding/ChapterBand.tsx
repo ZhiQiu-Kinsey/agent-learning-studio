@@ -5,6 +5,7 @@ import { useReducedMotion } from "../../motion";
 import EchoText from "../react-bits/EchoText";
 import Shuffle from "../react-bits/Shuffle";
 import { Backdrop } from "../backdrops/Backdrop";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import type { BackdropName } from "../backdrops/presets";
 import { numeral, type ChapterContent } from "./chapters";
 import { easeOut } from "./transitions";
@@ -23,6 +24,7 @@ export function ChapterBand({
 }) {
   const { t } = useTranslation("curriculum", { keyPrefix: "onboarding" });
   const reduced = useReducedMotion();
+  const dark = useResolvedTheme() === "dark";
   return (
     <header className="onboarding-chapter-band">
       <Backdrop name={sky} className="onboarding-band-backdrop" />
@@ -39,7 +41,7 @@ export function ChapterBand({
           <EchoText
             key={chapter.id}
             text={chapter.title}
-            tint="#b98aff"
+            tint={dark ? "#b98aff" : "#7c6cf5"}
             offset={20}
             echoes={7}
           />

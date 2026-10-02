@@ -16,6 +16,7 @@ import { Button } from "../ui/button";
 import BlurText from "../react-bits/BlurText";
 import StarBorder from "../react-bits/StarBorder";
 import { Backdrop } from "../backdrops/Backdrop";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import { MapMetric } from "./MapMetric";
 import { easeOut } from "./transitions";
 
@@ -60,6 +61,7 @@ export function CurriculumHero({
   onShowRoute: () => void;
 }) {
   const { t } = useTranslation("curriculum");
+  const theme = useResolvedTheme();
   const availableCount = curriculum.lessons.filter(
     (lesson) => lesson.status === "available",
   ).length;
@@ -105,7 +107,7 @@ export function CurriculumHero({
           {target && (
             <StarBorder
               className="curriculum-start-star"
-              color="#49dec6"
+              color={theme === "dark" ? "#49dec6" : "#6d5dfc"}
               speed="6s"
             >
               <Button
