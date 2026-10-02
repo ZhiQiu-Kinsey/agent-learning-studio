@@ -13,6 +13,8 @@ import type { QuizQuestion } from "../types";
 import { Button } from "./ui/button";
 import JellyRadio from "./react-bits/JellyRadio";
 import SparkBurst from "./react-bits/SparkBurst";
+import ElectricBorder from "./react-bits/ElectricBorder";
+import Shuffle from "./react-bits/Shuffle";
 
 const verdictIcon: Record<OptionVerdict, typeof Check> = {
   "correct-chosen": Check,
@@ -54,6 +56,8 @@ export function Quiz({
   const rated = questions.filter((question) => levels[question.id]).length;
   const ready = readyToSubmit(questions, answers, levels, confidence);
   const score = scoreQuiz(questions, answers, confidence ? levels : {});
+  // Only a real, checked, all-correct attempt gets the electric result card.
+  const perfect = checked && score.correct === questions.length;
 
   return (
     <form
@@ -67,7 +71,9 @@ export function Quiz({
       }}
     >
       <div className="quiz-intro">
-        <div className="quiz-eyebrow">{t("eyebrow")}</div>
+        <div className="quiz-eyebrow">
+          <Shuffle text={t("eyebrow")} />
+        </div>
         <h2>{title || t("title")}</h2>
         <p>{confidence ? t("introConfidence") : t("intro")}</p>
       </div>
@@ -230,7 +236,25 @@ export function Quiz({
           </fieldset>
         );
       })}
-      <div className="quiz-actions">
+      <div
+        className={`quiz-actions ${perfect ? "is-perfect" : ""}`}
+        data-testid="quiz-actions"
+      >
+        {perfect && (
+          <ElectricBorder
+            className="quiz-perfect-border"
+            color="#6fd39a"
+            chaos={0.07}
+            speed={0.9}
+            borderRadius={16}
+          />
+        )}
+        {perfect && (
+          <span className="quiz-perfect-badge">
+            <Check size={14} aria-hidden="true" />
+            {t("perfect")}
+          </span>
+        )}
         <span className="quiz-status" role="status" aria-live="polite">
           {checked
             ? t("scored", { correct: score.correct, total: questions.length })

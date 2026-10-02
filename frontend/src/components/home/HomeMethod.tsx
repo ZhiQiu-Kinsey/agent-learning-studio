@@ -11,8 +11,14 @@ import {
 } from "lucide-react";
 import { revealProps, useReducedMotion } from "../../motion";
 import GlareHover from "../react-bits/GlareHover";
+import TrueFocus from "../react-bits/TrueFocus";
+import Shuffle from "../react-bits/Shuffle";
 
-const steps: { key: "concept" | "code" | "evidence" | "experiment" | "check"; icon: LucideIcon; color: string }[] = [
+const steps: {
+  key: "concept" | "code" | "evidence" | "experiment" | "check";
+  icon: LucideIcon;
+  color: string;
+}[] = [
   { key: "concept", icon: Lightbulb, color: "#b98aff" },
   { key: "code", icon: Code2, color: "#6d5dfc" },
   { key: "evidence", icon: Radio, color: "#49dec6" },
@@ -30,7 +36,9 @@ export function HomeMethod() {
       aria-labelledby="home-method-title"
     >
       <header className="home-section-head">
-        <p className="home-eyebrow">{t("method.kicker")}</p>
+        <p className="home-eyebrow">
+          <Shuffle text={t("method.kicker")} />
+        </p>
         <h2 id="home-method-title">{t("method.title")}</h2>
         <p>{t("method.lead")}</p>
       </header>
@@ -38,38 +46,52 @@ export function HomeMethod() {
         <motion.span
           className="home-method-line"
           aria-hidden="true"
-          {...revealProps(reduced, { scaleX: 0 }, { scaleX: 1 }, {
-            duration: 1.4,
-            ease: [0.16, 1, 0.3, 1],
-          })}
+          {...revealProps(
+            reduced,
+            { scaleX: 0 },
+            { scaleX: 1 },
+            {
+              duration: 1.4,
+              ease: [0.16, 1, 0.3, 1],
+            },
+          )}
           viewport={{ once: true, amount: 0.6 }}
         />
-        <ol className="home-method-steps">
-          {steps.map(({ key, icon: Icon, color }, index) => (
-            <motion.li
-              key={key}
-              style={{ "--step": color } as CSSProperties}
-              {...revealProps(
-                reduced,
-                { opacity: 0, y: 30, filter: "blur(8px)" },
-                { opacity: 1, y: 0, filter: "blur(0px)" },
-                { duration: 0.7, delay: 0.15 + index * 0.12, ease: [0.16, 1, 0.3, 1] },
-              )}
-              viewport={{ once: true, amount: 0.4 }}
-            >
-              <GlareHover className="home-method-card" glareOpacity={0.22}>
-                <span className="home-method-index" aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span className="home-method-icon" aria-hidden="true">
-                  <Icon size={20} />
-                </span>
-                <h3>{t(`method.${key}`)}</h3>
-                <p>{t(`method.${key}Help`)}</p>
-              </GlareHover>
-            </motion.li>
-          ))}
-        </ol>
+        <TrueFocus
+          itemSelector=".home-method-steps > li"
+          className="home-method-focus"
+        >
+          <ol className="home-method-steps">
+            {steps.map(({ key, icon: Icon, color }, index) => (
+              <motion.li
+                key={key}
+                style={{ "--step": color } as CSSProperties}
+                {...revealProps(
+                  reduced,
+                  { opacity: 0, y: 30, filter: "blur(8px)" },
+                  { opacity: 1, y: 0, filter: "blur(0px)" },
+                  {
+                    duration: 0.7,
+                    delay: 0.15 + index * 0.12,
+                    ease: [0.16, 1, 0.3, 1],
+                  },
+                )}
+                viewport={{ once: true, amount: 0.4 }}
+              >
+                <GlareHover className="home-method-card" glareOpacity={0.22}>
+                  <span className="home-method-index" aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="home-method-icon" aria-hidden="true">
+                    <Icon size={20} />
+                  </span>
+                  <h3>{t(`method.${key}`)}</h3>
+                  <p>{t(`method.${key}Help`)}</p>
+                </GlareHover>
+              </motion.li>
+            ))}
+          </ol>
+        </TrueFocus>
       </div>
     </section>
   );

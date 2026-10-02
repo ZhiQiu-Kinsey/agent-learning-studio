@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import Markdown from "react-markdown";
+import { useMemo, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Braces, Cpu, Eye, Network, Quote } from "lucide-react";
@@ -16,6 +15,13 @@ import {
 } from "../../components/ui/accordion";
 import { AgentFlow } from "../../components/learning/AgentFlow";
 import { sceneBlocks, type Block } from "../view";
+import {
+  GlossaryMarkdown,
+  GlossaryScope,
+  GlossaryText,
+} from "../glossary/Glossary";
+import { blockTexts } from "../glossary/texts";
+import Shuffle from "../../components/react-bits/Shuffle";
 import { MicroQuizBlock } from "./MicroQuizBlock";
 import { PredictBlock } from "./PredictBlock";
 import { IllustrationFlow } from "./IllustrationFlow";
@@ -46,6 +52,7 @@ export function UnderstandBlocks({
   const reduced = useReducedMotion();
   const content = detail.learning;
   const blocks = sceneBlocks(content, "understand");
+  const texts = useMemo(() => blocks.flatMap(blockTexts), [blocks]);
   const hero = blocks.find((block) => block.type === "hero");
   const observe =
     content?.scenes.lab?.experiments.flatMap((item) => item.observe) ?? [];
@@ -67,7 +74,7 @@ export function UnderstandBlocks({
               data-testid="block-concepts"
             >
               <div className="learn-section-kicker">
-                <span>{block.title ?? "CONNECT THE IDEAS"}</span>
+                <Shuffle text={block.title ?? "CONNECT THE IDEAS"} />
                 <span>{t("concepts.kicker")}</span>
               </div>
               <div className="learn-concept-grid">
@@ -91,7 +98,9 @@ export function UnderstandBlocks({
                           <small>{concept.label}</small>
                         </div>
                         <h3>{concept.title}</h3>
-                        <p>{concept.description}</p>
+                        <p>
+                          <GlossaryText text={concept.description} />
+                        </p>
                         {concept.token && <code>{concept.token}</code>}
                       </SpotlightCard>
                     </FadeContent>
@@ -135,7 +144,7 @@ export function UnderstandBlocks({
             </div>
             <div className="reading-prose">
               {block.paragraphs.map((paragraph, index) => (
-                <Markdown key={index}>{paragraph}</Markdown>
+                <GlossaryMarkdown key={index}>{paragraph}</GlossaryMarkdown>
               ))}
             </div>
           </motion.section>
@@ -181,41 +190,43 @@ export function UnderstandBlocks({
 
   return (
     <div className="lesson-guide">
-      <article
-        className="reading-document"
-        aria-label={t("reading.region")}
-        data-testid="learn-reading-document"
-      >
-        {blocks.map(render)}
-        {!blocks.some((block) => block.type === "prose") && (
-          <p className="reading-prose">{t("reading.empty")}</p>
-        )}
-        {observe.length > 0 && (
-          <Accordion
-            type="single"
-            collapsible
-            defaultValue="observe"
-            className="reading-observations"
-            data-testid="learn-observations"
-          >
-            <AccordionItem value="observe">
-              <AccordionTrigger>
-                <span>
-                  <Eye size={16} />
-                  {t("observe.title")}
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <ol>
-                  {observe.map((point) => (
-                    <li key={point.id}>{point.text}</li>
-                  ))}
-                </ol>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        )}
-      </article>
+      <GlossaryScope texts={texts}>
+        <article
+          className="reading-document"
+          aria-label={t("reading.region")}
+          data-testid="learn-reading-document"
+        >
+          {blocks.map(render)}
+          {!blocks.some((block) => block.type === "prose") && (
+            <p className="reading-prose">{t("reading.empty")}</p>
+          )}
+          {observe.length > 0 && (
+            <Accordion
+              type="single"
+              collapsible
+              defaultValue="observe"
+              className="reading-observations"
+              data-testid="learn-observations"
+            >
+              <AccordionItem value="observe">
+                <AccordionTrigger>
+                  <span>
+                    <Eye size={16} />
+                    {t("observe.title")}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <ol>
+                    {observe.map((point) => (
+                      <li key={point.id}>{point.text}</li>
+                    ))}
+                  </ol>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
+        </article>
+      </GlossaryScope>
     </div>
   );
 }

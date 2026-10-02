@@ -42,6 +42,8 @@ import CountUp from "./react-bits/CountUp";
 import SquishSwitch from "./react-bits/SquishSwitch";
 import BlurText from "./react-bits/BlurText";
 import StarBorder from "./react-bits/StarBorder";
+import GooeyNav from "./react-bits/GooeyNav";
+import ElectricBorder from "./react-bits/ElectricBorder";
 import { Backdrop } from "./backdrops/Backdrop";
 import { revealProps, useReducedMotion } from "../motion";
 import { DomainBento } from "./curriculum/DomainBento";
@@ -226,6 +228,9 @@ function LessonPlan({
 }) {
   const { t } = useTranslation("curriculum");
   const marks = lessonMarks(useProgress(), lesson);
+  // Electric outline only on lessons that can really be opened, while hovered/focused.
+  const [hot, setHot] = useState(false);
+  const live = lesson.status === "available";
   const prerequisiteTitles = lesson.prerequisites.map(
     (id) =>
       curriculum.lessons.find(
@@ -239,7 +244,27 @@ function LessonPlan({
         className="curriculum-lesson"
         data-status={lesson.status}
         data-testid="curriculum-lesson"
+        onPointerEnter={live ? () => setHot(true) : undefined}
+        onPointerLeave={live ? () => setHot(false) : undefined}
+        onFocus={live ? () => setHot(true) : undefined}
+        onBlur={
+          live
+            ? (event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node))
+                  setHot(false);
+              }
+            : undefined
+        }
       >
+        {live && hot && (
+          <ElectricBorder
+            className="curriculum-lesson-electric"
+            color="#8f7dff"
+            chaos={0.06}
+            speed={0.9}
+            borderRadius={14}
+          />
+        )}
         <AccordionTrigger
           className="curriculum-lesson-trigger"
           data-testid="curriculum-lesson-trigger"
@@ -703,7 +728,6 @@ export function Curriculum({
   const [query, setQuery] = useState("");
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const reduced = useReducedMotion();
 
   const setView = (value: string) => {
     if (!mapViews.includes(value as MapView)) return;
@@ -910,20 +934,14 @@ export function Curriculum({
           aria-label={t("views.label")}
           data-testid="curriculum-view-switch"
         >
+          {/* Active indicator: gooey blob that bursts on a real view switch. */}
+          <GooeyNav activeKey={view} className="curriculum-view-goo" />
           {viewTabs.map(({ id, Icon }) => (
             <TabsTrigger
               key={id}
               value={id}
               data-testid={`curriculum-view-${id}`}
             >
-              {view === id && (
-                <motion.i
-                  className="curriculum-view-pill"
-                  layoutId="curriculum-view-pill"
-                  transition={reduced ? { duration: 0 } : pillSpring}
-                  aria-hidden="true"
-                />
-              )}
               <Icon aria-hidden="true" />
               <span>{t(`views.${id}`)}</span>
             </TabsTrigger>

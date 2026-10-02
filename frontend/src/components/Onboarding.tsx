@@ -22,7 +22,6 @@ import {
   ListChecks,
   Sparkles,
 } from "lucide-react";
-import Markdown from "react-markdown";
 import { jsonFetch } from "../api";
 import { chapterView } from "../content/view";
 import { IllustrationFlow } from "../content/blocks/IllustrationFlow";
@@ -34,6 +33,9 @@ import ShinyText from "./react-bits/ShinyText";
 import SpotlightCard from "./react-bits/SpotlightCard";
 import StarBorder from "./react-bits/StarBorder";
 import SpringCheck from "./react-bits/SpringCheck";
+import EchoText from "./react-bits/EchoText";
+import Shuffle from "./react-bits/Shuffle";
+import { GlossaryMarkdown, GlossaryScope } from "../content/glossary/Glossary";
 import { Backdrop } from "./backdrops/Backdrop";
 import type { BackdropName } from "./backdrops/presets";
 import { backdropAccent } from "./curriculum/atmosphere";
@@ -58,44 +60,6 @@ const skyCycle: BackdropName[] = ["aurora", "web", "rays", "radar", "veil"];
 const skyFor = (id: string, index: number): BackdropName =>
   chapterSkies[id] ?? skyCycle[index % skyCycle.length];
 
-/** Chapter heading: characters rise out of a blur; spaces stay real text. */
-function RevealTitle({ text }: { text: string }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <>{text}</>;
-  let index = 0;
-  return (
-    <>
-      {text.split(/(\s+)/).map((part, word) =>
-        /^\s+$/.test(part) ? (
-          part
-        ) : (
-          <span className="onboarding-title-word" key={word}>
-            {Array.from(part).map((char) => {
-              const delay = 0.12 + index++ * 0.035;
-              return (
-                <motion.span
-                  key={index}
-                  className="onboarding-title-char"
-                  initial={{ opacity: 0, y: "0.45em", filter: "blur(10px)" }}
-                  animate={{
-                    opacity: 1,
-                    y: 0,
-                    filter: "blur(0px)",
-                    transitionEnd: { filter: "none" },
-                  }}
-                  transition={{ duration: 0.6, delay, ease: easeOut }}
-                >
-                  {char}
-                </motion.span>
-              );
-            })}
-          </span>
-        ),
-      )}
-    </>
-  );
-}
-
 /** Scroll reveal for reading blocks; static motion shows them as they are. */
 function Reveal({
   children,
@@ -119,7 +83,12 @@ function Reveal({
       {...revealProps(
         reduced,
         { opacity: 0, y: 22, filter: "blur(6px)" },
-        { opacity: 1, y: 0, filter: "blur(0px)", transitionEnd: { filter: "none" } },
+        {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          transitionEnd: { filter: "none" },
+        },
         { duration: 0.6, delay, ease: easeOut },
       )}
       viewport={{ once: true, amount: 0.12 }}
@@ -355,6 +324,11 @@ export function Onboarding({
   const currentChecks = checksOf(currentChapter);
   const chapterDone =
     currentChecks.total > 0 && currentChecks.done === currentChecks.total;
+  const glossaryTexts = current.sections.flatMap((section) => [
+    ...section.paragraphs,
+    ...(section.bullets ?? []),
+    ...(section.table?.rows.flat() ?? []),
+  ]);
   const sky = skyFor(current.id, chapterIndex);
   const accent = backdropAccent(sky);
   function navigate(index: number) {
@@ -447,10 +421,16 @@ export function Onboarding({
               <div className="onboarding-band-copy">
                 <span className="onboarding-eyebrow">
                   <span className="onboarding-band-dot" aria-hidden="true" />
-                  {current.eyebrow}
+                  <Shuffle key={current.id} text={current.eyebrow} />
                 </span>
                 <h2>
-                  <RevealTitle text={current.title} />
+                  <EchoText
+                    key={current.id}
+                    text={current.title}
+                    tint="#b98aff"
+                    offset={20}
+                    echoes={7}
+                  />
                 </h2>
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
@@ -482,182 +462,188 @@ export function Onboarding({
                 </motion.div>
               </div>
             </header>
-            <div className="onboarding-chapter-body">
-              {current.sections.map((section, index) => (
-                <Fragment key={section.id}>
-                  <Reveal
-                    as="section"
-                    className={`onboarding-section onboarding-section-${section.kind}`}
-                    data-testid="onboarding-section"
+            <GlossaryScope texts={glossaryTexts}>
+              <div className="onboarding-chapter-body">
+                {current.sections.map((section, index) => (
+                  <Fragment key={section.id}>
+                    <Reveal
+                      as="section"
+                      className={`onboarding-section onboarding-section-${section.kind}`}
+                      data-testid="onboarding-section"
+                    >
+                      <h3>
+                        <span>{String(index + 1).padStart(2, "0")}</span>
+                        {section.title}
+                      </h3>
+                      {section.paragraphs.map((paragraph, i) => (
+                        <Reveal
+                          className="onboarding-prose"
+                          key={i}
+                          delay={Math.min(i, 3) * 0.06}
+                        >
+                          <GlossaryMarkdown>{paragraph}</GlossaryMarkdown>
+                        </Reveal>
+                      ))}
+                      {!!section.bullets?.length && (
+                        <ul>
+                          {section.bullets.map((bullet, i) => (
+                            <li key={i}>
+                              <GlossaryMarkdown>{bullet}</GlossaryMarkdown>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {section.table && (
+                        <div className="onboarding-table">
+                          <table>
+                            <thead>
+                              <tr>
+                                {section.table.columns.map((column) => (
+                                  <th key={column}>{column}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {section.table.rows.map((row, i) => (
+                                <tr key={i}>
+                                  {row.map((cell, j) => (
+                                    <td key={j}>
+                                      <GlossaryMarkdown>
+                                        {cell}
+                                      </GlossaryMarkdown>
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </Reveal>
+                    {current.flows
+                      .filter((flow) => flow.after === section.id)
+                      .map(({ block }) =>
+                        illustrations[block.illustration] ? (
+                          <Reveal key={block.id} className="onboarding-flow">
+                            <IllustrationFlow
+                              block={block}
+                              illustration={illustrations[block.illustration]}
+                            />
+                          </Reveal>
+                        ) : null,
+                      )}
+                  </Fragment>
+                ))}
+                <Reveal
+                  as="section"
+                  className="onboarding-exercise"
+                  data-complete={chapterDone ? "true" : "false"}
+                >
+                  <div className="onboarding-exercise-head">
+                    <span className="onboarding-eyebrow">
+                      <CheckCheck size={15} aria-hidden="true" />
+                      {t("pause")}
+                    </span>
+                    <AnimatePresence>
+                      {chapterDone && (
+                        <motion.span
+                          className="onboarding-exercise-badge"
+                          initial={reduced ? false : { opacity: 0, scale: 0.6 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={
+                            reduced ? undefined : { opacity: 0, scale: 0.8 }
+                          }
+                          transition={
+                            reduced
+                              ? { duration: 0 }
+                              : { type: "spring", stiffness: 500, damping: 22 }
+                          }
+                        >
+                          <Check size={13} aria-hidden="true" />
+                          {t("chapterChecked")}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <h3>{current.exercise.title}</h3>
+                  <p>{current.exercise.prompt}</p>
+                  <div
+                    className="onboarding-checks"
+                    data-testid="onboarding-checks"
                   >
-                    <h3>
-                      <span>{String(index + 1).padStart(2, "0")}</span>
-                      {section.title}
-                    </h3>
-                    {section.paragraphs.map((paragraph, i) => (
-                      <Reveal
-                        className="onboarding-prose"
-                        key={i}
-                        delay={Math.min(i, 3) * 0.06}
-                      >
-                        <Markdown>{paragraph}</Markdown>
-                      </Reveal>
-                    ))}
-                    {!!section.bullets?.length && (
+                    {current.exercise.checkpoints.map((point) => {
+                      const id = `${current.id}/${point.id}`;
+                      return (
+                        <SpringCheck
+                          key={id}
+                          className="onboarding-check"
+                          label={point.text}
+                          checked={!!checked[id]}
+                          onChange={(value) =>
+                            track.checkpointSet(onboardingProgressId, id, value)
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                  <small>{t("checkNote")}</small>
+                </Reveal>
+                <Accordion
+                  type="single"
+                  collapsible
+                  className="onboarding-sources"
+                  data-testid="onboarding-sources"
+                >
+                  <AccordionItem value="sources">
+                    <AccordionTrigger>
+                      {t("sources", { n: current.references.length })}
+                    </AccordionTrigger>
+                    <AccordionContent>
                       <ul>
-                        {section.bullets.map((bullet, i) => (
-                          <li key={i}>
-                            <Markdown>{bullet}</Markdown>
+                        {current.references.map((reference) => (
+                          <li key={reference.url}>
+                            <a
+                              href={reference.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {reference.title}
+                              <ExternalLink size={12} />
+                            </a>
                           </li>
                         ))}
                       </ul>
-                    )}
-                    {section.table && (
-                      <div className="onboarding-table">
-                        <table>
-                          <thead>
-                            <tr>
-                              {section.table.columns.map((column) => (
-                                <th key={column}>{column}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {section.table.rows.map((row, i) => (
-                              <tr key={i}>
-                                {row.map((cell, j) => (
-                                  <td key={j}>
-                                    <Markdown>{cell}</Markdown>
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </Reveal>
-                  {current.flows
-                    .filter((flow) => flow.after === section.id)
-                    .map(({ block }) =>
-                      illustrations[block.illustration] ? (
-                        <Reveal key={block.id} className="onboarding-flow">
-                          <IllustrationFlow
-                            block={block}
-                            illustration={illustrations[block.illustration]}
-                          />
-                        </Reveal>
-                      ) : null,
-                    )}
-                </Fragment>
-              ))}
-              <Reveal
-                as="section"
-                className="onboarding-exercise"
-                data-complete={chapterDone ? "true" : "false"}
-              >
-                <div className="onboarding-exercise-head">
-                  <span className="onboarding-eyebrow">
-                    <CheckCheck size={15} aria-hidden="true" />
-                    {t("pause")}
-                  </span>
-                  <AnimatePresence>
-                    {chapterDone && (
-                      <motion.span
-                        className="onboarding-exercise-badge"
-                        initial={reduced ? false : { opacity: 0, scale: 0.6 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={reduced ? undefined : { opacity: 0, scale: 0.8 }}
-                        transition={
-                          reduced
-                            ? { duration: 0 }
-                            : { type: "spring", stiffness: 500, damping: 22 }
-                        }
-                      >
-                        <Check size={13} aria-hidden="true" />
-                        {t("chapterChecked")}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+                <div className="onboarding-next">
+                  <Button
+                    variant="ghost"
+                    disabled={chapterIndex === 0}
+                    onClick={() => navigate(chapterIndex - 1)}
+                  >
+                    <ArrowLeft size={15} />
+                    {t("previous")}
+                  </Button>
+                  <Button
+                    data-testid="onboarding-next"
+                    className="onboarding-next-button"
+                    onClick={() =>
+                      chapterIndex < content.chapters.length - 1
+                        ? navigate(chapterIndex + 1)
+                        : onStart()
+                    }
+                  >
+                    {chapterIndex < content.chapters.length - 1
+                      ? t("next", {
+                          title: content.chapters[chapterIndex + 1].title,
+                        })
+                      : t("startLesson")}
+                    <ArrowRight size={15} />
+                  </Button>
                 </div>
-                <h3>{current.exercise.title}</h3>
-                <p>{current.exercise.prompt}</p>
-                <div
-                  className="onboarding-checks"
-                  data-testid="onboarding-checks"
-                >
-                  {current.exercise.checkpoints.map((point) => {
-                    const id = `${current.id}/${point.id}`;
-                    return (
-                      <SpringCheck
-                        key={id}
-                        className="onboarding-check"
-                        label={point.text}
-                        checked={!!checked[id]}
-                        onChange={(value) =>
-                          track.checkpointSet(onboardingProgressId, id, value)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-                <small>{t("checkNote")}</small>
-              </Reveal>
-              <Accordion
-                type="single"
-                collapsible
-                className="onboarding-sources"
-                data-testid="onboarding-sources"
-              >
-                <AccordionItem value="sources">
-                  <AccordionTrigger>
-                    {t("sources", { n: current.references.length })}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul>
-                      {current.references.map((reference) => (
-                        <li key={reference.url}>
-                          <a
-                            href={reference.url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {reference.title}
-                            <ExternalLink size={12} />
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-              <div className="onboarding-next">
-                <Button
-                  variant="ghost"
-                  disabled={chapterIndex === 0}
-                  onClick={() => navigate(chapterIndex - 1)}
-                >
-                  <ArrowLeft size={15} />
-                  {t("previous")}
-                </Button>
-                <Button
-                  data-testid="onboarding-next"
-                  className="onboarding-next-button"
-                  onClick={() =>
-                    chapterIndex < content.chapters.length - 1
-                      ? navigate(chapterIndex + 1)
-                      : onStart()
-                  }
-                >
-                  {chapterIndex < content.chapters.length - 1
-                    ? t("next", {
-                        title: content.chapters[chapterIndex + 1].title,
-                      })
-                    : t("startLesson")}
-                  <ArrowRight size={15} />
-                </Button>
               </div>
-            </div>
+            </GlossaryScope>
           </motion.article>
         </AnimatePresence>
         <aside className="onboarding-aside">

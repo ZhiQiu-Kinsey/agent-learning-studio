@@ -7,6 +7,7 @@ import { onboardingProgressId, useProgress } from "../../progress";
 import SpotlightCard from "../react-bits/SpotlightCard";
 import type { CurriculumData } from "../../types";
 import { categoryTint, rgbOf } from "./tint";
+import Shuffle from "../react-bits/Shuffle";
 
 function Reveal({
   index,
@@ -26,7 +27,12 @@ function Reveal({
         reduced,
         { opacity: 0, y: 36, scale: 0.96 },
         { opacity: 1, y: 0, scale: 1 },
-        { type: "spring", damping: 22, stiffness: 160, delay: (index % 4) * 0.07 },
+        {
+          type: "spring",
+          damping: 22,
+          stiffness: 160,
+          delay: (index % 4) * 0.07,
+        },
       )}
       viewport={{ once: true, amount: 0.15 }}
     >
@@ -61,14 +67,18 @@ export function HomeJourney({
       data-testid="home-journey"
     >
       <header className="home-section-head">
-        <p className="home-eyebrow">{t("journey.kicker")}</p>
+        <p className="home-eyebrow">
+          <Shuffle text={t("journey.kicker")} />
+        </p>
         <h2 id="home-journey-title">{t("journey.title")}</h2>
         <p>{t("journey.lead")}</p>
       </header>
       <ol className="home-domains">
         <Reveal
           index={0}
-          style={{ "--tint": "#49dec6", "--tint-rgb": "73 222 198" } as CSSProperties}
+          style={
+            { "--tint": "#49dec6", "--tint-rgb": "73 222 198" } as CSSProperties
+          }
         >
           <SpotlightCard
             className="home-domain is-prelude"
@@ -136,7 +146,9 @@ export function HomeJourney({
               key={category.id}
               index={index + 1}
               data-testid="home-journey-category"
-              style={{ "--tint": tint.color, "--tint-rgb": rgb } as CSSProperties}
+              style={
+                { "--tint": tint.color, "--tint-rgb": rgb } as CSSProperties
+              }
             >
               <SpotlightCard
                 className={`home-domain ${target ? "" : "is-planned"}`}
@@ -188,7 +200,9 @@ export function HomeJourney({
                       </small>
                       <span className="home-domain-go">
                         {target ? t("journey.enter") : t("journey.plannedOnly")}
-                        {target && <ArrowUpRight size={14} aria-hidden="true" />}
+                        {target && (
+                          <ArrowUpRight size={14} aria-hidden="true" />
+                        )}
                       </span>
                     </span>
                   </span>

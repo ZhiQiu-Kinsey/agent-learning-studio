@@ -8,6 +8,7 @@ import BlurText from "../react-bits/BlurText";
 import ShinyText from "../react-bits/ShinyText";
 import StarBorder from "../react-bits/StarBorder";
 import Magnet from "../react-bits/Magnet";
+import ElectricBorder from "../react-bits/ElectricBorder";
 import RotatingText from "../react-bits/RotatingText";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import type { Lesson } from "../../types";
@@ -58,6 +59,23 @@ function PrimaryAction({ children }: { children: ReactNode }) {
   );
 }
 
+/** "Continue" exists only when this device really opened a lesson: electric outline. */
+function ContinueAction({ children }: { children: ReactNode }) {
+  return (
+    <Magnet className="home-cta-magnet">
+      <span className="home-cta-electric">
+        {children}
+        <ElectricBorder
+          color="#b98aff"
+          chaos={0.07}
+          speed={0.9}
+          borderRadius={14}
+        />
+      </span>
+    </Magnet>
+  );
+}
+
 /**
  * The dark observatory band: living backdrop, entrance title, the loop in three
  * rotating phrases, the ways in, and catalogue/device numbers that are all real.
@@ -81,7 +99,9 @@ export function HomeHero({
   const onboarding = (primary: boolean) => (
     <button
       type="button"
-      className={primary ? "home-cta home-cta-primary" : "home-cta home-cta-glass"}
+      className={
+        primary ? "home-cta home-cta-primary" : "home-cta home-cta-glass"
+      }
       data-testid="home-start-onboarding"
       onClick={onStartOnboarding}
     >
@@ -135,7 +155,7 @@ export function HomeHero({
         </p>
         <div className="home-actions">
           {last ? (
-            <PrimaryAction>
+            <ContinueAction>
               <button
                 type="button"
                 className="home-cta home-cta-primary"
@@ -149,7 +169,7 @@ export function HomeHero({
                 })}
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
-            </PrimaryAction>
+            </ContinueAction>
           ) : (
             <PrimaryAction>{onboarding(true)}</PrimaryAction>
           )}

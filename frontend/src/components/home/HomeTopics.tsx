@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import ScrollVelocity from "../react-bits/ScrollVelocity";
 import type { CurriculumData } from "../../types";
 import { categoryTint } from "./tint";
+import Shuffle from "../react-bits/Shuffle";
 
 /**
  * Module titles straight from the catalogue, drifting in two rows. The rows are
@@ -36,7 +37,9 @@ export function HomeTopics({ curriculum }: { curriculum: CurriculumData }) {
       aria-labelledby="home-topics-title"
     >
       <header className="home-section-head">
-        <p className="home-eyebrow">{t("topics.kicker")}</p>
+        <p className="home-eyebrow">
+          <Shuffle text={t("topics.kicker")} />
+        </p>
         <h2 id="home-topics-title">{t("topics.title")}</h2>
         <p>
           {t("topics.lead", {
