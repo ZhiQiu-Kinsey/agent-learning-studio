@@ -1,28 +1,27 @@
-import { lazy, Suspense, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useReducedMotion } from "./motion";
-import ShinyText from "./components/react-bits/ShinyText";
 import {
-  ArrowUpRight,
-  BookOpen,
-  House,
-  Search,
-  ChevronRight,
-  Layers3,
-  Menu,
-  Settings2,
-  Waypoints,
-  X,
-} from "lucide-react";
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { useTranslation } from "react-i18next";
+import { AnimatePresence, motion, useAnimate } from "motion/react";
+import { ChevronRight, Menu, Settings2, X } from "lucide-react";
+import { motionTokens, useReducedMotion } from "./motion";
 import { useStudio } from "./hooks/useStudio";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
-import { CourseNavigation } from "./components/CourseNavigation";
 import {
   CommandButton,
   CommandMenu,
   openCommandPalette,
 } from "./components/command/CommandMenu";
+import { RailNavigation } from "./components/shell/RailNavigation";
+import { ShellAmbient } from "./components/shell/ShellAmbient";
+import ClickSparkLayer from "./components/react-bits/ClickSparkLayer";
 import { Button } from "./components/ui/button";
 import {
   Sheet,
@@ -51,15 +50,54 @@ const LessonScenes = lazy(() =>
     default: module.LessonScenes,
   })),
 );
-const loadingPanel = (
-  <div className="learn-empty" role="status">
-    正在准备学习内容…
-  </div>
-);
+
+type View = "home" | "intro" | "catalog" | "lesson";
+
+// Page change: the old page lifts away while the new one rises out of a blur.
+const pageEnter = { opacity: 0, y: 14, filter: "blur(8px)" };
+const pageShown = {
+  opacity: 1,
+  y: 0,
+  filter: "blur(0px)",
+  transition: { duration: 0.42, ease: motionTokens.ease },
+  transitionEnd: { filter: "none" },
+};
+const pageExit = {
+  opacity: 0,
+  y: -10,
+  filter: "blur(6px)",
+  transition: { duration: 0.2, ease: motionTokens.ease },
+};
+
+// AnimatePresence (popLayout) measures the leaving page through this ref.
+function PageView({
+  ref,
+  name,
+  reduced,
+  children,
+}: {
+  ref?: Ref<HTMLDivElement>;
+  name: View;
+  reduced: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <motion.div
+      ref={ref}
+      className="page-view"
+      data-view={name}
+      initial={reduced ? false : pageEnter}
+      animate={reduced ? undefined : pageShown}
+      exit={reduced ? undefined : pageExit}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export default function App() {
   const reducedMotion = useReducedMotion();
-  const { t } = useTranslation(["home", "command"]);
+  const { t } = useTranslation(["common", "home"]);
   const studio = useStudio();
   const [catalog, setCatalog] = useState(false);
   // First visit lands on the home page; returning learners go straight to their lesson.
@@ -75,8 +113,52 @@ export default function App() {
   const [hasOpenedLesson, setHasOpenedLesson] = useState(!home);
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLButtonElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [lessonScope, animateLesson] = useAnimate<HTMLDivElement>();
+  const view: View = home
+    ? "home"
+    : intro
+      ? "intro"
+      : catalog
+        ? "catalog"
+        : "lesson";
+  const loadingPanel = (
+    <div className="learn-empty" role="status">
+      {t("shell.loading")}
+    </div>
+  );
+
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 6);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+
+  // LessonScenes stays mounted (hidden) to keep its state; only its container
+  // replays the page entrance when the lesson comes back on screen.
+  useEffect(() => {
+    const el = lessonScope.current;
+    if (view !== "lesson" || reducedMotion || !el) return;
+    const controls = animateLesson(
+      el,
+      {
+        opacity: [0, 1],
+        y: [14, 0],
+        filter: ["blur(8px)", "blur(0px)"],
+      },
+      { duration: 0.42, ease: motionTokens.ease },
+    );
+    controls.then(() => {
+      el.style.filter = "";
+      el.style.transform = "";
+    });
+    return () => controls.stop();
+  }, [view, reducedMotion, animateLesson, lessonScope]);
+
   function choose(id: string) {
     if (studio.running) return;
     studio.selectLesson(id);
@@ -91,132 +173,55 @@ export default function App() {
     setCatalog(false);
     setMenu(false);
   }
-  const navigation = (
-    <>
-      <div className="rail-brand">
-        <span>
-          <Waypoints size={23} />
-        </span>
-        <div>
-          <ShinyText
-            text="Agent Lab"
-            color="var(--text)"
-            shineColor="var(--accent)"
-            speed={3}
-            delay={3}
-            disabled={!!reducedMotion}
-          />
-          <small>开发者学习空间</small>
-        </div>
-      </div>
-      <Button
-        variant="ghost"
-        className={`rail-catalog ${home ? "is-active" : ""}`}
-        data-testid="app-home-button"
-        aria-pressed={home}
-        disabled={studio.running}
-        onClick={() => {
-          setHome(true);
-          setCatalog(false);
-          setIntro(false);
-          setMenu(false);
-        }}
-      >
-        <House size={17} />
-        {t("nav")}
-      </Button>
-      {/* Narrow screens hide the toolbar search button; keep the palette reachable. */}
-      <Button
-        variant="ghost"
-        className="rail-catalog rail-command"
-        data-testid="app-rail-command"
-        onClick={() => {
-          setMenu(false);
-          openCommandPalette();
-        }}
-      >
-        <Search size={17} />
-        {t("command:open")}
-      </Button>
-      <Button
-        variant="ghost"
-        className={`rail-catalog ${catalog ? "is-active" : ""}`}
-        data-testid="app-curriculum-button"
-        aria-pressed={catalog}
-        disabled={studio.running}
-        onClick={() => {
-          setCatalog(true);
-          setIntro(false);
-          setHome(false);
-          setMenu(false);
-        }}
-      >
-        <Layers3 size={17} />
-        完整课程表
-        <ArrowUpRight size={15} />
-      </Button>
-      <div className="nav-prelude">
-        <span className="course-tree-heading">
-          开始之前 <small>START HERE</small>
-        </span>
-        {["学习前言", "认识 Agent", "学习路线与准备", "使用实验工作台"].map(
-          (label, index) => (
-            <Button
-              key={label}
-              variant="ghost"
-              className={`nav-prelude-link ${intro && introChapter === index ? "is-active" : ""}`}
-              aria-current={
-                intro && introChapter === index ? "page" : undefined
-              }
-              disabled={studio.running}
-              onClick={() => {
-                setIntro(true);
-                setHome(false);
-                setIntroChapter(index);
-                setCatalog(false);
-                setMenu(false);
-                window.scrollTo({ top: 0 });
-              }}
-            >
-              <span>0{index + 1}</span>
-              {label}
-              <ChevronRight size={12} />
-            </Button>
-          ),
-        )}
-      </div>
-      <CourseNavigation
-        lessons={studio.lessons}
-        current={!intro && !catalog && !home ? studio.lessonId : undefined}
-        disabled={studio.running}
-        onSelect={choose}
-      />
-      <div className="rail-next">
-        <BookOpen size={18} />
-        <strong>从原理，到工程</strong>
-        <p>沿着课程地图，逐步学习记忆、检索、框架与多 Agent 协作。</p>
-        <Button
-          variant="ghost"
-          disabled={studio.running}
-          onClick={() => {
-            setCatalog(true);
-            setIntro(false);
-            setHome(false);
-            setMenu(false);
-          }}
-        >
-          探索学习路线 <ChevronRight size={14} />
-        </Button>
-      </div>
-      <div className="rail-footer">
-        <i />
-        本地学习空间<span>Python + React</span>
-      </div>
-    </>
+  const navigationProps = {
+    view,
+    introChapter,
+    running: studio.running,
+    lessons: studio.lessons,
+    lessonId: studio.lessonId,
+    onHome: () => {
+      setHome(true);
+      setCatalog(false);
+      setIntro(false);
+      setMenu(false);
+    },
+    onCommand: () => {
+      setMenu(false);
+      openCommandPalette();
+    },
+    onCatalog: () => {
+      setCatalog(true);
+      setIntro(false);
+      setHome(false);
+      setMenu(false);
+    },
+    onIntro: (index: number) => {
+      setIntro(true);
+      setHome(false);
+      setIntroChapter(index);
+      setCatalog(false);
+      setMenu(false);
+      window.scrollTo({ top: 0 });
+    },
+    onSelect: choose,
+  };
+  const location = t(
+    view === "home"
+      ? "home:nav"
+      : view === "intro"
+        ? "shell.breadcrumb.intro"
+        : view === "catalog"
+          ? "shell.breadcrumb.map"
+          : "shell.breadcrumb.lesson",
   );
+  const ready = !!studio.status?.config_ready;
   return (
-    <div className="studio-shell experience-shell">
-      <aside className="course-rail">{navigation}</aside>
+    <div className="studio-shell experience-shell" ref={shellRef}>
+      <ShellAmbient />
+      <ClickSparkLayer scope={shellRef} />
+      <motion.aside className="course-rail" layoutScroll>
+        <RailNavigation id="rail" {...navigationProps} />
+      </motion.aside>
       <Sheet open={menu} onOpenChange={setMenu}>
         <SheetContent
           side="left"
@@ -226,15 +231,17 @@ export default function App() {
             menuRef.current?.focus();
           }}
         >
-          <SheetTitle className="sr-only">课程菜单</SheetTitle>
+          <SheetTitle className="sr-only">{t("shell.menu.title")}</SheetTitle>
           <SheetDescription className="sr-only">
-            选择一节课程继续学习。
+            {t("shell.menu.description")}
           </SheetDescription>
-          {navigation}
+          <motion.div className="course-sheet-scroll" layoutScroll>
+            <RailNavigation id="sheet" {...navigationProps} />
+          </motion.div>
         </SheetContent>
       </Sheet>
       <div className="studio-body">
-        <header className="app-toolbar">
+        <header className="app-toolbar" data-scrolled={scrolled || undefined}>
           <div className="app-location">
             <Button
               ref={menuRef}
@@ -242,22 +249,34 @@ export default function App() {
               size="icon"
               className="open-course-menu"
               data-testid="app-open-course-menu"
-              aria-label="打开课程菜单"
+              aria-label={t("shell.menu.open")}
               onClick={() => setMenu(true)}
             >
               <Menu size={18} />
             </Button>
-            <span>Agent 开发</span>
-            <ChevronRight size={13} />
-            <strong>
-              {home
-                ? t("nav")
-                : intro
-                  ? "开始之前"
-                  : catalog
-                    ? "课程地图"
-                    : "基础实践"}
-            </strong>
+            <span>{t("shell.breadcrumb.root")}</span>
+            <ChevronRight size={13} aria-hidden="true" />
+            <span className="app-location-current">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.strong
+                  key={location}
+                  initial={
+                    reducedMotion
+                      ? false
+                      : { opacity: 0, y: 10, filter: "blur(4px)" }
+                  }
+                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                  exit={
+                    reducedMotion
+                      ? undefined
+                      : { opacity: 0, y: -10, filter: "blur(4px)" }
+                  }
+                  transition={{ duration: 0.28, ease: motionTokens.ease }}
+                >
+                  {location}
+                </motion.strong>
+              </AnimatePresence>
+            </span>
           </div>
           <div className="app-preferences">
             <CommandButton />
@@ -267,12 +286,15 @@ export default function App() {
               variant="outline"
               className="connection-button"
               data-testid="app-connection-button"
-              title="配置模型连接"
+              data-ready={ready || undefined}
+              title={t("shell.connection.title")}
               onClick={() => setSettings(true)}
             >
-              <i className={studio.status?.config_ready ? "is-ready" : ""} />
-              <span>{studio.status?.provider_label || "连接模型"}</span>
-              <Settings2 size={15} />
+              <i className={ready ? "is-ready" : ""} aria-hidden="true" />
+              <span>
+                {studio.status?.provider_label || t("shell.connection.connect")}
+              </span>
+              <Settings2 size={15} aria-hidden="true" />
             </Button>
           </div>
         </header>
@@ -283,60 +305,73 @@ export default function App() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="关闭错误提示"
+                aria-label={t("shell.dismissError")}
                 onClick={() => studio.setError("")}
               >
                 <X size={16} />
               </Button>
             </div>
           )}
-          {home && (
-            <Suspense fallback={loadingPanel}>
-              <Home
-                lessons={studio.lessons}
-                onOpenLesson={choose}
-                onStartOnboarding={() => {
-                  setHome(false);
-                  setIntro(true);
-                  setIntroChapter(0);
-                  window.scrollTo({ top: 0 });
-                }}
-                onOpenMap={() => {
-                  setHome(false);
-                  setCatalog(true);
-                }}
-              />
-            </Suspense>
-          )}
-          {intro && (
-            <Suspense fallback={loadingPanel}>
-              <Onboarding
-                chapter={introChapter}
-                onChapterChange={setIntroChapter}
-                onStart={() => {
-                  const first = studio.lessons.find(
-                    (lesson) => lesson.available,
-                  );
-                  if (first) choose(first.id);
-                }}
-                onMap={() => {
-                  setIntro(false);
-                  setCatalog(true);
-                }}
-              />
-            </Suspense>
-          )}
-          {catalog && (
-            <Suspense fallback={loadingPanel}>
-              <Curriculum onSelectLesson={choose} />
-            </Suspense>
-          )}
-          <div hidden={catalog || intro || home}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {view === "home" && (
+              <PageView key="home" name="home" reduced={reducedMotion}>
+                <Suspense fallback={loadingPanel}>
+                  <Home
+                    lessons={studio.lessons}
+                    onOpenLesson={choose}
+                    onStartOnboarding={() => {
+                      setHome(false);
+                      setIntro(true);
+                      setIntroChapter(0);
+                      window.scrollTo({ top: 0 });
+                    }}
+                    onOpenMap={() => {
+                      setHome(false);
+                      setCatalog(true);
+                    }}
+                  />
+                </Suspense>
+              </PageView>
+            )}
+            {view === "intro" && (
+              <PageView key="intro" name="intro" reduced={reducedMotion}>
+                <Suspense fallback={loadingPanel}>
+                  <Onboarding
+                    chapter={introChapter}
+                    onChapterChange={setIntroChapter}
+                    onStart={() => {
+                      const first = studio.lessons.find(
+                        (lesson) => lesson.available,
+                      );
+                      if (first) choose(first.id);
+                    }}
+                    onMap={() => {
+                      setIntro(false);
+                      setCatalog(true);
+                    }}
+                  />
+                </Suspense>
+              </PageView>
+            )}
+            {view === "catalog" && (
+              <PageView key="catalog" name="catalog" reduced={reducedMotion}>
+                <Suspense fallback={loadingPanel}>
+                  <Curriculum onSelectLesson={choose} />
+                </Suspense>
+              </PageView>
+            )}
+          </AnimatePresence>
+          <div
+            ref={lessonScope}
+            className="page-view"
+            data-view="lesson"
+            hidden={view !== "lesson"}
+          >
             {hasOpenedLesson && (
               <Suspense fallback={loadingPanel}>
                 <LessonScenes
                   studio={studio}
-                  visible={!catalog && !intro && !home}
+                  visible={view === "lesson"}
                   onConfigure={() => setSettings(true)}
                 />
               </Suspense>
@@ -354,9 +389,10 @@ export default function App() {
       />
       <CommandMenu
         studio={studio}
-        lessonOpen={!intro && !catalog}
+        lessonOpen={view === "lesson"}
         onLesson={choose}
         onIntro={(chapter) => {
+          setHome(false);
           setIntro(true);
           setIntroChapter(chapter);
           setCatalog(false);
@@ -364,6 +400,7 @@ export default function App() {
           window.scrollTo({ top: 0 });
         }}
         onMap={() => {
+          setHome(false);
           setCatalog(true);
           setIntro(false);
           setMenu(false);

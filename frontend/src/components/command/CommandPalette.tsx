@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { motion } from "motion/react";
 import { Command } from "cmdk";
 import { useTranslation } from "react-i18next";
 import {
@@ -29,6 +30,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "../ui/dialog";
+import { useReducedMotion } from "../../motion";
 import { paletteFilter } from "./filter";
 import { useReturnFocus } from "./returnFocus";
 
@@ -64,6 +66,13 @@ export function CommandPalette({
   const { t: tLesson } = useTranslation("lesson");
   const { t: tCommon } = useTranslation();
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<{
+    top: number;
+    height: number;
+  } | null>(null);
+  const reduced = useReducedMotion();
   const [chapters, setChapters] = useState<string[]>([]);
   const [planned, setPlanned] = useState<PaletteLesson[]>([]);
   // Whether closing should return focus to where the palette opened from.
@@ -99,6 +108,21 @@ export function CommandPalette({
   useEffect(() => {
     if (open) setSearch("");
   }, [open]);
+
+  // One highlight slides between results (spring), measured inside the
+  // scrolling list so keyboard scrolling keeps it aligned.
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const item = listRef.current?.querySelector<HTMLElement>(
+        '[cmdk-item][data-selected="true"]',
+      );
+      setIndicator(
+        item ? { top: item.offsetTop, height: item.offsetHeight } : null,
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, selected, search, chapters.length, planned.length]);
 
   const run =
     (action: () => void, { keepFocus = true } = {}) =>
@@ -137,7 +161,13 @@ export function CommandPalette({
         <DialogDescription className="sr-only">
           {t("description")}
         </DialogDescription>
-        <Command label={t("title")} loop filter={paletteFilter}>
+        <Command
+          label={t("title")}
+          loop
+          filter={paletteFilter}
+          value={selected}
+          onValueChange={setSelected}
+        >
           <div className="command-input-row">
             <Search size={16} aria-hidden="true" />
             <Command.Input
@@ -147,7 +177,24 @@ export function CommandPalette({
               data-testid="command-input"
             />
           </div>
-          <Command.List className="command-list" data-testid="command-list">
+          <Command.List
+            ref={listRef}
+            className="command-list"
+            data-testid="command-list"
+          >
+            {indicator && (
+              <motion.span
+                aria-hidden="true"
+                className="command-indicator"
+                initial={false}
+                animate={{ y: indicator.top, height: indicator.height }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 560, damping: 42, mass: 0.6 }
+                }
+              />
+            )}
             <Command.Empty className="command-empty">
               {t("empty")}
             </Command.Empty>
