@@ -6,28 +6,12 @@ import { jsonFetch } from "../api";
 import { formatLessonNumber } from "../lib/lessonIds";
 import { useReducedMotion } from "../motion";
 import type { CurriculumData, Lesson } from "../types";
-import { categoryBackdrop, type BackdropName } from "./backdrops/presets";
+import { tintFor } from "./backdrops/presets";
 import { RailItem, useRailHighlight } from "./shell/Rail";
 import { Button } from "./ui/button";
 
 /** Each domain's glow follows the hue of its hero backdrop. */
-const backdropTint: Record<BackdropName, string> = {
-  threads: "#8f7dff",
-  blinds: "#49dec6",
-  grainient: "#b98aff",
-  rays: "#c9c0ff",
-  galaxy: "#6f9dff",
-  ripple: "#b98aff",
-  terminal: "#6fd39a",
-  radar: "#49dec6",
-  web: "#ff9473",
-  aurora: "#6fe0c0",
-  veil: "#a28bff",
-  topography: "#6d5dfc",
-  orb: "#6d5dfc",
-};
-export const domainTint = (categoryId?: string) =>
-  backdropTint[(categoryId && categoryBackdrop[categoryId]) || "threads"];
+export const domainTint = tintFor;
 
 const fold = {
   type: "spring",

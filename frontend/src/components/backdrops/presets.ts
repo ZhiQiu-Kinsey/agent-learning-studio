@@ -13,6 +13,8 @@ const brand = {
 };
 
 interface Preset {
+  /** Accent that carries the mood onto light surfaces (nav dots, card bars). */
+  tint: string;
   load: () => Promise<{ default: unknown }>;
   props: Record<string, unknown>;
   fallback: string;
@@ -23,11 +25,13 @@ const glow = (a: string, b: string) =>
 
 export const backdropPresets = {
   threads: {
+    tint: "#a99bff",
     load: () => import("../react-bits/Threads"),
     props: { color: [0.66, 0.6, 1], amplitude: 1.6, distance: 0.3, enableMouseInteraction: true },
     fallback: glow(brand.violet, brand.teal),
   },
   blinds: {
+    tint: "#49dec6",
     load: () => import("../react-bits/GradientBlinds"),
     props: {
       gradientColors: [brand.violet, brand.teal],
@@ -44,6 +48,7 @@ export const backdropPresets = {
     fallback: glow(brand.teal, brand.violet),
   },
   grainient: {
+    tint: "#b98aff",
     load: () => import("../react-bits/Grainient"),
     props: {
       color1: "#7c5cff",
@@ -56,6 +61,7 @@ export const backdropPresets = {
     fallback: glow(brand.lilac, brand.violet),
   },
   rays: {
+    tint: "#d6ceff",
     load: () => import("../react-bits/LightRays"),
     props: {
       raysOrigin: "top-center",
@@ -72,6 +78,7 @@ export const backdropPresets = {
     fallback: `radial-gradient(80% 120% at 50% -10%, #c9c0ff44 0%, transparent 60%), ${brand.ink}`,
   },
   galaxy: {
+    tint: "#7aa2ff",
     load: () => import("../react-bits/Galaxy"),
     props: {
       density: 1.1,
@@ -88,6 +95,7 @@ export const backdropPresets = {
     fallback: glow(brand.violet, "#2a6df4"),
   },
   ripple: {
+    tint: "#c9a6ff",
     load: () => import("../react-bits/RippleGrid"),
     props: {
       gridColor: brand.lilac,
@@ -102,6 +110,7 @@ export const backdropPresets = {
     fallback: glow(brand.lilac, brand.teal),
   },
   terminal: {
+    tint: "#6fd39a",
     load: () => import("../react-bits/FaultyTerminal"),
     props: {
       scale: 1.6,
@@ -121,6 +130,7 @@ export const backdropPresets = {
     fallback: glow(brand.mint, brand.teal),
   },
   radar: {
+    tint: "#49dec6",
     load: () => import("../react-bits/Radar"),
     props: {
       color: brand.teal,
@@ -135,6 +145,7 @@ export const backdropPresets = {
     fallback: glow(brand.teal, brand.mint),
   },
   web: {
+    tint: "#ff9473",
     load: () => import("../react-bits/WebThreads"),
     props: {
       color1: brand.violet,
@@ -150,6 +161,7 @@ export const backdropPresets = {
     fallback: glow(brand.coral, brand.violet),
   },
   aurora: {
+    tint: "#7ce8d6",
     load: () => import("../react-bits/SoftAurora"),
     props: {
       color1: brand.teal,
@@ -162,6 +174,7 @@ export const backdropPresets = {
     fallback: glow(brand.teal, brand.lilac),
   },
   veil: {
+    tint: "#b98aff",
     load: () => import("../react-bits/DarkVeil"),
     props: {
       hueShift: 18,
@@ -176,6 +189,7 @@ export const backdropPresets = {
     fallback: glow(brand.violet, brand.lilac),
   },
   topography: {
+    tint: "#6d5dfc",
     load: () => import("../react-bits/Topography"),
     props: {
       lowColor: "#241b5c",
@@ -191,11 +205,13 @@ export const backdropPresets = {
     fallback: glow(brand.violet, brand.teal),
   },
   orb: {
+    tint: "#a99bff",
     load: () => import("../react-bits/Orb"),
     props: { hue: 0, hoverIntensity: 0.35, rotateOnHover: true, backgroundColor: brand.ink },
     fallback: `radial-gradient(40% 60% at 50% 50%, ${brand.violet}55 0%, transparent 70%), ${brand.ink}`,
   },
   lightfall: {
+    tint: "#b98aff",
     load: () => import("../react-bits/Lightfall"),
     props: {
       colors: [brand.lilac, brand.violet, brand.teal, "#d6ceff"],
@@ -235,3 +251,6 @@ export const categoryBackdrop: Record<string, BackdropName> = {
 };
 export const backdropFor = (categoryId?: string): BackdropName =>
   (categoryId && categoryBackdrop[categoryId]) || "threads";
+/** Accent colour of a curriculum domain, shared by nav, cards and hero bands. */
+export const tintFor = (categoryId?: string) =>
+  backdropPresets[backdropFor(categoryId)].tint;
