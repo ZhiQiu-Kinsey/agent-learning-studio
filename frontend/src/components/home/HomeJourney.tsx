@@ -6,7 +6,8 @@ import { revealProps, useReducedMotion } from "../../motion";
 import { onboardingProgressId, useProgress } from "../../progress";
 import SpotlightCard from "../react-bits/SpotlightCard";
 import type { CurriculumData } from "../../types";
-import { categoryTint, rgbOf } from "./tint";
+import { rgbChannels } from "../../lib/color";
+import { categoryTint } from "./tint";
 import Shuffle from "../react-bits/Shuffle";
 
 function Reveal({
@@ -137,7 +138,7 @@ export function HomeJourney({
             available.find((lesson) => !progress.lessons[lesson.id]) ??
             available[0];
           const tint = categoryTint(category.id);
-          const rgb = rgbOf(tint.color);
+          const rgb = rgbChannels(tint.color);
           const share = inCategory.length
             ? Math.round((opened / inCategory.length) * 100)
             : 0;
@@ -153,7 +154,7 @@ export function HomeJourney({
               <SpotlightCard
                 className={`home-domain ${target ? "" : "is-planned"}`}
                 spotlightColor={
-                  `rgba(${rgbOf(tint.color, ", ")}, 0.2)` as `rgba(${number}, ${number}, ${number}, ${number})`
+                  `rgba(${rgbChannels(tint.color, ", ")}, 0.2)` as `rgba(${number}, ${number}, ${number}, ${number})`
                 }
               >
                 <button

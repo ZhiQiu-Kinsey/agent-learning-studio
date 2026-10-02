@@ -3,6 +3,7 @@ import {
   backdropPresets,
   type BackdropName,
 } from "../backdrops/presets";
+import { rgbChannels } from "../../lib/color";
 
 /**
  * Each domain borrows the palette of its hero backdrop (presets.ts), so a
@@ -10,10 +11,7 @@ import {
  * Values are "r, g, b" so MagicBento can derive glow alphas.
  */
 export const backdropAccent = (name: BackdropName): string =>
-  rgbChannels(backdropPresets[name].tint);
-
-const rgbChannels = (hex: string) =>
-  [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(", ");
+  rgbChannels(backdropPresets[name].tint, ", ");
 
 export interface DomainAtmosphere {
   backdrop: BackdropName;

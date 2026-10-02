@@ -8,4 +8,12 @@
 - `RoadmapSection.tsx`: switches to a vertical stage list at 720px and below, so the page never scrolls sideways.
 - `DomainBento.tsx`: domain tiles on React Bits [MagicBento](../react-bits/MagicBento.tsx) (MIT + Commons Clause, see `../react-bits/LICENSE.md`), with CountUp for lesson counts. Particles and the spotlight only run at the full motion level while the grid is on screen; only the hovered tile animates, so a single looping effect is ever visible.
 
+`../Curriculum.tsx` only assembles the pieces below:
+
+- Data hooks: `useCurriculumData.ts` (fetch with retry, derived graph), `useMapView.ts` (view kept in sessionStorage), `useLessonFilter.ts` (search / only-available / domain, shared by roadmap and list).
+- `CurriculumHero.tsx` + `MapMetric.tsx`: masthead, resume/start action and real catalogue counts. `CurriculumLoading.tsx`: loading and retry.
+- `ViewSwitch.tsx` (GooeyNav tab list), `ViewPanel.tsx` (view entrance), `RoadmapPanel.tsx` (roadmap view container).
+- List view: `CurriculumFilters.tsx`, `LessonList.tsx`, `CategoryBlock.tsx` (domain block, modules, lesson rows), `LessonPlan.tsx` (lesson detail), `Supplements.tsx` (electives, principles, sources).
+- `transitions.ts`: shared spring and easing (easing comes from `src/motion/tokens.ts`).
+
 The list view keeps the existing SpotlightCard categories and SquishSwitch filter. RotatingText and GlareHover were removed with the old hero: they added continuous motion next to MagicBento.
