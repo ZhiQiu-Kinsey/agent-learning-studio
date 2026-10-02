@@ -6,6 +6,7 @@ from importlib import import_module
 from pathlib import Path, PurePosixPath
 
 # LessonValidationError 定义在 server.curriculum，这里继续导出以保持原有导入路径。
+from server.code_reading import compare_target, lesson_code, validate_code_scene
 from server.content import lesson_content_model, load_lesson_content
 from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
 
@@ -136,7 +137,12 @@ def _manifest(root, path, catalog_lesson):
         else:
             _require(isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]*", value), path, f"ui.{key} 必须为扩展键")
     defaults = _object(data.get("input_defaults", {}), str(path) + ": input_defaults")
-    lesson_content_model(content_path, {"id": data["id"], "subtitle": subtitle, "exercises": exercises})
+    content_model = lesson_content_model(content_path, {"id": data["id"], "subtitle": subtitle, "exercises": exercises})
+    # 读码批注必须对准本课白名单源码中真实存在的行。
+    validate_code_scene(content_model, sources,
+                        lambda relative: _safe_file(root, relative, str(path) + ": sources.path",
+                                                    source=True).read_text(encoding="utf-8"),
+                        str(content_path))
     return {"id": data["id"], "number": catalog_lesson["number"], "aliases": list(catalog_lesson.get("aliases", [])),
             "title": catalog_lesson["title"], "description": catalog_lesson["summary"],
             "objectives": catalog_lesson["objectives"], "subtitle": subtitle, "exercises": exercises,
@@ -144,7 +150,8 @@ def _manifest(root, path, catalog_lesson):
             "status": catalog_lesson["status"], "available": catalog_lesson["status"] == "available",
             "capabilities": {"requires_model": runtime["requires_model"], "custom_runtime": kind == "custom", "supports_inputs": kind == "custom"},
             "root": root, "module": module, "package": "lessons." + module,
-            "content": content_relative, "content_path": content_path, "sources": sources}
+            "content": content_relative, "content_path": content_path, "sources": sources,
+            "code_compare": compare_target(content_model)}
 
 
 def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
@@ -180,6 +187,14 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
     for identifier, entry in catalog.items():
         _require(entry["status"] != "available" or identifier in found,
                  "curriculum lesson " + identifier, "available 课程缺少 lessons/lesson_*/lesson.json 实现声明")
+    for identifier, spec in found.items():
+        target = spec["code_compare"]
+        if target is not None:
+            # whats-new 的对比课可以写 slug 或别名，但必须是另一门已有实现的课程。
+            canonical = index.resolve(target)
+            _require(canonical in found and canonical != identifier, str(spec["content_path"]),
+                     f"whats-new.compare_with「{target}」必须引用另一门已有实现的课程")
+            spec["code_compare"] = canonical
     return [found[identifier] for identifier in catalog if identifier in found
             and (include_planned or found[identifier]["available"])]
 
@@ -220,6 +235,13 @@ def lesson_callable(spec, reference):
     function = getattr(import_module(spec["package"] + "." + module_name), function_name, None)
     _require(callable(function), "lesson " + spec["id"], "声明的入口函数不存在或不可调用")
     return function
+
+
+def lesson_code_view(spec, locale=None):
+    """读码场景数据：只读本课 sources 白名单，批注取自已合并译文层的内容。"""
+    content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
+    learning, _ = load_lesson_content(content_path, spec, locale)
+    return lesson_code(spec, LESSONS, learning)
 
 
 def lesson_detail(spec, locale=None):

@@ -217,6 +217,124 @@
         }
       ]
     },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new"
+        },
+        {
+          "id": "code-memory-store",
+          "type": "annotated-source",
+          "path": "lessons/lesson_10_persistent_memory/runtime.py",
+          "start": 35,
+          "end": 91,
+          "notes": [
+            {
+              "id": "n37",
+              "line": 37,
+              "text": "只读模式用 SQLite URI 的 mode=ro 打开，读取阶段在数据库层面就无法写入。"
+            },
+            {
+              "id": "n44",
+              "line": 44,
+              "text": "主键是 (namespace, key)：同一范围的同一个键只有一条记录。"
+            },
+            {
+              "id": "n56",
+              "line": 56,
+              "text": "读取时检查 expires_at，过期记录视为不存在，但这里不会删除它。"
+            },
+            {
+              "id": "n63",
+              "line": 63,
+              "text": "BEGIN IMMEDIATE 先拿写锁再读版本，避免两次写入交错。"
+            },
+            {
+              "id": "n70",
+              "line": 70,
+              "text": "乐观并发：期望版本与当前版本不符就拒绝；已过期的记录允许以 expected_version=None 重写，版本继续递增，不抹掉时间线。"
+            }
+          ]
+        },
+        {
+          "id": "code-memory-lifecycle",
+          "type": "annotated-source",
+          "path": "lessons/lesson_10_persistent_memory/runtime.py",
+          "start": 94,
+          "end": 191,
+          "notes": [
+            {
+              "id": "n97",
+              "line": 97,
+              "text": "只读恢复时，数据库文件不存在就改用内存库，读取阶段不会创建文件。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "text": "另取一个 namespace，用来核对本次写入没有影响其他范围。"
+            },
+            {
+              "id": "n128",
+              "line": 128,
+              "text": "关闭第一条连接后用新连接重新打开，证明恢复不依赖进程内的变量。"
+            },
+            {
+              "id": "n138",
+              "line": 138,
+              "text": "用比当前小 1 的版本模拟过时写入，它必须被拒绝。"
+            },
+            {
+              "id": "n153",
+              "line": 153,
+              "text": "把到期时间设为一秒前，验证过期记录读不到。"
+            }
+          ]
+        },
+        {
+          "id": "code-memory-storage",
+          "type": "annotated-source",
+          "path": "lessons/lesson_10_persistent_memory/runtime.py",
+          "start": 194,
+          "end": 209,
+          "notes": [
+            {
+              "id": "n196",
+              "line": 196,
+              "text": "测试模式使用一次性临时目录，不会改动本地教学库。"
+            },
+            {
+              "id": "n209",
+              "line": 209,
+              "text": "真实练习写入 .runtime 下的固定 SQLite 文件，第二次运行仍能读到。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "用 SQLite 加版本号保存显式记忆",
+          "chosen": "标准库 sqlite3 保存 namespace、key、value、source、version、expires_at；读取时检查到期，写入时用期望版本做乐观并发，删除后重开连接核对。",
+          "alternatives": [
+            {
+              "id": "in-process-dict",
+              "title": "放在进程内字典里",
+              "why_not": "进程重启就丢失；本课要证明的正是关闭连接后仍能恢复。"
+            },
+            {
+              "id": "vector-store",
+              "title": "用向量库按相似度检索",
+              "why_not": "适合模糊召回，但本课要演示精确的键、来源、版本和删除；相似检索会掩盖“记录是否真的被删掉”。"
+            },
+            {
+              "id": "last-write-wins",
+              "title": "写入时直接覆盖",
+              "why_not": "过时的更新会悄悄覆盖新值；conflict 场景展示的正是版本比较如何拒绝它。"
+            }
+          ]
+        }
+      ]
+    },
     "lab": {
       "experiments": [
         {

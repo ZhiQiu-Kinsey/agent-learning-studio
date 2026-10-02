@@ -188,6 +188,78 @@
         }
       ]
     },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new"
+        },
+        {
+          "id": "code-dependency-prompt",
+          "type": "annotated-source",
+          "path": "lessons/lesson_02_dependent_calls/main.py",
+          "notes": [
+            {
+              "id": "n4",
+              "line": 4,
+              "text": "直接复用第 1 课的 TOOLS 和 AVAILABLE_TOOLS。本课只改提示词，“本课新增”里工具定义显示为沿用，方便对照。"
+            },
+            {
+              "id": "n13",
+              "line": 13,
+              "text": "工具定义无法表达“b 依赖 a 的结果”，所以依赖顺序写在系统提示词里：先单独取时间。"
+            },
+            {
+              "id": "n15",
+              "line": 15,
+              "text": "模型可以在同一轮一次提出多个调用。同一轮的参数在发出时就已确定，看不到彼此的结果，有依赖时只能靠猜，因此明确禁止。"
+            }
+          ]
+        },
+        {
+          "id": "code-rounds",
+          "type": "annotated-source",
+          "path": "course/runner.py",
+          "start": 69,
+          "end": 108,
+          "notes": [
+            {
+              "id": "n69",
+              "line": 69,
+              "text": "依赖调用靠多轮完成：第 1 轮拿到真实时间，第 2 轮模型才能用 hour、minute 提出加法。"
+            },
+            {
+              "id": "n96",
+              "line": 96,
+              "text": "同一轮的多个 tool_calls 按顺序执行，但参数都是模型在这一轮开始前写好的。"
+            },
+            {
+              "id": "n102",
+              "line": 102,
+              "text": "结果以 JSON 字符串放进 role=tool 消息。下一轮请求的 messages 里能看到 hour、minute，这就是“工具结果成为下一次调用参数”的通道。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "依赖顺序交给多轮循环与提示词，不在 Python 里写死",
+          "chosen": "运行器保持通用：每轮把真实工具结果追加进 messages，由模型在下一轮根据 hour、minute 提出加法；SYSTEM_PROMPT 只声明依赖规则和禁止猜参数。",
+          "alternatives": [
+            {
+              "id": "hardcode-order",
+              "title": "在 Python 中固定先调 get_current_time，再调 add_numbers",
+              "why_not": "对这一个问题更稳，但运行器就不再是 Agent 循环；“计算 19 加 23，并告诉我现在几点”这类独立任务也会被强制串行。"
+            },
+            {
+              "id": "combined-tool",
+              "title": "新增组合工具，一次返回“小时加分钟”",
+              "why_not": "依赖消失了，学习者也就看不到工具结果如何进入下一次调用；每种组合还都要新写一个工具。"
+            }
+          ]
+        }
+      ]
+    },
     "lab": {
       "experiments": [
         {

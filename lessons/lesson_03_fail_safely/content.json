@@ -183,6 +183,90 @@
         }
       ]
     },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new"
+        },
+        {
+          "id": "code-divide-guard",
+          "type": "annotated-source",
+          "path": "lessons/lesson_03_fail_safely/tools.py",
+          "start": 29,
+          "end": 54,
+          "notes": [
+            {
+              "id": "n32",
+              "line": 32,
+              "text": "逐个检查参数类型并排除 bool，错误消息点名是哪个参数。"
+            },
+            {
+              "id": "n37",
+              "line": 37,
+              "text": "超大整数转成浮点数时 math.isfinite 会抛 OverflowError，这里把它转换为明确的“超出支持范围”，不让意外异常逃出工具。"
+            },
+            {
+              "id": "n43",
+              "line": 43,
+              "text": "除数为 0 时抛 ValueError，消息里直接写修正方法。这段文字会原样回传给模型，供它向用户解释。"
+            },
+            {
+              "id": "n49",
+              "line": 49,
+              "text": "浮点运算溢出可能得到 inf 而不抛错，所以对结果也再检查一次。"
+            }
+          ]
+        },
+        {
+          "id": "code-error-wrapping",
+          "type": "annotated-source",
+          "path": "course/runner.py",
+          "start": 13,
+          "end": 40,
+          "notes": [
+            {
+              "id": "n21",
+              "line": 21,
+              "text": "模型给出的 arguments 是 JSON 字符串；格式错误会抛 JSONDecodeError，在下面被包装为工具失败。"
+            },
+            {
+              "id": "n25",
+              "line": 25,
+              "text": "未登记的工具名也作为 ValueError 处理，回传 ok=false，而不是让整个运行崩溃。"
+            },
+            {
+              "id": "n33",
+              "line": 33,
+              "text": "只捕获参数与校验类异常。其他异常会继续向上抛，运行以 error 结束，不会被伪装成一次普通的工具失败。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "text": "失败结果包含 ok=false、error_type 和 error。下一轮模型读到的是具体原因，而不是空白。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "可预期的工具失败作为结构化结果回传，而不是中断运行",
+          "chosen": "execute_tool 把参数和领域错误包装为 {ok: false, error_type, error}，仍以 role=tool 消息回传；SYSTEM_PROMPT 要求只有 ok=true 才能报告结果，ok=false 时如实说明并请用户修正。",
+          "alternatives": [
+            {
+              "id": "abort-on-error",
+              "title": "工具一抛异常就终止整个运行",
+              "why_not": "模型拿不到失败原因，用户只看到运行失败，得不到“请提供非零除数”这样的修正建议。"
+            },
+            {
+              "id": "default-value",
+              "title": "失败时返回默认值（如 0 或 None）",
+              "why_not": "模型会把默认值当成真实结果报告出去，正是本课要避免的“编造商”。"
+            }
+          ]
+        }
+      ]
+    },
     "lab": {
       "experiments": [
         {

@@ -209,6 +209,124 @@
         }
       ]
     },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new"
+        },
+        {
+          "id": "code-three-layers",
+          "type": "annotated-source",
+          "path": "lessons/lesson_05_structured_output/runtime.py",
+          "start": 21,
+          "end": 50,
+          "notes": [
+            {
+              "id": "n22",
+              "line": 22,
+              "text": "extra=\"forbid\"：多出一个字段也算 Schema 失败，模型不能夹带未声明的内容。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "text": "json.loads 默认接受 NaN、Infinity 这类非标准常量，parse_constant 把它们拒绝掉。"
+            },
+            {
+              "id": "n41",
+              "line": 41,
+              "text": "第二层用 Pydantic 校验必填、类型和长度。"
+            },
+            {
+              "id": "n45",
+              "line": 45,
+              "text": "上游失败就直接返回，后面的层级不做判断，报告里也不会出现未执行的检查。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "text": "第三层逐项比对 FACTS。结构完全合法的输出仍可能写错事实，wrong_fact 场景就停在这一层。"
+            }
+          ]
+        },
+        {
+          "id": "code-repair",
+          "type": "annotated-source",
+          "path": "lessons/lesson_05_structured_output/runtime.py",
+          "start": 78,
+          "end": 103,
+          "notes": [
+            {
+              "id": "n88",
+              "line": 88,
+              "text": "temperature=0 降低随机性，但不保证每次输出相同；结果仍以本次 response 为准。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "text": "只有未通过、repair 开启、且模型调用预算至少为 2 时才修复，并且只修一次。"
+            },
+            {
+              "id": "n95",
+              "line": 95,
+              "text": "修复请求把原始输出作为 assistant 消息放回，只附上未通过项的具体原因。"
+            },
+            {
+              "id": "n102",
+              "line": 102,
+              "text": "accepted 要求三层都执行并且都通过；只有两层通过不算。"
+            }
+          ]
+        },
+        {
+          "id": "code-complete",
+          "type": "annotated-source",
+          "path": "course/execution.py",
+          "start": 68,
+          "end": 86,
+          "notes": [
+            {
+              "id": "n73",
+              "line": 73,
+              "text": "每次模型调用前检查预算，超过 lesson.json 声明的 max_rounds 就停止，修复循环不可能无限进行。"
+            },
+            {
+              "id": "n75",
+              "line": 75,
+              "text": "课程代码不能自己换模型，请求必须使用当前配置的模型。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "text": "请求和响应都作为事件发布，报告里的结论可以回到原始数据核对。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "三层校验（JSON → Schema → 事实），最多修复一次",
+          "chosen": "先用 json.loads 解析，再用 Pydantic TaskCard 校验结构，最后与给定 FACTS 比对；任一层失败时，可以带着具体错误让模型重写一次，结果仍要重新经过三层检查。",
+          "alternatives": [
+            {
+              "id": "regex-extract",
+              "title": "用正则从回答里抽取字段",
+              "why_not": "能抽到值不代表结构合法，多余字段、类型错误和非标准常量都会被放过。"
+            },
+            {
+              "id": "schema-only",
+              "title": "只做 Schema 校验",
+              "why_not": "wrong_fact 场景的输出结构完全合法，只有和可信事实比对才能发现 prerequisite 写错。"
+            },
+            {
+              "id": "retry-until-pass",
+              "title": "失败后不断重试直到通过",
+              "why_not": "消耗不可控，也容易把“碰巧通过”当作可靠；本课受模型调用预算约束，最多修复一次。"
+            }
+          ]
+        }
+      ]
+    },
     "lab": {
       "experiments": [
         {
