@@ -42,7 +42,7 @@ async function errorFrom(
 }
 
 /** Content endpoints serve translation overlays; the source locale needs no parameter. */
-const localizedPaths = /^\/api\/(lessons\/[^/?]+|onboarding)(\?|$)/;
+const localizedPaths = /^\/api\/(lessons\/[^/?]+(\/code)?|onboarding)(\?|$)/;
 export function withLocale(path: string) {
   const language = i18n.resolvedLanguage ?? sourceLocale;
   if (language === sourceLocale || !localizedPaths.test(path)) return path;

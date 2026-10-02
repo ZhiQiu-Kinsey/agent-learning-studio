@@ -23,8 +23,8 @@ from course.runner import RunCancelled
 from course.api_client import send_bailian
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
-from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_detail,
-                            lesson_runtime, lesson_spec, public_lesson)
+from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_code_view,
+                            lesson_detail, lesson_runtime, lesson_spec, public_lesson)
 from server.content import load_onboarding
 from server.content_overlay import LOCALE
 from server.curriculum import public_curriculum, roadmap
@@ -214,6 +214,17 @@ def glossary():
 @app.get("/api/lessons/{lesson_id}")
 def detail(lesson_id: str, lang: str | None = None):
     return lesson_detail(require_lesson(lesson_id), require_locale(lang))
+
+
+@app.get("/api/lessons/{lesson_id}/code")
+def lesson_code(lesson_id: str, lang: str | None = None):
+    """读码场景：源码符号、本课新增（与对比课的 AST 比较）和批注；只读本课 sources 白名单。"""
+    spec = require_lesson(lesson_id)
+    locale = require_locale(lang)
+    try:
+        return lesson_code_view(spec, locale)
+    except (OSError, SyntaxError, ValueError):  # LessonValidationError 是 ValueError 的子类
+        raise ApiError(503, "code_unavailable", "本课源码暂时无法解析，请检查课程源码与读码内容。") from None
 
 
 # 随课录制是只读的课程资源，与 /api/runs（学习者自己的运行）完全分开，不写入运行存储。

@@ -114,6 +114,114 @@
         }
       ]
     },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new"
+        },
+        {
+          "id": "code-tool-schema",
+          "type": "annotated-source",
+          "path": "lessons/lesson_01_tool_selection/tools.py",
+          "start": 7,
+          "end": 41,
+          "notes": [
+            {
+              "id": "n12",
+              "line": 12,
+              "text": "description 写的是“什么时候该调用”，而不只是“它做什么”。模型选工具时只能看到名称、描述和参数结构，看不到下面的 Python 实现。"
+            },
+            {
+              "id": "n20",
+              "line": 20,
+              "text": "additionalProperties=False 告诉模型不要传 schema 之外的参数。即使模型仍然多传，Python 调用 add_numbers(**arguments) 也会触发 TypeError，被运行器包装为 ok=false。"
+            },
+            {
+              "id": "n30",
+              "line": 30,
+              "text": "描述里写明返回字段 hour、minute。模型在提出调用前就知道结果长什么样，第 2 课的依赖调用正是靠这两个字段。"
+            }
+          ]
+        },
+        {
+          "id": "code-tool-impl",
+          "type": "annotated-source",
+          "path": "lessons/lesson_01_tool_selection/tools.py",
+          "start": 44,
+          "end": 69,
+          "notes": [
+            {
+              "id": "n46",
+              "line": 46,
+              "text": "先排除 bool：在 Python 里 True 是 int 的子类，不排除的话 True + 1 会被当成 2 算出来。"
+            },
+            {
+              "id": "n50",
+              "line": 50,
+              "text": "json.loads 默认接受 NaN 和 Infinity，所以模型传来的参数仍要检查是否为有限数字。"
+            },
+            {
+              "id": "n57",
+              "line": 57,
+              "text": "时间来自运行 Python 的这台机器。模型自己无法知道“现在”，只能读工具结果。"
+            },
+            {
+              "id": "n66",
+              "line": 66,
+              "text": "AVAILABLE_TOOLS 是可执行白名单：运行器只按名称在这个字典里查找函数，模型提出别的名字不会被执行。"
+            }
+          ]
+        },
+        {
+          "id": "code-native-loop",
+          "type": "annotated-source",
+          "path": "course/runner.py",
+          "start": 47,
+          "end": 112,
+          "notes": [
+            {
+              "id": "n71",
+              "line": 71,
+              "text": "每一轮都把完整 messages 和 tools 一起发出。模型本身不保存上一轮的内容，历史只存在于这份请求体里。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "text": "只有响应里没有 tool_calls 时，content 才被当作最终回答。有 tool_calls 时，这一轮只是“提议行动”。"
+            },
+            {
+              "id": "n95",
+              "line": 95,
+              "text": "先追加带 tool_calls 的 assistant 消息，再追加 role=tool 的结果。服务商要求每个结果的 tool_call_id 都能对上前面的调用。"
+            },
+            {
+              "id": "n110",
+              "line": 110,
+              "text": "轮数用完仍没有回答就抛错，而不是返回半截结果；运行会以 error 结束，学习者能看到真实原因。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "工具由 Python 按白名单执行，模型只提出调用",
+          "chosen": "模型返回的 tool_calls 只是提议。execute_tool 解析参数后，只在 AVAILABLE_TOOLS 中按名称查找函数并执行，再把结果包装为 ok=true 的 result 或 ok=false 的错误，通过 role=tool 消息交回模型。",
+          "alternatives": [
+            {
+              "id": "model-answers-directly",
+              "title": "不用工具，让模型直接回答",
+              "why_not": "算术和当前时间都是模型无法可靠给出的事实；没有 tool_result，回答就缺少可以核对的证据。"
+            },
+            {
+              "id": "dynamic-dispatch",
+              "title": "按模型给出的名字用 getattr 或 eval 动态调用",
+              "why_not": "模型生成的名字不可信，可能指向未登记甚至危险的函数。显式字典把可执行范围限定在本课登记的两个函数。"
+            }
+          ]
+        }
+      ]
+    },
     "lab": {
       "experiments": [
         {
