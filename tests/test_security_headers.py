@@ -18,6 +18,7 @@ class SecurityHeadersTest(unittest.TestCase):
         self.assertNotIn("'unsafe-eval'", policy)
         self.assertEqual(directives["frame-ancestors"], ["'none'"])
         self.assertIn("blob:", directives["img-src"])
+        self.assertEqual(directives["connect-src"], ["'self'", "blob:"])
 
 
 if __name__ == "__main__":

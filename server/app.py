@@ -153,8 +153,8 @@ async def local_request_guard(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     # 'wasm-unsafe-eval' only allows compiling WebAssembly (the 3D badge's physics
-    # engine), not JavaScript eval; blob: images are textures decoded from local models.
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+    # engine), not JavaScript eval; blob: images/fetches are textures decoded from local models.
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'"
     return response
 
 
