@@ -158,7 +158,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.teal, brand.mint),
-    light: { props: { lightMode: true } },
+    light: { props: { lightMode: true, backgroundColor: "#f4f2ff" } },
   },
   web: {
     tint: "#ff9473",

@@ -4,13 +4,15 @@
 // the React Bits repository (same licence). Changes: sized to its parent
 // instead of the viewport, the render/physics loop follows `active` (off
 // screen or hidden tab -> frameloop "never"), desktop-only so no mobile branch,
-// and the front face takes a caller-drawn image. Import it with React.lazy:
+// the front face takes a caller-drawn image (atlas upscaled to keep its
+// resolution), and dpr / anchor height are props. Import it with React.lazy:
 // three / fiber / drei / rapier only load where the badge is shown.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Canvas,
   extend,
   useFrame,
+  useThree,
   type ThreeElement,
   type ThreeEvent,
 } from "@react-three/fiber";
@@ -53,6 +55,8 @@ export default function Lanyard({
   position = [0, 0, 13],
   gravity = [0, -40, 0],
   fov = 20,
+  dpr = [1, 2],
+  anchorY = 4,
   className = "",
 }: {
   frontImage: string;
@@ -60,20 +64,24 @@ export default function Lanyard({
   position?: [number, number, number];
   gravity?: [number, number, number];
   fov?: number;
+  /** Render resolution range (device pixel ratio), as in R3F's Canvas. */
+  dpr?: [number, number];
+  /** Height of the band's fixed anchor; raise it to hang the card higher. */
+  anchorY?: number;
   className?: string;
 }) {
   return (
     <div className={`rb-lanyard ${className}`}>
       <Canvas
         camera={{ position, fov }}
-        dpr={[1, 2]}
+        dpr={dpr}
         frameloop={active ? "always" : "never"}
         gl={{ alpha: true }}
         onCreated={({ gl }) => gl.setClearColor(new THREE.Color(0x000000), 0)}
       >
         <ambientLight intensity={Math.PI} />
         <Physics gravity={gravity} timeStep={1 / 60} paused={!active}>
-          <Band frontImage={frontImage} />
+          <Band frontImage={frontImage} anchorY={anchorY} />
         </Physics>
         <Environment blur={0.75}>
           <Lightformer
@@ -114,10 +122,12 @@ type LanyardRigidBody = RapierRigidBody & { lerped?: THREE.Vector3 };
 
 function Band({
   frontImage,
+  anchorY,
   maxSpeed = 50,
   minSpeed = 0,
 }: {
   frontImage: string;
+  anchorY: number;
   maxSpeed?: number;
   minSpeed?: number;
 }) {
@@ -151,18 +161,30 @@ function Band({
   const texture = useTexture(lanyardTexture);
   const frontTex = useTexture(frontImage);
 
+  const maxTexture = useThree((state) => state.gl.capabilities.maxTextureSize);
+
   // Composite the drawn face into the card atlas (aspect-preserving cover).
+  // The atlas is upscaled so the face keeps its own resolution instead of
+  // being squeezed into the model's original texture size.
   const cardMap = useMemo(() => {
     const baseMap = materials.base.map as THREE.Texture;
     const baseImg = baseMap.image as HTMLImageElement;
-    const W = baseImg.width;
-    const H = baseImg.height;
+    const img = frontTex.image as HTMLImageElement | undefined;
+    const upscale = img
+      ? Math.min(
+          Math.max(1, img.width / (FRONT_UV_RECT.w * baseImg.width)),
+          maxTexture / Math.max(baseImg.width, baseImg.height),
+          4,
+        )
+      : 1;
+    const W = Math.round(baseImg.width * upscale);
+    const H = Math.round(baseImg.height * upscale);
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext("2d");
-    const img = frontTex.image as HTMLImageElement | undefined;
     if (!ctx || !img) return baseMap;
+    ctx.imageSmoothingQuality = "high";
     ctx.drawImage(baseImg, 0, 0, W, H);
     const rx = FRONT_UV_RECT.x * W;
     const ry = FRONT_UV_RECT.y * H;
@@ -183,7 +205,7 @@ function Band({
     composite.anisotropy = 16;
     composite.needsUpdate = true;
     return composite;
-  }, [frontTex, materials.base.map]);
+  }, [frontTex, materials.base.map, maxTexture]);
   useEffect(() => () => cardMap.dispose(), [cardMap]);
 
   const [curve] = useState(
@@ -256,7 +278,7 @@ function Band({
 
   return (
     <>
-      <group position={[0, 4, 0]}>
+      <group position={[0, anchorY, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type="fixed" />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps}>
           <BallCollider args={[0.1]} />

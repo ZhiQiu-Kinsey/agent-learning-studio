@@ -39,54 +39,66 @@ interface Face {
   footer: string;
 }
 
-/** Card face drawn on a canvas from real numbers (Lanyard's front image). */
+/** Logical size of the card face; the canvas is this times the pixel scale. */
+const FACE_W = 720;
+const FACE_H = 1000;
+
+/**
+ * Card face drawn on a canvas from real numbers (Lanyard's front image).
+ * Drawn at least 2x (more on high-DPI screens) so the text stays crisp once
+ * the card is mapped onto the 3D model.
+ */
 function drawFace(face: Face) {
+  const scale = Math.min(2.5, Math.max(2, window.devicePixelRatio || 1));
   const canvas = document.createElement("canvas");
-  canvas.width = 720;
-  canvas.height = 1000;
+  canvas.width = Math.round(FACE_W * scale);
+  canvas.height = Math.round(FACE_H * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
+  ctx.scale(scale, scale);
   const family = getComputedStyle(document.body).fontFamily || "sans-serif";
-  const bg = ctx.createLinearGradient(0, 0, 720, 1000);
-  bg.addColorStop(0, "#1b1440");
-  bg.addColorStop(0.55, "#0d0b18");
-  bg.addColorStop(1, "#08261f");
+  const bg = ctx.createLinearGradient(0, 0, FACE_W, FACE_H);
+  bg.addColorStop(0, "#1f1748");
+  bg.addColorStop(0.55, "#0f0c1e");
+  bg.addColorStop(1, "#08281f");
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, 720, 1000);
-  const glow = ctx.createRadialGradient(560, 140, 10, 560, 140, 420);
-  glow.addColorStop(0, "rgba(185,138,255,0.45)");
+  ctx.fillRect(0, 0, FACE_W, FACE_H);
+  const glow = ctx.createRadialGradient(560, 140, 10, 560, 140, 440);
+  glow.addColorStop(0, "rgba(185,138,255,0.5)");
   glow.addColorStop(1, "rgba(185,138,255,0)");
   ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, 720, 1000);
+  ctx.fillRect(0, 0, FACE_W, FACE_H);
   // Fine grid, like the hero bands.
   ctx.strokeStyle = "rgba(255,255,255,0.05)";
   ctx.lineWidth = 1;
-  for (let x = 0; x <= 720; x += 48) {
+  for (let x = 0; x <= FACE_W; x += 48) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, 1000);
+    ctx.lineTo(x, FACE_H);
     ctx.stroke();
   }
-  for (let y = 0; y <= 1000; y += 48) {
+  for (let y = 0; y <= FACE_H; y += 48) {
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(720, y);
+    ctx.lineTo(FACE_W, y);
     ctx.stroke();
   }
+  const left = 72;
+  const width = FACE_W - left * 2;
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = "#8ff0de";
-  ctx.font = `700 30px ${family}`;
-  ctx.fillText(face.brand.split("").join(" "), 64, 150);
-  ctx.fillStyle = "rgba(236,232,255,0.72)";
-  ctx.font = `600 34px ${family}`;
-  ctx.fillText(face.lesson, 64, 250);
+  ctx.font = `800 32px ${family}`;
+  ctx.fillText(face.brand.split("").join(" "), left, 150);
+  ctx.fillStyle = "#d9cfff";
+  ctx.font = `700 46px ${family}`;
+  ctx.fillText(face.lesson, left, 252);
   // Title: wrap by measured width, at most two lines.
   ctx.fillStyle = "#ffffff";
-  ctx.font = `800 64px ${family}`;
+  ctx.font = `800 80px ${family}`;
   const lines: string[] = [];
   let line = "";
   for (const char of Array.from(face.title)) {
-    if (ctx.measureText(line + char).width > 592 && line) {
+    if (ctx.measureText(line + char).width > width && line) {
       lines.push(line);
       line = char;
     } else line += char;
@@ -94,22 +106,24 @@ function drawFace(face: Face) {
   lines.push(line);
   lines.slice(0, 2).forEach((text, index) => {
     const last = index === 1 && lines.length > 2;
-    ctx.fillText(last ? `${text.slice(0, -1)}…` : text, 64, 336 + index * 78);
+    ctx.fillText(last ? `${text.slice(0, -1)}…` : text, left, 352 + index * 94);
   });
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  ctx.fillRect(left, 520, width, 2);
   const accent = ["#b98aff", "#49dec6", "#ff9473"];
   face.facts.forEach((fact, index) => {
-    const y = 560 + index * 120;
+    const y = 630 + index * 112;
     ctx.fillStyle = accent[index];
-    ctx.fillRect(64, y - 56, 6, 76);
-    ctx.font = `800 72px ${family}`;
-    ctx.fillText(fact.value, 96, y + 8);
-    ctx.fillStyle = "rgba(236,232,255,0.86)";
-    ctx.font = `600 38px ${family}`;
-    ctx.fillText(fact.label, 300, y - 2);
+    ctx.fillRect(left, y - 66, 8, 84);
+    ctx.font = `800 84px ${family}`;
+    ctx.fillText(fact.value, left + 34, y + 10);
+    ctx.fillStyle = "rgba(244,241,255,0.92)";
+    ctx.font = `700 42px ${family}`;
+    ctx.fillText(fact.label, left + 250, y - 2);
   });
-  ctx.fillStyle = "rgba(236,232,255,0.55)";
-  ctx.font = `500 26px ${family}`;
-  ctx.fillText(face.footer, 64, 944);
+  ctx.fillStyle = "rgba(236,232,255,0.7)";
+  ctx.font = `600 30px ${family}`;
+  ctx.fillText(face.footer, left, 952);
   return canvas.toDataURL("image/png");
 }
 
@@ -166,7 +180,13 @@ function BadgeStage({ face }: { face: Face }) {
           <EffectBoundary fallback={<StaticBadge face={face} />}>
             <Suspense fallback={<StaticBadge face={face} />}>
               <div aria-hidden="true" className="learning-badge-canvas">
-                <Lanyard frontImage={image} active={active} />
+                <Lanyard
+                  frontImage={image}
+                  active={active}
+                  anchorY={4.5}
+                  fov={13}
+                  dpr={[1.5, 2.5]}
+                />
               </div>
             </Suspense>
           </EffectBoundary>

@@ -488,7 +488,7 @@ export function CodeScene({ studio }: SceneProps) {
         <h2>{t("promptTitle")}</h2>
         <p>{t("promptHelp")}</p>
         {detail.system_prompt ? (
-          <div className="learn-code-frame">
+          <div className="learn-code-frame code-prompt-frame">
             <Code content={detail.system_prompt} language="text" />
           </div>
         ) : (

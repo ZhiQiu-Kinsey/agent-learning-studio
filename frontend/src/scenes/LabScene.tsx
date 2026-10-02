@@ -13,6 +13,7 @@ import { ShortcutHelp } from "./lab/ShortcutHelp";
 import { useLabShortcuts } from "./lab/useLabShortcuts";
 import { useLessonRecordings } from "./lab/useLessonRecordings";
 import { useRunEndToast } from "./lab/useRunEndToast";
+import { observeStatus } from "../content/guide";
 import type { SceneProps } from "./types";
 
 /** 实验：experiments frame the run; the stage, film and cards show what really happened. */
@@ -97,6 +98,7 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
               />
               <ExperimentSide
                 experiment={experiment}
+                statuses={observeStatus(experiment, studio.events)}
                 finished={finished}
                 running={studio.running}
                 guiding={guideStep !== null}

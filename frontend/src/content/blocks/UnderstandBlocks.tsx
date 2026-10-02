@@ -218,7 +218,9 @@ export function UnderstandBlocks({
                 <AccordionContent>
                   <ol>
                     {observe.map((point) => (
-                      <li key={point.id}>{point.text}</li>
+                      <li key={point.id}>
+                        <GlossaryText text={point.text} />
+                      </li>
                     ))}
                   </ol>
                 </AccordionContent>
