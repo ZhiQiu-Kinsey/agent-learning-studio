@@ -185,3 +185,8 @@ catalog 每课增加：`estimated_minutes`（预计时长）、`difficulty`（�
 
 | 步 | 内容 | 提交 | 验证 |
 | --- | --- | --- | --- |
+| 1 | 决定写进本节与 `curriculum-research.md` 决策 7–10 | `d45cede` | — |
+| 2 | 术语会话已合并到 main（`eef58ca`），本轮在其上继续，术语表无冲突 | — | `validate_lessons` 用词 0 问题 |
+| 3a | 批注锚点与校验；第 5 课错位批注重新对准；`folds` 字段；批注密度门槛与只减不增的基线（30 块） | `d994598` | 后端全部测试、vitest、tsc |
+| 3b | 删除全部数字别名，别名只接受旧 slug；测试与 e2e 改用 slug | `2c14178` | 后端全部测试 |
+| 3c | `{{lesson:<slug>}}` 课程引用，禁止写死课号；principles 改正；第 5 课可信事实改用 slug；`scripts/realign_notes.py` | `1df57a3` | 后端全部测试、vitest、i18n |
