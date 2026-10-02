@@ -14,7 +14,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "REASONING / LESSON 18",
+          "eyebrow": "REASONING / ORCHESTRATION",
           "headline": "多叫几次模型之前，",
           "highlight": "先算清多出来的调用换来了什么。",
           "takeaway": "编排者-工人让一个模型拆任务、几个模型并行干活；评估者-优化者让一个模型写、另一个评。两种模式都比单次调用贵，后一种的修订循环还必须有上限。"
@@ -59,7 +59,7 @@
           "title": "从固定流程到动态拆分",
           "paragraphs": [
             "上一课的三种工作流，步骤都是事先写好的。编排者-工人（Orchestrator-Workers）换了一种做法：让一个模型（编排者）先读任务，决定拆成几个子任务、每个子任务写什么指令；程序再按这份列表派出工人，每个工人做一件事。子任务在运行时才确定，适合事先说不清要拆成几块的任务。",
-            "本课的任务是为第 7、8、9 课各出一道四选一的选择题。基线是单次调用：一次请求写完三道题。编排模式下，编排者输出子任务列表，程序校验后发一条 event=created 的 lesson.plan，每个子任务是计划里的一项。三个工人并行出题；全部返回后，程序按格式检查把每项标成 done 或 failed，再发一条 event=progress 的 lesson.plan。"
+            "本课的任务是为{{lesson:messages-context}}、{{lesson:application-state}}和{{lesson:context-budget}}各出一道四选一的选择题，程序里用 messages-context 这样的课程标识指代它们。基线是单次调用：一次请求写完三道题。编排模式下，编排者输出子任务列表，程序校验后发一条 event=created 的 lesson.plan，每个子任务是计划里的一项。三个工人并行出题；全部返回后，程序按格式检查把每项标成 done 或 failed，再发一条 event=progress 的 lesson.plan。"
           ]
         },
         {
@@ -68,8 +68,18 @@
           "title": "工人的输入要小",
           "paragraphs": [
             "每个工人只拿到编排者给它的那一句指令，加上对应那一课的要点，看不到其他工人在做什么。输入越小，工人越不容易被无关信息带偏，也越容易并行。代价是工人之间无法互相参考，比如三道题的错误选项可能写得很像。",
-            "编排者的输出先经过程序校验：子任务不超过 4 个，id 不重复，lesson 只能是 7、8、9。校验不通过就不派工人，记一条 lesson.plan_error。工人写回的题目再过一遍格式检查：四个不重复的选项、answer 是 0 到 3 的整数、有题干和解释。"
+            "编排者的输出先经过程序校验：子任务不超过 4 个，id 不重复，lesson 只能是这三课之一。校验不通过就不派工人，记一条 lesson.plan_error。工人写回的题目再过一遍格式检查：四个不重复的选项、answer 是 0 到 3 的整数、有题干和解释。"
           ]
+        },
+        {
+          "id": "predict-calls",
+          "type": "predict",
+          "prompt": "运行“编排者-工人”之前先猜：这次运行会出现几个 request 事件？",
+          "experiment": "orchestrator-vs-single",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
         },
         {
           "id": "mq-n-plus-one",
@@ -221,16 +231,6 @@
               "evidence": "lesson.cost"
             }
           ]
-        },
-        {
-          "id": "predict-calls",
-          "type": "predict",
-          "prompt": "运行“编排者-工人”之前先猜：这次运行会出现几个 request 事件？",
-          "experiment": "orchestrator-vs-single",
-          "rule": {
-            "kind": "count_events",
-            "event": "request"
-          }
         }
       ]
     },
@@ -245,26 +245,44 @@
           "id": "code-ledger",
           "type": "annotated-source",
           "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
-          "start": 51,
-          "end": 96,
+          "start": 83,
+          "end": 108,
           "notes": [
-            {
-              "id": "n51",
-              "line": 51,
-              "anchor": "def check_question(value) -> list[str]:",
-              "text": "格式检查由程序完成，题目内容的好坏留给评估者或人来判断。"
-            },
             {
               "id": "n83",
               "line": 83,
-              "anchor": "tokens = usage.get(\"total_tokens\") if isinstance",
-              "text": "只记服务商报告的 total_tokens，没有就记 None。"
+              "anchor": "class Ledger:",
+              "text": "账本是本课的成本证据：每次模型调用记一行，含角色、轮次、branch 和用量。"
             },
             {
               "id": "n90",
               "line": 90,
+              "anchor": "def call(self, role: str, system: str",
+              "text": "所有角色都经过同一个 call，单次、编排者、工人、生成者和评估者记在同一本账上。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "response = self.context.complete({\"messages\": [{\"role\": \"system\", \"content\": system}",
+              "text": "请求和响应仍由平台原样记成事件，账本只多记一行汇总。"
+            },
+            {
+              "id": "n96",
+              "line": 96,
+              "anchor": "tokens = usage.get(\"total_tokens\") if isinstance",
+              "text": "只记服务商报告的 total_tokens，没有就记 None。"
+            },
+            {
+              "id": "n103",
+              "line": 103,
               "anchor": "def total(self) -> str | int:",
               "text": "累计时把未报告的次数写出来，不拿估算补。"
+            },
+            {
+              "id": "n106",
+              "line": 106,
+              "anchor": "if not reported:",
+              "text": "一次都没报告就写“未报告”，而不是 0。"
             }
           ]
         },
@@ -272,32 +290,68 @@
           "id": "code-orchestrator",
           "type": "annotated-source",
           "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
-          "start": 112,
-          "end": 151,
+          "start": 126,
+          "end": 162,
           "notes": [
             {
-              "id": "n120",
-              "line": 120,
-              "anchor": "and len({s[\"id\"] for s in subtasks}) == len(subt",
-              "text": "编排者的子任务列表先校验：数量、id、课号。"
+              "id": "n126",
+              "line": 126,
+              "anchor": "def valid_subtasks(plan)",
+              "text": "编排者的输出是计划数据，派工前先由程序校验。"
             },
             {
-              "id": "n124",
-              "line": 124,
-              "anchor": "context.emit(\"lesson.plan_error\", {\"error\": \"编排者",
-              "text": "校验不通过就不派工人，原文记下来。"
+              "id": "n129",
+              "line": 129,
+              "anchor": "valid = (isinstance(subtasks, list) and 0 < len(subtasks) <= MAX_WORKERS",
+              "text": "子任务最多 4 个：编排者拆得再多，工人数也有上限。"
+            },
+            {
+              "id": "n130",
+              "line": 130,
+              "anchor": "and all(isinstance(s, dict) and s.get(\"lesson\") in NOTES",
+              "text": "lesson 必须是三课之一，工人才能拿到对应的要点。"
             },
             {
               "id": "n132",
               "line": 132,
-              "anchor": "return subtask, ledger.call(\"工人\", WORKER_SYSTEM,",
+              "anchor": "and len({s[\"id\"] for s in subtasks}) == len(subtasks))",
+              "text": "id 不能重复：它同时是计划项的 id 和工人请求的 branch。"
+            },
+            {
+              "id": "n139",
+              "line": 139,
+              "anchor": "content = ledger.call(\"编排者\", ORCHESTRATOR_SYSTEM",
+              "text": "第 1 次调用：编排者只拆任务，不写题目。"
+            },
+            {
+              "id": "n146",
+              "line": 146,
+              "anchor": "context.emit(\"lesson.plan_error\", {\"error\": \"编排者",
+              "text": "校验不通过就不派工人，原文记下来。"
+            },
+            {
+              "id": "n149",
+              "line": 149,
+              "anchor": "context.emit(\"lesson.plan\", {\"version\": 1, \"event\": \"created\"",
+              "text": "子任务就是计划项，以 lesson.plan 发布，计划透镜能显示它们的状态。"
+            },
+            {
+              "id": "n153",
+              "line": 153,
+              "anchor": "user = f\"{subtask['instruction']}\\n要点：",
               "text": "工人只拿到自己的指令和那一课的要点，请求带 branch。"
             },
             {
-              "id": "n135",
-              "line": 135,
+              "id": "n157",
+              "line": 157,
               "anchor": "with ThreadPoolExecutor(max_workers=len(subtasks",
-              "text": "工人并行执行，共用同一个调用预算。"
+              "text": "工人并行执行，共用同一个调用预算；总调用数是 1 + 子任务数。"
+            },
+            {
+              "id": "n160",
+              "line": 160,
+              "anchor": "results, rows = _collect(context, outputs, steps)",
+              "text": "_collect 逐题做格式检查，把计划项标成 done 或 failed。"
             }
           ]
         },
@@ -305,32 +359,68 @@
           "id": "code-evaluator",
           "type": "annotated-source",
           "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
-          "start": 154,
-          "end": 192,
+          "start": 195,
+          "end": 226,
           "notes": [
             {
-              "id": "n158",
-              "line": 158,
+              "id": "n197",
+              "line": 197,
+              "anchor": "lesson, rows, feedback, previous = EVALUATED",
+              "text": "评估者-优化者只为一课出题，便于数清每轮多了几次调用。"
+            },
+            {
+              "id": "n199",
+              "line": 199,
               "anchor": "for iteration in range(1, max_iters + 1):",
               "text": "循环次数由 max_iters 决定，没有无限循环。"
             },
             {
-              "id": "n171",
-              "line": 171,
+              "id": "n203",
+              "line": 203,
+              "anchor": "user += f\"\\n上一版：{previous}",
+              "text": "修订请求带上上一版和评审意见，生成者据此改写。"
+            },
+            {
+              "id": "n204",
+              "line": 204,
+              "anchor": "output = ledger.call(\"生成者\", WORKER_SYSTEM",
+              "text": "生成者和工人用同一个出题提示词，每轮至少一次调用。"
+            },
+            {
+              "id": "n205",
+              "line": 205,
+              "anchor": "question, problems = _parse_question(output)",
+              "text": "先做程序能确定的格式检查：四个不重复的选项、answer 是 0 到 3 的整数、有题干和解释。"
+            },
+            {
+              "id": "n209",
+              "line": 209,
               "anchor": "if problems:",
-              "text": "格式不对时直接退回格式问题，不请求评估者。"
+              "text": "格式不对时直接退回格式问题，不请求评估者，省一次调用。"
             },
             {
-              "id": "n174",
-              "line": 174,
-              "anchor": "review = ledger.call(\"评估者\", EVALUATOR_SYSTEM, f\"",
-              "text": "格式对了才请评估者按量规评审。"
+              "id": "n212",
+              "line": 212,
+              "anchor": "verdict, feedback = review(ledger, lesson, output)",
+              "text": "格式对了才请评估者按量规评审，结论只接受 pass 或 revise。"
             },
             {
-              "id": "n185",
-              "line": 185,
+              "id": "n214",
+              "line": 214,
+              "anchor": "context.emit(\"lesson.review\", {\"iteration\": iteration",
+              "text": "lesson.review 的 source 写明意见来自格式检查还是评估者。"
+            },
+            {
+              "id": "n218",
+              "line": 218,
               "anchor": "if verdict == \"pass\":",
               "text": "评估者判定通过就停，停止原因写进报告。"
+            },
+            {
+              "id": "n225",
+              "line": 225,
+              "anchor": "final = {\"question\": question, \"problems\":",
+              "text": "报告里的格式结论针对最后一版题目。"
             }
           ]
         },
@@ -776,7 +866,7 @@
     },
     {
       "name": "lesson",
-      "note": "子任务字段：这道题对应的课号，只能是 7、8、9，工人据此拿到那一课的要点。"
+      "note": "子任务字段：这道题对应哪一课，只能是三课之一，工人据此拿到那一课的要点。"
     },
     {
       "name": "answer",

@@ -1,4 +1,4 @@
-"""第 18 课离线测试模型：只服务自动化测试，不代表任何真实模型的行为。
+"""编排与评估课的离线测试模型：只服务自动化测试，不代表任何真实模型的行为。
 
 评估者第一次固定要求修订，第二次通过，用来测试评估循环；每次响应附带脚本写的用量。
 """
@@ -8,7 +8,7 @@ from lessons.lesson_orchestrator_evaluator.runtime import EVALUATOR_SYSTEM, NOTE
 
 
 def _question(lesson, revised=False):
-    return {"question": f"关于第 {lesson} 课，下列哪一项正确？" + ("（修订版）" if revised else ""),
+    return {"question": f"关于 {lesson} 这一课，下列哪一项正确？" + ("（修订版）" if revised else ""),
             "options": [NOTES[lesson], "模型会自动记住所有历史", "工具结果可以由模型自己写", "上下文越长越好"],
             "answer": 0, "explanation": "第一项是该课要点，其余三项都与课程内容相反。"}
 
@@ -28,8 +28,8 @@ def create_completion(exercise_id, inputs=None):
         if system == SINGLE_SYSTEM:
             return _reply([_question(lesson) for lesson in NOTES], 300)
         if system == ORCHESTRATOR_SYSTEM:
-            return _reply({"subtasks": [{"id": f"w{lesson}", "lesson": lesson, "instruction": f"为第 {lesson} 课出一道选择题"}
-                                        for lesson in NOTES]}, 80)
+            return _reply({"subtasks": [{"id": f"w{index}", "lesson": lesson, "instruction": f"为 {lesson} 这一课出一道选择题"}
+                                        for index, lesson in enumerate(NOTES, 1)]}, 80)
         if system == EVALUATOR_SYSTEM:
             reviews += 1
             if reviews == 1:
