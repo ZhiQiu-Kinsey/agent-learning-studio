@@ -123,10 +123,13 @@ export function Laboratory({
   studio: s,
   onConfigure,
   active,
+  spotlight,
 }: {
   studio: StudioState;
   onConfigure: () => void;
   active: boolean;
+  /** Stage node role highlighted by a guided replay. */
+  spotlight?: string | null;
 }) {
   const reducedMotion = useReducedMotion();
   const { t } = useTranslation("stage");
@@ -401,6 +404,7 @@ export function Laboratory({
                   events={s.events}
                   cursor={s.cursor}
                   live={s.running && s.cursor === s.events.length}
+                  spotlight={spotlight}
                 />
               </LessonExtension>
               <div className="inspector-summary" data-testid="lab-run-metrics">

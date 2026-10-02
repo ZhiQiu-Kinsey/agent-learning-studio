@@ -78,12 +78,15 @@ export function AgentStage({
   cursor,
   live,
   recording,
+  spotlight,
 }: {
   events: readonly Trace[];
   cursor: number;
   /** True while this run is still streaming and the cursor is at its end. */
   live: boolean;
   recording?: { model: string; date: string };
+  /** Node role a guided replay points at; other nodes recede. */
+  spotlight?: string | null;
 }) {
   const { t, i18n } = useTranslation(["stage", "common"]);
   const { reduced } = useMotion();
@@ -132,6 +135,7 @@ export function AgentStage({
       data-testid="agent-stage"
       data-provenance={stage.provenance}
       data-status={stage.status}
+      data-spotlight={spotlight || undefined}
     >
       <header className="stage-header">
         <span className="stage-provenance" data-provenance={stage.provenance}>
@@ -188,6 +192,9 @@ export function AgentStage({
               className="stage-node"
               data-role={node.role}
               data-state={node.state}
+              data-spotlit={
+                spotlight && node.role === spotlight ? true : undefined
+              }
               data-testid={`stage-node-${node.id}`}
               style={{ left: `${place.x}%`, top: `${place.y}%` }}
             >
