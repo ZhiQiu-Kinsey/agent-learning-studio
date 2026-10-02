@@ -1,24 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Play } from "lucide-react";
-import { jsonFetch } from "../api";
 import { Laboratory } from "../components/workspace/Laboratory";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
-import { Button } from "../components/ui/button";
 import RubberSegment from "../components/react-bits/RubberSegment";
 import ElectricBorder from "../components/react-bits/ElectricBorder";
-import { notify } from "../components/toast/toast";
+import { segmentColors } from "../components/lab/controlColors";
 import { ExperimentPanel } from "./lab/ExperimentPanel";
+import { ExperimentSide } from "./lab/ExperimentSide";
 import { GuideBar } from "./lab/GuideBar";
-import { RecordingView, type RecordingMeta } from "./lab/RecordingView";
+import { RecordingView, formatRecordingDate } from "./lab/RecordingView";
 import { ShortcutHelp } from "./lab/ShortcutHelp";
 import { useLabShortcuts } from "./lab/useLabShortcuts";
+import { useLessonRecordings } from "./lab/useLessonRecordings";
+import { useRunEndToast } from "./lab/useRunEndToast";
 import type { SceneProps } from "./types";
 
 /** 实验：experiments frame the run; the stage, film and cards show what really happened. */
 export function LabScene({ studio, active, onConfigure }: SceneProps) {
   const { t, i18n } = useTranslation("lesson", { keyPrefix: "lab" });
-  const { t: tLab } = useTranslation("lab");
   const detail = studio.detail!;
   const experiments = detail.learning?.scenes.lab?.experiments ?? [];
   const [experimentId, setExperimentId] = useState(experiments[0]?.id ?? "");
@@ -26,7 +25,7 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     experiments.find((item) => item.id === experimentId) ?? experiments[0];
   const [guideStep, setGuideStep] = useState<number | null>(null);
   const [spotlight, setSpotlight] = useState<string | null>(null);
-  const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
+  const recordings = useLessonRecordings(detail.id);
   const [source, setSource] = useState("mine");
   const finished = studio.events.at(-1)?.type === "done";
 
@@ -34,21 +33,6 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     setExperimentId(experiments[0]?.id ?? "");
     setGuideStep(null);
     setSource("mine");
-    const abort = new AbortController();
-    jsonFetch<{ recordings: RecordingMeta[] }>(
-      `/api/lessons/${encodeURIComponent(detail.id)}/recordings`,
-      { signal: abort.signal },
-    )
-      .then((value) => {
-        if (!abort.signal.aborted)
-          setRecordings(
-            value.recordings.filter((item) => item.valid && item.metadata),
-          );
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setRecordings([]);
-      });
-    return () => abort.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail.id]);
 
@@ -57,42 +41,7 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     if (studio.running) setGuideStep(null);
   }, [studio.running]);
 
-  // Report how a live run really ended, once, when it stops running.
-  const wasRunning = useRef(false);
-  useEffect(() => {
-    const ended = wasRunning.current && !studio.running;
-    wasRunning.current = studio.running;
-    if (!ended) return;
-    const events = studio.events;
-    const last = events.at(-1);
-    const error = events.findLast((event) => event.type === "error");
-    if (last?.type === "done" && last.data.status === "completed") {
-      const ms = Date.parse(last.timestamp) - Date.parse(events[0].timestamp);
-      notify({
-        tone: "success",
-        title: tLab("toast.completed"),
-        description: Number.isFinite(ms)
-          ? tLab("toast.completedDetail", {
-              count: events.length,
-              seconds: new Intl.NumberFormat(i18n.language, {
-                maximumFractionDigits: 2,
-              }).format(Math.max(0, ms) / 1000),
-            })
-          : tLab("toast.completedCount", { count: events.length }),
-      });
-    } else if (error) {
-      notify({
-        tone: "error",
-        title: tLab("toast.error"),
-        description:
-          typeof error.data.message === "string" && error.data.message
-            ? error.data.message
-            : tLab("toast.errorFallback"),
-      });
-    }
-    // Only the running edge matters; events are read at that moment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studio.running]);
+  useRunEndToast(studio);
 
   const exitGuide = useCallback(() => setGuideStep(null), []);
   const recording = recordings.find((item) => item.name === source);
@@ -103,10 +52,6 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     guideActive: guideStep !== null && finished,
     onHelp: () => setHelp(true),
   });
-  const dateOf = (item: RecordingMeta) =>
-    new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(
-      new Date(item.metadata!.recorded_at),
-    );
 
   return (
     <div className="scene-lab" data-testid="scene-lab">
@@ -121,17 +66,17 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
                 value: item.name,
                 label: t("source.recording", {
                   model: item.metadata!.model,
-                  date: dateOf(item),
+                  date: formatRecordingDate(
+                    item.metadata!.recorded_at,
+                    i18n.language,
+                  ),
                 }),
               })),
             ]}
             value={source}
             onChange={setSource}
             disabled={studio.running}
-            trackColor="var(--surface-muted)"
-            thumbColor="var(--surface)"
-            textColor="var(--text-muted)"
-            activeTextColor="var(--text)"
+            {...segmentColors}
           />
         </div>
       )}
@@ -150,62 +95,13 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
                 }}
                 studio={studio}
               />
-              <section className="experiment-side">
-                {experiment.guide.length > 0 && (
-                  <div className="experiment-guide-start">
-                    <Button
-                      size="sm"
-                      disabled={
-                        !finished || studio.running || guideStep !== null
-                      }
-                      data-testid="guide-start"
-                      onClick={() => setGuideStep(0)}
-                    >
-                      <Play size={14} aria-hidden="true" />
-                      {t("guide.start")}
-                    </Button>
-                    {!finished && <small>{t("guide.needRun")}</small>}
-                  </div>
-                )}
-                {experiment.conclusion && (
-                  <div
-                    className="experiment-conclusion"
-                    data-testid="experiment-conclusion"
-                  >
-                    <h4>{t("conclusion.title")}</h4>
-                    {finished ? (
-                      <>
-                        {experiment.conclusion.proves.length > 0 && (
-                          <>
-                            <strong>{t("conclusion.proves")}</strong>
-                            <ul>
-                              {experiment.conclusion.proves.map(
-                                (item, index) => (
-                                  <li key={index}>{item}</li>
-                                ),
-                              )}
-                            </ul>
-                          </>
-                        )}
-                        {experiment.conclusion.does_not_prove.length > 0 && (
-                          <>
-                            <strong>{t("conclusion.doesNotProve")}</strong>
-                            <ul>
-                              {experiment.conclusion.does_not_prove.map(
-                                (item, index) => (
-                                  <li key={index}>{item}</li>
-                                ),
-                              )}
-                            </ul>
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <p>{t("conclusion.needRun")}</p>
-                    )}
-                  </div>
-                )}
-              </section>
+              <ExperimentSide
+                experiment={experiment}
+                finished={finished}
+                running={studio.running}
+                guiding={guideStep !== null}
+                onStartGuide={() => setGuideStep(0)}
+              />
             </div>
           )}
           <div className="lab-frame" data-running={studio.running || undefined}>

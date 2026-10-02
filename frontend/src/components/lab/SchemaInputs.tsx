@@ -8,6 +8,7 @@ import SquishSwitch from "../react-bits/SquishSwitch";
 import GlideSelect from "../react-bits/GlideSelect";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
+import { segmentColors } from "./controlColors";
 
 /** The subset of JSON Schema that Pydantic emits for lesson INPUT_MODELs. */
 export interface PropertySchema {
@@ -121,10 +122,7 @@ export function SchemaInputs({
                 onChange={(next) => set(name, next)}
                 disabled={disabled}
                 size="sm"
-                trackColor="var(--surface-muted)"
-                thumbColor="var(--surface)"
-                textColor="var(--text-muted)"
-                activeTextColor="var(--text)"
+                {...segmentColors}
               />
             )}
             {kind === "select" && (

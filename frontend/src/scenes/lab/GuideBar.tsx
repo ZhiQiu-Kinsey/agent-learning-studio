@@ -6,6 +6,7 @@ import { resolveGuide } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { Button } from "../../components/ui/button";
 import ElectricBorder from "../../components/react-bits/ElectricBorder";
+import { locateEvent } from "./locate";
 
 const preview = (value: unknown) => {
   const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -41,10 +42,7 @@ export function GuideBar({
 
   useEffect(() => {
     onSpotlight(frame.spotlight);
-    if (evidence?.found && !studio.running) {
-      studio.seek(evidence.index + 1);
-      studio.selectEvent(evidence.index);
-    }
+    if (evidence?.found && !studio.running) locateEvent(studio, evidence.index);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame.step, frame.spotlight, evidence?.found ? evidence.index : -1]);
 

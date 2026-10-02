@@ -5,6 +5,8 @@ import { observeStatus } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { Button } from "../../components/ui/button";
 import RubberSegment from "../../components/react-bits/RubberSegment";
+import { segmentColors } from "../../components/lab/controlColors";
+import { locateEvent } from "./locate";
 
 /**
  * Experiment card: hypothesis, arms (each an exercise of this lesson) and
@@ -42,10 +44,7 @@ export function ExperimentPanel({
             value={selected.id}
             onChange={onSelect}
             disabled={studio.running}
-            trackColor="var(--surface-muted)"
-            thumbColor="var(--surface)"
-            textColor="var(--text-muted)"
-            activeTextColor="var(--text)"
+            {...segmentColors}
           />
         </div>
       )}
@@ -105,10 +104,7 @@ export function ExperimentPanel({
                     size="sm"
                     variant="ghost"
                     aria-label={`${t("locate")} ${point.text}`}
-                    onClick={() => {
-                      studio.seek(point.index + 1);
-                      studio.selectEvent(point.index);
-                    }}
+                    onClick={() => locateEvent(studio, point.index)}
                   >
                     <Crosshair size={14} aria-hidden="true" />
                     {t("locate")}
