@@ -51,3 +51,29 @@ for (const { lesson, lens } of [
     await expect(page.getByTestId(lens)).toHaveCount(0);
   });
 }
+
+test("memory lens shows scope filtering and flags recalled instructions without sending them", async ({
+  page,
+  request,
+}) => {
+  const detail = await (
+    await request.get("/api/lessons/persistent-memory")
+  ).json();
+  const scope = detail.exercises.find(
+    (item: { id: string }) => item.id === "scope_filter",
+  );
+  await page.goto("/");
+  await openLessonById(page, request, "persistent-memory");
+  await page.getByTestId("scene-tab-lab").click();
+  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
+  await page.getByRole("option", { name: scope.title, exact: true }).click();
+  await page.getByTestId("lab-run-button").click();
+  await expect(
+    page.locator("[data-testid='agent-stage'][data-status='completed']"),
+  ).toBeVisible();
+  const lens = page.getByTestId("lens-memory");
+  await expect(lens.locator("li[data-action='recalled']")).toHaveCount(2);
+  await expect(lens.locator("[data-excluded]").first()).toBeVisible();
+  await expect(lens.locator("[data-flagged]")).toHaveCount(1);
+  await expect(lens.locator("li[data-action='packaged']")).toBeVisible();
+});

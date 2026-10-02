@@ -260,7 +260,7 @@ def _scope_filter(context: RunContext, path: Path, values: Inputs) -> str:
     try:
         for key, value, source, scope, task_id in seeds:
             store.put(namespace, key, value, source, None, scope=scope, task_id=task_id)
-        context.emit("lesson.memory", {"action": "seeded", "storage": "temporary",
+        context.emit("lesson.memory", {"action": "seeded", "storage": "scratch",
                                         "records": [{"key": k, "scope": sc, "task_id": t} for k, _, _, sc, t in seeds]})
         context.check_cancelled()
         included, excluded = store.recall(namespace, TASK_NOW)

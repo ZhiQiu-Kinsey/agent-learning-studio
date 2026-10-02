@@ -40,6 +40,53 @@ function TaskCardLens({ event }: { event: Trace }) {
   );
 }
 
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+
+/** Scope recall details: which keys came back, which were filtered and why. */
+function MemoryDetails({ data }: { data: Record }) {
+  const { t, i18n } = useTranslation("stage", { keyPrefix: "lens.memory" });
+  const list = new Intl.ListFormat(i18n.language, { type: "conjunction" });
+  const included = stringList(data.included);
+  const excluded = Array.isArray(data.excluded)
+    ? data.excluded.map(asRecord).filter((item) => typeof item.key === "string")
+    : [];
+  const flagged = stringList(data.flagged);
+  return (
+    <>
+      {typeof data.task_id === "string" && (
+        <small>{t("task", { task: data.task_id })}</small>
+      )}
+      {Array.isArray(data.included) && (
+        <span className="lens-memory-keys">
+          {t("included", {
+            keys: included.length ? list.format(included) : "—",
+          })}
+        </span>
+      )}
+      {excluded.map((item) => (
+        <span key={String(item.key)} className="lens-memory-keys" data-excluded>
+          {t("excluded", {
+            key: String(item.key),
+            reason: String(item.reason ?? ""),
+          })}
+        </span>
+      ))}
+      {flagged.length > 0 && (
+        <span className="lens-memory-keys" data-flagged>
+          {t("flagged", { keys: list.format(flagged) })}
+        </span>
+      )}
+      {data.sent_to_model === false && <small>{t("notSent")}</small>}
+      {typeof data.deleted === "number" && (
+        <small>{t("deletedCount", { count: data.deleted })}</small>
+      )}
+    </>
+  );
+}
+
 function MemoryLens({ events }: { events: Trace[] }) {
   const { t } = useTranslation("stage", { keyPrefix: "lens.memory" });
   return (
@@ -78,6 +125,7 @@ function MemoryLens({ events }: { events: Trace[] }) {
                     })}
                   </small>
                 )}
+                <MemoryDetails data={event.data} />
               </li>
             );
           })}
