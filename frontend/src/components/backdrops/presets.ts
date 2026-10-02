@@ -1,7 +1,9 @@
 /**
- * Backdrop presets: one React Bits shader per mood, tuned for the always-dark
- * hero bands. `fallback` is the CSS gradient painted under (and instead of)
- * the shader, so static motion and missing WebGL keep the same palette.
+ * Backdrop presets: one React Bits shader per mood. `props`/`fallback` are tuned
+ * for dark hero bands; `light` adapts the same mood to the light theme (most
+ * shaders take `lightMode`; the rest get light-friendly colours or swap to a
+ * sibling preset). `fallback` is the CSS gradient painted under (and instead
+ * of) the shader, so static motion and missing WebGL keep the same palette.
  */
 const brand = {
   violet: "#6d5dfc",
@@ -18,6 +20,12 @@ interface Preset {
   load: () => Promise<{ default: unknown }>;
   props: Record<string, unknown>;
   fallback: string;
+  light?: {
+    /** Merged over `props` in the light theme. */
+    props?: Record<string, unknown>;
+    /** Use another preset's shader in the light theme (e.g. additive light rays vanish on white). */
+    use?: string;
+  };
 }
 
 const glow = (a: string, b: string) =>
@@ -29,6 +37,7 @@ export const backdropPresets = {
     load: () => import("../react-bits/Threads"),
     props: { color: [0.78, 0.72, 1], amplitude: 2.1, distance: 0.45, enableMouseInteraction: true },
     fallback: glow(brand.violet, brand.teal),
+    light: { props: { color: [0.33, 0.25, 0.78] } },
   },
   blinds: {
     tint: "#49dec6",
@@ -46,6 +55,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.teal, brand.violet),
+    light: { props: { lightMode: true } },
   },
   grainient: {
     tint: "#b98aff",
@@ -59,6 +69,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.lilac, brand.violet),
+    light: { props: { lightMode: true } },
   },
   rays: {
     tint: "#d6ceff",
@@ -76,6 +87,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: `radial-gradient(80% 120% at 50% -10%, #c9c0ff44 0%, transparent 60%), ${brand.ink}`,
+    light: { props: { lightMode: true } },
   },
   galaxy: {
     tint: "#7aa2ff",
@@ -93,6 +105,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.violet, "#2a6df4"),
+    light: { props: { lightMode: true } },
   },
   ripple: {
     tint: "#c9a6ff",
@@ -108,6 +121,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.lilac, brand.teal),
+    light: { props: { lightMode: true } },
   },
   terminal: {
     tint: "#6fd39a",
@@ -128,6 +142,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.mint, brand.teal),
+    light: { props: { lightMode: true } },
   },
   radar: {
     tint: "#49dec6",
@@ -143,6 +158,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.teal, brand.mint),
+    light: { props: { lightMode: true } },
   },
   web: {
     tint: "#ff9473",
@@ -159,6 +175,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.coral, brand.violet),
+    light: { props: { lightMode: true, backgroundColor: "#f4f2ff" } },
   },
   aurora: {
     tint: "#7ce8d6",
@@ -172,6 +189,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.teal, brand.lilac),
+    light: { props: { lightMode: true } },
   },
   veil: {
     tint: "#b98aff",
@@ -187,6 +205,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.violet, brand.lilac),
+    light: { props: { lightMode: true } },
   },
   topography: {
     tint: "#6d5dfc",
@@ -203,12 +222,14 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.violet, brand.teal),
+    light: { props: { lightMode: true } },
   },
   orb: {
     tint: "#a99bff",
     load: () => import("../react-bits/Orb"),
     props: { hue: 0, hoverIntensity: 0.35, rotateOnHover: true, backgroundColor: brand.ink },
     fallback: `radial-gradient(40% 60% at 50% 50%, ${brand.violet}55 0%, transparent 70%), ${brand.ink}`,
+    light: { props: { backgroundColor: "#f4f2ff" } },
   },
   lightfall: {
     tint: "#b98aff",
@@ -231,6 +252,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.lilac, brand.violet),
+    light: { props: { lightMode: true } },
   },
   molten: {
     tint: "#ff9473",
@@ -249,6 +271,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.coral, brand.violet),
+    light: { props: { lightMode: true, backgroundColor: "#f4f2ff" } },
   },
   sideRays: {
     tint: "#b98aff",
@@ -262,10 +285,28 @@ export const backdropPresets = {
       opacity: 0.95,
     },
     fallback: glow(brand.lilac, brand.teal),
+    light: { use: "rays" },
   },
 } satisfies Record<string, Preset>;
 
 export type BackdropName = keyof typeof backdropPresets;
+
+const lightGlow = (tint: string) =>
+  `radial-gradient(120% 140% at 85% 0%, ${tint}40 0%, transparent 55%), radial-gradient(90% 120% at 10% 100%, ${tint}2e 0%, transparent 60%), #f4f2ff`;
+
+/** Shader, props and fallback for a preset in the applied theme. */
+export function resolveBackdrop(name: BackdropName, theme: "light" | "dark") {
+  const preset: Preset = backdropPresets[name];
+  if (theme === "dark")
+    return { shader: name, props: preset.props, fallback: preset.fallback };
+  const shader = (preset.light?.use as BackdropName | undefined) ?? name;
+  const base: Preset = backdropPresets[shader];
+  return {
+    shader,
+    props: { ...base.props, ...base.light?.props },
+    fallback: lightGlow(preset.tint),
+  };
+}
 
 /** Each curriculum domain has its own atmosphere on lesson and map hero bands. */
 export const categoryBackdrop: Record<string, BackdropName> = {

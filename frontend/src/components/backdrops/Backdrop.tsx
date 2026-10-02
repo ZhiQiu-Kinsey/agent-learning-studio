@@ -5,7 +5,8 @@ import {
   type LazyExoticComponent,
 } from "react";
 import { EffectBoundary, useMotionBudget } from "../../motion";
-import { backdropPresets, type BackdropName } from "./presets";
+import { backdropPresets, resolveBackdrop, type BackdropName } from "./presets";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import "../../styles/backdrops.css";
 
 // Each preset loads its React Bits shader on demand; props stay in presets.ts.
@@ -23,7 +24,8 @@ function lazyBackdrop(name: BackdropName) {
 }
 
 /**
- * Living background for hero bands. A CSS gradient in the preset's palette is
+ * Living background for hero bands, in the applied theme's variant (the shader
+ * remounts when the theme changes). A CSS gradient in the preset's palette is
  * always painted underneath; the WebGL shader mounts only at full motion, while
  * on screen in a visible tab and holding the shared WebGL slot, and fades in on
  * top. Leaving the viewport unmounts it, which releases the GPU context.
@@ -41,21 +43,23 @@ export function Backdrop({
   const { ref, active } = useMotionBudget<HTMLDivElement>("webgl", {
     margin: "120px",
   });
-  const preset = backdropPresets[name];
-  const Effect = lazyBackdrop(name);
+  const theme = useResolvedTheme();
+  const { shader, props: themed, fallback } = resolveBackdrop(name, theme);
+  const Effect = lazyBackdrop(shader);
   return (
     <div
       ref={ref}
       className={`backdrop ${className}`}
       data-backdrop={name}
+      data-theme-variant={theme}
       aria-hidden="true"
-      style={{ background: preset.fallback }}
+      style={{ background: fallback }}
     >
       {active && (
-        <EffectBoundary key={name}>
+        <EffectBoundary key={`${shader}-${theme}`}>
           <Suspense fallback={null}>
             <div className="backdrop-canvas">
-              <Effect {...preset.props} {...props} />
+              <Effect {...themed} {...props} />
             </div>
           </Suspense>
         </EffectBoundary>
