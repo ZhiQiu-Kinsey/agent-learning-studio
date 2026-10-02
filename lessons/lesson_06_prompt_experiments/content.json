@@ -16,7 +16,7 @@
           "eyebrow": "CHAPTER 02 / LESSON 06",
           "headline": "先写清楚比较什么",
           "highlight": "同题同模型的提示与工具描述配对实验",
-          "takeaway": "固定同题、同模型、同配置，两次真实响应按同一规则比较；单次结果只是一条观察。"
+          "takeaway": "同一道题、同一个模型、同样的配置，只改一处文本，按同一规则比较两次真实响应。一次结果只算一条观察。"
         },
         {
           "id": "concepts",
@@ -33,15 +33,22 @@
               "id": "02-check",
               "label": "02 / CHECK",
               "title": "工具描述是决策输入",
-              "description": "真实模型返回 tool_calls 提议；本实验检查工具名称与参数，不执行工具。",
+              "description": "模型读描述决定要不要调用、参数怎么填。配对实验只记录提议不执行；矩阵实验会执行提议，看代码的真实返回。",
               "token": "validation · evidence"
             },
             {
               "id": "03-evidence",
               "label": "03 / EVIDENCE",
               "title": "流程规则要可观察",
-              "description": "关键词初筛不能证明整句正确；命中和未命中都要对照原始响应人工复核。",
+              "description": "关键词初筛不能证明整句正确。命中和未命中，都要回到原始响应人工复核。",
               "token": "trace · report"
+            },
+            {
+              "id": "04-matrix",
+              "label": "04 / MATRIX",
+              "title": "描述要和代码一致",
+              "description": "描述说“拼接”，代码做的是加法。模型按描述做决定，被执行的却是代码。",
+              "token": "description · code"
             }
           ]
         },
@@ -50,7 +57,7 @@
           "type": "prose",
           "title": "先写清楚比较什么",
           "paragraphs": [
-            "每个预设有固定用户任务和两个版本。两次请求使用当前同一模型、相同 temperature=0 与相同调用预算；工具预设只改 function.description，其他预设只改 system 规则。temperature=0 不保证完全可复现，还需重复多次才能估计波动。"
+            "每个预设有固定的用户任务和两个版本。两次请求用同一个模型、temperature=0 和同样的调用预算；工具预设只改 function.description，其他预设只改 system 规则。temperature=0 也不保证完全可复现，要多跑几次才能估计波动。"
           ]
         },
         {
@@ -58,7 +65,7 @@
           "type": "prose",
           "title": "工具描述是决策输入",
           "paragraphs": [
-            "工具名称、职责和参数含义会影响模型如何构造调用提议。tool-description 预设把相同工具 Schema 交给真实模型，两轮只改 description，再检查响应里的 tool_calls 名称和实参。这里观察提议，不执行该工具；真正可调用范围仍由 Python 登记表决定。"
+            "工具名称、职责和参数含义会影响模型怎么构造调用提议。tool-description 预设把同一份工具 Schema 交给真实模型，两次只改 description，再检查响应里 tool_calls 的名称和实参。这里只观察提议，不执行工具；能真正执行哪些函数，仍由 Python 登记表决定。"
           ]
         },
         {
@@ -93,7 +100,7 @@
           "type": "prose",
           "title": "流程规则要可观察",
           "paragraphs": [
-            "flow-rule 预设比较简短指令和明确的识别、计算、核对、回答顺序。检查器只做关键词初筛：查看回答是否包含独立数字 42 且没有明确否定它；这不能证明整句算术语义正确，也不能反推出模型内部是否按步骤推理。应逐条人工阅读原始响应。"
+            "flow-rule 预设比较一句简短指令和一份写明“识别、计算、核对、回答”顺序的规则。检查器只做关键词初筛：回答里有没有独立的数字 42，且没有明确否定它。这不能证明整句算术正确，也不能反推模型内部是否按步骤推理，原始响应要逐条读。"
           ]
         },
         {
@@ -101,7 +108,7 @@
           "type": "prose",
           "title": "缺参时不要编造",
           "paragraphs": [
-            "missing-input 预设没有给两个加数。改写版要求索取缺失输入。初筛只查是否像在询问数字、且文本中没有数字；“需要计算1+1=2”会被拦下，但仍不能证明所有含糊请求都处理正确。"
+            "missing-input 预设没有给加数，改写版要求只询问缺少的输入。初筛查两件事：像不像在询问数字，文本里有没有数字。“需要计算1+1=2”会被拦下，但这不代表所有含糊请求都能处理对。"
           ]
         },
         {
@@ -136,64 +143,101 @@
           "type": "prose",
           "title": "配对报告保留退化",
           "paragraphs": [
-            "真实 tools Schema 的 tool-description 预设只改 function.description；另两个预设只改 system 规则。两个响应与初筛结果都进报告。初筛命中不是语义验收：基线命中而改写未命中是一条退化线索，双方命中也不证明普遍有效。问题栏作为学习者备注进入报告，不改变固定任务；重复实验还需固定更多案例并人工复核。"
+            "两次响应和初筛结果都写进报告。初筛命中不是语义验收：基线命中而改写未命中，是一条退化线索；两边都命中，也不说明改写普遍有效。问题栏是学习者备注，不改变固定任务。要得出更可靠的结论，需要更多案例、重复运行和人工复核。"
           ]
+        },
+        {
+          "id": "section-matrix",
+          "type": "prose",
+          "title": "空白、良好、误导：三种描述的矩阵",
+          "paragraphs": [
+            "tool-matrix 预设把同一个 add_numbers 交给模型，description 分三种：不写；写清职责和边界；写成“把两个整数拼成一个新整数”。每种描述配两道题：“19 加 23 等于多少？”需要调用，“把 19 和 23 按顺序拼成一个四位数”不需要调用。三行两列，六次请求，其余条件都不变。",
+            "误导的描述和代码不一致。模型只能看到描述，并据此做决定；被执行的却是代码。所以矩阵实验会把模型提出的 add_numbers 调用真的执行一次，报告里同时写出模型提了什么、代码实际返回什么。如果模型照着误导描述去“拼接”，拿到的会是 42，而不是 1923。",
+            "空白描述那一行也值得看。没有 description，模型只能靠函数名和参数名猜用途。add_numbers 这个名字已经说明了用途，空白描述未必出错；名字含糊的工具才会暴露问题。"
+          ]
+        },
+        {
+          "id": "mq-matrix",
+          "type": "micro-quiz",
+          "question": {
+            "id": "misleading-result",
+            "prompt": "误导描述 × 拼接题这一格，模型提出了 add_numbers(19, 23)。报告里的“实际返回”会是多少？",
+            "options": [
+              {
+                "id": "a",
+                "text": "42，因为执行的是代码里的加法",
+                "feedback": "对。描述只影响模型的决定，执行结果由代码决定。"
+              },
+              {
+                "id": "b",
+                "text": "1923，因为描述说会拼接",
+                "feedback": "不对。描述不会改变函数的实现。"
+              },
+              {
+                "id": "c",
+                "text": "不会执行，因为描述和代码不一致",
+                "feedback": "不对。平台不知道描述写错了；名称在登记表里、参数合法，就会执行。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "描述写错时，模型的决定和代码的行为对不上，这就是误导描述的危害。"
+          }
         },
         {
           "id": "walkthrough",
           "type": "walkthrough",
           "title": "从任务到可检查结果",
-          "description": "以下代码是跨课概念示意；本次执行证据请查看右侧事件。",
+          "description": "按步骤说明配对实验的结构，代码是简化的示意。本次运行的证据在实验台的事件里。",
           "steps": [
             {
               "id": "step-1",
-              "label": "限定输入",
-              "actor": "Python / 模型",
-              "title": "任务/事实进入运行器",
-              "body": "任务/事实进入运行器；示意不代替本次运行记录。",
+              "label": "固定条件",
+              "actor": "课程程序",
+              "title": "取出任务和两个版本",
+              "body": "TASKS 里每个场景是（任务，基线文本，改写文本），任务在两次请求里逐字相同。",
               "code": "task, baseline, variant = TASKS[scenario]",
               "language": "python",
-              "evidence": "检查输入范围与默认值"
+              "evidence": "TASKS[scenario] 的三项"
             },
             {
               "id": "step-2",
-              "label": "执行或生成",
-              "actor": "Python / 模型",
-              "title": "程序调用本地工具或真实模型",
-              "body": "程序调用本地工具或真实模型；示意不代替本次运行记录。",
+              "label": "基线请求",
+              "actor": "模型",
+              "title": "用基线文本请求一次",
+              "body": "请求和响应都由平台记录，记为第 1 轮。",
               "code": "left = context.complete(body_with_baseline_description, 1)",
               "language": "python",
-              "evidence": "在事件中查看真实调用"
+              "evidence": "round 1 的 request 与 response"
             },
             {
               "id": "step-3",
-              "label": "独立检查",
-              "actor": "Python / 模型",
-              "title": "把输出交给验证代码",
-              "body": "把输出交给验证代码；示意不代替本次运行记录。",
+              "label": "改写请求",
+              "actor": "模型",
+              "title": "只换那一处文本，再请求一次",
+              "body": "其余字段不变，记为第 2 轮。",
               "code": "right = context.complete(body_with_variant_description, 2)",
               "language": "python",
-              "evidence": "查看每项 passed 和 detail"
+              "evidence": "round 2 的 request 与 response"
             },
             {
               "id": "step-4",
-              "label": "形成证据",
-              "actor": "Python / 模型",
-              "title": "报告由检查结果生成",
-              "body": "报告由检查结果生成；示意不代替本次运行记录。",
+              "label": "初筛",
+              "actor": "课程程序",
+              "title": "按同一规则初筛两份输出",
+              "body": "工具预设检查提议的名称和参数，其他预设做关键词或形式初筛。",
               "code": "context.emit(\"lesson.report\", {\"checks\": heuristic_checks, \"table\": paired_rows})",
               "language": "python",
-              "evidence": "对照 report 与两份真实 response"
+              "evidence": "报告里每项 passed 与 detail"
             },
             {
               "id": "step-5",
-              "label": "作出结论",
-              "actor": "Python / 模型",
-              "title": "报告初筛并保留原文",
-              "body": "报告两份模型输出和有限初筛；命中仍需人工复核，示意不代替本次运行记录。",
+              "label": "报告",
+              "actor": "课程程序",
+              "title": "报告初筛，保留原文",
+              "body": "两份原始输出都进报告，命中与否都要人工复核。",
               "code": "return \"配对记录已生成；请人工复核\"",
               "language": "python",
-              "evidence": "最终回答只是提示；两次响应和报告才是本次证据"
+              "evidence": "最终回答只是提示；两次响应和报告才是证据"
             }
           ]
         },
@@ -220,17 +264,32 @@
           "type": "annotated-source",
           "path": "lessons/lesson_06_prompt_experiments/runtime.py",
           "start": 11,
-          "end": 15,
+          "end": 50,
           "notes": [
             {
               "id": "n12",
               "line": 12,
-              "text": "每个场景是（用户任务，基线文本，改写文本）三元组。同一场景里任务固定，只有后两项不同。"
+              "text": "每个配对场景是（用户任务，基线文本，改写文本）。同一场景里任务固定，只有后两项不同。"
             },
             {
               "id": "n14",
               "line": 14,
-              "text": "missing_input 的任务故意不给数字，用来观察改写后的规则能否让模型改为追问。"
+              "text": "missing_input 的任务故意不给数字，看改写后的规则能否让模型改为追问。"
+            },
+            {
+              "id": "n21",
+              "line": 21,
+              "text": "空白组用 None 表示：tool_spec 会直接省略 description 字段，而不是传空字符串。"
+            },
+            {
+              "id": "n23",
+              "line": 23,
+              "text": "误导组的描述故意和第 43 行的实现不一致。"
+            },
+            {
+              "id": "n27",
+              "line": 27,
+              "text": "拼接题的期望是“不调用”，用来检查模型会不会把工具用在它做不到的事上。"
             }
           ]
         },
@@ -238,57 +297,77 @@
           "id": "code-paired-run",
           "type": "annotated-source",
           "path": "lessons/lesson_06_prompt_experiments/runtime.py",
-          "start": 67,
-          "end": 100,
+          "start": 63,
+          "end": 127,
           "notes": [
             {
-              "id": "n68",
-              "line": 68,
-              "text": "配对至少需要两次调用，预算不够就直接拒绝，而不是只跑一半。"
+              "id": "n66",
+              "line": 66,
+              "text": "缺参场景做形式初筛：像不像在询问、是否提到数字、有没有写出数字。命中后仍需人工复核。"
             },
             {
-              "id": "n75",
-              "line": 75,
-              "text": "tool_description 场景的 system 固定不变，变量放在工具描述里；其他场景变量就是 system 本身。"
+              "id": "n73",
+              "line": 73,
+              "text": "排除“不是 42”这类否定表达，减少关键词误判。"
             },
             {
-              "id": "n77",
-              "line": 77,
-              "text": "两次请求的用户任务和 temperature=0 都相同，唯一差别是那一处文本。"
+              "id": "n89",
+              "line": 89,
+              "text": "配对实验只检查提议的名称和参数是否完全匹配，不执行这次调用。"
             },
             {
-              "id": "n79",
-              "line": 79,
-              "text": "工具描述场景把变量写进 function.description，其余参数结构两次完全一样。"
+              "id": "n97",
+              "line": 97,
+              "text": "配对至少需要两次调用，预算不够就直接拒绝，不会只跑一半。"
             },
             {
-              "id": "n90",
-              "line": 90,
-              "text": "报告明确写出：单次配对不能推断普遍优劣。"
+              "id": "n104",
+              "line": 104,
+              "text": "工具描述场景的 system 固定，变量放在工具描述里；其他场景的变量就是 system 本身。"
+            },
+            {
+              "id": "n108",
+              "line": 108,
+              "text": "工具描述场景把变量写进 function.description，参数结构两次完全一样。"
+            },
+            {
+              "id": "n117",
+              "line": 117,
+              "text": "报告摘要直接写明：单次配对不能推断普遍优劣。"
             }
           ]
         },
         {
-          "id": "code-screening",
+          "id": "code-matrix",
           "type": "annotated-source",
           "path": "lessons/lesson_06_prompt_experiments/runtime.py",
-          "start": 36,
-          "end": 64,
+          "start": 144,
+          "end": 195,
           "notes": [
             {
-              "id": "n40",
-              "line": 40,
-              "text": "缺少输入的场景做形式初筛：是否在询问、是否提到数字、是否没有写出数字；命中后仍需人工复核。"
+              "id": "n146",
+              "line": 146,
+              "text": "拼接题不该调用：没有提议算符合预期，调用了任何工具都算不符合。"
             },
             {
-              "id": "n46",
-              "line": 46,
-              "text": "排除“不是 42”这类否定表达，减少关键词误判。"
+              "id": "n157",
+              "line": 157,
+              "text": "六个格子各需一次请求，预算不足就在发出第一次请求前拒绝。"
             },
             {
-              "id": "n62",
-              "line": 62,
-              "text": "工具场景只检查提议的名称和参数是否完全匹配，不执行这次调用。"
+              "id": "n166",
+              "line": 166,
+              "text": "六次请求的 system、用户题和 temperature 都由表格决定，唯一的变量是 tool_spec(description)。"
+            },
+            {
+              "id": "n176",
+              "line": 176,
+              "text": "只有名称是 add_numbers、参数能解析成对象的提议才会执行；其他提议只记录。"
+            },
+            {
+              "id": "n179",
+              "line": 179,
+              "text": "执行走 call_tool，登记表里只有这一个纯函数，tool_call 与 tool_result 成对记录。"
             }
           ]
         },
@@ -659,6 +738,178 @@
               "离线测试模式下的回答由确定性脚本给出。"
             ]
           }
+        },
+        {
+          "id": "tool-matrix",
+          "title": "工具描述矩阵：空白、良好、误导",
+          "hypothesis": "只改 description 时，模型是否调用、参数怎么填会随之变化；描述与代码不一致时，模型的决定和执行结果会对不上。",
+          "arms": [
+            {
+              "id": "matrix",
+              "exercise": "tool-matrix",
+              "label": "3 种描述 × 2 道题，共 6 次请求"
+            }
+          ],
+          "observe": [
+            {
+              "id": "blank-function",
+              "text": "空白组的函数定义：只有名称和参数，没有 description。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools[0].function"
+              }
+            },
+            {
+              "id": "misleading-description",
+              "text": "误导组的 description：说的是拼接，代码做的是加法。",
+              "selector": {
+                "event": "request",
+                "round": 5,
+                "path": "data.body.tools[0].function.description"
+              }
+            },
+            {
+              "id": "same-system",
+              "text": "第 6 次请求的 system：六次请求逐字相同。",
+              "selector": {
+                "event": "request",
+                "round": 6,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "misleading-proposal",
+              "text": "误导组 × 拼接题：模型提出了什么调用（如果提了）。",
+              "selector": {
+                "event": "response",
+                "round": 6,
+                "path": "data.body.choices[0].message.tool_calls[0].function"
+              }
+            },
+            {
+              "id": "executed-result",
+              "text": "这次提议被执行后，代码的真实返回值。",
+              "selector": {
+                "event": "tool_result",
+                "round": 6,
+                "path": "data.result.result"
+              }
+            },
+            {
+              "id": "matrix-table",
+              "text": "报告的矩阵：每格写明模型做了什么、代码返回什么、是否符合预期。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "六次请求只差在工具描述上。先看没有描述时，模型能拿到什么。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "blank-function"
+            },
+            {
+              "action": "highlight",
+              "observe": "blank-function"
+            },
+            {
+              "action": "narrate",
+              "text": "空白组只剩函数名和参数名。模型要靠 add_numbers 这个名字猜用途。"
+            },
+            {
+              "action": "seek",
+              "observe": "misleading-description"
+            },
+            {
+              "action": "highlight",
+              "observe": "misleading-description"
+            },
+            {
+              "action": "narrate",
+              "text": "误导组的描述说会把两个数拼起来，和代码不符。"
+            },
+            {
+              "action": "seek",
+              "observe": "same-system"
+            },
+            {
+              "action": "highlight",
+              "observe": "same-system"
+            },
+            {
+              "action": "narrate",
+              "text": "system 在六次请求里逐字相同，变量只有描述。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "misleading-proposal"
+            },
+            {
+              "action": "highlight",
+              "observe": "misleading-proposal"
+            },
+            {
+              "action": "narrate",
+              "text": "拼接题本来不需要这个工具。看模型在误导描述下有没有提出调用。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "executed-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "executed-result"
+            },
+            {
+              "action": "narrate",
+              "text": "如果提了，平台会执行它。返回的是加法结果，不是描述承诺的拼接结果。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "matrix-table"
+            },
+            {
+              "action": "highlight",
+              "observe": "matrix-table"
+            },
+            {
+              "action": "narrate",
+              "text": "最后对照整张矩阵。每格只跑了一次，它说明这一次发生了什么，不说明哪种描述普遍更好。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "六次请求只有 description 不同（空白组没有这个字段），每格的提议和执行结果都在事件里。",
+              "被执行的提议用的是真实的 add_numbers，表格里的“实际返回”是代码的输出，不是描述的承诺。"
+            ],
+            "does_not_prove": [
+              "每格只跑一次，不能说明某种描述普遍更好；换模型、换题或再跑一次，结果都可能变。",
+              "add_numbers 这个名字本身就暗示加法，空白组的表现有一部分来自函数名；名字含糊的工具要另外测试。",
+              "离线测试模式下六格的行为来自确定性脚本。"
+            ]
+          }
         }
       ],
       "inputs": [
@@ -677,6 +928,10 @@
             {
               "value": "missing_input",
               "label": "失败边界：缺少加数"
+            },
+            {
+              "value": "tool_matrix",
+              "label": "工具描述矩阵：空白、良好、误导"
             }
           ]
         },
@@ -745,6 +1000,29 @@
               ],
               "correct": "b",
               "explanation": "提示与描述影响提议，程序允许列表才决定真实执行范围。"
+            },
+            {
+              "id": "q4",
+              "prompt": "误导的工具描述最直接的风险是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "模型按描述做决定，执行的却是代码，结果和用户意图对不上",
+                  "feedback": "对。矩阵里“误导 × 拼接”那一格就是这种情况。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型会拒绝调用任何工具",
+                  "feedback": "不一定。模型仍可能调用，只是用错了地方。"
+                },
+                {
+                  "id": "c",
+                  "text": "平台会报错并停止运行",
+                  "feedback": "不对。平台不检查描述是否属实，合法的调用照样执行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "描述是模型能看到的全部说明，它和代码一致，模型的决定才有依据。"
             }
           ]
         },
@@ -775,6 +1053,10 @@
             {
               "id": "item-3",
               "text": "我能解释一次配对为什么不能证明改写版普遍更好。"
+            },
+            {
+              "id": "item-4",
+              "text": "我跑过工具描述矩阵，能指出哪一格的模型决定和代码返回对不上。"
             }
           ]
         }

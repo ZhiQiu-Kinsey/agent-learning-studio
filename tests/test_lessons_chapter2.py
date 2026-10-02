@@ -166,6 +166,7 @@ class PromptExperimentTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 result, events = run_case(prompts, "6", scenario, {"scenario": scenario},
                                           prompt_fixture(scenario, {"scenario": scenario}))
+                self.assertFalse(any(kind == "tool_call" for kind, _, _ in events), "配对实验只记录提议，不执行")
                 requests = [data["body"] for kind, data, _ in events if kind == "request"]
                 self.assertEqual(len(requests), 2)
                 self.assertEqual(requests[0]["model"], requests[1]["model"])
@@ -182,6 +183,39 @@ class PromptExperimentTests(unittest.TestCase):
                 self.assertEqual(len(report(events)["table"]["rows"]), 2)
                 self.assertIn("单次", result)
                 self.assertIn({"label": "学习者备注", "value": "fixed task"}, report(events)["metrics"])
+
+    def test_description_matrix_changes_only_the_description_and_runs_proposals(self):
+        result, events = run_case(prompts, "6", "tool-matrix", {"scenario": "tool_matrix"},
+                                  prompt_fixture("tool-matrix", {"scenario": "tool_matrix"}), budget=6)
+        requests = [data["body"] for kind, data, _ in events if kind == "request"]
+        self.assertEqual(len(requests), 6)
+        functions = [body["tools"][0]["function"] for body in requests]
+        self.assertNotIn("description", functions[0])
+        self.assertEqual([f.get("description") for f in functions[::2]], list(prompts.DESCRIPTIONS.values()))
+        self.assertTrue(all(f["parameters"] == functions[0]["parameters"] for f in functions))
+        self.assertTrue(all(body["messages"][0] == requests[0]["messages"][0] for body in requests))
+        self.assertTrue(all(body["temperature"] == 0 for body in requests))
+        # Proposals are executed by real Python; the misleading "concatenate" call still returns a sum.
+        results = [(round_number, data["result"]) for kind, data, round_number in events if kind == "tool_result"]
+        self.assertEqual(results, [(1, {"ok": True, "result": 42}), (3, {"ok": True, "result": 42}),
+                                   (6, {"ok": True, "result": 42})])
+        checks = report(events)["checks"]
+        self.assertEqual([check["passed"] for check in checks], [True, True, True, True, False, False])
+        self.assertIn("实际返回 42", report(events)["table"]["rows"][2][2])
+        self.assertIn("单次", result)
+
+    def test_matrix_needs_full_budget_and_judges_cells_strictly(self):
+        with self.assertRaises(RuntimeError):
+            run_case(prompts, "6", "tool-matrix", {"scenario": "tool_matrix"},
+                     prompt_fixture("tool-matrix", {"scenario": "tool_matrix"}), budget=5)
+        expected = {"a": 19, "b": 23}
+        self.assertTrue(prompts.judge_cell(expected, {"name": "add_numbers", "arguments": expected})[0])
+        self.assertFalse(prompts.judge_cell(expected, {"name": "add_numbers", "arguments": {"a": 19}})[0])
+        self.assertFalse(prompts.judge_cell(expected, None)[0])
+        self.assertFalse(prompts.judge_cell(None, {"name": "add_numbers", "arguments": expected})[0])
+        self.assertTrue(prompts.judge_cell(None, None)[0])
+        bad_json = {"choices": [{"message": {"tool_calls": [{"function": {"name": "add_numbers", "arguments": "{"}}]}}]}
+        self.assertEqual(prompts.proposed_call(bad_json), {"name": "add_numbers", "arguments": None})
 
     def test_heuristic_rejects_known_false_positives(self):
         self.assertFalse(prompts.evaluate("flow_rule", "不是42而是43")[0])
