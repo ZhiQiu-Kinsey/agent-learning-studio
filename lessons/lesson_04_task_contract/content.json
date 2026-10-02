@@ -13,7 +13,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "CHAPTER 02 / LESSON 04",
+          "eyebrow": "CHAPTER 02 / TASK CONTRACT",
           "headline": "从“帮我学习”到可执行任务",
           "highlight": "把任务写成能独立检查的契约",
           "takeaway": "程序跑完了、执行者说“做完了”，都不等于完成。完成要由验收器对照任务卡和工具证据来判定。"
@@ -57,7 +57,7 @@
           "type": "prose",
           "title": "从“帮我学习”到可执行任务",
           "paragraphs": [
-            "“帮我学习 Agent”这句话缺三样东西：用哪些资料、交付什么、什么时候停。缺了它们，任何回答都没法复核。本课把任务缩小到“依据本地计算回答 19 + 23”，输入范围、期望输出、证据、失败处理和停止条件都写进 TASK_CARD。",
+            "“帮我学习 Agent”这句话缺三样东西：用哪些资料、交付什么、什么时候停。缺了它们，任何回答都没法复核。本课把任务缩小到“依据本地计算回答 19 + 23”，输入范围、期望输出、证据、失败处理和停止条件都写进 TASK_CARD。本课不调用模型，所有步骤都由本地 Python 执行。",
             "真实任务也要先回答同样的问题：事实由谁提供，允许做哪些操作，什么情况需要人来确认。实验台的学习者备注只是你的记录，任务本身由结构化预设决定，备注不会改变验收规则。"
           ]
         },
@@ -68,6 +68,16 @@
           "paragraphs": [
             "任务卡把验收标准（Acceptance Criteria）提前写成六个字段。goal 是目标，input_scope 限定能用的数据，output 描述要交的产物。evidence 写明要看哪条工具结果、满足什么条件，failure 规定不满足时怎么报，stop 规定什么时候停。改任务卡会改变验收的对象；把回答写得更自信，检查结果不会变。"
           ]
+        },
+        {
+          "id": "predict-missing-evidence",
+          "type": "predict",
+          "prompt": "运行“故障注入：不调用工具，直接声明 42”之前先猜：这次运行会出现几个 tool_result 事件？",
+          "experiment": "acceptance",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_result"
+          }
         },
         {
           "id": "mq-card-evidence",
@@ -189,7 +199,7 @@
           "title": "预告：有上限的目标循环",
           "paragraphs": [
             "验收不通过时，可以把原因交回执行者，让它再试一次。这就是目标循环：执行，独立验收，未通过就带着原因重试，通过或到达上限时停止。goal_loop 预设演示这个结构：第 1 次尝试被注入错误，验收器写下原因；第 2 次按任务卡重做，通过后停止。",
-            "上限要写进任务卡的 stop 字段。把上限改成 1，循环会在第一次失败后停下，如实报告“达到尝试上限”。{{lesson:long-running-tasks}}会用真实模型实现完整的目标循环；本课没有模型，第 2 次尝试的修正是固定脚本。"
+            "上限要写进任务卡的 stop 字段。把上限改成 1，循环会在第一次失败后停下，如实报告“达到尝试上限”。{{lesson:goal-loops}}会用真实模型实现完整的目标循环；本课没有模型，第 2 次尝试的修正是固定脚本。"
           ]
         },
         {
@@ -249,16 +259,6 @@
               "evidence": "lesson.goal_check 的 next 字段"
             }
           ]
-        },
-        {
-          "id": "predict-missing-evidence",
-          "type": "predict",
-          "prompt": "运行“故障注入：不调用工具，直接声明 42”之前先猜：这次运行会出现几个 tool_result 事件？",
-          "experiment": "acceptance",
-          "rule": {
-            "kind": "count_events",
-            "event": "tool_result"
-          }
         }
       ]
     },
@@ -272,42 +272,93 @@
           "id": "code-acceptance",
           "type": "annotated-source",
           "path": "lessons/lesson_04_task_contract/runtime.py",
-          "start": 16,
-          "end": 67,
+          "start": 20,
+          "end": 58,
           "notes": [
             {
-              "id": "n16",
-              "line": 16,
+              "id": "n21",
+              "line": 21,
               "anchor": "TASK_CARD = {",
-              "text": "TASK_CARD 在执行前写清目标、证据和停止条件，运行开始时作为 lesson.task_card 发布。"
+              "text": "任务卡把目标、输入范围、产物、证据、失败处理和停止条件写成六个字段，运行开始时作为 lesson.task_card 发布。"
             },
             {
-              "id": "n33",
-              "line": 33,
-              "anchor": "record = evidence.get(claim.get(\"evidence_ref\") ",
-              "text": "verify 只用声明里的 evidence_ref 去找本次记录的工具结果，不读声明里的答案下结论。"
+              "id": "n25",
+              "line": 25,
+              "anchor": "\"evidence\": \"计算工具成功返回",
+              "text": "evidence 写的是能核对的条件：哪个工具成功、结果等于几。后面的检查项逐条照它判。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "anchor": "def verify(claim: dict, evidence",
+              "text": "验收器的输入只有完成声明和本次记录的证据，执行者怎么描述过程它不看。"
+            },
+            {
+              "id": "n39",
+              "line": 39,
+              "anchor": "record = evidence.get(claim.get(\"evidence_ref\")",
+              "text": "只顺着声明里的 evidence_ref 找证据。引用了别处的调用 id，这里拿到的就是空。"
             },
             {
               "id": "n44",
               "line": 44,
-              "anchor": "{\"label\": \"声明与证据一致\", \"passed\": ok and claim.get(",
-              "text": "声明与证据一致是单独一项检查：claim_mismatch 就是在这里被拦下的。"
+              "anchor": "{\"label\": \"执行过程已结束\", \"passed\": True",
+              "text": "第一项永远为真：流程走到这里，只说明 Python 没出错。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "{\"label\": \"证据中的值满足任务卡\"",
+              "text": "拿证据里的值对照任务卡；wrong_result 证据存在、工具也成功，但停在这一项。"
             },
             {
               "id": "n51",
               "line": 51,
-              "anchor": "return all(item[\"passed\"] for item in checks[1:]",
-              "text": "accepted 跳过第一项“执行过程已结束”。流程跑完和任务通过是两件事。"
+              "anchor": "{\"label\": \"声明与证据一致\", \"passed\": ok and claim.get(",
+              "text": "声明与证据单独比一次：claim_mismatch 就是在这里被拦下的。"
             },
             {
-              "id": "n60",
-              "line": 60,
+              "id": "n58",
+              "line": 58,
+              "anchor": "return all(item[\"passed\"] for item in checks[1:])",
+              "text": "accepted 跳过第一项。流程跑完和任务通过是两件事。"
+            }
+          ]
+        },
+        {
+          "id": "code-attempt",
+          "type": "annotated-source",
+          "path": "lessons/lesson_04_task_contract/runtime.py",
+          "start": 61,
+          "end": 74,
+          "notes": [
+            {
+              "id": "n61",
+              "line": 61,
+              "anchor": "def _attempt(context: RunContext",
+              "text": "执行者是一段固定脚本，代替 Agent 交完成声明。故障由运行器注入，不是模型犯的错。"
+            },
+            {
+              "id": "n65",
+              "line": 65,
+              "anchor": "return {\"status\": \"done\", \"answer\": EXPECTED, \"evidence_ref\": None",
+              "text": "missing_evidence 不调用工具就交声明：答案恰好是对的，但没有可核对的证据。"
+            },
+            {
+              "id": "n67",
+              "line": 67,
               "anchor": "wrong = scenario in (\"wrong_result\", \"claim_mism",
-              "text": "故障由运行器注入，只改变证据，不改变上面的验收规则。"
+              "text": "注入的故障只改变证据，不改变验收规则。goal_loop 只让第 1 次出错。"
             },
             {
-              "id": "n66",
-              "line": 66,
+              "id": "n71",
+              "line": 71,
+              "anchor": "evidence[call_id] = {\"result\": result}",
+              "text": "工具结果按调用 id 存进 evidence，验收器只认这里的记录。"
+            },
+            {
+              "id": "n73",
+              "line": 73,
               "anchor": "answer = EXPECTED if scenario == \"claim_mismatch",
               "text": "claim_mismatch 的执行者不管工具返回什么都报 42，模拟“只报好消息”的声明。"
             }
@@ -318,11 +369,17 @@
           "type": "annotated-source",
           "path": "lessons/lesson_04_task_contract/runtime.py",
           "start": 77,
-          "end": 117,
+          "end": 107,
           "notes": [
             {
-              "id": "n82",
-              "line": 82,
+              "id": "n81",
+              "line": 81,
+              "anchor": "limit = context.inputs[\"max_attempts\"] if scenario",
+              "text": "尝试次数由 max_attempts 决定；其他场景固定为 1 次，每种故障单独可见。"
+            },
+            {
+              "id": "n83",
+              "line": 83,
               "anchor": "card = {**TASK_CARD, \"stop\": f\"验收通过或尝试 {limit} 次",
               "text": "目标循环把上限写进任务卡的 stop 字段，停止条件也是契约的一部分。"
             },
@@ -330,19 +387,31 @@
               "id": "n87",
               "line": 87,
               "anchor": "for attempt in range(1, limit + 1):",
-              "text": "循环次数由 max_attempts 决定，其他场景固定为 1 次。"
+              "text": "有上限的目标循环：每次尝试都是“执行 → 独立验收”，最多 limit 次。"
             },
             {
-              "id": "n95",
-              "line": 95,
+              "id": "n93",
+              "line": 93,
+              "anchor": "checks = verify(claim, evidence)",
+              "text": "每次尝试都交给同一个验收器，执行者的声明改变不了检查规则。"
+            },
+            {
+              "id": "n98",
+              "line": 98,
               "anchor": "context.emit(\"lesson.goal_check\", {",
               "text": "每次尝试都发布 lesson.goal_check：是否通过、未通过的原因、下一步是重试还是停止。"
             },
             {
-              "id": "n100",
-              "line": 100,
+              "id": "n104",
+              "line": 104,
               "anchor": "if passed:",
               "text": "通过就停。没有这一行，循环会把剩下的尝试次数用完。"
+            },
+            {
+              "id": "n107",
+              "line": 107,
+              "anchor": "_report(context, scenario, limit, checks",
+              "text": "报告的组装放在 _report 里：检查项、指标和每次尝试的记录。"
             }
           ]
         },

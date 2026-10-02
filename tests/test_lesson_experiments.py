@@ -21,6 +21,11 @@ from server.run_store import RunStore
 from server.selectors import count_events, select_events
 
 STAGE_ROLES = {"user", "runtime", "model", "tool", "memory"}
+# “先跑一次”：predict 放在第一道微测之前。这些课还按旧版放在理解场景末尾，改好一课删一课（只减不增）。
+PREDICT_AT_END = {"tool-selection", "dependent-calls", "fail-safely", "structured-output", "messages-context",
+                  "application-state", "context-budget", "persistent-memory",
+                  "prompt-experiments", "text-actions", "todo-planning", "plan-and-replan", "reflection-revision",
+                  "workflow-patterns", "orchestrator-evaluator"}
 
 
 def stage_roles(events):
@@ -121,7 +126,11 @@ class LessonExperimentTests(unittest.TestCase):
                 blocks = model.scenes.understand.blocks
                 predicts = [block for block in blocks if isinstance(block, Predict)]
                 self.assertEqual(len(predicts), 1)
-                self.assertIs(blocks[-1], predicts[0], "predict 放在理解场景末尾")
+                if lesson_id in PREDICT_AT_END:
+                    self.assertIs(blocks[-1], predicts[0], "已改到第一道微测之前，请从 PREDICT_AT_END 删除")
+                else:
+                    first_quiz = next(index for index, item in enumerate(blocks) if isinstance(item, MicroQuiz))
+                    self.assertLess(blocks.index(predicts[0]), first_quiz, "predict 放在第一道微测之前（先跑一次）")
                 block = predicts[0]
                 experiment = next(item for item in model.scenes.lab.experiments if item.id == block.experiment)
                 self.assertEqual(experiment.predict, block.id)
