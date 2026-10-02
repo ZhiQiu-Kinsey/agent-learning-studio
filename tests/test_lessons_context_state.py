@@ -1,103 +1,179 @@
-"""第 7–8 课的离线行为回归。"""
+"""“上下文组成与消息协议”“应用状态与运行生命周期”两课的离线行为回归。"""
+import json
 import unittest
 
 from pydantic import ValidationError
 
+from course.api_client import ProviderHTTPError
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.runner import RunCancelled
 from lessons.lesson_07_messages_context import fixtures as context_fixtures
 from lessons.lesson_07_messages_context import runtime as context_runtime
 from lessons.lesson_08_application_state import runtime as state_runtime
 
+CUSTOM = {"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}
 
-def make_context(lesson_id, exercise_id, inputs, completion=None, cancelled=lambda: False):
+
+def make_context(lesson_id, exercise_id, inputs, completion=None, cancelled=lambda: False, budget=4):
     events = []
     context = RunContext(
         lesson_id=lesson_id, exercise_id=exercise_id, question="", mode="offline",
         model="test-model", representation="offline", inputs=inputs,
         api_key="", completion=completion,
         emit_event=lambda kind, data, round_number: events.append((kind, data, round_number)),
-        cancelled=cancelled, max_model_calls=3,
+        cancelled=cancelled, max_model_calls=budget,
     )
     return context, events
 
 
+def of(events, kind):
+    return [data for event, data, _ in events if event == kind]
+
+
+def run_ablation(inputs=None, completion=None, budget=4):
+    values = validate_inputs(context_runtime, inputs or {})
+    completion = completion or context_fixtures.create_completion("ablate", values)
+    context, events = make_context("messages-context", "ablate", values, completion, budget=budget)
+    answer = execute_lesson(CUSTOM, context_runtime, context)
+    return values, answer, events
+
+
 class MessagesContextTests(unittest.TestCase):
-    def test_full_vs_omitted_history_uses_three_real_completion_calls(self):
-        values = validate_inputs(context_runtime, {})
-        context, events = make_context("7", "compare", values, context_fixtures.create_completion("compare", values))
-        result = execute_lesson({"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}, context_runtime, context)
-        requests = [data["body"] for kind, data, _ in events if kind == "request"]
-        self.assertEqual(len(requests), 3)
-        self.assertEqual(len(requests[1]["messages"]), 4)
-        self.assertEqual(len(requests[2]["messages"]), 2)
-        self.assertNotIn(values["fact"], str(requests[2]))
-        self.assertEqual([kind for kind, _, _ in events].count("response"), 3)
-        self.assertIn("已保存", result)
+    def test_five_variants_send_four_requests_and_block_the_orphan_call(self):
+        values, answer, events = run_ablation()
+        requests = [data["body"]["messages"] for data in of(events, "request")]
+        self.assertEqual([len(messages) for messages in requests], [5, 4, 4, 3])
+        self.assertEqual(len(of(events, "response")), 4)
+        blocked = [data for data in of(events, "lesson.context") if "rejected" in data]
+        self.assertEqual(len(blocked), 1)
+        self.assertEqual(blocked[0]["variant"], "只去掉工具结果")
+        self.assertEqual(blocked[0]["roles"], ["system", "user", "assistant", "user"])
+        self.assertIn("4 组请求已发送，1 组", answer)
 
-    def test_full_only_respects_two_call_budget(self):
-        values = validate_inputs(context_runtime, {"comparison": "full_only"})
-        context, events = make_context("7", "full", values, context_fixtures.create_completion("full", values))
-        context.max_model_calls = 2
-        context_runtime.run(context)
-        self.assertEqual([kind for kind, _, _ in events].count("request"), 2)
-        report = next(data for kind, data, _ in events if kind == "lesson.report")
-        self.assertFalse(any("消融" in check["label"] for check in report["checks"]))
+    def test_each_request_differs_from_full_context_only_by_the_removed_part(self):
+        _, _, events = run_ablation()
+        requests = [data["body"]["messages"] for data in of(events, "request")]
+        full = requests[0]
+        sent = [(name, removed) for name, removed in context_runtime.VARIANTS.items() if removed != ("tool_result",)]
+        for (name, removed), messages in zip(sent, requests):
+            with self.subTest(variant=name):
+                expected = [message for key, message in zip(context_runtime.ORDER, full) if key not in removed]
+                self.assertEqual(messages, expected)
+                context_runtime.validate_tool_history(messages)
 
-    def test_question_override_and_multiline_fact_visibility(self):
-        values = validate_inputs(context_runtime, {"fact": "代号是\nQH-\"731\"。"})
-        context, events = make_context("7", "compare", values, context_fixtures.create_completion("compare", values))
-        context.question = "请回答当前自定义追问"
-        context_runtime.run(context)
-        requests = [data["body"]["messages"] for kind, data, _ in events if kind == "request"]
-        self.assertEqual(requests[1][-1]["content"], "请回答当前自定义追问")
-        self.assertEqual(requests[2][-1]["content"], "请回答当前自定义追问")
-        report = next(data for kind, data, _ in events if kind == "lesson.report")
+    def test_tool_result_is_really_executed_and_paired_by_the_same_call_id(self):
+        values, _, events = run_ablation({"student_id": "s-2077"})
+        call, result = of(events, "tool_call")[0], of(events, "tool_result")[0]
+        self.assertEqual(call["origin"], "course_program")
+        self.assertEqual(result["result"]["result"]["score"], 58)
+        full = of(events, "request")[0]["body"]["messages"]
+        self.assertEqual(full[2]["tool_calls"][0]["id"], call["id"])
+        self.assertEqual(full[3]["tool_call_id"], call["id"])
+        self.assertEqual(json.loads(full[3]["content"]), result["result"])
+        self.assertIn("周四", full[1]["content"])
+        self.assertNotIn("58", full[1]["content"] + full[4]["content"])
+
+    def test_report_table_lists_screens_only_for_sent_variants(self):
+        _, _, events = run_ablation({"free_day": "周六"})
+        report = of(events, "lesson.report")[0]
+        rows = {row[0]: row for row in report["table"]["rows"]}
+        self.assertEqual(rows["完整上下文"][4:], [True, True, True])
+        self.assertEqual(rows["去掉系统提示词"][6], False)
+        self.assertEqual(rows["去掉之前的对话"][5], False)
+        self.assertEqual(rows["去掉工具调用和结果"][4], False)
+        self.assertEqual(rows["只去掉工具结果"][3:], ["未发送", "—", "—", "—"])
         self.assertTrue(all(check["passed"] for check in report["checks"]))
+        metrics = {item["label"]: item["value"] for item in report["metrics"]}
+        self.assertEqual((metrics["模型调用数"], metrics["被拦下的组"], metrics["能复习的日子"]), (4, 1, "周六"))
+
+    def test_provider_rejection_is_recorded_and_other_variants_continue(self):
+        values = validate_inputs(context_runtime, {})
+        scripted = context_fixtures.create_completion("ablate", values)
+
+        def completion(body, api_key):
+            if body["messages"][0]["role"] != "system":
+                raise ProviderHTTPError("HTTP 400", 400)
+            return scripted(body, api_key)
+
+        _, _, events = run_ablation(completion=completion)
+        errors = of(events, "lesson.provider_error")
+        self.assertEqual([error["status"] for error in errors], [400])
+        rows = {row[0]: row for row in of(events, "lesson.report")[0]["table"]["rows"]}
+        self.assertIn("服务商拒绝", rows["去掉系统提示词"][3])
+        self.assertEqual(len(of(events, "request")), 4)
+
+    def test_network_failure_budget_and_cancel_are_not_swallowed(self):
+        def offline(body, api_key):
+            raise RuntimeError("连接失败")
+
+        with self.assertRaisesRegex(RuntimeError, "连接失败"):
+            run_ablation(completion=offline)
+        with self.assertRaisesRegex(RuntimeError, "超过 3 次"):
+            run_ablation(budget=3)
+        values = validate_inputs(context_runtime, {})
+        context, _ = make_context("messages-context", "ablate", values,
+                                  context_fixtures.create_completion("ablate", values), cancelled=lambda: True)
+        with self.assertRaises(RunCancelled):
+            context_runtime.run(context)
 
     def test_protocol_rejects_orphan_tool_result_and_unfinished_call(self):
         with self.assertRaises(ValueError):
             context_runtime.validate_tool_history([{"role": "tool", "tool_call_id": "x", "content": "3"}])
         with self.assertRaises(ValueError):
             context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]}])
+        with self.assertRaises(ValueError):
+            context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]},
+                                                   {"role": "user", "content": "下一问"}])
         context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]},
                                                {"role": "tool", "tool_call_id": "x", "content": "3"}])
 
     def test_input_contract(self):
-        with self.assertRaises(ValidationError):
-            validate_inputs(context_runtime, {"fact": "x"})
-        with self.assertRaises(ValidationError):
-            validate_inputs(context_runtime, {"unexpected": "value"})
+        for invalid in ({"student_id": "s-9999"}, {"free_day": "明天"}, {"unexpected": "value"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
+                validate_inputs(context_runtime, invalid)
+        with self.assertRaises(ValueError):
+            context_runtime.lookup_score("s-9999")
 
 
 class ApplicationStateTests(unittest.TestCase):
     def test_success_has_evidence_and_distinct_messages(self):
         values = validate_inputs(state_runtime, {})
-        context, events = make_context("8", "success", values)
+        context, events = make_context("application-state", "success", values)
         answer = state_runtime.run(context)
-        states = [data["state"] for kind, data, _ in events if kind == "lesson.state"]
-        self.assertEqual(states[-1]["status"], "completed")
+        states = [data["state"] for data in of(events, "lesson.state")]
+        self.assertEqual([state["status"] for state in states], ["ready", "running", "running", "completed"])
         self.assertEqual(len(states[-1]["evidence"]), 1)
-        metrics = next(data for kind, data, _ in events if kind == "lesson.report")["metrics"]
+        self.assertEqual(states[-1]["evidence"][0]["source"], "messages-context")
+        metrics = of(events, "lesson.report")[0]["metrics"]
         self.assertEqual(next(item["value"] for item in metrics if item["label"] == "消息数"), 1)
         self.assertEqual(next(item["value"] for item in metrics if item["label"] == "已执行步骤"), 3)
-        self.assertIn("lesson-07", answer)
+        self.assertIn("messages-context", answer)
 
     def test_missing_and_budget_are_distinct_failures(self):
         for scenario in ("missing", "budget"):
             values = validate_inputs(state_runtime, {"scenario": scenario, "step_budget": 2 if scenario == "budget" else 3})
-            context, events = make_context("8", scenario, values)
+            context, events = make_context("application-state", scenario, values)
             state_runtime.run(context)
-            states = [data["state"] for kind, data, _ in events if kind == "lesson.state"]
+            states = [data["state"] for data in of(events, "lesson.state")]
             self.assertEqual(states[-1]["status"], "failed")
             self.assertTrue(states[-1]["terminal_reason"])
             self.assertEqual(len(states[-1]["evidence"]), 0 if scenario == "missing" else 1)
             self.assertEqual(states[-1]["used_steps"], 1 if scenario == "missing" else 2)
             self.assertEqual("waiting" in [s["status"] for s in states], scenario == "missing")
+            # 没有进入 completed 时，“成功有证据和产物”没有可检查的对象，不标通过。
+            success = of(events, "lesson.report")[0]["checks"][1]
+            self.assertNotIn("passed", success)
+
+    def test_budget_of_one_fails_before_checking_the_source(self):
+        values = validate_inputs(state_runtime, {"source_key": "application-state", "step_budget": 1})
+        context, events = make_context("application-state", "budget", values)
+        self.assertIn("核对资料来源前耗尽", state_runtime.run(context))
+        final = of(events, "lesson.state")[-1]["state"]
+        self.assertEqual((final["status"], final["used_steps"], final["evidence"]), ("failed", 1, []))
 
     def test_invalid_transition_and_cancel(self):
         state = state_runtime.TaskState(run_id="one", goal="可检查的目标")
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "非法状态转换：ready → completed"):
             state.transition("completed", "未经执行")
         state.transition("running")
         with self.assertRaises(ValueError):
@@ -105,16 +181,19 @@ class ApplicationStateTests(unittest.TestCase):
         state.evidence.append({"source": "x"})
         with self.assertRaises(ValueError):
             state.transition("completed", "没有产物")
+        with self.assertRaises(ValueError):
+            state.transition("failed")
         state.transition("cancelled", "用户停止")
         with self.assertRaises(ValueError):
             state.transition("running")
         values = validate_inputs(state_runtime, {})
-        context, _ = make_context("8", "success", values, cancelled=lambda: True)
+        context, _ = make_context("application-state", "success", values, cancelled=lambda: True)
         with self.assertRaises(RunCancelled):
             state_runtime.run(context)
 
     def test_input_contract(self):
-        for invalid in ({"step_budget": 0}, {"source_key": "../../private"}, {"scenario": "unknown"}):
+        for invalid in ({"step_budget": 0}, {"source_key": "../../private"}, {"source_key": "lesson-07"},
+                        {"scenario": "unknown"}):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 validate_inputs(state_runtime, invalid)
 

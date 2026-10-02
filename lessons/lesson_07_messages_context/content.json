@@ -5,7 +5,8 @@
   "source_language": "zh-CN",
   "capabilities": [
     "model",
-    "context"
+    "context",
+    "tools"
   ],
   "scenes": {
     "understand": {
@@ -14,201 +15,258 @@
           "id": "hero",
           "type": "hero",
           "eyebrow": "CHAPTER 03 / CONTEXT",
-          "headline": "模型读到的历史，",
-          "highlight": "由本次消息决定。",
-          "takeaway": "模型只读得到这一次请求里的消息。历史要由程序重发，工具消息要成对，结论只能按实际请求和响应下。"
+          "headline": "回答靠的是哪一部分，",
+          "highlight": "一次只拿掉一部分来看。",
+          "takeaway": "一次请求的上下文由系统提示词、之前的对话、工具调用与工具结果、本轮问题组成。每次只拿掉一部分再问同一个问题，就能看出回答依赖哪一部分；工具调用和工具结果只能一起拿掉。"
         },
         {
           "id": "concepts",
           "type": "concepts",
           "items": [
             {
-              "id": "01-roles",
-              "label": "01 / ROLES",
-              "title": "消息角色",
-              "description": "system、user、assistant、tool 各有各的位置，不能互相顶替。",
-              "token": "messages[]"
+              "id": "01-parts",
+              "label": "01 / PARTS",
+              "title": "上下文的四部分",
+              "description": "系统提示词、之前的对话、工具调用与工具结果、本轮问题，按固定顺序拼成这次请求的 messages。",
+              "token": "ORDER"
             },
             {
-              "id": "02-replay",
-              "label": "02 / REPLAY",
-              "title": "历史重发",
-              "description": "程序把上一轮的消息再放进请求，模型这一次才可能用到它。",
-              "token": "append → complete"
+              "id": "02-ablation",
+              "label": "02 / ABLATION",
+              "title": "一次只拿掉一部分",
+              "description": "其余消息一字不改，只少一部分；回答缺了什么，才能归到这一部分上。",
+              "token": "VARIANTS"
             },
             {
-              "id": "03-evidence",
-              "label": "03 / EVIDENCE",
-              "title": "合法消融",
-              "description": "只拿掉可选的历史，追问保持一字不差，再看实际请求里少了什么。",
-              "token": "full / omit"
+              "id": "03-pair",
+              "label": "03 / PAIR",
+              "title": "调用和结果成对",
+              "description": "带 tool_calls 的 assistant 消息后面，必须紧跟同一调用 id 的 tool 消息。",
+              "token": "tool_call_id"
+            },
+            {
+              "id": "04-check",
+              "label": "04 / CHECK",
+              "title": "发送前检查",
+              "description": "validate_tool_history 先检查配对，不合法的历史不发请求。",
+              "token": "validate_tool_history()"
             }
           ]
         },
         {
           "id": "section-1",
           "type": "prose",
-          "title": "模型看到的是本次请求",
+          "title": "一次请求里装了什么",
           "paragraphs": [
-            "先告诉模型一条事实，再追问。第二次调用能不能用上这条事实，取决于程序有没有把第一轮的消息重新放进 messages，也就是本次请求携带的消息历史。网页回放里看得到上一轮，不代表它进了下一轮请求。",
-            "模型这次看到了什么，以 request 事件为准：RunContext.complete 发请求时，会把实际发出的请求体原样记下来。"
+            "{{lesson:multi-turn-history}}讲过：模型不记得上一轮，历史要靠程序重发。这一课往前走一步，把一次请求的上下文拆开，看里面有哪几部分、回答各靠哪一部分。",
+            "本课的完整上下文是五条消息，分成四部分。系统提示词：1 条 system 消息，要求回答最后写一行“依据：”。之前的对话：1 条 user 消息，“这周我只有周四晚上能复习。先帮我查一下 s-1042 最近一次练习。”工具调用与工具结果：1 条带 tool_calls 的 assistant 消息，加 1 条 tool 消息，里面是 73 分。本轮问题：1 条 user 消息，“我那次练习及格了吗？这周哪天复习？”",
+            "本轮问题要两样信息才答得全：分数只在工具结果里，复习日只在之前的对话里。系统提示词不提供事实，只规定怎么回答。"
           ]
         },
         {
           "id": "section-2",
           "type": "prose",
-          "title": "角色与轮次",
+          "title": "一次只拿掉一部分",
           "paragraphs": [
-            "system 写本课的回答约束，user 是用户给的事实或追问，assistant 是模型之前的回复。第二次请求里，程序把第一次的 user 和 assistant 消息一起带上，这才叫历史重发。服务商会把这些角色消息转换成自己的格式；页面上的消息列表只是这次请求的内容，模型不会在请求之间替你保存它。"
+            "其余不变、只拿掉一部分再比较，这种做法叫消融。本课一次运行准备五组上下文：完整上下文；去掉系统提示词；去掉之前的对话；去掉工具调用和结果；只去掉工具结果、留下调用。五组问同一个问题，temperature 都是 0。",
+            "比较方法很直接：去掉工具调用和结果之后，回答里还有没有 73？去掉之前的对话之后，还提不提周四？去掉系统提示词之后，还写不写“依据：”这一行？哪一部分拿掉后回答缺了对应的信息，就说明这次回答用到了它。",
+            "这五条消息都是运行器拼出来的样本。那条带 tool_calls 的 assistant 消息由运行器写入，不是模型提出的；tool 消息里的分数来自本次真实执行的 lookup_score，事件里这次调用的 origin 是 course_program。"
           ]
         },
         {
-          "id": "mq-history-resent",
+          "id": "predict-request-count",
+          "type": "predict",
+          "prompt": "在实验中运行“学号 s-1042：五组上下文对照”之前先猜：一次运行准备了五组上下文，这次运行一共会有几次模型调用（request 事件）？",
+          "experiment": "context-ablation",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-missing-score",
           "type": "micro-quiz",
           "question": {
-            "id": "history-resent",
-            "prompt": "第二次请求能用上第一次发出的事实，靠的是什么？",
+            "id": "missing-score",
+            "prompt": "假如“去掉工具调用和结果”那一组的回答没有提到 73 分，最直接的解释是什么？",
             "options": [
               {
                 "id": "a",
-                "text": "程序把第一次的 user 与 assistant 消息重新放进了本次 messages",
-                "feedback": "对。历史需要程序重发，模型才看得到。"
+                "text": "这次请求里没有工具结果，模型拿不到分数",
+                "feedback": "对。分数只在那条 tool 消息里，拿掉后这次请求就没有它。"
               },
               {
                 "id": "b",
-                "text": "模型在第一次请求后记住了事实",
-                "feedback": "不对。模型不会在请求之间保留信息。"
+                "text": "模型忘了上一次请求查到的分数",
+                "feedback": "不对。模型本来就不记得上一次请求，谈不上忘记；它只看这次请求里的消息。"
               },
               {
                 "id": "c",
-                "text": "网页回放里显示过第一次对话",
-                "feedback": "不对。页面显示不等于发给了模型。"
+                "text": "系统提示词不让它提分数",
+                "feedback": "不对。这一组保留了系统提示词，规则没有变；变的只有工具调用和结果。"
               }
             ],
             "correct": "a",
-            "explanation": "模型能用的上下文，只有本次请求携带的消息。"
+            "explanation": "一次只拿掉一部分，回答缺的信息就能对应到拿掉的那一部分。"
           }
         },
         {
           "id": "section-3",
           "type": "prose",
-          "title": "工具消息有配对规则",
+          "title": "工具调用和工具结果要成对",
           "paragraphs": [
-            "工具调用由 assistant 消息里的 tool_calls 提出，每个调用 id 后面都要跟一条 role=tool、tool_call_id 相同的工具结果。接口对消息顺序和配对的这类规则，叫消息协议（Message Protocol）。",
-            "孤立的工具结果，或者提出了调用却没有补上结果，都可能被接口拒绝。本课用 validate_tool_history 在发送前做协议检查；对照实验本身不涉及工具，所以不会虚构一条模型的工具调用。"
+            "工具调用写在 assistant 消息的 tool_calls 里，本课这次调用的 id 是 lookup_score_1。下一条必须是 role 为 tool、tool_call_id 也是 lookup_score_1 的消息。接口对消息顺序和配对的这类规则，叫消息协议（Message Protocol）。",
+            "所以第三部分是一对消息，拿掉时只能一起拿掉。“去掉工具调用和结果”那一组就是这样做的：剩下三条消息，顺序仍然合法。"
           ]
         },
         {
           "id": "section-4",
           "type": "prose",
-          "title": "做一次合法消融",
+          "title": "只拿掉工具结果会怎样",
           "paragraphs": [
-            "默认练习先把事实发给模型并拿到真实回复，再带着完整历史追问；第三次只保留 system 和同一句追问。这种只拿掉一部分、其余不变再比较的做法叫消融。两次追问都是合法的消息序列，变的只是模型能看到的事实。",
-            "比较时分三层：请求是否被接受，事实是否可见（有没有出现在 messages 里），回答是否正确。三层要分开判断，不能混在一起。"
+            "第五组只拿掉 tool 消息、留下调用：assistant 提出了 lookup_score_1，后面却直接接上本轮问题。这段历史违反消息协议，服务商可能直接拒绝请求；{{lesson:context-budget}}会真的把一段违反消息协议的历史（开头是一条孤立的工具结果）发给服务商，看它怎么处理。",
+            "本课在发送前先运行 validate_tool_history。它发现调用后面跟着的是 user 消息，就抛出“工具调用后必须先提供对应的 tool 消息。”，运行器记下被拦下的原因，不发请求。所以五组里只有四组会出现 request 事件。"
           ]
         },
         {
-          "id": "mq-ablation-order",
+          "id": "mq-blocked",
           "type": "micro-quiz",
           "question": {
-            "id": "ablation-order",
-            "prompt": "消融追问的回答是“无法从当前消息确定”。应该先核对什么？",
+            "id": "blocked",
+            "prompt": "“只去掉工具结果”那一组为什么没有 request 事件？",
             "options": [
               {
                 "id": "a",
-                "text": "这次请求是否被正常接受，messages 里是否确实没有事实",
-                "feedback": "对。先确认请求被接受、事实确实不可见，再评价回答。"
+                "text": "发送前的协议检查发现调用缺少工具结果，运行器没有发请求",
+                "feedback": "对。不合法的历史在发送前就被拦下，原因记在 lesson.context 的 rejected 字段里。"
               },
               {
                 "id": "b",
-                "text": "模型是不是出了故障",
-                "feedback": "先别下结论。请求里没有事实时，这样回答正符合 system 的要求。"
+                "text": "服务商拒绝了这次请求，所以没有记录",
+                "feedback": "不对。服务商拒绝的请求也会先留下 request 事件；这一组根本没有发出去。"
               },
               {
                 "id": "c",
-                "text": "换一个更大的模型重跑",
-                "feedback": "这样会引入新的变量，无法解释这次对照。"
+                "text": "本次运行的模型调用数用完了",
+                "feedback": "不对。拦下它的是协议检查，和调用数上限无关；rejected 字段里写的是协议问题。"
               }
             ],
             "correct": "a",
-            "explanation": "请求是否被接受、事实是否可见、回答是否正确，三层要分开判断。"
+            "explanation": "先检查再发送：既不浪费一次请求，也不会把协议错误误当成模型答不出来。"
           }
         },
         {
           "id": "section-5",
           "type": "prose",
-          "title": "证据与边界",
+          "title": "怎么读这次运行",
           "paragraphs": [
-            "报告里的消息条数和“事实是否可见”都从本次请求对象算出，回答文本来自真实 response。拿掉历史后模型仍然答对，不能说明它读到了被删掉的消息，可能只是猜中；带着完整历史却答错，也不是协议出了问题。页面上的流程动画是示意，证据以 request、response 和报告事件为准。"
+            "分三层看，一层一层排除。第一层，请求有没有发出、有没有被接受：发出的组有 request 和 response 事件，被拦下的组只有一条带 rejected 的 lesson.context。第二层，那一部分在不在这次请求里：展开 request 的 messages 数一数，报告表格里也列了每组的消息数。",
+            "第三层才看回答有没有用到它。报告里“提到分数”“提到复习日”“写了依据行”三列是关键词初筛：程序只查回答里有没有 73、周四、“依据”这几个字，不懂意思。回答写“七十三分”会漏判，写“无法确定是不是周四”会误判，所以要对照回答原文复核。"
+          ]
+        },
+        {
+          "id": "mq-screening",
+          "type": "micro-quiz",
+          "question": {
+            "id": "screening",
+            "prompt": "假如“去掉之前的对话”那一组的“提到复习日”一列显示为是，下一步该做什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "读这组的回答原文，看它是怎么提到复习日的",
+                "feedback": "对。初筛只查字面，可能是回答里写了“无法确定是不是周四”。"
+              },
+              {
+                "id": "b",
+                "text": "断定模型记住了周四",
+                "feedback": "不对。模型不保存上一次请求；先确认这组的 messages 里没有那句对话，再读回答原文。"
+              },
+              {
+                "id": "c",
+                "text": "换一个模型重跑一遍",
+                "feedback": "不对。换模型会引入新的变量，也解释不了这一次的初筛结果。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "先看请求里有什么，再读回答原文；初筛只是提示，不是结论。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "局限与成本",
+          "paragraphs": [
+            "一次运行发四次请求，每次都带着几乎相同的消息，开销是只发一次的好几倍。所以消融适合在设计上下文时做几次对照，不适合每次回答都做。",
+            "结论只对这次运行、这个模型成立。如果去掉系统提示词后模型仍写了依据行，不说明规则没用，可能它本来就习惯这么写，要多跑几次才能判断。离线测试模式下的回答由夹具按消息内容拼出，只用来测试程序。"
           ]
         },
         {
           "id": "walkthrough",
           "type": "walkthrough",
-          "title": "三次请求，一次合法对照",
-          "description": "按步骤说明三次请求怎样组装，代码是简化的示意。真实字段和回答在事件面板里核对。",
+          "title": "五组上下文，一次运行",
+          "description": "按步骤说明一次运行怎样组装五组上下文，代码是简化的示意。真实消息和回答在事件面板里核对。",
           "steps": [
             {
               "id": "step-1",
               "label": "01",
-              "actor": "程序",
-              "title": "发送事实",
-              "body": "第一轮只提供事实。",
-              "code": "seed = [system, user_fact]\nfirst = context.complete({'messages': seed})",
+              "actor": "运行器",
+              "title": "真实执行工具",
+              "body": "运行器发起一次 lookup_score 调用，工具结果来自本地成绩表。",
+              "code": "result = context.call_tool('lookup_score', {'student_id': 's-1042'}, ...)",
               "language": "python",
-              "evidence": "request / response"
+              "evidence": "tool_call / tool_result"
             },
             {
               "id": "step-2",
               "label": "02",
-              "actor": "程序",
-              "title": "组成历史",
-              "body": "第二轮加入第一次真实回答。",
-              "code": "full = [*seed, assistant(first), follow_up]",
+              "actor": "运行器",
+              "title": "拼出五条消息",
+              "body": "系统提示词、之前的对话、调用、结果、本轮问题各一条。",
+              "code": "parts = build_parts(values, result)",
               "language": "python",
-              "evidence": "request.messages"
+              "evidence": "lesson.context"
             },
             {
               "id": "step-3",
               "label": "03",
-              "actor": "程序",
-              "title": "移除事实",
-              "body": "对照请求保留相同追问。",
-              "code": "omitted = [system, follow_up]",
+              "actor": "运行器",
+              "title": "每组拿掉一部分",
+              "body": "按固定顺序拼消息，只跳过这一组要拿掉的部分。",
+              "code": "messages = assemble(parts, removed)",
               "language": "python",
               "evidence": "request.messages"
             },
             {
               "id": "step-4",
               "label": "04",
-              "actor": "模型",
-              "title": "返回回答",
-              "body": "两次追问分别产生真实响应。",
-              "code": "full_answer = context.complete({'messages': full})\nomit_answer = context.complete({'messages': omitted})",
+              "actor": "运行器",
+              "title": "发送前检查",
+              "body": "只去掉工具结果的那组在这里被拦下，不发请求。",
+              "code": "validate_tool_history(messages)  # 不合法就抛 ValueError",
               "language": "python",
-              "evidence": "response"
+              "evidence": "lesson.context"
             },
             {
               "id": "step-5",
               "label": "05",
+              "actor": "模型",
+              "title": "四次回答",
+              "body": "合法的四组各发一次，回答原样记下。",
+              "code": "answer = _send(context, messages, sent)",
+              "language": "python",
+              "evidence": "response"
+            },
+            {
+              "id": "step-6",
+              "label": "06",
               "actor": "运行器",
-              "title": "归因差异",
-              "body": "按请求是否被接受、事实是否可见、回答是否正确依次判断。",
-              "code": "report = compare(full, omitted, responses)",
+              "title": "对照表",
+              "body": "消息数、协议检查、回答原文和三列初筛并列。",
+              "code": "_report(context, values, rows, sent)",
               "language": "python",
               "evidence": "lesson.report"
             }
           ]
-        },
-        {
-          "id": "predict-request-count",
-          "type": "predict",
-          "prompt": "在实验中运行“事实 QH-731：完整历史与移除事实各追问一次”之前先猜：这次运行一共会有几次模型调用（request 事件）？",
-          "experiment": "history-ablation",
-          "rule": {
-            "kind": "count_events",
-            "event": "request"
-          }
         }
       ]
     },
@@ -219,35 +277,59 @@
           "type": "whats-new"
         },
         {
-          "id": "code-ablation",
+          "id": "code-context-parts",
           "type": "annotated-source",
           "path": "lessons/lesson_07_messages_context/runtime.py",
-          "start": 54,
-          "end": 89,
+          "start": 36,
+          "end": 67,
           "notes": [
             {
-              "id": "n56",
-              "line": 56,
-              "anchor": "follow_up = context.question.strip() or values.f",
-              "text": "学习者输入的问题优先作为追问；为空时才用参数里的默认追问。"
+              "id": "n38",
+              "line": 38,
+              "anchor": "VARIANTS = {",
+              "text": "五组对照，每组只写拿掉了哪几部分；空元组就是完整上下文。"
+            },
+            {
+              "id": "n42",
+              "line": 42,
+              "anchor": "\"去掉工具调用和结果\": (\"tool_call\", \"tool_result\")",
+              "text": "调用和结果是一对，要拿就一起拿，剩下的历史仍然合法。"
+            },
+            {
+              "id": "n43",
+              "line": 43,
+              "anchor": "\"只去掉工具结果\": (\"tool_result\",)",
+              "text": "故意只拿掉结果、留下调用：这一组违反消息协议，用来演示发送前的检查。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "anchor": "def build_parts(values: Inputs, tool_result: dict)",
+              "text": "五条消息各占一个键，键名就是部分名；消融时按键跳过，不改动任何一条的内容。"
+            },
+            {
+              "id": "n54",
+              "line": 54,
+              "anchor": "\"conversation\": {\"role\": \"user\"",
+              "text": "之前的对话：复习日只出现在这里。回答提到它，说明用上了这一部分。"
             },
             {
               "id": "n57",
               "line": 57,
-              "anchor": "def visible(messages: list[dict], fact: str) -> ",
-              "text": "visible 只检查实际发出的消息内容。“事实在不在请求里”由程序判断，不依赖模型回答。"
+              "anchor": "\"tool_call\": {\"role\": \"assistant\", \"content\": None",
+              "text": "这条 assistant 消息是运行器写的，不是模型提出的；调用 id 与真实执行时相同，事件和消息对得上。"
             },
             {
-              "id": "n65",
-              "line": 65,
-              "anchor": "full = [*seed, {\"role\": \"assistant\", \"content\": ",
-              "text": "完整历史 = 第一轮消息 + 模型第一次的真实回答 + 追问。历史由程序显式重发。"
+              "id": "n59",
+              "line": 59,
+              "anchor": "\"tool_result\": {\"role\": \"tool\", \"tool_call_id\": CALL_ID",
+              "text": "内容是本次 call_tool 的真实返回值；分数只在这条消息里。"
             },
             {
-              "id": "n71",
-              "line": 71,
-              "anchor": "omitted = [seed[0], {\"role\": \"user\", \"content\": ",
-              "text": "消融版只保留 system 和追问：事实连同模型的确认一起移除，消息序列仍然合法。"
+              "id": "n67",
+              "line": 67,
+              "anchor": "return [parts[key] for key in ORDER if key not in removed]",
+              "text": "按固定顺序拼：每组只比完整上下文少几条消息，其余消息的位置和文字都不变。"
             }
           ]
         },
@@ -255,65 +337,124 @@
           "id": "code-history-protocol",
           "type": "annotated-source",
           "path": "lessons/lesson_07_messages_context/runtime.py",
-          "start": 28,
-          "end": 51,
+          "start": 70,
+          "end": 97,
           "notes": [
             {
-              "id": "n34",
-              "line": 34,
+              "id": "n70",
+              "line": 70,
+              "anchor": "def validate_tool_history(messages: list[dict]) -> None:",
+              "text": "发送前的协议检查：只读消息列表，不合法就抛 ValueError，运行器据此决定不发请求。"
+            },
+            {
+              "id": "n72",
+              "line": 72,
+              "anchor": "outstanding: set[str] = set()",
+              "text": "outstanding 记着已经提出、还没等到结果的调用 id；不为空就说明有调用在等结果。"
+            },
+            {
+              "id": "n77",
+              "line": 77,
               "anchor": "if outstanding and role != \"tool\":",
-              "text": "有调用还没等到工具结果时，下一条必须是 tool 消息。"
+              "text": "有调用在等结果时，下一条只能是 tool 消息。第五组就在这里被拦下：调用后面直接是本轮问题。"
             },
             {
-              "id": "n45",
-              "line": 45,
+              "id": "n83",
+              "line": 83,
+              "anchor": "if not isinstance(call_id, str) or not call_id or call_id in seen:",
+              "text": "调用 id 是配对的唯一依据，空的或重复的 id 没法和结果一一对上。"
+            },
+            {
+              "id": "n90",
+              "line": 90,
               "anchor": "if call_id not in outstanding:",
-              "text": "孤立或重复的工具结果直接拒绝，避免构造出服务商会拒收的历史。"
+              "text": "工具结果必须回应一个还在等结果的调用；孤立或重复的 tool 消息直接拒绝。"
             },
             {
-              "id": "n50",
-              "line": 50,
+              "id": "n96",
+              "line": 96,
               "anchor": "if outstanding:",
-              "text": "结尾仍有调用没有工具结果，也算不合法。"
+              "text": "消息走完了还有调用没等到结果，同样不合法。"
             }
           ]
         },
         {
-          "id": "code-stateless-fixture",
+          "id": "code-ablation-run",
           "type": "annotated-source",
-          "path": "lessons/lesson_07_messages_context/fixtures.py",
-          "start": 10,
-          "end": 18,
+          "path": "lessons/lesson_07_messages_context/runtime.py",
+          "start": 100,
+          "end": 127,
           "notes": [
             {
-              "id": "n12",
-              "line": 12,
-              "anchor": "if len(messages) == 2 and \"确认收到\" in messages[-1]",
-              "text": "离线夹具按本次 messages 的形状判断是第一轮确认。"
+              "id": "n103",
+              "line": 103,
+              "anchor": "result = context.call_tool(\"lookup_score\"",
+              "text": "call_tool 由运行器发起调用，记下 tool_call 与 tool_result 事件，origin 标为 course_program。"
             },
             {
-              "id": "n14",
-              "line": 14,
-              "anchor": "elif any(isinstance(message.get(\"content\"), str)",
-              "text": "只要事实出现在本次消息里就能答出，否则回答无法确定。夹具不保存任何隐藏状态，模拟的正是无状态模型。"
+              "id": "n107",
+              "line": 107,
+              "anchor": "parts = build_parts(values, result)",
+              "text": "五条消息只拼一次，五组都从这同一份里挑，各组之间只差拿掉的部分。"
+            },
+            {
+              "id": "n110",
+              "line": 110,
+              "anchor": "for name, removed in VARIANTS.items():",
+              "text": "按 VARIANTS 的顺序逐组处理，会被拦下的那组排在最后。"
+            },
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "validate_tool_history(messages)",
+              "text": "每组发送前都检查一次；检查不过的那组只记下原因，直接跳到下一组。"
+            },
+            {
+              "id": "n117",
+              "line": 117,
+              "anchor": "_record(context, name, removed, messages, rejected=str(error))",
+              "text": "被拦下的组记为一条带 rejected 的 lesson.context，没有 request 事件。"
+            },
+            {
+              "id": "n121",
+              "line": 121,
+              "anchor": "_record(context, name, removed, messages, round_number=sent)",
+              "text": "通过检查的组按发送顺序编号，lesson.context 与随后的 request 用同一个轮次。"
+            },
+            {
+              "id": "n123",
+              "line": 123,
+              "anchor": "answer = _send(context, messages, sent)",
+              "text": "_send 用 context.complete 发请求；服务商若拒绝，记成 lesson.provider_error，不重试。"
+            },
+            {
+              "id": "n125",
+              "line": 125,
+              "anchor": "_report(context, values, rows, sent)",
+              "text": "报告的拼装和本课无关，放在 _report 里，读码不展开。"
             }
           ]
         },
         {
           "id": "code-decision",
           "type": "decision",
-          "title": "用合法的消融对照证明“模型只看本次请求”",
-          "chosen": "同一追问发两次：一次带完整历史，一次移除事实所在的消息；两份历史都先通过 validate_tool_history，再对照 request 的 messages 与 response。",
+          "title": "用合法消融找出回答依赖哪一部分",
+          "chosen": "同一问题发五组上下文，每组只比完整上下文少一部分；工具调用和工具结果作为一对拿掉；发送前用 validate_tool_history 拦下只拿掉结果的那组。",
           "alternatives": [
             {
-              "id": "full-only",
-              "title": "只发完整历史，看模型能不能答对",
-              "why_not": "答对无法区分是来自历史还是模型猜中，缺少对照组。"
+              "id": "drop-all",
+              "title": "全部拿掉，只留本轮问题",
+              "why_not": "一次少了三部分，回答变了也分不清是哪一部分起的作用。"
             },
             {
-              "id": "broken-history",
-              "title": "随意删一条消息（例如留下孤立的工具结果）",
-              "why_not": "服务商可能直接拒绝请求，失败原因变成协议错误而不是缺少信息；协议检查在发送前拦截这类序列。"
+              "id": "drop-any",
+              "title": "随手删一条消息，比如只删 tool 消息",
+              "why_not": "会留下没有结果的调用，违反消息协议；服务商可能直接拒绝，失败原因就成了协议错误，而不是缺少信息。"
+            },
+            {
+              "id": "model-call",
+              "title": "让模型自己提出那次工具调用",
+              "why_not": "模型每次提出的调用可能不同，五组之间就多了一个变量；本课由运行器写入固定的调用，并在事件里如实标明。"
             }
           ]
         }
@@ -322,76 +463,77 @@
     "lab": {
       "experiments": [
         {
-          "id": "history-ablation",
-          "title": "同一追问：带历史与不带历史",
-          "hypothesis": "同一追问、同一模型下，只有把先前事实所在的消息重新放进 messages，模型才有依据回答；移除这些消息后，模型无法从当前请求得知该事实。",
+          "id": "context-ablation",
+          "title": "一次只拿掉一部分",
+          "hypothesis": "同一问题、同一模型，拿掉哪一部分，回答就缺少那一部分提供的信息：去掉工具调用和结果后没有分数依据，去掉之前的对话后没有复习日，去掉系统提示词后不再受“依据：”格式约束；只拿掉工具结果的历史违反消息协议，在发送前被拦下。",
           "predict": "predict-request-count",
           "arms": [
             {
-              "id": "compare",
-              "exercise": "compare",
-              "label": "事实 QH-731：完整历史与移除事实各追问一次"
+              "id": "ablate",
+              "exercise": "ablate",
+              "label": "学号 s-1042：五组上下文对照"
             },
             {
-              "id": "alternate",
-              "exercise": "alternate",
-              "label": "换一条事实 BLUE-204，同样对照"
-            },
-            {
-              "id": "full",
-              "exercise": "full",
-              "label": "只发完整历史追问，不做消融"
+              "id": "other-student",
+              "exercise": "other-student",
+              "label": "换成 s-2077（58 分），其余不变"
             }
           ],
           "observe": [
             {
-              "id": "fact-sent",
-              "text": "第一轮 request 的 user 消息：事实只在这里发出过一次。",
+              "id": "parts",
+              "text": "运行器说明五条消息分别是谁写的：只有 tool 消息的内容来自真实执行。",
+              "selector": {
+                "event": "lesson.context",
+                "path": "data.detail"
+              }
+            },
+            {
+              "id": "real-tool",
+              "text": "工具结果：本次真实执行 lookup_score 返回的分数，这次调用的 origin 是 course_program。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.score"
+              }
+            },
+            {
+              "id": "full-request",
+              "text": "第 1 组完整上下文：五条消息，分数只在 tool 消息里，复习日只在之前的对话里。",
               "selector": {
                 "event": "request",
                 "round": 1,
-                "path": "data.body.messages[1].content"
-              }
-            },
-            {
-              "id": "full-history",
-              "text": "第二轮完整历史：system、带事实的 user、上一轮 assistant 回复、追问，共四条。",
-              "selector": {
-                "event": "request",
-                "round": 2,
                 "path": "data.body.messages"
               }
             },
             {
-              "id": "full-answer",
-              "text": "完整历史追问的回答原文。",
-              "selector": {
-                "event": "response",
-                "round": 2,
-                "path": "data.body.choices[0].message.content"
-              }
-            },
-            {
-              "id": "ablated-history",
-              "text": "第三轮消融历史：只剩 system 与同一追问。",
+              "id": "no-tool-request",
+              "text": "第 4 组去掉工具调用和结果：只剩三条消息，调用和结果一起拿掉，顺序仍然合法。",
               "selector": {
                 "event": "request",
-                "round": 3,
+                "round": 4,
                 "path": "data.body.messages"
               }
             },
             {
-              "id": "ablated-answer",
-              "text": "消融追问的回答原文。",
+              "id": "no-tool-answer",
+              "text": "第 4 组的回答原文：这次请求里没有分数。",
               "selector": {
                 "event": "response",
-                "round": 3,
+                "round": 4,
                 "path": "data.body.choices[0].message.content"
               }
             },
             {
-              "id": "visibility-table",
-              "text": "报告表格：消息数、是否包含事实与回答并列。“是否包含”由程序逐条检查请求内容得出。",
+              "id": "blocked",
+              "text": "第 5 组只去掉工具结果：协议检查拒绝的原因。这一组没有 request 事件。",
+              "selector": {
+                "event": "lesson.context",
+                "path": "data.rejected"
+              }
+            },
+            {
+              "id": "report-table",
+              "text": "报告表格：每组的消息数、协议检查、回答原文与三列关键词初筛并列。",
               "selector": {
                 "event": "lesson.report",
                 "path": "data.table.rows"
@@ -401,23 +543,7 @@
           "guide": [
             {
               "action": "narrate",
-              "text": "模型只能看到本次请求里的消息。沿着几次请求看事实在哪里。"
-            },
-            {
-              "action": "spotlight",
-              "target": "user"
-            },
-            {
-              "action": "seek",
-              "observe": "fact-sent"
-            },
-            {
-              "action": "highlight",
-              "observe": "fact-sent"
-            },
-            {
-              "action": "narrate",
-              "text": "事实在第一轮以 user 消息发出，模型这一轮只是确认收到。"
+              "text": "一次运行准备五组上下文，每组只比完整上下文少一部分。先看这五条消息是谁写的。"
             },
             {
               "action": "spotlight",
@@ -425,15 +551,31 @@
             },
             {
               "action": "seek",
-              "observe": "full-history"
+              "observe": "parts"
             },
             {
               "action": "highlight",
-              "observe": "full-history"
+              "observe": "parts"
             },
             {
               "action": "narrate",
-              "text": "第二轮是程序重新组装的完整历史：把第一轮的 user 和 assistant 消息又发了一遍，最后接上追问。"
+              "text": "只有 tool 消息的内容来自真实执行；那条带 tool_calls 的 assistant 消息是运行器写的。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "real-tool"
+            },
+            {
+              "action": "highlight",
+              "observe": "real-tool"
+            },
+            {
+              "action": "narrate",
+              "text": "分数来自本次真实执行的 lookup_score。哪一组的回答里有这个分数，就看那组请求里有没有这条工具结果。"
             },
             {
               "action": "spotlight",
@@ -441,15 +583,39 @@
             },
             {
               "action": "seek",
-              "observe": "full-answer"
+              "observe": "full-request"
             },
             {
               "action": "highlight",
-              "observe": "full-answer"
+              "observe": "full-request"
             },
             {
               "action": "narrate",
-              "text": "读这次回答：事实就在本次请求里，模型有依据作答。"
+              "text": "第 1 组是完整上下文：五条消息，四部分都在。"
+            },
+            {
+              "action": "seek",
+              "observe": "no-tool-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "no-tool-request"
+            },
+            {
+              "action": "narrate",
+              "text": "第 4 组把调用和结果一起拿掉，只剩三条消息，顺序仍然合法。"
+            },
+            {
+              "action": "seek",
+              "observe": "no-tool-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "no-tool-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "读这组回答：请求里没有分数时，模型怎么回答及格与否？"
             },
             {
               "action": "spotlight",
@@ -457,82 +623,89 @@
             },
             {
               "action": "seek",
-              "observe": "ablated-history"
+              "observe": "blocked"
             },
             {
               "action": "highlight",
-              "observe": "ablated-history"
+              "observe": "blocked"
             },
             {
               "action": "narrate",
-              "text": "第三轮只保留 system 和同一追问，事实所在的消息没有发送。若你运行的是“只发完整历史”，这里会提示本次运行没有这条证据。"
-            },
-            {
-              "action": "spotlight",
-              "target": "model"
+              "text": "第 5 组只拿掉结果、留下调用，协议检查在发送前拦下了它，所以这一组没有 request。"
             },
             {
               "action": "seek",
-              "observe": "ablated-answer"
+              "observe": "report-table"
             },
             {
               "action": "highlight",
-              "observe": "ablated-answer"
+              "observe": "report-table"
             },
             {
               "action": "narrate",
-              "text": "读消融追问的回答：请求里没有事实时，模型能否回答？"
-            },
-            {
-              "action": "spotlight",
-              "target": "runtime"
-            },
-            {
-              "action": "seek",
-              "observe": "visibility-table"
-            },
-            {
-              "action": "highlight",
-              "observe": "visibility-table"
-            },
-            {
-              "action": "narrate",
-              "text": "报告先列可见性，再列回答。判断顺序是：请求是否被接受、事实是否可见、回答是否正确。"
+              "text": "最后对照表格：先看协议检查和消息数，再读回答原文；三列初筛只作提示。"
             }
           ],
           "conclusion": {
             "proves": [
-              "这次哪一次请求的 messages 包含事实、哪一次不包含，以及两次追问各自得到的回答。",
-              "两次追问都是合法的消息序列，差别只在事实是否可见。"
+              "这次运行中，每组请求实际包含哪些消息，以及每组得到的回答原文。",
+              "只拿掉工具结果、留下调用的历史在发送前被协议检查拦下，没有发出请求。"
             ],
             "does_not_prove": [
-              "回答差异不能证明模型内部有没有保存信息，只说明两次请求的可见内容不同。",
-              "若消融追问仍然答对，也不能说模型读到了已删除的消息，可能只是猜中。",
-              "离线测试模式下的回答由脚本根据请求内容生成。"
+              "回答差异只说明这次请求里有没有那一部分，不能说明模型内部怎样使用这些信息。",
+              "三列关键词初筛只查字面，不能代替阅读回答原文。",
+              "换一个模型或再跑一次，回答可能不同；违反消息协议的历史发给服务商会怎样，本课没有发送，不能证明。",
+              "离线测试模式下的回答由夹具按消息内容拼出。"
             ]
           }
         }
       ],
       "inputs": [
         {
-          "name": "fact",
-          "label": "事实消息"
-        },
-        {
-          "name": "follow_up",
-          "label": "共同追问"
-        },
-        {
-          "name": "comparison",
-          "label": "对照方式",
+          "name": "student_id",
+          "label": "学号（决定工具结果）",
           "options": [
             {
-              "value": "omit",
-              "label": "完整历史与事实消融"
+              "value": "s-1042",
+              "label": "s-1042（73 分）"
             },
             {
-              "value": "full_only",
-              "label": "仅查看完整历史"
+              "value": "s-2077",
+              "label": "s-2077（58 分）"
+            }
+          ]
+        },
+        {
+          "name": "free_day",
+          "label": "能复习的日子（写进之前的对话）",
+          "options": [
+            {
+              "value": "周一",
+              "label": "周一"
+            },
+            {
+              "value": "周二",
+              "label": "周二"
+            },
+            {
+              "value": "周三",
+              "label": "周三"
+            },
+            {
+              "value": "周四",
+              "label": "周四"
+            },
+            {
+              "value": "周五",
+              "label": "周五"
+            },
+            {
+              "value": "周六",
+              "label": "周六"
+            },
+            {
+              "value": "周日",
+              "label": "周日"
             }
           ]
         }
@@ -545,108 +718,108 @@
           "type": "quiz",
           "questions": [
             {
-              "id": "history",
-              "prompt": "第二次调用为何能回答前一轮才给出的事实？",
+              "id": "parts",
+              "prompt": "本课的完整上下文里，复习日“周四”出现在哪一部分？",
               "options": [
                 {
                   "id": "a",
-                  "text": "模型自动保存所有浏览器对话",
-                  "feedback": "模型服务不会自动保存浏览器里的对话；每次请求只处理本次收到的 messages。"
+                  "text": "系统提示词",
+                  "feedback": "系统提示词只规定回答规则和“依据：”格式，不提供事实。"
                 },
                 {
                   "id": "b",
-                  "text": "程序把前一轮消息重新放入本次 messages",
-                  "feedback": "对。程序把前一轮的 user 与 assistant 消息重新放进本次 messages，模型才看得到那个事实。"
+                  "text": "之前的对话",
+                  "feedback": "对。那条 user 消息写着“这周我只有周四晚上能复习”，复习日只在这里出现。"
                 },
                 {
                   "id": "c",
-                  "text": "页面回放替模型保存了上一轮",
-                  "feedback": "回放只给人看，不会发送给模型；模型看不到页面上的任何记录。"
+                  "text": "工具结果",
+                  "feedback": "工具结果里只有学号、分数和及格线，没有复习日。"
                 }
               ],
               "correct": "b",
-              "explanation": "完整历史是否可见由本次请求决定。程序明确重发前一轮消息，模型才有这个证据。"
+              "explanation": "四部分各提供不同的东西：对话给复习日，工具结果给分数，系统提示词给规则，本轮问题给要回答的事。"
             },
             {
-              "id": "tool",
-              "prompt": "哪一条工具历史满足配对协议？",
+              "id": "pair",
+              "prompt": "要从历史里拿掉那次成绩查询，哪种做法合法？",
               "options": [
                 {
                   "id": "a",
-                  "text": "只有 role=tool 且 tool_call_id=x",
-                  "feedback": "孤立的 tool 消息前面没有对应的 assistant 调用，协议检查会判为非法。"
+                  "text": "只删 tool 消息",
+                  "feedback": "留下的调用没有结果，违反消息协议，validate_tool_history 会拒绝。"
                 },
                 {
                   "id": "b",
-                  "text": "assistant 的 tool_calls 含 id=x，后面有匹配的工具结果",
-                  "feedback": "对。工具结果必须接在声明了相同 id 的 assistant tool_calls 之后，调用与结果成对出现。"
+                  "text": "把带 tool_calls 的 assistant 消息和对应的 tool 消息一起删",
+                  "feedback": "对。调用和结果作为一对拿掉，剩下的历史仍然合法。"
                 },
                 {
                   "id": "c",
-                  "text": "assistant 声称已经调用工具即可",
-                  "feedback": "assistant 用文字声称调用过，不构成协议记录；没有 tool_calls 和匹配的工具结果，就没有可核对的调用。"
+                  "text": "只删 assistant 消息，留下 tool 消息",
+                  "feedback": "tool 消息失去了它回应的调用，成了孤立的工具结果，同样不合法。"
                 }
               ],
               "correct": "b",
-              "explanation": "工具结果必须接在对应的 assistant 调用之后；孤立的 tool 消息没有合法来源。"
+              "explanation": "工具调用和工具结果靠调用 id 配对，只能一起保留或一起拿掉。"
+            },
+            {
+              "id": "blocked",
+              "prompt": "只去掉工具结果的那组，为什么不算一次失败的模型调用？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它在发送前被协议检查拦下，没有 request 事件",
+                  "feedback": "对。运行器只记下拦下的原因，模型和服务商都没收到这组消息。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务商返回了 HTTP 400",
+                  "feedback": "本课没有把它发给服务商，没有 response，也就没有状态码。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型拒绝回答",
+                  "feedback": "模型根本没收到这组消息，谈不上拒绝。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "协议错误在发送前就拦下，模型调用数里不包括它。"
             },
             {
               "id": "attribution",
-              "prompt": "消融组答错时，最先该核对什么？",
+              "prompt": "假如去掉系统提示词那一组的回答仍然写了“依据：”一行，能得出什么结论？",
               "options": [
                 {
                   "id": "a",
-                  "text": "直接判定模型推理失败",
-                  "feedback": "答错可能是请求失败、事实根本不在 messages 里，或模型没用好证据；不先排除前两者就无法归因。"
+                  "text": "系统提示词完全没用",
+                  "feedback": "一次运行看不出规则有没有用；模型可能本来就习惯这么写，要多跑几次、多看几组才能判断。"
                 },
                 {
                   "id": "b",
-                  "text": "先确认请求被接受、事实是否在本次 messages，再比较答案",
-                  "feedback": "对。先确认请求被接受、事实确实在本次请求里，再比较答案，才能把原因落到具体层次。"
+                  "text": "这次回答的格式不只受系统提示词影响，还需要更多运行才能下结论",
+                  "feedback": "对。一次对照只说明这一次的现象，归因要谨慎。"
                 },
                 {
                   "id": "c",
-                  "text": "把答案写进 system 让它正确",
-                  "feedback": "把答案写进 system 改变了实验条件，只会掩盖问题，不能解释消融组为什么答错。"
+                  "text": "模型读到了被拿掉的系统提示词",
+                  "feedback": "这组请求的 messages 里没有 system 消息，模型读不到它；可以在 request 事件里核对。"
                 }
               ],
               "correct": "b",
-              "explanation": "请求是否被接受、事实是否可见、模型能否用好证据，是三个不同层次。"
-            },
-            {
-              "id": "memory",
-              "prompt": "网页可回放第一次请求，第三次请求没有那段历史。这说明什么？",
-              "options": [
-                {
-                  "id": "a",
-                  "text": "模型仍必然能读取回放",
-                  "feedback": "回放保存在运行记录里，不会自动进入请求；第三次请求里没有那段历史，模型就读不到。"
-                },
-                {
-                  "id": "b",
-                  "text": "回放存有记录，但模型只收到第三次实际 messages",
-                  "feedback": "对。回放是给人看的记录；模型只收到第三次请求实际发送的 messages。"
-                },
-                {
-                  "id": "c",
-                  "text": "浏览器自动将回放塞入模型",
-                  "feedback": "浏览器不会把回放塞进请求；请求内容完全由程序构造，可以在 request 事件里核对。"
-                }
-              ],
-              "correct": "b",
-              "explanation": "回放用于人观察，不能替代当前请求的上下文。"
+              "explanation": "消融说明这次请求里少了什么；回答没变，不等于那部分没用。"
             }
           ]
         },
         {
           "id": "check-hunt",
           "type": "trace-hunt",
-          "prompt": "找出模型能同时看到早先事实和追问的那次请求。",
+          "prompt": "找出被协议检查拦下、没有发出请求的那一组上下文。",
           "target": {
-            "event": "request",
-            "path": "data.body.messages[3]"
+            "event": "lesson.context",
+            "path": "data.rejected"
           },
-          "explanation": "这次 request 的 messages 至少有 4 条：system 之外，还有先前给出事实的 user 消息、assistant 的确认，以及最后的追问。事实之所以可见，是因为程序重发了前一轮消息；消融请求只有 system 和追问两条。"
+          "explanation": "这条 lesson.context 带有 rejected 字段：只去掉工具结果后，assistant 的调用后面直接接上 user 消息，validate_tool_history 抛出“工具调用后必须先提供对应的 tool 消息。”。运行器记下原因后跳过发送，所以这一组没有对应的 request 和 response。"
         },
         {
           "id": "check-points",
@@ -656,15 +829,23 @@
           "items": [
             {
               "id": "item-1",
-              "text": "我比较了完整历史与消融两次请求的 messages，找到了事实所在的那条消息。"
+              "text": "我比较了第 1 组和第 4 组的 request，说得出少了哪两条消息、为什么要一起少。"
             },
             {
               "id": "item-2",
-              "text": "我能说明网页回放与模型实际收到的 messages 有什么不同。"
+              "text": "我能说出本轮问题需要的两样信息分别来自哪一部分。"
             },
             {
               "id": "item-3",
-              "text": "我能说出工具消息合法配对的要求。"
+              "text": "我读了三列初筛对应的回答原文，确认初筛有没有误判。"
+            },
+            {
+              "id": "item-4",
+              "text": "小扩展：把能复习的日子改成周六再跑一次，对照完整上下文和去掉之前的对话两组的回答，看复习日是跟着消息变，还是一直是周四。"
+            },
+            {
+              "id": "item-5",
+              "text": "小扩展：在 VARIANTS 里把“去掉系统提示词”改成同时拿掉 system 和 conversation，用离线测试模式跑一次，说明为什么一次拿掉两部分时，回答的变化难以归因。"
             }
           ]
         }
@@ -673,28 +854,40 @@
   },
   "code_notes": [
     {
-      "name": "RunContext.complete",
-      "note": "平台的模型调用方法：发出请求，并把实际请求体和响应分别记为 request、response 事件。"
+      "name": "validate_tool_history",
+      "note": "本课的协议检查：每个工具调用后面要紧跟同 id 的 tool 消息，不合法就抛错。"
     },
     {
       "name": "tool_calls",
-      "note": "assistant 消息里的调用列表，每项有调用 id、工具名和参数；后面必须跟同 id 的 tool 消息。"
+      "note": "assistant 消息里的调用列表，每项有调用 id、工具名和参数。"
     },
     {
       "name": "tool_call_id",
       "note": "tool 消息里的字段，填它回应的那次调用的 id，用来和 tool_calls 配对。"
     },
     {
-      "name": "validate_tool_history",
-      "note": "本课的协议检查：发送前确认每个调用都有且只有一条对应的 tool 消息，不合法就抛错。"
+      "name": "VARIANTS",
+      "note": "五组对照的清单：组名对应这一组拿掉的部分。"
     },
     {
-      "name": "visible",
-      "note": "本课的小函数：逐条查消息内容里有没有事实原文，结果写进报告的“包含早先事实”一列。"
+      "name": "lookup_score",
+      "note": "本课唯一的工具：按学号查成绩表。由运行器发起调用，结果是真实执行的返回值。"
+    },
+    {
+      "name": "lesson.context",
+      "note": "本课事件：先说明五条消息是谁写的，再逐组记下拿掉了什么、协议检查的结论。"
+    },
+    {
+      "name": "rejected",
+      "note": "lesson.context 的字段：这一组被协议检查拦下的原因；有它就没有 request。"
+    },
+    {
+      "name": "origin",
+      "note": "工具事件的字段；course_program 表示这次调用由运行器发起，不是模型提出的。"
     },
     {
       "name": "lesson.report",
-      "note": "运行器在运行末尾发的报告事件；本课表格并列每次请求的消息数、是否含事实和模型回答。"
+      "note": "本课报告：表格并列每组的消息数、协议检查、回答原文和三列关键词初筛。"
     }
   ]
 }

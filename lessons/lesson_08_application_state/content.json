@@ -16,7 +16,7 @@
           "eyebrow": "CHAPTER 03 / STATE",
           "headline": "任务的进度，",
           "highlight": "由程序事件决定。",
-          "takeaway": "消息是模型这次能看到的资料；应用状态是程序记下的目标、证据和进度。任务走到哪一步，由程序事件说了算。"
+          "takeaway": "本课不调用模型。消息是模型这次能看到的资料；应用状态是程序记下的目标、证据和进度。任务走到哪一步，由程序事件说了算。"
         },
         {
           "id": "concepts",
@@ -42,6 +42,13 @@
               "title": "终态约束",
               "description": "完成、失败、取消都只能从允许的状态进入，而且要写明原因。",
               "token": "transition()"
+            },
+            {
+              "id": "04-snapshot",
+              "label": "04 / SNAPSHOT",
+              "title": "状态快照",
+              "description": "每到关键变化，程序发布一份完整副本，回放时一步一步核对。",
+              "token": "lesson.state"
             }
           ]
         },
@@ -50,17 +57,38 @@
           "type": "prose",
           "title": "消息和状态各管什么",
           "paragraphs": [
-            "messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课只把用户目标放进 messages，读取资料、更新进度、写入终态都发生在 TaskState 里。界面上消息再多，也推不出任务完成了没有。本课不调用模型，免得把程序写死的状态转换说成模型的行为。"
+            "本课不调用模型。所有状态变化都由本地 Python 写入，免得把程序写死的状态转换说成模型的行为。",
+            "messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课的 messages 从头到尾只有一条 user 消息，内容就是任务目标“说明消息与应用状态的区别”。读取资料、更新进度、写入终态，都发生在另一个对象 TaskState 里。",
+            "所以界面上消息再多，也推不出任务完成了没有，要看 TaskState 里的 status。{{lesson:messages-context}}拆的是一次请求里装了什么；这一课看的是请求之外、程序自己记下的东西。"
           ]
         },
         {
           "id": "section-2",
           "type": "prose",
-          "title": "任务状态要有来源",
+          "title": "一份状态长什么样",
           "paragraphs": [
-            "本课的应用状态是一个 TaskState 对象。goal 来自通过校验的输入；evidence 只从本地 SOURCES 读取，每条附上 source 键；result 是最后生成的课内要点；status 记录当前走到哪一步，进入终态时把原因写进 terminal_reason。",
-            "读取、核对、生成课内要点三个步骤，每一步执行前都先扣步骤预算，used_steps 记下已经执行了几步。每条 lesson.state 是当时完整状态的一份副本，也就是状态快照，可以看到各个值怎样随实际步骤变化。"
+            "TaskState 有八个字段。run_id 和 goal 在创建时写入：run_id 每次运行新生成，goal 来自通过校验的输入。status 从 ready 开始，记录当前走到哪一步。",
+            "evidence 是核对过的资料，每条写成 source 和 excerpt 两项，例如 source 为 messages-context、excerpt 为那份资料的原文。result 是第三步生成的课内要点；进入终态时，原因写进 terminal_reason。"
           ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "步骤预算与状态快照",
+          "paragraphs": [
+            "本课一次运行最多三步：读取本地资料索引、核对资料来源、生成课内资料要点。每一步执行前先调用 consume_step 扣步骤预算，used_steps 记下已经执行了几步。step_budget 为 3 时三步都够；为 2 时，第三步执行前预算就用完了。",
+            "每到关键变化，运行器就发布一条 lesson.state，里面是当时完整状态的一份副本，也就是状态快照。回放时按顺序看这些快照，就能看到 status、evidence、used_steps 怎样随实际步骤变化。"
+          ]
+        },
+        {
+          "id": "predict-state-snapshots",
+          "type": "predict",
+          "prompt": "在实验中运行“资料存在，步骤预算 3”之前先猜：这次运行会发布几份状态快照（lesson.state 事件）？",
+          "experiment": "terminal-states",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.state"
+          }
         },
         {
           "id": "mq-messages-not-progress",
@@ -77,7 +105,7 @@
               {
                 "id": "b",
                 "text": "能，消息越多说明进展越多",
-                "feedback": "不对。消息数量和任务进度没有对应关系。"
+                "feedback": "不对。消息数量和任务进度没有对应关系；本课的消息数一直是 1。"
               },
               {
                 "id": "c",
@@ -90,20 +118,23 @@
           }
         },
         {
-          "id": "section-3",
+          "id": "section-4",
           "type": "prose",
           "title": "转换规则守住边界",
           "paragraphs": [
-            "status 只能沿转换表走：ready 只能进入 running 或 cancelled；running 可以进入 waiting、completed、failed 或 cancelled；waiting 可以回到 running，也可以进入 failed 或 cancelled。completed、failed、cancelled 是终态，进入后不能再转出。一组状态加上这样的转换规则，就是状态机；transition 每次转换都会查这张表。",
+            "status 只能沿转换表 TRANSITIONS 走：ready 只能进入 running 或 cancelled；running 可以进入 waiting、completed、failed 或 cancelled；waiting 可以回到 running，也可以进入 failed 或 cancelled。completed、failed、cancelled 是终态，进入后不能再转出。一组状态加上这样的转换规则，就是状态机。",
+            "transition 每次转换都先查这张表。比如在 ready 时直接调用 transition(\"completed\")，会抛出“非法状态转换：ready → completed”。",
             "进入 completed 还要求已有证据和实际的 result，任何终态都必须写原因。这里的 completed 只表示“课内资料归纳”这个流程走完了，不说明你输入的任意目标都达成了。如果把模型一句“我已经完成”直接映射成 completed，就绕过了这些检查，所以本课没有这条转换。"
           ]
         },
         {
-          "id": "section-4",
+          "id": "section-5",
           "type": "prose",
           "title": "等待、失败和预算结束",
           "paragraphs": [
-            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed。预算预设的 step_budget=2，只够读取和核对，第三步生成产物前预算真的用完了。这两种结局和 completed 一样都是明确的终态，只是原因和验收结果不同。在事件序列里可以核对 used_steps 和预算，确认失败时已有的证据仍然保留。报告里的检查项由运行器按状态逐项计算，不看消息内容。"
+            "缺少资料时先进入 waiting，随后以“本次预设没有可核验的资料，无法完成目标。”转为 failed。生命周期是 ready → running → waiting → failed，evidence 一直为空。",
+            "预算预设的 step_budget 为 2：读取和核对各用一步，used_steps 到 2；第三步执行前 consume_step 返回 False，状态转为 failed，原因是“步骤预算在生成资料要点前耗尽。”。这时 evidence 里那条资料仍然保留。",
+            "这两种结局和 completed 一样都是明确的终态，只是原因和验收结果不同。报告里的检查项由运行器按状态逐项计算，不看消息内容。"
           ]
         },
         {
@@ -134,11 +165,12 @@
           }
         },
         {
-          "id": "section-5",
+          "id": "section-6",
           "type": "prose",
           "title": "会话隔离与取消",
           "paragraphs": [
-            "每次运行都新建 TaskState 和 run_id，不用全局的可变状态。取消由平台在步骤之间检查；你点停止时会抛出 RunCancelled，平台把这次运行记为 cancelled，不会冒充 completed。内存里的状态随运行结束消失，跨运行保存放在{{lesson:persistent-memory}}讲。"
+            "每次运行都新建 TaskState 和 run_id，不用全局的可变状态，两次运行的状态不会互相覆盖。",
+            "取消由平台在步骤之间检查：你点停止时，context.check_cancelled 会抛出 RunCancelled，平台把这次运行记为 cancelled，不会冒充 completed。内存里的状态随运行结束消失，跨运行保存放在{{lesson:persistent-memory}}讲。"
           ]
         },
         {
@@ -172,7 +204,7 @@
               "label": "03",
               "actor": "资料源",
               "title": "读取证据",
-              "body": "只有真实返回的资料进入 evidence。",
+              "body": "只有真实读到的资料进入 evidence。",
               "code": "source = SOURCES.get(source_key)\nstate.evidence.append({'source': source_key, 'excerpt': source})",
               "language": "python",
               "evidence": "lesson.state"
@@ -193,21 +225,11 @@
               "actor": "运行器",
               "title": "发布报告",
               "body": "比较终态、证据与消息。",
-              "code": "context.emit('lesson.report', report)",
+              "code": "_report(context, state, messages, values)",
               "language": "python",
               "evidence": "lesson.report"
             }
           ]
-        },
-        {
-          "id": "predict-model-requests",
-          "type": "predict",
-          "prompt": "在实验“三种终态，各有原因”中运行任意一组之前先猜：这一课的一次运行会有几次模型调用（request 事件）？",
-          "experiment": "terminal-states",
-          "rule": {
-            "kind": "count_events",
-            "event": "request"
-          }
         }
       ]
     },
@@ -221,36 +243,60 @@
           "id": "code-state-machine",
           "type": "annotated-source",
           "path": "lessons/lesson_08_application_state/runtime.py",
-          "start": 15,
-          "end": 62,
+          "start": 26,
+          "end": 69,
           "notes": [
             {
-              "id": "n15",
-              "line": 15,
+              "id": "n27",
+              "line": 27,
               "anchor": "TRANSITIONS = {",
               "text": "转换表显式列出所有合法路径，不在表里的转换一律拒绝。"
             },
             {
-              "id": "n19",
-              "line": 19,
+              "id": "n31",
+              "line": 31,
               "anchor": "\"completed\": set(), \"failed\": set(), \"cancelled\"",
               "text": "三个终态的出口都是空集合，进入后不能再转出。"
             },
             {
-              "id": "n47",
-              "line": 47,
+              "id": "n37",
+              "line": 37,
+              "anchor": "class TaskState:",
+              "text": "应用状态是一个普通数据类，和 messages 是两个容器，状态更新不会自动变成消息。"
+            },
+            {
+              "id": "n42",
+              "line": 42,
+              "anchor": "evidence: list[dict] = field(default_factory=list)",
+              "text": "证据单独成一个字段：失败时也保留，事实与终止原因都可追溯。"
+            },
+            {
+              "id": "n46",
+              "line": 46,
+              "anchor": "terminal_reason: str | None = None",
+              "text": "进入终态时写入的原因；报告里“终态有原因”一项直接显示它。"
+            },
+            {
+              "id": "n52",
+              "line": 52,
               "anchor": "if self.used_steps >= budget:",
               "text": "步骤预算在执行前扣减：用完时返回 False，由调用方把状态转为 failed 并写明原因。"
             },
             {
-              "id": "n56",
-              "line": 56,
-              "anchor": "if target in {\"completed\", \"failed\", \"cancelled\"",
+              "id": "n60",
+              "line": 60,
+              "anchor": "if target not in TRANSITIONS[self.status]:",
+              "text": "每次转换先查转换表；ready 直接转 completed 会在这里抛错。"
+            },
+            {
+              "id": "n62",
+              "line": 62,
+              "anchor": "if target in TERMINAL and not reason:",
               "text": "进入终态必须说明原因。"
             },
             {
-              "id": "n58",
-              "line": 58,
+              "id": "n65",
+              "line": 65,
               "anchor": "if target == \"completed\" and (not self.evidence ",
               "text": "没有证据或产物就不能标为 completed，规则写在状态机里，而不是靠调用方自觉。"
             }
@@ -260,32 +306,62 @@
           "id": "code-state-run",
           "type": "annotated-source",
           "path": "lessons/lesson_08_application_state/runtime.py",
-          "start": 65,
-          "end": 111,
+          "start": 72,
+          "end": 107,
           "notes": [
             {
-              "id": "n66",
-              "line": 66,
-              "anchor": "context.emit(\"lesson.state\", {\"action\": action, ",
-              "text": "每次关键变化都发布完整状态快照（asdict），回放时能看到每一步的状态。"
+              "id": "n75",
+              "line": 75,
+              "anchor": "state = TaskState(run_id=uuid4().hex, goal=values.goal)",
+              "text": "每次运行新建状态和 run_id，不共享全局任务状态。"
             },
             {
-              "id": "n72",
-              "line": 72,
+              "id": "n76",
+              "line": 76,
               "anchor": "messages = [{\"role\": \"user\", \"content\": values.g",
               "text": "messages 从头到尾只有这一条 user 消息，状态更新从不伪装成 assistant 或 tool 消息。"
             },
             {
-              "id": "n78",
-              "line": 78,
-              "anchor": "source = SOURCES.get(values.source_key) if value",
-              "text": "missing 场景拿不到资料，走 waiting → failed。"
+              "id": "n77",
+              "line": 77,
+              "anchor": "_publish(context, state, \"创建独立运行\")",
+              "text": "_publish 发布一份完整状态快照（lesson.state）；回放时能看到每一步的状态。"
             },
             {
-              "id": "n90",
-              "line": 90,
-              "anchor": "if not state.consume_step(\"生成课内资料要点\", values.ste",
-              "text": "budget 练习把预算设为 2：第三步在执行前就被拒绝，状态转为 failed。"
+              "id": "n83",
+              "line": 83,
+              "anchor": "source = SOURCES.get(values.source_key) if value",
+              "text": "资料缺失组拿不到资料，走 waiting → failed。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "anchor": "elif not state.consume_step(\"核对资料来源\", values.step_budget):",
+              "text": "预算为 1 时，第二步前就用完，状态转为 failed，evidence 为空。"
+            },
+            {
+              "id": "n93",
+              "line": 93,
+              "anchor": "state.evidence.append({\"source\": values.source_key",
+              "text": "证据写进应用状态，messages 不因此增加。"
+            },
+            {
+              "id": "n97",
+              "line": 97,
+              "anchor": "if not state.consume_step(\"生成课内资料要点\", values.step_budget):",
+              "text": "预算预设把预算设为 2：第三步在执行前就被拒绝，状态转为 failed，已有证据保留。"
+            },
+            {
+              "id": "n101",
+              "line": 101,
+              "anchor": "state.transition(\"completed\", \"课内资料归纳流程完成",
+              "text": "只有证据和 result 都在，transition 才允许进入 completed。"
+            },
+            {
+              "id": "n104",
+              "line": 104,
+              "anchor": "_report(context, state, messages, values)",
+              "text": "报告的拼装放在 _report 里，检查项按状态逐项计算，读码不展开。"
             }
           ]
         },
@@ -315,7 +391,7 @@
           "id": "terminal-states",
           "title": "三种终态，各有原因",
           "hypothesis": "终态由程序按转换规则写入：只有拿到证据并生成产物才能进入 completed；资料缺失或步骤预算耗尽时转为 failed 并写明原因，已取得的证据不会被抹掉。",
-          "predict": "predict-model-requests",
+          "predict": "predict-state-snapshots",
           "arms": [
             {
               "id": "success",
@@ -360,7 +436,7 @@
             },
             {
               "id": "terminal-reason",
-              "text": "报告中“终态有原因”的 detail：就是本次的 terminal_reason。",
+              "text": "报告中“终态有原因”的说明：就是本次的 terminal_reason。",
               "selector": {
                 "event": "lesson.report",
                 "path": "data.checks[0].detail"
@@ -471,11 +547,11 @@
           "label": "资料来源",
           "options": [
             {
-              "value": "lesson-07",
+              "value": "messages-context",
               "label": "{{lesson:messages-context}}资料"
             },
             {
-              "value": "lesson-08",
+              "value": "application-state",
               "label": "{{lesson:application-state}}资料"
             },
             {
@@ -635,6 +711,10 @@
             {
               "id": "item-3",
               "text": "我能解释终态为什么必须写明 terminal_reason。"
+            },
+            {
+              "id": "item-4",
+              "text": "小扩展：资料存在，把步骤预算改成 1 再跑一次，看 used_steps、evidence 和 terminal_reason 各是什么，说说它和预算为 2 时有什么不同。"
             }
           ]
         }
@@ -671,8 +751,12 @@
       "note": "本课输入：最多执行几步；每步执行前扣减，不够时状态转为 failed。"
     },
     {
+      "name": "consume_step",
+      "note": "TaskState 方法：执行一步前先扣预算，预算用完返回 False，由调用方写入失败终态。"
+    },
+    {
       "name": "SOURCES",
-      "note": "本课内置的两条本地资料（lesson-07、lesson-08）；证据只能从这里读。"
+      "note": "本课内置的两份本地资料（messages-context、application-state）；证据只能从这里读。"
     },
     {
       "name": "lesson.state",
