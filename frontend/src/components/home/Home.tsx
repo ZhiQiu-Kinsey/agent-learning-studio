@@ -10,6 +10,7 @@ import { HomeStage } from "./HomeStage";
 import { HomeTopics } from "./HomeTopics";
 import { HomeMethod } from "./HomeMethod";
 import { HomeJourney } from "./HomeJourney";
+import { HomeOutro } from "./HomeOutro";
 import "../../styles/home.css";
 
 const stripNumber = (title: string) =>
@@ -108,6 +109,7 @@ export function Home({
         onOpenLesson={onOpenLesson}
         onStartOnboarding={onStartOnboarding}
       />
+      <HomeOutro onStartOnboarding={onStartOnboarding} onOpenMap={onOpenMap} />
     </div>
   );
 }

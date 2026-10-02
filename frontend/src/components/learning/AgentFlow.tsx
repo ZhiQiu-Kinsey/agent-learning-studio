@@ -12,6 +12,8 @@ import {
 import { useTranslation } from "react-i18next";
 import type { Walkthrough } from "../../content/types.gen";
 import { Code } from "../Code";
+import { GlossaryText } from "../../content/glossary/Glossary";
+import Shuffle from "../react-bits/Shuffle";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
@@ -41,7 +43,7 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
       data-testid="agent-flow"
     >
       <div className="learn-section-kicker">
-        <span>{tw("kicker")}</span>
+        <Shuffle text={tw("kicker")} />
         <span
           className="lesson-example-tag"
           data-testid="agent-flow-provenance"
@@ -136,7 +138,9 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
               {step.actor}
             </span>
             <h3>{step.title}</h3>
-            <p>{step.body}</p>
+            <p>
+              <GlossaryText text={step.body} />
+            </p>
             {step.evidence && (
               <div className="agent-flow-evidence">
                 <span className="agent-evidence-icon">

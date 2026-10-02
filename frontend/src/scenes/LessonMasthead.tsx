@@ -1,4 +1,4 @@
-import { useRef, type ComponentType } from "react";
+import { useCallback, useRef, useState, type ComponentType } from "react";
 import { AnimatePresence, motion, useScroll, useTransform } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../motion";
@@ -6,6 +6,7 @@ import { Backdrop } from "../components/backdrops/Backdrop";
 import { backdropFor } from "../components/backdrops/presets";
 import ShinyText from "../components/react-bits/ShinyText";
 import StarBorder from "../components/react-bits/StarBorder";
+import StrokeText from "../components/react-bits/StrokeText";
 import { TabsList, TabsTrigger } from "../components/ui/tabs";
 import type { LessonContent } from "../content/types.gen";
 import { sceneIds, type SceneId } from "./types";
@@ -16,30 +17,53 @@ const ease = [0.16, 1, 0.3, 1] as const;
 const tokens = (text: string) =>
   text.match(/[A-Za-z0-9_\-.'/+#]+|\s+|./gu) ?? [text];
 
-/** h1 with a blur-rise entrance (BlurText style). Screen readers get the plain title. */
+/** Fallback entrance for titles too long for one stroked line: blur-rise tokens. */
+function RiseTokens({ text }: { text: string }) {
+  return (
+    <span aria-hidden="true">
+      {tokens(text).map((token, index) =>
+        /^\s+$/.test(token) ? (
+          <span key={index}> </span>
+        ) : (
+          <motion.span
+            key={index}
+            className="band-title-token"
+            initial={{ opacity: 0, y: "0.5em", filter: "blur(12px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            transition={{ delay: 0.12 + index * 0.05, duration: 0.75, ease }}
+          >
+            {token}
+          </motion.span>
+        ),
+      )}
+    </span>
+  );
+}
+
+/**
+ * h1 that draws its outline first, then fills (StrokeText). Still an h1 whose
+ * accessible text is the plain title; titles wider than one line fall back to
+ * the blur-rise tokens, and static motion renders plain text.
+ */
 function BandTitle({ text }: { text: string }) {
   const reduced = useReducedMotion();
+  const [stroke, setStroke] = useState(true);
+  const overflow = useCallback(() => setStroke(false), []);
   if (reduced) return <h1 className="band-title">{text}</h1>;
   return (
-    <h1 className="band-title">
+    <h1 className="band-title" data-effect={stroke ? "stroke" : "rise"}>
       <span className="sr-only">{text}</span>
-      <span aria-hidden="true">
-        {tokens(text).map((token, index) =>
-          /^\s+$/.test(token) ? (
-            <span key={index}> </span>
-          ) : (
-            <motion.span
-              key={index}
-              className="band-title-token"
-              initial={{ opacity: 0, y: "0.5em", filter: "blur(12px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              transition={{ delay: 0.12 + index * 0.05, duration: 0.75, ease }}
-            >
-              {token}
-            </motion.span>
-          ),
-        )}
-      </span>
+      {stroke ? (
+        <StrokeText
+          text={text}
+          className="band-title-stroke"
+          strokeColor="#c8b5ff"
+          fillColor="currentColor"
+          onOverflow={overflow}
+        />
+      ) : (
+        <RiseTokens text={text} />
+      )}
     </h1>
   );
 }

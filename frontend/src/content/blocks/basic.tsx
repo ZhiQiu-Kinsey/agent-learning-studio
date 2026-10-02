@@ -1,7 +1,7 @@
-import Markdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ExternalLink, Info, ShieldAlert } from "lucide-react";
 import type { BlockOf } from "../view";
+import { GlossaryMarkdown, GlossaryText } from "../glossary/Glossary";
 
 /** Generic renderers shared by lesson scenes and onboarding chapters. */
 
@@ -11,13 +11,13 @@ export function StepsBlock({ block }: { block: BlockOf<"steps"> }) {
       {block.title && <h3>{block.title}</h3>}
       {block.paragraphs.map((paragraph, index) => (
         <div className="reading-prose" key={index}>
-          <Markdown>{paragraph}</Markdown>
+          <GlossaryMarkdown>{paragraph}</GlossaryMarkdown>
         </div>
       ))}
       <ol>
         {block.items.map((item) => (
           <li key={item.id}>
-            <Markdown>{item.text}</Markdown>
+            <GlossaryMarkdown>{item.text}</GlossaryMarkdown>
           </li>
         ))}
       </ol>
@@ -34,7 +34,7 @@ export function CompareBlock({ block }: { block: BlockOf<"compare"> }) {
       {block.title && <h3>{block.title}</h3>}
       {block.paragraphs.map((paragraph, index) => (
         <div className="reading-prose" key={index}>
-          <Markdown>{paragraph}</Markdown>
+          <GlossaryMarkdown>{paragraph}</GlossaryMarkdown>
         </div>
       ))}
       <div className="content-table">
@@ -51,7 +51,7 @@ export function CompareBlock({ block }: { block: BlockOf<"compare"> }) {
               <tr key={index}>
                 {row.map((cell, column) => (
                   <td key={column}>
-                    <Markdown>{cell}</Markdown>
+                    <GlossaryMarkdown>{cell}</GlossaryMarkdown>
                   </td>
                 ))}
               </tr>
@@ -82,7 +82,7 @@ export function CalloutBlock({ block }: { block: BlockOf<"callout"> }) {
         {block.title && <h3>{block.title}</h3>}
         {block.paragraphs.map((paragraph, index) => (
           <div className="reading-prose" key={index}>
-            <Markdown>{paragraph}</Markdown>
+            <GlossaryMarkdown>{paragraph}</GlossaryMarkdown>
           </div>
         ))}
       </div>
@@ -103,11 +103,15 @@ export function MisconceptionBlock({
     >
       <p>
         <strong>{t("claim")}</strong>
-        <span>{block.claim}</span>
+        <span>
+          <GlossaryText text={block.claim} />
+        </span>
       </p>
       <p>
         <strong>{t("correction")}</strong>
-        <span>{block.correction}</span>
+        <span>
+          <GlossaryText text={block.correction} />
+        </span>
       </p>
     </section>
   );

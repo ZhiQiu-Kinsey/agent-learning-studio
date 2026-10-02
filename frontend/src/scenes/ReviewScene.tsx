@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { jsonFetch } from "../api";
 import CountUp from "../components/react-bits/CountUp";
 import { Button } from "../components/ui/button";
+import { LearningBadge } from "../components/learning/LearningBadge";
 import { formatLessonNumber } from "../lib/lessonIds";
 import { useReducedMotion } from "../motion";
 import { confidenceLevels, reviewNumbers, useProgress } from "../progress";
@@ -24,7 +25,11 @@ function Stat({
 }) {
   const reduced = useReducedMotion();
   return (
-    <div className="review-stat" data-testid={`review-${id}`} data-value={value}>
+    <div
+      className="review-stat"
+      data-testid={`review-${id}`}
+      data-value={value}
+    >
       <dt>{label}</dt>
       <dd>
         {/* 数值只在入场时滚动一次；减少动画时直接显示最终值。 */}
@@ -54,9 +59,9 @@ export function ReviewScene({ studio }: SceneProps) {
     (level) => numbers.confidence[level].answered > 0,
   );
 
-  const [curriculum, setCurriculum] = useState<
-    CurriculumData | "error" | null
-  >(null);
+  const [curriculum, setCurriculum] = useState<CurriculumData | "error" | null>(
+    null,
+  );
   useEffect(() => {
     const controller = new AbortController();
     jsonFetch<CurriculumData>("/api/curriculum", { signal: controller.signal })
@@ -86,6 +91,16 @@ export function ReviewScene({ studio }: SceneProps) {
         <h2>{t("title")}</h2>
         <p>{t("help")}</p>
       </header>
+
+      <LearningBadge
+        number={formatLessonNumber(detail.number)}
+        title={
+          lessons.find((lesson) => lesson.id === detail.id)?.title ??
+          detail.title
+        }
+        record={record}
+        quizAttempts={numbers.quizAttempts}
+      />
 
       {hasActivity ? (
         <dl className="review-stats" aria-label={t("stats.region")}>

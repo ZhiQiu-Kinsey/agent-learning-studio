@@ -4,6 +4,7 @@ import BorderGlow from "../react-bits/BorderGlow";
 import AnimatedContent from "../react-bits/AnimatedContent";
 import { IllustrationFlow } from "../../content/blocks/IllustrationFlow";
 import type { Flow, Illustration } from "../../content/types.gen";
+import Shuffle from "../react-bits/Shuffle";
 
 /**
  * The authored Agent loop on the real stage. It stays an illustration: the
@@ -25,7 +26,9 @@ export function HomeStage({
     >
       <header className="home-section-head home-stage-head">
         <div>
-          <p className="home-eyebrow">{t("stage.kicker")}</p>
+          <p className="home-eyebrow">
+            <Shuffle text={t("stage.kicker")} />
+          </p>
           <h2 id="home-stage-title">{t("stageTitle")}</h2>
           <p>{t("stage.lead")}</p>
         </div>
@@ -37,7 +40,12 @@ export function HomeStage({
           </span>
         </div>
       </header>
-      <AnimatedContent distance={60} duration={0.9} scale={0.97} threshold={0.12}>
+      <AnimatedContent
+        distance={60}
+        duration={0.9}
+        scale={0.97}
+        threshold={0.12}
+      >
         <BorderGlow
           className="home-stage-frame"
           backgroundColor="var(--surface)"
