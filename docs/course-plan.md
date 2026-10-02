@@ -6,7 +6,7 @@
 
 > 课号按目录顺序计算，仅用于显示；接口与链接使用课程 ID（slug），旧数字编号作为别名继续可用。
 
-课程按 **大类 → 模块 → 课次 → 知识点 → 实验 → 验收** 组织。当前可运行课程：第 4 课、第 6 课、第 7 课、第 8 课、第 9 课、第 10 课、第 11 课、第 12 课、第 13 课、第 15 课、第 19 课、第 20 课、第 21 课、第 22 课、第 23 课、第 24 课；其余课程只登记教学计划，后续逐课补充。
+课程按 **大类 → 模块 → 课次 → 知识点 → 实验 → 验收** 组织。当前可运行课程：第 5 课、第 6 课、第 7 课、第 8 课、第 9 课、第 10 课、第 11 课、第 12 课、第 13 课、第 15 课、第 19 课、第 20 课、第 21 课、第 22 课、第 23 课、第 24 课；其余课程只登记教学计划，后续逐课补充。
 
 ## 学习原则
 
@@ -186,9 +186,9 @@
 
 #### 第 4 课 · 工具定义与调用提议
 
-**课程 ID：** `tool-selection`
+**课程 ID：** `tool-proposals`
 
-**层级：** 必修　**状态：** 已可运行
+**层级：** 必修　**状态：** 规划中
 
 **先修：** 第 1 课 一次模型请求
 
@@ -228,13 +228,13 @@
 **参考材料**
 
 - [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners)：`04-tool-use/README.md`。
-- [深入理解 AI Agent：设计原理与工程实践](https://github.com/bojieli/ai-agent-book)：`book/chapter1.md`。
+- [Hugging Face Agents Course](https://github.com/huggingface/agents-course)：`units/en/unit1/tools.mdx`。
 
 #### 第 5 课 · 执行工具与回传结果
 
-**课程 ID：** `tool-results`
+**课程 ID：** `tool-selection`
 
-**层级：** 必修　**状态：** 规划中
+**层级：** 必修　**状态：** 已可运行
 
 **先修：** 第 4 课 工具定义与调用提议、第 2 课 多轮对话：程序重发历史
 
