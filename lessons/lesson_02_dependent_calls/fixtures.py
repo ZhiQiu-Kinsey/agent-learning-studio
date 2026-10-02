@@ -1,13 +1,12 @@
-"""第 2 课样本从本次真实时钟结果生成依赖调用的参数。"""
-from lessons.lesson_01_tool_selection.fixtures import create_completion as selection_completion
+"""“依赖式多轮调用”的离线测试模型：依赖调用的参数取自本次真实时钟结果；工具仍真实执行。"""
 from server.offline import CompletionScript, result_answer, tool_call
 
 
 def create_completion(exercise_id, inputs=None):
     if exercise_id == "both":
-        return selection_completion("both", inputs)
+        return CompletionScript(_independent)
     if exercise_id != "chain":
-        raise ValueError("第 2 课没有此测试样本。")
+        raise ValueError("“依赖式多轮调用”没有此测试样本。")
 
     def decide(results):
         if not results:
@@ -21,3 +20,10 @@ def create_completion(exercise_id, inputs=None):
         return result_answer(results)
 
     return CompletionScript(decide)
+
+
+def _independent(results):
+    """两个任务互不依赖：第一轮同时提出加法和查时间，看到两个结果后作答。"""
+    if results:
+        return result_answer(results)
+    return {"tool_calls": [tool_call("add_numbers", {"a": 19, "b": 23}, 1), tool_call("get_current_time", {}, 2)]}

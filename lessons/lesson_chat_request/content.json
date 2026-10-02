@@ -1,0 +1,854 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "chat-request",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "MODEL CALLS / ONE REQUEST",
+          "headline": "一次请求，",
+          "highlight": "一次回答。",
+          "takeaway": "Agent 的每一步都从一次模型请求开始。本课不带工具，只看请求里写了什么、响应里回来什么。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-request",
+              "label": "01 / REQUEST",
+              "title": "请求体",
+              "description": "一次请求是一个 JSON 对象：model 写用哪个模型，messages 写按顺序排好的消息。",
+              "token": "model · messages"
+            },
+            {
+              "id": "02-role",
+              "label": "02 / ROLE",
+              "title": "谁在说话",
+              "description": "每条消息都有消息角色（Message Role）：system 是写给模型的规则，user 是问题，assistant 是模型说的话。",
+              "token": "system · user · assistant"
+            },
+            {
+              "id": "03-finish",
+              "label": "03 / FINISH",
+              "title": "为什么停下",
+              "description": "响应里的结束原因（Finish Reason）说明输出为什么停：stop 是自己写完，length 是写到输出上限被截断。",
+              "token": "finish_reason"
+            },
+            {
+              "id": "04-usage",
+              "label": "04 / USAGE",
+              "title": "花了多少",
+              "description": "用量（Usage）是服务商报告的 Token 数：提示、完成和合计。没有报告就写“未报告”，不写 0。",
+              "token": "usage"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "一次请求就是一个 JSON 对象",
+          "paragraphs": [
+            "Agent 是由模型决定下一步、由程序去执行的系统。它每走一步，都要先问一次模型。本课把这一步单独拿出来：不带工具，只发一次请求，看清发出去什么、收回来什么。",
+            "请求体是一个 JSON 对象。本课的 build_request 只写 messages：一个列表，按顺序放消息，每条消息有 role 和 content。model 不用自己写，平台会按当前连接补上。所以在实验台 request 事件的 body 里，你会看到 model 和 messages 两个字段；设了输出上限时，还会多一个 max_tokens。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "消息角色：每条消息是谁说的",
+          "paragraphs": [
+            "messages 里每条消息的 role 就是它的消息角色。system 消息是写给模型的规则，本课默认是“你是编程课的助教。回答简短、具体，不超过两句话。”；user 消息是这次的问题；assistant 消息是模型说的话。本课只发一次请求，assistant 只出现在响应里，{{lesson:multi-turn-history}}会把它放回下一次请求。",
+            "system 消息没有特殊权限，它只是排在最前面的一条消息。练习“去掉系统提示词”把 system_prompt 留空，build_request 就不放 system 消息，请求里只剩 user 一条。模型照样会回答，只是少了这条规则。"
+          ]
+        },
+        {
+          "id": "predict-request-count",
+          "type": "predict",
+          "prompt": "先跑一次。在实验“有没有系统提示词”里运行“带系统提示词”之前先猜：这次运行会发出几次模型请求（request 事件）？",
+          "experiment": "system-or-not",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-roles",
+          "type": "micro-quiz",
+          "question": {
+            "id": "roles-in-request",
+            "prompt": "练习“带系统提示词”发出的 messages 有几条，各是什么角色？",
+            "options": [
+              {
+                "id": "a",
+                "text": "两条：system 和 user",
+                "feedback": "对。规则在 system，问题在 user；模型这次的回答在响应里。"
+              },
+              {
+                "id": "b",
+                "text": "三条：system、user 和 assistant",
+                "feedback": "不对。本课只发一次请求，assistant 是模型这次的回答，出现在响应里，不在请求里。"
+              },
+              {
+                "id": "c",
+                "text": "一条 user；system 规则写在 HTTP 请求头里",
+                "feedback": "不对。system 也是 messages 里的一条消息。请求头里放的是认证信息。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "messages 是按顺序排的消息列表，每条靠 role 说明是谁说的。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "响应：回答和结束原因",
+          "paragraphs": [
+            "响应也是一个 JSON 对象。回答在 choices[0].message.content：choices 是候选回答的列表，通常只有一个；其中 message 的 role 是 assistant。本课的 read_reply 就从这里取回答。",
+            "和 message 并列的是 finish_reason，也就是结束原因。stop 表示模型自己写完了；length 表示写到了 max_tokens 设定的输出上限，被截断了。练习“把输出上限设得很小”把 max_tokens 设成 16，运行后看 response 里的 finish_reason 是不是 length，再看 content 剩下多少。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "用量：这次花了多少 Token",
+          "paragraphs": [
+            "Token 是模型切分文本的单位，由分词器决定怎么切，一个汉字不一定正好是一个 Token。响应里的 usage 报告这次的用量：prompt_tokens 是请求里全部消息算出的提示 Token，completion_tokens 是模型写出的完成 Token，total_tokens 是两者之和。",
+            "有的模型先推理再回答：推理写在 message 的 reasoning_content 字段，用掉的 Token 记在 completion_tokens_details.reasoning_tokens，也算进 completion_tokens，同样受 max_tokens 限制。所以上限很小时，content 可能只剩半句，也可能是空的，因为推理还没写完就被截断了。对照 reasoning_tokens 和 completion_tokens，就能分清是哪一种。",
+            "服务商没有报告某项用量时，实验报告写“未报告”，不写 0，也不用本地估算冒充。去掉系统提示词后提示 Token 少了多少，对照两次 response 的 prompt_tokens 就知道。"
+          ]
+        },
+        {
+          "id": "mq-finish",
+          "type": "micro-quiz",
+          "question": {
+            "id": "finish-length",
+            "prompt": "一次响应的 finish_reason 是 length。能确定什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "输出写到了 max_tokens 设定的上限，被截断了",
+                "feedback": "对。length 说明输出没写完就停了；回答可能只有半句，甚至是空的。"
+              },
+              {
+                "id": "b",
+                "text": "模型认为回答已经完整",
+                "feedback": "不对。那是 stop。length 说明输出是被上限截断的。"
+              },
+              {
+                "id": "c",
+                "text": "请求失败了，需要重发",
+                "feedback": "不对。请求成功返回了，只是输出被截断。想要完整的回答，调大 max_tokens 再发一次。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "结束原因只说明输出为什么停下，不评价回答对不对。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "密钥只在后端",
+          "paragraphs": [
+            "request 事件记录的是请求体，里面没有 API Key。密钥在发送那一刻才加上：send_bailian 把它放进 HTTP 请求头的 Authorization 字段，请求体里只有 model、messages 这些给模型看的字段。浏览器拿不到密钥，运行记录里也没有。",
+            "接百炼时，request 事件就是发出去的 HTTP 请求体；经 LiteLLM 接入的其他服务商，事件里是标准化后的请求与响应，不是原始 HTTP 报文。两种情况下，密钥都只在后端。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次请求，从拼装到读回",
+          "description": "以“带系统提示词”为例分三步看。下面是教学示意，不是本次运行记录；数字请看你自己的运行。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "拼请求体",
+              "actor": "本课代码",
+              "title": "build_request 只写 messages",
+              "body": "system 规则在前，user 问题在后；没设输出上限时不放 max_tokens。",
+              "code": "{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"你是编程课的助教。……\"},\n    {\"role\": \"user\", \"content\": \"用一句话解释什么是 Agent。\"}\n  ]\n}",
+              "language": "json",
+              "evidence": "展开 request 事件的 body.messages，核对条数和每条的 role。"
+            },
+            {
+              "id": "step-2",
+              "label": "发送",
+              "actor": "后端",
+              "title": "密钥加在请求头里",
+              "body": "平台补上 model，send_bailian 把密钥放进 Authorization 请求头再发出。请求体里没有密钥。",
+              "code": "headers={\n    \"Authorization\": \"Bearer \" + api_key,\n    \"Content-Type\": \"application/json\",\n}",
+              "language": "python",
+              "evidence": "在 request 事件里搜不到 API Key。"
+            },
+            {
+              "id": "step-3",
+              "label": "读响应",
+              "actor": "模型 → 本课代码",
+              "title": "从响应里取三样东西",
+              "body": "回答在 choices[0].message.content，结束原因在 finish_reason，用量在 usage。",
+              "code": "{\n  \"choices\": [{\n    \"message\": {\"role\": \"assistant\", \"content\": \"……\"},\n    \"finish_reason\": \"stop\"\n  }],\n  \"usage\": {\"prompt_tokens\": …, \"completion_tokens\": …, \"total_tokens\": …}\n}",
+              "language": "json",
+              "evidence": "展开 response 事件，和实验报告里的数字对一遍。"
+            }
+          ]
+        },
+        {
+          "id": "mq-key",
+          "type": "micro-quiz",
+          "question": {
+            "id": "where-is-key",
+            "prompt": "在 request 事件的 body 里找 API Key，会找到什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "找不到：密钥在发送时才放进 HTTP 请求头",
+                "feedback": "对。请求体是给模型看的内容，认证信息走请求头，只在后端。"
+              },
+              {
+                "id": "b",
+                "text": "在 messages 的第一条里",
+                "feedback": "不对。messages 只有消息，第一条是 system 规则。"
+              },
+              {
+                "id": "c",
+                "text": "在 model 字段里",
+                "feedback": "不对。model 只写模型名。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "send_bailian 在发送时才把密钥写进 Authorization 请求头，记录的请求体里没有它。"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new"
+        },
+        {
+          "id": "code-build-request",
+          "type": "annotated-source",
+          "path": "lessons/lesson_chat_request/runtime.py",
+          "start": 6,
+          "end": 34,
+          "notes": [
+            {
+              "id": "n9",
+              "line": 9,
+              "anchor": "FINISH_REASONS = {\"stop\"",
+              "text": "只列最常见的两个结束原因，实验报告用它把 finish_reason 翻成中文；别的值照原样显示。"
+            },
+            {
+              "id": "n14",
+              "line": 14,
+              "anchor": "system_prompt: str = Field(default=DEFAULT_SYSTEM",
+              "text": "系统提示词是一个输入参数。练习“去掉系统提示词”把它设成空字符串。"
+            },
+            {
+              "id": "n16",
+              "line": 16,
+              "anchor": "max_tokens: int = Field(default=0, ge=0, le=1024)",
+              "text": "用 0 表示“不设上限”。这样表单里只有一个数字框，不必再加开关。"
+            },
+            {
+              "id": "n22",
+              "line": 22,
+              "anchor": "def build_request(question: str, system_prompt: str, max_tokens: int)",
+              "text": "这个函数只做一件事：把问题和设置拼成请求体。它不发请求，也碰不到密钥。"
+            },
+            {
+              "id": "n25",
+              "line": 25,
+              "anchor": "if system_prompt.strip():",
+              "text": "只有系统提示词非空时才放 system 消息。全是空格也算空，免得发出一条没有内容的规则。"
+            },
+            {
+              "id": "n29",
+              "line": 29,
+              "anchor": "messages.append({\"role\": \"user\", \"content\": question})",
+              "text": "user 消息永远在最后。messages 的顺序就是模型读到的顺序。"
+            },
+            {
+              "id": "n31",
+              "line": 31,
+              "anchor": "if max_tokens:",
+              "text": "max_tokens 为 0 时请求体里就没有这个字段，输出上限交给服务商的默认值。"
+            }
+          ]
+        },
+        {
+          "id": "code-read-reply",
+          "type": "annotated-source",
+          "path": "lessons/lesson_chat_request/runtime.py",
+          "start": 37,
+          "end": 68,
+          "notes": [
+            {
+              "id": "n39",
+              "line": 39,
+              "anchor": "choices = response.get(\"choices\")",
+              "text": "回答在 choices 列表里。先确认它存在，响应格式不对就报错，而不是把空字符串当成回答。"
+            },
+            {
+              "id": "n46",
+              "line": 46,
+              "anchor": "\"content\": message.get(\"content\") or \"\",",
+              "text": "content 可能是 null 或空字符串。这里统一成空字符串，回答长度就是 0。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "\"reasoning\": message.get(\"reasoning_content\"),",
+              "text": "推理内容单独取出，不混进回答。没有这个字段的模型，这里是 None。"
+            },
+            {
+              "id": "n49",
+              "line": 49,
+              "anchor": "\"finish_reason\": choices[0].get(\"finish_reason\"),",
+              "text": "结束原因和 message 并列，都在 choices[0] 里。"
+            },
+            {
+              "id": "n50",
+              "line": 50,
+              "anchor": "\"prompt_tokens\": usage.get(\"prompt_tokens\"),",
+              "text": "用 get 取用量：服务商没报告时得到 None，报告里显示“未报告”，而不是 0。"
+            },
+            {
+              "id": "n54",
+              "line": 54,
+              "anchor": "\"reasoning_tokens\": details.get(\"reasoning_tokens\"),",
+              "text": "推理 Token 在 completion_tokens_details 里。它是 completion_tokens 的一部分，不是另加的。"
+            },
+            {
+              "id": "n58",
+              "line": 58,
+              "anchor": "def run(context: RunContext) -> str:",
+              "text": "运行入口。整个流程只有三步，每一步都有编号注释。"
+            },
+            {
+              "id": "n64",
+              "line": 64,
+              "anchor": "response = context.complete(body)",
+              "text": "只调用一次 context.complete，所以这次运行只有一对 request 和 response 事件。lesson.json 的 max_rounds 设为 1，多发一次就会被平台拦下。"
+            },
+            {
+              "id": "n68",
+              "line": 68,
+              "anchor": "return reply[\"content\"] or",
+              "text": "返回值记为最终回答。content 为空时不编一句话填上，而是如实说明它是空的。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-report",
+              "start": 67,
+              "end": 67,
+              "label": "平台：发布实验报告（_report）"
+            }
+          ]
+        },
+        {
+          "id": "code-send",
+          "type": "annotated-source",
+          "path": "course/api_client.py",
+          "start": 32,
+          "end": 48,
+          "notes": [
+            {
+              "id": "n32",
+              "line": 32,
+              "anchor": "def send_bailian(request_body, api_key, timeout_seconds=60):",
+              "text": "后端发送百炼请求的函数。请求体和密钥分成两个参数传进来，事件只记录前一个。"
+            },
+            {
+              "id": "n38",
+              "line": 38,
+              "anchor": "data=json.dumps(request_body).encode(\"utf-8\"),",
+              "text": "HTTP 正文就是 request 事件里记录的那份请求体。"
+            },
+            {
+              "id": "n40",
+              "line": 40,
+              "anchor": "\"Authorization\": \"Bearer \" + api_key,",
+              "text": "密钥只在这里出现：放进 Authorization 请求头，不进请求体，也不进运行记录。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "return json.loads(response.read().decode(\"utf-8\"))",
+              "text": "响应正文解析成字典原样返回，response 事件记录的就是它。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "没报告的用量写“未报告”，不写 0",
+          "chosen": "read_reply 用 get 读取 usage 里的每一项，缺失时得到 None；实验报告把 None 显示成“未报告”。所有数字都来自这次 response。",
+          "alternatives": [
+            {
+              "id": "zero",
+              "title": "缺失时写 0",
+              "why_not": "0 是一个测量值，读的人会以为这次没花 Token。缺失和 0 是两回事。"
+            },
+            {
+              "id": "estimate",
+              "title": "用字符数在本地估一个",
+              "why_not": "各家分词器切法不同，估出来的数和服务商计费的数对不上，还会冒充服务商的数据。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "system-or-not",
+          "title": "有没有系统提示词",
+          "hypothesis": "两组的 user 问题相同，只差一条 system 消息。去掉它，请求里的 messages 少一条，prompt_tokens 随之变少；回答的长短和语气可能不同。",
+          "predict": "predict-request-count",
+          "arms": [
+            {
+              "id": "with-system",
+              "exercise": "basic",
+              "label": "带系统提示词"
+            },
+            {
+              "id": "without-system",
+              "exercise": "no-system",
+              "label": "去掉系统提示词（system_prompt 留空）"
+            }
+          ],
+          "observe": [
+            {
+              "id": "messages",
+              "text": "request 的 messages：带系统提示词的一组有 system、user 两条，去掉的一组只有 user 一条。",
+              "selector": {
+                "event": "request",
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "answer",
+              "text": "response 的 choices[0].message.content：模型这次的回答，两组比一比长短和语气。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "prompt-tokens",
+              "text": "response 的 usage.prompt_tokens：请求里全部消息算出的提示 Token。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.usage.prompt_tokens"
+              }
+            },
+            {
+              "id": "report",
+              "text": "实验报告：回答长度、结束原因和各项用量放在一起，没报告的项写“未报告”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这次运行只发了一次请求。先看发出去的消息。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "messages"
+            },
+            {
+              "action": "highlight",
+              "observe": "messages"
+            },
+            {
+              "action": "narrate",
+              "text": "数一数 messages 有几条，每条的 role 是什么。两组只差这里。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "answer"
+            },
+            {
+              "action": "narrate",
+              "text": "这是模型的回答，原样来自响应。"
+            },
+            {
+              "action": "seek",
+              "observe": "prompt-tokens"
+            },
+            {
+              "action": "highlight",
+              "observe": "prompt-tokens"
+            },
+            {
+              "action": "narrate",
+              "text": "提示 Token 由请求里的全部消息算出。两组对比，差值大致就是那条 system 消息。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "report"
+            },
+            {
+              "action": "highlight",
+              "observe": "report"
+            },
+            {
+              "action": "narrate",
+              "text": "实验报告把这些字段放在一起。每个数字都能在上面的 response 里找到出处。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里 system 消息有没有出现在请求中，以及两组提示 Token 的实际差别。",
+              "回答来自 response 的 content，不是平台写的。"
+            ],
+            "does_not_prove": [
+              "一次运行的回答差异，不能说明系统提示词总会让回答变短；同一个请求再发一次，回答也可能不同，{{lesson:sampling-variance}}专门看这件事。",
+              "提示 Token 的具体数值取决于服务商的分词器，换个模型就会不同。"
+            ]
+          }
+        },
+        {
+          "id": "output-limit",
+          "title": "输出上限与结束原因",
+          "hypothesis": "max_tokens 设成 16 时，输出写到 16 个 Token 就被截断，finish_reason 是 length；不设上限时，模型写完自己停下，finish_reason 是 stop。",
+          "arms": [
+            {
+              "id": "no-limit",
+              "exercise": "basic",
+              "label": "不设 max_tokens"
+            },
+            {
+              "id": "short-limit",
+              "exercise": "short-limit",
+              "label": "max_tokens 设为 16"
+            }
+          ],
+          "observe": [
+            {
+              "id": "limit-sent",
+              "text": "request 的 max_tokens：只有“max_tokens 设为 16”这一组有这个字段。",
+              "selector": {
+                "event": "request",
+                "path": "data.body.max_tokens"
+              }
+            },
+            {
+              "id": "finish",
+              "text": "response 的 choices[0].finish_reason：看它是 stop 还是 length。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].finish_reason"
+              }
+            },
+            {
+              "id": "completion-tokens",
+              "text": "response 的 usage.completion_tokens：截断的那一组，它不会超过 max_tokens。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.usage.completion_tokens"
+              }
+            },
+            {
+              "id": "limit-report",
+              "text": "实验报告：回答长度、结束原因的含义；模型报告了推理 Token 时，这里也会列出。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组问同一个问题，差别只在请求里有没有 max_tokens。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "limit-sent"
+            },
+            {
+              "action": "highlight",
+              "observe": "limit-sent"
+            },
+            {
+              "action": "narrate",
+              "text": "如果你运行的是不设上限的一组，这里会提示本次运行没有这条证据，这正是两组的差别。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "finish"
+            },
+            {
+              "action": "highlight",
+              "observe": "finish"
+            },
+            {
+              "action": "narrate",
+              "text": "结束原因告诉你输出为什么停下：stop 是写完了，length 是被上限截断。"
+            },
+            {
+              "action": "seek",
+              "observe": "completion-tokens"
+            },
+            {
+              "action": "highlight",
+              "observe": "completion-tokens"
+            },
+            {
+              "action": "narrate",
+              "text": "对照 completion_tokens 和 max_tokens。先推理的模型，推理也算在这个数里。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "limit-report"
+            },
+            {
+              "action": "highlight",
+              "observe": "limit-report"
+            },
+            {
+              "action": "narrate",
+              "text": "回答长度为 0 也是一种结果：推理还没写完，输出就到了上限。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次请求有没有带 max_tokens，输出是否因此被截断（finish_reason 是否为 length）。",
+              "completion_tokens 是否到了上限，其中有多少是推理用掉的（模型报告了推理 Token 时）。"
+            ],
+            "does_not_prove": [
+              "length 只说明输出被截断，不说明已经写出的部分对不对。",
+              "同样设成 16，换个模型截断的位置不同：先推理的模型可能连回答都没开始写。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "system_prompt",
+          "label": "系统提示词",
+          "help": "作为 system 消息放在最前面；留空表示请求里不放 system 消息。"
+        },
+        {
+          "name": "max_tokens",
+          "label": "输出上限 max_tokens",
+          "help": "0 表示请求体里不放 max_tokens，由服务商决定上限。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "request-fields",
+              "prompt": "请求体里的 model 和 messages 分别写什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "model 写用哪个模型，messages 写按顺序排列的消息",
+                  "feedback": "对。本课只写 messages，model 由平台按当前连接补上。"
+                },
+                {
+                  "id": "b",
+                  "text": "model 写模型的回答，messages 写用户问题",
+                  "feedback": "不对。模型的回答在响应里，不在请求体里。"
+                },
+                {
+                  "id": "c",
+                  "text": "model 写 API Key，messages 写问题",
+                  "feedback": "不对。密钥不进请求体，它在发送时放进请求头。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "请求体是给模型看的内容：用哪个模型，加上按顺序排好的消息。"
+            },
+            {
+              "id": "empty-system",
+              "prompt": "把 system_prompt 留空再运行，请求会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "messages 只剩 user 一条，模型照样回答",
+                  "feedback": "对。system 消息不是必填的，去掉它只是少了一条规则。"
+                },
+                {
+                  "id": "b",
+                  "text": "请求会失败，因为缺了 system 消息",
+                  "feedback": "不对。system 消息可有可无，只有 user 一条也是合法请求。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型会自动沿用上一次运行的 system 规则",
+                  "feedback": "不对。每次请求只带这次写进 messages 的内容，上一次运行的规则不会自己带过来。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "模型只看得到这一次请求里的消息。"
+            },
+            {
+              "id": "missing-usage",
+              "prompt": "响应的 usage 里没有 total_tokens。实验报告应该怎么写？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "写 0",
+                  "feedback": "不对。0 是一个测量值，读的人会以为这次没花 Token。"
+                },
+                {
+                  "id": "b",
+                  "text": "写“未报告”",
+                  "feedback": "对。缺失就如实写缺失。"
+                },
+                {
+                  "id": "c",
+                  "text": "用回答的字符数估一个",
+                  "feedback": "不对。字符数和 Token 数不是一回事，估出来的数会冒充服务商的数据。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "用量只记服务商报告的数；没有报告就写“未报告”。"
+            },
+            {
+              "id": "empty-content",
+              "prompt": "finish_reason 是 length，content 却是空的。最可能的原因是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "模型先推理，推理还没写完就到了 max_tokens",
+                  "feedback": "对。看 usage 里的 reasoning_tokens：它等于 completion_tokens，说明输出全花在推理上了。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务商出错，没有返回回答",
+                  "feedback": "不对。出错时不会有正常的响应。这里有 finish_reason，说明是正常返回，只是输出被截断。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型拒绝回答这个问题",
+                  "feedback": "不对。拒绝也要写出文字。content 为空、结束原因又是 length，说明输出被上限截断了。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "推理和回答共用 max_tokens。上限太小时，回答可能一个字都没写。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“把输出上限设得很小”，找出说明这次输出为什么停下的那个字段。",
+          "target": {
+            "event": "response",
+            "path": "data.body.choices[0].finish_reason"
+          },
+          "explanation": "它在 response 事件的 choices[0].finish_reason。值是 length，说明输出写到了请求里 max_tokens 设定的上限。再看同一个事件的 usage：completion_tokens 不会超过这个上限。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在 request 事件里指出了 model、messages 和每条消息的 role。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在 response 事件里找到了回答、finish_reason 和 usage，并和实验报告对上了。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在 request 事件里确认没有 API Key。"
+            },
+            {
+              "id": "item-4",
+              "text": "我把 max_tokens 改成 200 又跑了一次，比较了 finish_reason、completion_tokens 和回答长度。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "messages",
+      "note": "请求体里的消息列表，按顺序排列；每条消息有 role 和 content。"
+    },
+    {
+      "name": "role",
+      "note": "消息的角色：system 是规则，user 是问题，assistant 是模型的回答。"
+    },
+    {
+      "name": "choices",
+      "note": "响应里的候选回答列表，通常只有一个；回答在 choices[0].message.content。"
+    },
+    {
+      "name": "finish_reason",
+      "note": "响应里说明输出为何停下：stop 是写完了，length 是到了 max_tokens。"
+    },
+    {
+      "name": "max_tokens",
+      "note": "请求参数：输出最多写多少 Token。先推理的模型，推理也算在内。"
+    },
+    {
+      "name": "completion_tokens",
+      "note": "用量里模型写出的 Token 数，包含推理用掉的部分。"
+    },
+    {
+      "name": "reasoning_content",
+      "note": "有的模型在回答前写的推理内容。它不是回答，但占输出上限。"
+    },
+    {
+      "name": "send_bailian",
+      "note": "后端发送百炼请求的函数；密钥在这里才放进 Authorization 请求头。"
+    }
+  ]
+}

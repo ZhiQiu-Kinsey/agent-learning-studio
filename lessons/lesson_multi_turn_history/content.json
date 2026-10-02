@@ -1,0 +1,704 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "multi-turn-history",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "context"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "MODEL CALLS / MULTI-TURN",
+          "headline": "模型不记得上一轮，",
+          "highlight": "是程序把历史再发一遍。",
+          "takeaway": "每次请求都是独立的。多轮对话靠程序把之前的消息放回 messages；历史越长，每次请求越大。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-stateless",
+              "label": "01 / STATELESS",
+              "title": "一次一清",
+              "description": "模型调用之间不保存任何东西。上一次请求里说过的话，这一次请求里没有，模型就不知道。",
+              "token": "request × 2"
+            },
+            {
+              "id": "02-history",
+              "label": "02 / HISTORY",
+              "title": "历史在程序这边",
+              "description": "消息历史（Message History）是程序手里的一个列表：每轮追加问题和回答，下一次请求再整段发出去。",
+              "token": "history.append"
+            },
+            {
+              "id": "03-context",
+              "label": "03 / CONTEXT",
+              "title": "模型能看到的全部",
+              "description": "上下文（Context）就是这一次请求里的全部内容。不在 messages 里的，模型看不到。",
+              "token": "messages"
+            },
+            {
+              "id": "04-cost",
+              "label": "04 / COST",
+              "title": "越聊越大",
+              "description": "每轮都重发整段历史，请求一轮比一轮大。usage 里的 prompt_tokens 记着每次的大小。",
+              "token": "prompt_tokens"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "模型不会自己记住上一轮",
+          "paragraphs": [
+            "{{lesson:chat-request}}只发了一次请求。本课连问两次：第一轮告诉模型“我养了一只猫，名字叫团子”，第二轮问“我的猫叫什么名字？”。如果第二次请求里只有第二个问题，模型无从知道团子，因为上一轮的请求和回答，本课用的这种接口不会替你留着。",
+            "这就是模型调用之间不保存状态。网页上的聊天应用看起来记得你说过的话，是因为它在背后把之前的消息又发了一遍。本课不调用工具，只把这件事摊开给你看。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "消息历史放在程序这边",
+          "paragraphs": [
+            "本课的 run 用一个 Python 列表 history 保存消息历史。每轮先把这一轮的 user 问题追加进去，再发请求；收到回答后，把它作为 role 为 assistant 的消息也追加进去。这样到下一轮，history 里就有了上一轮的问与答。",
+            "拿第二轮来说：练习“带历史追问”发出四条消息，依次是 system、第一轮 user、第一轮 assistant、第二轮 user。练习“不带历史追问”只发两条：system 和第二轮 user。两组的第一轮完全相同，差别只在第二轮发什么。"
+          ]
+        },
+        {
+          "id": "predict-request-count",
+          "type": "predict",
+          "prompt": "先跑一次。在实验“带历史与不带历史”里运行“不带历史追问”之前先猜：这次运行会发出几次模型请求（request 事件）？",
+          "experiment": "history-or-not",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-which-message",
+          "type": "micro-quiz",
+          "question": {
+            "id": "which-message",
+            "prompt": "第二轮带历史的请求里，哪条消息让模型知道猫叫团子？",
+            "options": [
+              {
+                "id": "a",
+                "text": "第一轮的 user 消息",
+                "feedback": "对。名字是你在第一轮 user 消息里说的，程序把这条消息原样重发了。"
+              },
+              {
+                "id": "b",
+                "text": "模型自己记住了上一轮",
+                "feedback": "不对。模型调用之间不保存状态；这条消息不在请求里，模型就看不到。"
+              },
+              {
+                "id": "c",
+                "text": "system 消息",
+                "feedback": "不对。system 只写了回答规则，里面没有猫的名字。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "模型能用的事实，必须在这一次请求的 messages 里。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "上下文：这一次请求里的全部内容",
+          "paragraphs": [
+            "上下文就是模型在这一次请求里能看到的全部内容。对本课来说，就是 messages 里的那几条消息。不在 messages 里的，模型看不到；在里面的，不管是哪一轮说的，它都能用。",
+            "所以“记住”其实是程序的选择：这次请求放哪几条消息。本课的 latest_only 模式只放 system 和这一轮的问题。后面的课还会裁剪、摘要或挑选历史，做的都是同一件事：决定这一次请求带什么。"
+          ]
+        },
+        {
+          "id": "compare-second-turn",
+          "type": "compare",
+          "title": "第二轮的两种请求",
+          "columns": [
+            "第二轮请求",
+            "带历史追问",
+            "不带历史追问"
+          ],
+          "rows": [
+            [
+              "发出的消息",
+              "system、第一轮 user、第一轮 assistant、第二轮 user",
+              "system、第二轮 user"
+            ],
+            [
+              "请求里有没有“团子”",
+              "有，在第一轮 user 消息里",
+              "没有"
+            ],
+            [
+              "回答猫的名字时，依据在哪",
+              "在这次请求里",
+              "请求里没有依据，模型只能说不知道或者猜"
+            ]
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "历史越长，每次请求越大",
+          "paragraphs": [
+            "带着整段历史，第三轮要发六条消息：system、三条 user、两条 assistant。每多一轮，请求就多两条。usage 里的 prompt_tokens 记的是这一次请求全部消息的提示 Token，所以它会一轮比一轮大。",
+            "每次请求都按整段历史计费，聊得越久，每一轮越贵。练习“三轮对话”的实验报告列出每轮的 prompt_tokens：对照相邻两轮的差值，看它是不是接近上一轮那一问一答的大小。具体涨多少，以你的运行为准。",
+            "本课只把回答的 content 放回历史。如果模型先推理再回答，推理内容不会放回去，所以 completion_tokens 可能很大，下一轮的 prompt_tokens 却只多出那一句回答。"
+          ]
+        },
+        {
+          "id": "mq-growth",
+          "type": "micro-quiz",
+          "question": {
+            "id": "why-growth",
+            "prompt": "三轮对话里，第三轮的 prompt_tokens 比第一轮多，主要因为什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "第三轮请求里带着前两轮的问与答",
+                "feedback": "对。提示 Token 按这次发出的全部消息计算，历史越长就越多。"
+              },
+              {
+                "id": "b",
+                "text": "模型在第三轮想得更多",
+                "feedback": "不对。模型写出的内容算在 completion_tokens 里，prompt_tokens 只算发出去的消息。"
+              },
+              {
+                "id": "c",
+                "text": "服务商按轮数加价",
+                "feedback": "不对。服务商不知道这是第几轮，它只按这一次请求的内容计算。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "每次请求都是独立计算的；历史是程序每轮重新发出去的。"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "chat-request"
+        },
+        {
+          "id": "code-turns",
+          "type": "annotated-source",
+          "path": "lessons/lesson_multi_turn_history/runtime.py",
+          "start": 8,
+          "end": 21,
+          "notes": [
+            {
+              "id": "n9",
+              "line": 9,
+              "anchor": "# 第一轮说出一个事实",
+              "text": "三轮的问题写死在这里。第二、三轮都要靠第一轮的事实才能回答，带不带历史的差别才看得出来。"
+            },
+            {
+              "id": "n15",
+              "line": 15,
+              "anchor": "FACT = \"团子\"",
+              "text": "实验报告用这个词检查第二轮实际发出的消息里有没有第一轮的事实。"
+            },
+            {
+              "id": "n20",
+              "line": 20,
+              "anchor": "history: Literal[\"full\", \"latest_only\"] = \"full\"",
+              "text": "两种模式只差一处：每轮发整段历史，还是只发 system 和这一轮的问题。"
+            },
+            {
+              "id": "n21",
+              "line": 21,
+              "anchor": "turns: int = Field(default=2, ge=2, le=3)",
+              "text": "最多三轮。lesson.json 的 max_rounds 也是 3，多发一次请求就会被平台拦下。"
+            }
+          ]
+        },
+        {
+          "id": "code-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_multi_turn_history/runtime.py",
+          "start": 34,
+          "end": 50,
+          "notes": [
+            {
+              "id": "n37",
+              "line": 37,
+              "anchor": "history = [{\"role\": \"system\", \"content\": SYSTEM}]",
+              "text": "消息历史就是这个普通的 Python 列表。运行结束它就没了，下一次运行从头开始。"
+            },
+            {
+              "id": "n39",
+              "line": 39,
+              "anchor": "for number, question in enumerate(TURNS[:values.turns], start=1):",
+              "text": "每一轮发一次请求。number 作为 round_number 传给平台，时间线按它分轮显示。"
+            },
+            {
+              "id": "n41",
+              "line": 41,
+              "anchor": "history.append({\"role\": \"user\", \"content\": question})",
+              "text": "第一处追加：这一轮的问题。"
+            },
+            {
+              "id": "n43",
+              "line": 43,
+              "anchor": "messages = history if values.history == \"full\" else",
+              "text": "这一行决定模型这次能看到什么。latest_only 模式只取第一条 system 和最后一条 user。"
+            },
+            {
+              "id": "n44",
+              "line": 44,
+              "anchor": "response = context.complete({\"messages\": messages}, round_number=number)",
+              "text": "context.complete 先复制一份请求体再记录，之后再往 history 里追加，不会改动已经记下的 request 事件。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "history.append({\"role\": \"assistant\", \"content\": answer})",
+              "text": "第二处追加：模型的回答。latest_only 模式也照样追加，只是下一轮不发出去。"
+            },
+            {
+              "id": "n50",
+              "line": 50,
+              "anchor": "return answer",
+              "text": "最后一轮的回答作为这次运行的最终回答。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-record",
+              "start": 46,
+              "end": 46,
+              "label": "平台：记下这一轮实际发出的消息和响应，给实验报告用"
+            },
+            {
+              "id": "fold-report",
+              "start": 49,
+              "end": 49,
+              "label": "平台：发布实验报告（_report）"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "历史放在程序的列表里，每轮整段重发",
+          "chosen": "run 自己用 history 列表保存每轮的 user 问题和 assistant 回答，每次请求都把要发的消息完整放进 messages。模型这边不保存任何东西，发了什么都记在 request 事件里。",
+          "alternatives": [
+            {
+              "id": "provider-session",
+              "title": "交给服务商保存会话",
+              "why_not": "本课用的这种接口不保存会话。就算有的服务商提供会话功能，每次实际用了哪些历史也不再摆在请求里，没法逐条核对。"
+            },
+            {
+              "id": "latest-only",
+              "title": "只发最近一轮的问题",
+              "why_not": "省提示 Token，但模型看不到之前说过的事实。这正是“不带历史追问”那一组。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "history-or-not",
+          "title": "带历史与不带历史",
+          "hypothesis": "两组的第一轮完全相同。第二轮带着第一轮的问与答时，请求里有猫的名字，模型能据此回答；只发第二个问题时，请求里没有这个名字，模型无从回答。",
+          "predict": "predict-request-count",
+          "arms": [
+            {
+              "id": "with-history",
+              "exercise": "with-history",
+              "label": "带历史追问"
+            },
+            {
+              "id": "without-history",
+              "exercise": "without-history",
+              "label": "不带历史追问"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-request",
+              "text": "第 1 轮 request 的 messages：两组都是 system 和第一轮 user，完全相同。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "second-request",
+              "text": "第 2 轮 request 的 messages：带历史的一组有四条，不带历史的一组只有两条。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "second-answer",
+              "text": "第 2 轮 response 的回答：看它有没有说出猫的名字。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "checks",
+              "text": "实验报告的检查：第二轮请求里有没有第一轮的事实，回答有没有提到它。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这次运行发了两次请求。先看第一轮，两组在这里没有差别。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "first-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-request"
+            },
+            {
+              "action": "narrate",
+              "text": "猫的名字在第一轮的 user 消息里。"
+            },
+            {
+              "action": "seek",
+              "observe": "second-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "second-request"
+            },
+            {
+              "action": "narrate",
+              "text": "数一数第二轮发了几条消息，找一找里面有没有“团子”。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "second-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "second-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "模型只能根据这一次请求里的消息回答。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "checks"
+            },
+            {
+              "action": "highlight",
+              "observe": "checks"
+            },
+            {
+              "action": "narrate",
+              "text": "第一条检查看的是发出去的消息，第二条看的是回答。先有前者，才谈得上后者。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里第二轮实际发出了哪些消息，其中有没有第一轮的事实。",
+              "不带历史时，模型在第一轮已经“听过”这个名字，第二轮仍然拿不到它：上一次调用没有留下任何东西。"
+            ],
+            "does_not_prove": [
+              "带历史的一组答对，只说明依据在请求里，不保证模型每次都会用对它。",
+              "一次运行的回答措辞会变；同一个请求再发一次，回答也可能不同。"
+            ]
+          }
+        },
+        {
+          "id": "growing-history",
+          "title": "三轮对话的提示 Token",
+          "hypothesis": "带着整段历史连问三轮，每轮请求比上一轮多两条消息，prompt_tokens 一轮比一轮大。",
+          "arms": [
+            {
+              "id": "three-turns",
+              "exercise": "three-turns",
+              "label": "三轮对话"
+            }
+          ],
+          "observe": [
+            {
+              "id": "third-request",
+              "text": "第 3 轮 request 的 messages：六条消息，前两轮的问与答都在里面。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "third-usage",
+              "text": "第 3 轮 response 的 usage.prompt_tokens：这一次请求全部消息的提示 Token。",
+              "selector": {
+                "event": "response",
+                "round": 3,
+                "path": "data.body.usage.prompt_tokens"
+              }
+            },
+            {
+              "id": "per-turn",
+              "text": "实验报告的表格：每轮发出的消息数和 prompt_tokens，没有报告的写“未报告”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这次连问了三轮。先看最后一次请求有多长。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "third-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "third-request"
+            },
+            {
+              "action": "narrate",
+              "text": "第三轮的问题只有一句，但请求里带着前两轮的全部问答。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "third-usage"
+            },
+            {
+              "action": "highlight",
+              "observe": "third-usage"
+            },
+            {
+              "action": "narrate",
+              "text": "服务商按这一次请求的全部消息计算提示 Token。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "per-turn"
+            },
+            {
+              "action": "highlight",
+              "observe": "per-turn"
+            },
+            {
+              "action": "narrate",
+              "text": "从上往下看提示 Token 那一列，再算一算相邻两轮差了多少。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行每轮实际发出的消息数，以及服务商报告的每轮提示 Token。",
+              "提示 Token 的增长来自重发的历史：每轮请求都包含之前全部的问与答。"
+            ],
+            "does_not_prove": [
+              "具体每轮涨多少取决于回答的长短和服务商的分词器，换个模型数字会不同。",
+              "三轮的数字说明不了几十轮之后会怎样；历史太长时要裁剪或摘要，那是后面课程的内容。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "history",
+          "label": "每轮发什么",
+          "help": "整段历史：每轮发出之前的全部消息。只发本轮问题：每轮只发 system 和这一轮的 user。",
+          "options": [
+            {
+              "value": "full",
+              "label": "整段历史"
+            },
+            {
+              "value": "latest_only",
+              "label": "只发本轮问题"
+            }
+          ]
+        },
+        {
+          "name": "turns",
+          "label": "轮数",
+          "help": "2 轮问名字，3 轮再问年龄。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "who-remembers",
+              "prompt": "多轮对话里，“记住上一轮说过什么”是谁做的？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "程序：把之前的消息放进下一次请求",
+                  "feedback": "对。程序保存消息历史，每轮把要发的消息放进 messages。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型：它会记住同一个用户说过的话",
+                  "feedback": "不对。模型调用之间不保存状态，不带历史的一组就是证据。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务商：它按 API Key 保存会话",
+                  "feedback": "不对。本课用的这种接口不保存会话，每次请求只按它自己的内容处理。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "“记住”是程序决定这次请求带哪些消息。"
+            },
+            {
+              "id": "assistant-back",
+              "prompt": "如果程序只把每轮的 user 问题放回 history，不放 assistant 回答，会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "下一轮模型看不到自己上一轮说了什么",
+                  "feedback": "对。回答不在请求里，模型就不知道自己答过什么。"
+                },
+                {
+                  "id": "b",
+                  "text": "没有影响，模型会自己补上上一轮的回答",
+                  "feedback": "不对。模型只看这次请求里的消息，不会补上没发的内容。"
+                },
+                {
+                  "id": "c",
+                  "text": "请求会报错，因为缺了 assistant 消息",
+                  "feedback": "不对。连续几条 user 消息也是合法请求，只是少了模型自己的回答。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "问和答都要放回去，下一轮的上下文才完整。"
+            },
+            {
+              "id": "context-means",
+              "prompt": "本课里，模型在第二轮请求中的上下文是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "第二轮请求的 messages 里的全部消息",
+                  "feedback": "对。上下文就是这一次请求里的全部内容。"
+                },
+                {
+                  "id": "b",
+                  "text": "这次运行发过的所有请求",
+                  "feedback": "不对。第一轮的请求已经结束，只有被重新放进第二轮 messages 的内容，模型才看得到。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型训练时见过的全部文本",
+                  "feedback": "不对。训练数据影响模型怎么回答，但你这次说的猫的名字只能从请求里来。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "每次请求的上下文都由程序重新组装。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“三轮对话”，找出模型第一次能看到第二轮回答的那次请求。",
+          "target": {
+            "event": "request",
+            "round": 3,
+            "path": "data.body.messages[4].content"
+          },
+          "explanation": "是第 3 轮 request：messages[4] 是第二轮的 assistant 回答，程序在第二轮结束后把它追加进 history，第三轮才发出去。第二轮的 request 里还没有它。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我对照了两组第二轮的 messages，能说出多出来的两条从哪里来。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在 run 里找到了两处 history.append，能说出各追加了什么。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在三轮对话的实验报告里算过相邻两轮 prompt_tokens 的差值。"
+            },
+            {
+              "id": "item-4",
+              "text": "我把轮数改成 3、每轮发什么改成“只发本轮问题”又跑了一次，看第三轮模型能不能说出猫几岁。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "history",
+      "note": "run 里的 Python 列表，保存到目前为止的全部消息；运行结束就没了。"
+    },
+    {
+      "name": "latest_only",
+      "note": "只发 system 和这一轮问题的模式，用来对照不带历史会怎样。"
+    },
+    {
+      "name": "prompt_tokens",
+      "note": "用量里这一次请求全部消息的提示 Token。"
+    },
+    {
+      "name": "round_number",
+      "note": "context.complete 的参数，标记这是第几轮；时间线按它分组。"
+    }
+  ]
+}

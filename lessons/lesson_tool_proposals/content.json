@@ -1,0 +1,672 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "tool-proposals",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "TOOL CALLING / PROPOSALS",
+          "headline": "模型只提出调用，",
+          "highlight": "执行是程序的事。",
+          "takeaway": "把工具定义随请求发给模型，看它选哪个工具、填什么参数。本课只看提议，不执行任何工具。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-define",
+              "label": "01 / DEFINE",
+              "title": "工具定义",
+              "description": "工具描述（Tool Description）写在每条工具定义里，说明工具做什么、什么时候该用。整条定义随请求的 tools 字段发给模型。",
+              "token": "tools"
+            },
+            {
+              "id": "02-schema",
+              "label": "02 / SCHEMA",
+              "title": "参数的形状",
+              "description": "参数用 JSON Schema 描述：有哪些字段、什么类型、哪些必填。模型照着它写参数。",
+              "token": "parameters"
+            },
+            {
+              "id": "03-propose",
+              "label": "03 / PROPOSE",
+              "title": "提出，不执行",
+              "description": "模型在响应的 tool_calls 里写下工具名和参数，这是工具调用（Tool Calling）的前一半：调用提议。执行要等程序来做。",
+              "token": "tool_calls"
+            },
+            {
+              "id": "04-no-tool",
+              "label": "04 / NO TOOL",
+              "title": "用不着就不调",
+              "description": "问题用不着工具时，模型直接回答：finish_reason 是 stop，没有 tool_calls。",
+              "token": "finish_reason"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "请求里多了 tools",
+          "paragraphs": [
+            "{{lesson:chat-request}}的请求只有 messages。本课多了两个字段：tools 是工具定义的列表；tool_choice 设为 auto，表示让模型自己决定用不用工具。这里的 TOOLS 来自{{lesson:tool-selection}}的 tools.py，一共两个工具：add_numbers 计算两数之和，get_current_time 读运行 Python 的机器的本地时间。",
+            "模型看到的只有这几段文字，看不到 Python 函数。add_numbers 的工具描述是“把两个数字相加。需要计算两个数的和时调用。”，既说了做什么，也说了什么时候该用。模型就是读这些说明来挑工具的。",
+            "工具定义也是请求的一部分，同样算进 prompt_tokens。把本课 response 里的提示 Token 和{{lesson:chat-request}}的比一比，就知道这两条定义让每次请求大了多少。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "JSON Schema 描述参数",
+          "paragraphs": [
+            "每条工具定义的 parameters 是一段 JSON Schema。add_numbers 是这样写的：type 为 object；properties 里有 a、b 两个字段，类型都是 number；required 写明两个都必填；additionalProperties 为 false，表示不许多传字段。",
+            "get_current_time 不需要参数，所以 properties 是空对象。JSON Schema 只是写给模型看的约定，模型照样可能写错。真正检查参数，要等程序执行之前再做。"
+          ]
+        },
+        {
+          "id": "predict-tool-results",
+          "type": "predict",
+          "prompt": "先跑一次。在实验“加法、查时间与闲聊”里运行“问加法”之前先猜：这次运行会出现几个 tool_result 事件？",
+          "experiment": "three-questions",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_result"
+          }
+        },
+        {
+          "id": "mq-what-model-sees",
+          "type": "micro-quiz",
+          "question": {
+            "id": "what-model-sees",
+            "prompt": "关于 add_numbers，模型在请求里能看到什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "名称、工具描述和参数的 JSON Schema",
+                "feedback": "对。tools 里是工具定义，模型据此决定要不要提出调用。"
+              },
+              {
+                "id": "b",
+                "text": "add_numbers 的 Python 源代码",
+                "feedback": "不对。函数实现留在本机，请求里没有源代码。"
+              },
+              {
+                "id": "c",
+                "text": "上一次运行时 add_numbers 算出的结果",
+                "feedback": "不对。模型调用之间不保存状态，请求里也没有任何执行结果。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "模型看到的是工具定义，Python 持有实现，两边只靠工具名对应。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "调用提议：tool_calls 里写了什么",
+          "paragraphs": [
+            "模型决定用工具时，响应的 message 里会有 tool_calls 列表，content 往往是空的，也可能带一句说明。tool_calls 的每一项有 id、type 和 function：function.name 是工具名，function.arguments 是参数。这时 finish_reason 是 tool_calls。",
+            "注意 arguments 是一段 JSON 字符串，比如 {\"a\": 19, \"b\": 23} 这样一段文字，不是已经解析好的对象。本课的 read_proposals 用 json.loads 试着解析它，只为在实验报告里标出它是不是合法的 JSON 对象，解析结果不拿去调用任何函数。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "提议不等于执行",
+          "paragraphs": [
+            "tool_calls 只是模型写下的调用提议，像一张填好的申请单。本课到这里就停：没有登记任何可执行的函数，也不发第二次请求，所以事件里只有一对 request 和 response，没有 tool_call，也没有 tool_result。",
+            "模型提的工具名可能不存在，参数可能写错，它还可能在同一个响应里提出两个调用。这些提议要怎样执行、执行完怎样交回模型，留给{{lesson:tool-selection}}。"
+          ]
+        },
+        {
+          "id": "mq-proposal-only",
+          "type": "micro-quiz",
+          "question": {
+            "id": "proposal-only",
+            "prompt": "响应里出现 add_numbers，参数是 19 和 23。此时能确定什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "模型提出了一次调用；还没有任何东西被执行",
+                "feedback": "对。tool_calls 只是提议，本课也没有执行它。"
+              },
+              {
+                "id": "b",
+                "text": "Python 已经算出了 42",
+                "feedback": "不对。本课没有执行工具，事件里没有 tool_result。"
+              },
+              {
+                "id": "c",
+                "text": "服务商替你执行了加法",
+                "feedback": "不对。服务商只返回模型写的内容，不会运行你的 Python 函数。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "提出调用的是模型，执行调用的只能是程序。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "用不着工具时，直接回答",
+          "paragraphs": [
+            "闲聊问题用不着加法，也用不着时间。模型这时直接回答：message.content 是回答，没有 tool_calls，finish_reason 是 stop。tools 照样在请求里，只是这次没被选中。",
+            "选不选工具、选哪个，依据只有问题和工具描述。描述写得含糊，模型就可能选错或者不选。这一点{{lesson:prompt-experiments}}会用对照实验来检验。"
+          ]
+        },
+        {
+          "id": "mq-chat",
+          "type": "micro-quiz",
+          "question": {
+            "id": "chat-no-calls",
+            "prompt": "闲聊问题的响应里没有 tool_calls，说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "模型判断这个问题用不着工具，直接回答了",
+                "feedback": "对。finish_reason 是 stop，回答在 content 里。"
+              },
+              {
+                "id": "b",
+                "text": "这次请求里没有发 tools",
+                "feedback": "不对。三个练习的请求都带着同样的 tools。"
+              },
+              {
+                "id": "c",
+                "text": "工具执行失败了",
+                "feedback": "不对。本课不执行工具，也就谈不上失败。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "tools 只是可选项，用不用由模型在这一次回答里决定。"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "chat-request"
+        },
+        {
+          "id": "code-tool-schema",
+          "type": "annotated-source",
+          "path": "lessons/lesson_01_tool_selection/tools.py",
+          "start": 7,
+          "end": 41,
+          "notes": [
+            {
+              "id": "n7",
+              "line": 7,
+              "anchor": "TOOLS = [",
+              "text": "TOOLS 原样放进请求体的 tools 字段。列表里有几条定义，模型就有几个工具可选。"
+            },
+            {
+              "id": "n9",
+              "line": 9,
+              "anchor": "\"type\": \"function\",",
+              "text": "目前工具类型只有 function 一种，真正的内容在下面的 function 对象里。"
+            },
+            {
+              "id": "n11",
+              "line": 11,
+              "anchor": "\"name\": \"add_numbers\",",
+              "text": "工具名。模型提出调用时写的就是这个名字，程序以后也靠它找到对应的函数。"
+            },
+            {
+              "id": "n12",
+              "line": 12,
+              "anchor": "\"description\": \"把两个数字相加。需要计算两个数的和时调用。\",",
+              "text": "工具描述写“什么时候该调用”，不只是“它做什么”。模型挑工具时只能读到这一句和参数说明。"
+            },
+            {
+              "id": "n13",
+              "line": 13,
+              "anchor": "\"parameters\": {",
+              "text": "从这里开始是参数的 JSON Schema。"
+            },
+            {
+              "id": "n16",
+              "line": 16,
+              "anchor": "\"a\": {\"type\": \"number\", \"description\": \"第一个数字\"},",
+              "text": "每个参数也有自己的类型和描述。number 表示整数和小数都可以。"
+            },
+            {
+              "id": "n19",
+              "line": 19,
+              "anchor": "\"required\": [\"a\", \"b\"],",
+              "text": "两个参数都必填。模型漏写时，提议里就缺这个字段，要等执行前才会被发现。"
+            },
+            {
+              "id": "n20",
+              "line": 20,
+              "anchor": "\"additionalProperties\": False,",
+              "text": "不许多传字段。这只是告诉模型的约定，模型多传了，Python 端仍要自己拦住。"
+            },
+            {
+              "id": "n27",
+              "line": 27,
+              "anchor": "\"name\": \"get_current_time\",",
+              "text": "第二个工具。本课只看模型会不会选中它，不会真的去读时间。"
+            },
+            {
+              "id": "n30",
+              "line": 30,
+              "anchor": "\"返回 local_datetime、timezone、hour、minute 字段。\"",
+              "text": "描述里写明返回哪些字段。模型在提出调用前就知道结果长什么样，{{lesson:dependent-calls}}会用到 hour 和 minute。"
+            },
+            {
+              "id": "n35",
+              "line": 35,
+              "anchor": "\"properties\": {},",
+              "text": "没有参数就写空对象。模型提出调用时，arguments 通常是 {}。"
+            }
+          ]
+        },
+        {
+          "id": "code-proposals",
+          "type": "annotated-source",
+          "path": "lessons/lesson_tool_proposals/runtime.py",
+          "start": 14,
+          "end": 47,
+          "notes": [
+            {
+              "id": "n14",
+              "line": 14,
+              "anchor": "def read_proposals(message: dict) -> list[dict]:",
+              "text": "只读不执行：这个函数里没有任何能调用工具的东西。"
+            },
+            {
+              "id": "n17",
+              "line": 17,
+              "anchor": "for call in message.get(\"tool_calls\") or []:",
+              "text": "没有 tool_calls 时得到空列表，闲聊组就是这样。"
+            },
+            {
+              "id": "n19",
+              "line": 19,
+              "anchor": "arguments = function.get(\"arguments\")",
+              "text": "arguments 原样保留成字符串，实验报告里显示的就是模型写的那段文字。"
+            },
+            {
+              "id": "n22",
+              "line": 22,
+              "anchor": "valid = isinstance(json.loads(arguments or \"{}\"), dict)",
+              "text": "只看能不能解析成 JSON 对象。写错了就标为 false，不替模型修。"
+            },
+            {
+              "id": "n33",
+              "line": 33,
+              "anchor": "body = {\"messages\": [{\"role\": \"system\", \"content\": SYSTEM_PROMPT}",
+              "text": "messages 的写法和不带工具时一样，系统提示词里写了什么问题用哪个工具。"
+            },
+            {
+              "id": "n34",
+              "line": 34,
+              "anchor": "\"tools\": TOOLS, \"tool_choice\": \"auto\"}",
+              "text": "新增的两个字段：工具定义，以及让模型自己决定用不用工具。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "anchor": "response = context.complete(body)",
+              "text": "整课只有这一次请求。lesson.json 的 max_rounds 是 1，不会有第二轮。"
+            },
+            {
+              "id": "n42",
+              "line": 42,
+              "anchor": "proposals = read_proposals(message)",
+              "text": "拿到的只是提议列表。后面没有执行，也没有把任何结果交回模型。"
+            },
+            {
+              "id": "n44",
+              "line": 44,
+              "anchor": "if not proposals:",
+              "text": "没有提议，就把模型的 content 当作回答。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "anchor": "return f\"模型提出了 {len(proposals)} 个调用：\"",
+              "text": "有提议时，最终回答如实写出提了什么，并说明本课没有执行。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-report",
+              "start": 43,
+              "end": 43,
+              "label": "平台：发布实验报告（_report）"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "只记录提议，原样展示，不执行也不修正",
+          "chosen": "run 只发一次请求，read_proposals 把 tool_calls 的每一项原样列出，只标出 arguments 能不能解析成 JSON 对象。没有登记可执行的函数，事件里不会出现 tool_call 和 tool_result。",
+          "alternatives": [
+            {
+              "id": "execute-now",
+              "title": "收到提议就直接执行",
+              "why_not": "执行要先查名字、解析和检查参数，再把结果交回模型，这是另一件事。本课先看清模型交出了什么。"
+            },
+            {
+              "id": "repair-arguments",
+              "title": "把写错的 arguments 修好再展示",
+              "why_not": "修正会掩盖模型写错的地方。表格原样显示字符串，只标出能不能解析。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "three-questions",
+          "title": "加法、查时间与闲聊",
+          "hypothesis": "三组的 system 和 tools 完全相同，只换用户问题。问加法时模型提出 add_numbers，问时间时提出 get_current_time，闲聊时不提出调用、直接回答；三组都没有任何工具被执行。",
+          "predict": "predict-tool-results",
+          "arms": [
+            {
+              "id": "sum",
+              "exercise": "sum",
+              "label": "问加法"
+            },
+            {
+              "id": "time",
+              "exercise": "time",
+              "label": "问时间"
+            },
+            {
+              "id": "chat",
+              "exercise": "chat",
+              "label": "闲聊"
+            }
+          ],
+          "observe": [
+            {
+              "id": "tools-sent",
+              "text": "request 的 tools：三组都带着同样的两条工具定义。",
+              "selector": {
+                "event": "request",
+                "path": "data.body.tools"
+              }
+            },
+            {
+              "id": "proposal",
+              "text": "response 里第一个调用提议的 function：工具名和 JSON 字符串参数。闲聊组没有这一项。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].message.tool_calls[0].function"
+              }
+            },
+            {
+              "id": "finish",
+              "text": "response 的 finish_reason：提出调用时是 tool_calls，直接回答时是 stop。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].finish_reason"
+              }
+            },
+            {
+              "id": "content",
+              "text": "response 的 message.content：闲聊组的回答在这里；提出调用时它通常是空的。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "proposal-table",
+              "text": "实验报告的表格：每个调用提议一行，标出 arguments 能不能解析成 JSON 对象。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这次运行只有一次请求。先看请求里多出来的 tools。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "tools-sent"
+            },
+            {
+              "action": "highlight",
+              "observe": "tools-sent"
+            },
+            {
+              "action": "narrate",
+              "text": "这里只有名称、描述和参数 Schema，没有 Python 代码。换另一组再跑，这一段不会变。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "proposal"
+            },
+            {
+              "action": "highlight",
+              "observe": "proposal"
+            },
+            {
+              "action": "narrate",
+              "text": "看 name 选了哪个工具，arguments 是一段待解析的 JSON 字符串。"
+            },
+            {
+              "action": "seek",
+              "observe": "finish"
+            },
+            {
+              "action": "highlight",
+              "observe": "finish"
+            },
+            {
+              "action": "narrate",
+              "text": "结束原因告诉你这一轮是提出了调用，还是直接回答。"
+            },
+            {
+              "action": "seek",
+              "observe": "content"
+            },
+            {
+              "action": "highlight",
+              "observe": "content"
+            },
+            {
+              "action": "narrate",
+              "text": "闲聊组的回答在这里。提出调用的两组，这里通常是空的。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "proposal-table"
+            },
+            {
+              "action": "highlight",
+              "observe": "proposal-table"
+            },
+            {
+              "action": "narrate",
+              "text": "时间线上到这里就结束了：没有 tool_call，没有 tool_result，提议没有被执行。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里模型针对这个问题提出了哪个工具、写了什么参数，或者选择直接回答。",
+              "三组的 tools 相同，选择上的差别只能来自用户问题，或者采样本身的波动。",
+              "本课运行的事件里没有 tool_call 和 tool_result，没有任何工具被执行。"
+            ],
+            "does_not_prove": [
+              "一次运行只是一条样本，不能证明模型对类似的问题每次都会选对工具。",
+              "参数能解析成 JSON 对象，不代表它符合 JSON Schema，更不代表执行会成功。",
+              "离线测试模式下的提议来自固定脚本，不代表真实模型的选择。"
+            ]
+          }
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "tools-purpose",
+              "prompt": "tools 字段里的工具定义，模型拿它做什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "读名称和工具描述决定用不用、用哪个，照 JSON Schema 写参数",
+                  "feedback": "对。工具定义是写给模型看的说明。"
+                },
+                {
+                  "id": "b",
+                  "text": "直接运行其中的函数",
+                  "feedback": "不对。工具定义里没有函数，只有名称、描述和参数说明。"
+                },
+                {
+                  "id": "c",
+                  "text": "什么也不做，tools 只给程序自己看",
+                  "feedback": "不对。tools 随请求发给模型，模型正是靠它选工具。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "模型读工具定义来决定调用提议；执行与否由程序决定。"
+            },
+            {
+              "id": "arguments-type",
+              "prompt": "调用提议里 arguments 的值是 {\"a\": 19, \"b\": 23}。它是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "一段 JSON 字符串，用之前要先解析",
+                  "feedback": "对。程序要先 json.loads，而且它可能根本不是合法 JSON。"
+                },
+                {
+                  "id": "b",
+                  "text": "已经解析好的对象，可以直接当参数用",
+                  "feedback": "不对。它是字符串；不解析就用，类型对不上。"
+                },
+                {
+                  "id": "c",
+                  "text": "一段调用函数的 Python 代码",
+                  "feedback": "不对。它只是参数，工具名在 function.name 里。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "工具名和参数分开放；参数是模型写出的 JSON 文本。"
+            },
+            {
+              "id": "no-result",
+              "prompt": "运行“问加法”后，事件里为什么没有 tool_result？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "本课只记录提议，没有执行任何工具",
+                  "feedback": "对。本课没有登记可执行的函数，也不发第二次请求。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型没有提出调用",
+                  "feedback": "不对。看 response 里的 tool_calls，模型提出了 add_numbers。"
+                },
+                {
+                  "id": "c",
+                  "text": "工具执行失败，结果被丢掉了",
+                  "feedback": "不对。本课根本没有执行这一步，谈不上失败。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "提议和执行是两件事，本课只做前一件。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“问加法”，找出模型写下的参数。",
+          "target": {
+            "event": "response",
+            "path": "data.body.choices[0].message.tool_calls[0].function.arguments"
+          },
+          "explanation": "在 response 事件的 choices[0].message.tool_calls[0].function.arguments。它是一段 JSON 字符串，写着 a 和 b。之后再没有事件去执行它。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在 request 的 tools 里找到了 add_numbers 的工具描述和参数 JSON Schema。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在 response 里找到了 tool_calls、工具名、JSON 字符串参数和 finish_reason。"
+            },
+            {
+              "id": "item-3",
+              "text": "我确认三次运行的事件里都没有 tool_call 和 tool_result。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在用户消息里换了一个问题（比如“3.5 加 4.25 是多少”）又跑了一次，看模型怎样写参数。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "tools",
+      "note": "请求体里的工具定义列表，来自 tools.py 的 TOOLS；只有名称、描述和参数 Schema。"
+    },
+    {
+      "name": "tool_choice",
+      "note": "请求参数；auto 表示让模型自己决定用不用工具。"
+    },
+    {
+      "name": "tool_calls",
+      "note": "响应 message 里的调用提议列表，每项有 id、工具名和 JSON 字符串参数。"
+    },
+    {
+      "name": "arguments",
+      "note": "调用提议里的参数：一段 JSON 字符串，不是解析好的对象。"
+    },
+    {
+      "name": "parameters",
+      "note": "工具定义里描述参数的 JSON Schema。"
+    },
+    {
+      "name": "additionalProperties",
+      "note": "JSON Schema 关键字；false 表示不许出现 properties 以外的字段。"
+    }
+  ]
+}

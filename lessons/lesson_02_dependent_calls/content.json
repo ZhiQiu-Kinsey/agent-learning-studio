@@ -50,7 +50,8 @@
           "type": "prose",
           "title": "先看数据依赖，再安排步骤",
           "paragraphs": [
-            "“把现在的小时和分钟相加”看起来只有一句话，却需要两个能力：读取时间和计算加法。加法的 a、b 不在用户输入里，而在 get_current_time 返回的 hour、minute 中。因此先获取时间，才能确定下一次调用的参数。\n这与“计算 19 加 23，并查时间”不同：后者的数字一开始就已知。判断能否同轮提出多个调用，要看后一步输入是否依赖前一步实际输出，而不是看工具名是不是不同。"
+            "“把现在的小时和分钟相加”看起来只有一句话，却需要两个能力：读取时间和计算加法。加法的 a、b 不在用户输入里，而在 get_current_time 返回的 hour、minute 中。所以要先拿到时间，才能确定下一次调用的参数。",
+            "这与“计算 19 加 23，并告诉我现在几点”不同：后者的数字一开始就在问题里。判断能否在同一轮提出多个调用，要看后一步的输入是否依赖前一步的实际输出，而不是看工具名是不是不同。"
           ]
         },
         {
@@ -67,6 +68,16 @@
           "title": "示意：先查时间，再用结果做加法",
           "illustration": "dependent-chain",
           "caption": "教学示意 · 非运行记录。调用 id 与数值都是示例；你自己的运行请到实验中查看。"
+        },
+        {
+          "id": "predict-request-count",
+          "type": "predict",
+          "prompt": "先跑一次。在实验“上一步的结果，决定下一步的参数”里运行“小时与分钟相加”之前先猜：这次运行会发出几次模型请求（request 事件）？",
+          "experiment": "chain-dependency",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
         },
         {
           "id": "mq-same-response",
@@ -100,7 +111,8 @@
           "type": "prose",
           "title": "检验参数来源，而不只看最终数字",
           "paragraphs": [
-            "假设时间工具返回 hour=11、minute=33，下一次加法应传 a=11、b=33，结果才是 44。只看到最终的 44 仍不够：模型可能猜对，也可能使用了旧时间。沿轨迹逐步核对输入来源，才能解释这次答案为什么可信。\n典型成功的轨迹包含“查时间 → 加法 → 回答”三次模型响应，中间两个工具在本机执行。真实模型可能走不同轨迹，应核对实际事件与参数来源。每次请求重新携带历史只是为本次任务提供上下文，不代表模型权重被更新，也不代表下一次运行还能看到这些结果。"
+            "假设时间工具返回 hour=11、minute=33，下一次加法应传 a=11、b=33，结果才是 44。只看到最终的 44 还不够：模型可能猜对，也可能用了旧时间。一次运行按顺序记下的请求、响应、调用和工具结果，叫作轨迹（Trace）。沿轨迹逐步核对输入来源，才能解释这次答案为什么可信。",
+            "典型成功的轨迹包含“查时间 → 加法 → 回答”三次模型响应，中间两个工具在本机执行。真实模型可能走不同的路，应核对实际事件与参数来源。每次请求重新携带历史只是为本次任务提供上下文，不代表模型权重被更新，也不代表下一次运行还能看到这些结果。"
           ]
         },
         {
@@ -128,6 +140,42 @@
             ],
             "correct": "a",
             "explanation": "可信度来自可追溯的数据传递：时间结果 → 加法参数 → 加法结果 → 回答。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "独立调用：同一轮提出，逐个执行",
+          "paragraphs": [
+            "“计算 19 加 23，并告诉我现在几点”也要用两个工具，但两件事互不依赖：19 和 23 一开始就在问题里，不用等时间结果。这时模型可以在同一个响应里一次提出两个调用，tool_calls 里有两项。练习“两个独立任务”问的就是这个问题。",
+            "同一轮提出不等于同时执行。run_agent 用 for 循环逐个执行：先执行第一个调用、记下它的工具结果，再执行第二个。两个结果各带自己的 tool_call_id，一起进入下一次请求。模型也可能分两轮提出，那同样是一次合法的运行，以你的轨迹为准。"
+          ]
+        },
+        {
+          "id": "mq-independent",
+          "type": "micro-quiz",
+          "question": {
+            "id": "independent-calls",
+            "prompt": "模型在同一个响应里提出了加法和查时间两个独立调用。对本课运行器最准确的描述是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "可以同轮提出；Python 按列表逐个执行，再回传各自的结果",
+                "feedback": "对。两个任务没有数据依赖，可以同轮提出；run_agent 用 for 循环逐个执行，再按 tool_call_id 回传各自的结果。"
+              },
+              {
+                "id": "b",
+                "text": "同轮提出就说明两个 Python 函数是同时执行的",
+                "feedback": "不对。同轮提出只说明模型一次给出了两个调用；本课的运行器是逐个执行的。"
+              },
+              {
+                "id": "c",
+                "text": "加法一定要等时间结果，所以必须分成两次模型调用",
+                "feedback": "不对。19 加 23 用不着时间结果，两者没有依赖，不必拆成两轮；有依赖时才必须分轮。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "能不能同轮提出看数据依赖；是否同时执行看运行器的实现，本课是逐个执行。"
           }
         },
         {
@@ -175,16 +223,6 @@
               "evidence": "确认最终答案依据实际加法结果，再与两个独立任务的调用安排作对比。"
             }
           ]
-        },
-        {
-          "id": "predict-request-count",
-          "type": "predict",
-          "prompt": "在实验中运行“小时与分钟相加：参数要从时间结果中取得”之前先猜：这次运行会发出几次模型请求（request 事件）？",
-          "experiment": "chain-dependency",
-          "rule": {
-            "kind": "count_events",
-            "event": "request"
-          }
         }
       ]
     },
@@ -198,12 +236,26 @@
           "id": "code-dependency-prompt",
           "type": "annotated-source",
           "path": "lessons/lesson_02_dependent_calls/main.py",
+          "start": 3,
+          "end": 17,
           "notes": [
             {
               "id": "n4",
               "line": 4,
               "anchor": "from lessons.lesson_01_tool_selection.tools impo",
-              "text": "直接复用{{lesson:tool-selection}}的 TOOLS 和 AVAILABLE_TOOLS。本课只改提示词，“本课新增”里工具定义显示为沿用，方便对照。"
+              "text": "直接复用{{lesson:tool-selection}}的 TOOLS 和 AVAILABLE_TOOLS。本课只改系统提示词，“本课新增”里工具定义显示为沿用，方便对照。"
+            },
+            {
+              "id": "n10",
+              "line": 10,
+              "anchor": "\"如果用户同时要求独立的计算和查时间，可以调用两个合适的工具。\"",
+              "text": "独立任务允许同一轮提出两个调用，这是“两个独立任务”那组要观察的情况。"
+            },
+            {
+              "id": "n11",
+              "line": 11,
+              "anchor": "\"时间工具返回的是运行本 Python 程序的机器本地时间和时区；\"",
+              "text": "说清时间来自哪台机器，免得模型把它说成用户所在地的时间。"
             },
             {
               "id": "n13",
@@ -215,7 +267,13 @@
               "id": "n15",
               "line": 15,
               "anchor": "\"不要并行调用这两个有依赖关系的工具，也不要猜测或编造参数。\"",
-              "text": "模型可以在同一轮一次提出多个调用。同一轮的参数在发出时就已确定，看不到彼此的结果，有依赖时只能靠猜，因此明确禁止。"
+              "text": "同一轮的参数在提出时就已写定，看不到彼此的结果；有依赖时同轮提出只能靠猜，所以明确禁止。"
+            },
+            {
+              "id": "n16",
+              "line": 16,
+              "anchor": "\"拿到工具结果后再回答。\"",
+              "text": "最后一句约束回答时机：没看到工具结果之前，不写最终回答。"
             }
           ]
         },
@@ -242,7 +300,7 @@
               "id": "n56",
               "line": 56,
               "anchor": "for tool_call in tool_calls:",
-              "text": "同一轮的多个 tool_calls 按顺序执行，但参数都是模型在这一轮开始前写好的。"
+              "text": "同一轮的多个 tool_calls 按顺序逐个执行，参数都是模型在提出时写好的。独立任务的两个调用就在这里先后执行。"
             },
             {
               "id": "n58",
@@ -284,11 +342,6 @@
               "id": "chain",
               "exercise": "chain",
               "label": "小时与分钟相加：参数要从时间结果中取得"
-            },
-            {
-              "id": "both",
-              "exercise": "both",
-              "label": "对照：19 加 23 并查时间，参数一开始就已知"
             }
           ],
           "observe": [
@@ -338,15 +391,6 @@
                 "round": 2,
                 "path": "data.result.result",
                 "name": "add_numbers"
-              }
-            },
-            {
-              "id": "parallel-contrast",
-              "text": "对照组第一轮 response 的 tool_calls[1]：参数已知时，两个调用可以在同一轮提出。",
-              "selector": {
-                "event": "response",
-                "round": 1,
-                "path": "data.body.choices[0].message.tool_calls[1]"
               }
             }
           ],
@@ -434,18 +478,6 @@
             {
               "action": "narrate",
               "text": "加法结果来自依赖参数，最终回答里的数字应与它一致。"
-            },
-            {
-              "action": "seek",
-              "observe": "parallel-contrast"
-            },
-            {
-              "action": "highlight",
-              "observe": "parallel-contrast"
-            },
-            {
-              "action": "narrate",
-              "text": "这一条只在对照组出现：19 和 23 一开始就已知，两个调用可以同轮提出。若你运行的是“小时与分钟相加”，这里会提示本次运行没有这条证据，这正是两组的差别。"
             }
           ],
           "conclusion": {
@@ -454,9 +486,135 @@
               "时间结果确实以 role=tool 消息进入了下一轮请求，模型是在看到它之后才提出加法。"
             ],
             "does_not_prove": [
-              "不能证明模型理解了“依赖”；它也可能只是遵循了 系统提示词里“先查时间再相加”的要求。",
+              "不能证明模型理解了“依赖”；它也可能只是遵循了系统提示词里“先查时间再相加”的要求。",
               "不能证明真实模型每次都会分两轮调用，需要多次运行观察。",
               "离线测试模式下的加法参数由脚本按真实时钟结果生成，验证的是运行器传递数据的路径。"
+            ]
+          }
+        },
+        {
+          "id": "two-calls",
+          "title": "两个独立任务：同一轮提出，逐个执行",
+          "hypothesis": "两个任务互不依赖时，模型可以在同一个响应里提出两个调用；run_agent 按列表顺序逐个执行，两个工具结果各带自己的 tool_call_id 回到下一次请求。",
+          "arms": [
+            {
+              "id": "both",
+              "exercise": "both",
+              "label": "计算 19 加 23，并告诉我现在几点"
+            }
+          ],
+          "observe": [
+            {
+              "id": "same-response",
+              "text": "第 1 轮 response 的 tool_calls[1]：第二个调用和第一个出现在同一个响应里。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.tool_calls[1].function.name"
+              }
+            },
+            {
+              "id": "first-result",
+              "text": "add_numbers 的 tool_result：第一个调用的执行结果。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result",
+                "name": "add_numbers"
+              }
+            },
+            {
+              "id": "second-call",
+              "text": "get_current_time 的 tool_call：在时间线上排在第一个结果之后，说明运行器是逐个执行。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.id",
+                "name": "get_current_time"
+              }
+            },
+            {
+              "id": "both-returned",
+              "text": "第 2 轮 request 的 messages[4]：第二条 role 为 tool 的消息，两条结果各自带着 tool_call_id。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[4].tool_call_id"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这组只有一个问题，却包含两个互不依赖的任务。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "same-response"
+            },
+            {
+              "action": "highlight",
+              "observe": "same-response"
+            },
+            {
+              "action": "narrate",
+              "text": "如果这次模型在同一个响应里提出了两个调用，这里能看到第二个调用的工具名。若模型分两轮提出，这里会提示本次运行没有这条证据，那同样是一次合法的运行。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "first-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-result"
+            },
+            {
+              "action": "narrate",
+              "text": "第一个工具先执行完，结果才被记录下来。"
+            },
+            {
+              "action": "seek",
+              "observe": "second-call"
+            },
+            {
+              "action": "highlight",
+              "observe": "second-call"
+            },
+            {
+              "action": "narrate",
+              "text": "第二个调用在第一个结果之后才开始：同一轮提出不等于同时执行。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "both-returned"
+            },
+            {
+              "action": "highlight",
+              "observe": "both-returned"
+            },
+            {
+              "action": "narrate",
+              "text": "两条结果都以 role 为 tool 的消息回到下一轮，模型据此一起作答。和依赖那组对比：这里参数一开始就已知，所以不必分轮。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行中两个调用是否出现在同一个响应里，以及它们在时间线上的实际执行顺序。",
+              "两条工具结果各自通过 tool_call_id 对应到自己的调用。"
+            ],
+            "does_not_prove": [
+              "同一轮提出不能证明同时执行；这次的事件顺序显示运行器是逐个执行的。",
+              "不能证明模型每次都会把两个独立任务放进同一轮，它也可能分两轮提出。"
             ]
           }
         }
@@ -562,11 +720,15 @@
             },
             {
               "id": "item-2",
-              "text": "我运行了“对比独立调用”练习，能说明独立任务为什么可以同轮提出。"
+              "text": "我运行了“两个独立任务”，能说明它为什么可以同轮提出，又为什么仍是逐个执行。"
             },
             {
               "id": "item-3",
               "text": "我能解释执行顺序为什么不能代替数据传递。"
+            },
+            {
+              "id": "item-4",
+              "text": "我把用户消息改成“把现在的分钟数和 100 相加”又跑了一次，核对加法参数里哪个来自时间结果、哪个来自问题。"
             }
           ]
         }

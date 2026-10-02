@@ -37,12 +37,12 @@ class OverlayTests(unittest.TestCase):
     def test_paths_use_stable_ids_and_exclude_facts(self):
         question = self.data["scenes"]["check"]["blocks"][0]["questions"][0]
         option = question["options"][0]["id"]
-        for path in ("hero.headline", "concepts.01-interface.title", "section-1.paragraphs.0", "walkthrough.step-1.body",
-                     "which-tool.title", "which-tool.tools-declared.text", "which-tool.sum.label",
+        for path in ("hero.headline", "concepts.01-allowlist.title", "section-1.paragraphs.0", "walkthrough.step-1.body",
+                     "one-loop.title", "one-loop.proposal.text", "one-loop.sum.label",
                      f"quiz.{question['id']}.prompt", f"quiz.{question['id']}.{option}.text"):
             self.assertIn(path, self.slots)
-        for fact in ("hero.id", "hero.type", "hero.reveal", "concepts.01-interface.token", "walkthrough.step-1.code",
-                     "walkthrough.step-1.language", "which-tool.sum.exercise", f"quiz.{question['id']}.correct",
+        for fact in ("hero.id", "hero.type", "hero.reveal", "concepts.01-allowlist.token", "walkthrough.step-1.code",
+                     "walkthrough.step-1.language", "one-loop.sum.exercise", f"quiz.{question['id']}.correct",
                      "lesson", "source_language"):
             self.assertNotIn(fact, self.slots)
 
@@ -60,7 +60,7 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(hero["id"], "hero")
 
     def test_facts_and_unknown_paths_cannot_be_overridden(self):
-        for path in ("walkthrough.step-1.code", "hero.id", "quiz.nope.prompt", "which-tool.sum.exercise"):
+        for path in ("walkthrough.step-1.code", "hero.id", "quiz.nope.prompt", "one-loop.sum.exercise"):
             with self.subTest(path=path):
                 self.write_overlay({path: {"text": "x", "source": "0"}})
                 with self.assertRaisesRegex(OverlayError, "不是可翻译的文本路径"):

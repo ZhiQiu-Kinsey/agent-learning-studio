@@ -121,7 +121,12 @@ class LessonExperimentTests(unittest.TestCase):
                 blocks = model.scenes.understand.blocks
                 predicts = [block for block in blocks if isinstance(block, Predict)]
                 self.assertEqual(len(predicts), 1)
-                self.assertIs(blocks[-1], predicts[0], "predict 放在理解场景末尾")
+                # 节奏规范（2026-10-03 起）：predict 放在第一道微测之前，读完两三节就去跑一次；
+                # 尚未按新规范改写的旧课暂时保留在理解场景末尾。
+                first_quiz = next((index for index, item in enumerate(blocks) if isinstance(item, MicroQuiz)),
+                                  len(blocks))
+                self.assertTrue(blocks.index(predicts[0]) < first_quiz or blocks[-1] is predicts[0],
+                                "predict 放在第一道微测之前（旧课可暂在理解场景末尾）")
                 block = predicts[0]
                 experiment = next(item for item in model.scenes.lab.experiments if item.id == block.experiment)
                 self.assertEqual(experiment.predict, block.id)

@@ -1,4 +1,4 @@
-"""第 1 课的工具定义和实现。"""
+"""工具定义和实现：“工具定义与调用提议”只把 TOOLS 发给模型，“执行工具与回传结果”再用 AVAILABLE_TOOLS 执行。"""
 
 import math
 from datetime import datetime
