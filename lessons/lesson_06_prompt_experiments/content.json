@@ -13,7 +13,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "CHAPTER 02 / LESSON 06",
+          "eyebrow": "CHAPTER 02 / PROMPT EXPERIMENTS",
           "headline": "先写清楚比较什么",
           "highlight": "同题同模型的提示词与工具描述配对实验",
           "takeaway": "同一道题、同一个模型、同样的配置，只改一处文本，按同一规则比较两次真实响应。一次结果只算一条观察。"
@@ -67,6 +67,16 @@
           "paragraphs": [
             "工具名称、职责和参数含义会影响模型怎么构造调用提议。“工具描述：模糊与明确”把同一个工具交给真实模型，参数 Schema 不变，两次只改 description，再检查响应里 tool_calls 的名称和参数。这里只观察调用提议，不执行工具；能真正执行哪些函数，仍由 Python 里登记的白名单决定。"
           ]
+        },
+        {
+          "id": "predict-executed-tools",
+          "type": "predict",
+          "prompt": "在实验“只改工具描述”运行之前先猜：这次运行会出现几个 tool_call 事件，也就是平台实际执行工具几次？",
+          "experiment": "tool-description",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
         },
         {
           "id": "mq-proposal-only",
@@ -240,16 +250,6 @@
               "evidence": "最终回答只是提示；两次响应和报告才是证据"
             }
           ]
-        },
-        {
-          "id": "predict-executed-tools",
-          "type": "predict",
-          "prompt": "在实验“只改工具描述”运行之前先猜：这次运行会出现几个 tool_call 事件，也就是平台实际执行工具几次？",
-          "experiment": "tool-description",
-          "rule": {
-            "kind": "count_events",
-            "event": "tool_call"
-          }
         }
       ]
     },
@@ -260,41 +260,53 @@
           "type": "whats-new"
         },
         {
-          "id": "code-paired-tasks",
+          "id": "code-conditions",
           "type": "annotated-source",
           "path": "lessons/lesson_06_prompt_experiments/runtime.py",
-          "start": 11,
-          "end": 50,
+          "start": 21,
+          "end": 57,
           "notes": [
-            {
-              "id": "n12",
-              "line": 12,
-              "anchor": "\"tool_description\": (\"用户问 19 加 23。需要精确算术时可调用登记的工",
-              "text": "每个配对场景是（用户任务，基线文本，改写文本）。同一场景里任务固定，只有后两项不同。"
-            },
-            {
-              "id": "n14",
-              "line": 14,
-              "anchor": "\"missing_input\": (\"用户只说：帮我计算一个加法，但没有给数字。\", \"请处理用",
-              "text": "missing_input 的任务故意不给数字，看改写后的规则能否让模型改为追问。"
-            },
-            {
-              "id": "n21",
-              "line": 21,
-              "anchor": "\"空白\": None,",
-              "text": "空白组用 None 表示：tool_spec 会直接省略 description 字段，而不是传空字符串。"
-            },
             {
               "id": "n23",
               "line": 23,
-              "anchor": "\"误导\": \"把两个整数按顺序拼接成一个新整数，例如 a=19、b=23 时返回 1923。\",",
-              "text": "误导组的描述故意和第 43 行的实现不一致。"
+              "anchor": "\"tool_description\": (\"用户问 19 加 23。",
+              "text": "工具描述场景的两版差在描述：基线只写“计算工具。”，改写版写清参数含义和不该调用的情况。"
             },
             {
-              "id": "n27",
-              "line": 27,
-              "anchor": "\"拼接\": (\"把 19 和 23 按顺序拼成一个四位数。\", None),",
-              "text": "拼接题的期望是“不调用”，用来检查模型会不会把工具用在它做不到的事上。"
+              "id": "n25",
+              "line": 25,
+              "anchor": "\"missing_input\": (\"用户只说",
+              "text": "missing_input 故意不给数字，看改写后的规则能否让模型追问，而不是编一个答案。"
+            },
+            {
+              "id": "n28",
+              "line": 28,
+              "anchor": "PAIR_SYSTEM = ",
+              "text": "system 固定住，变量只放在工具描述里，行为差异才能归到描述上。"
+            },
+            {
+              "id": "n32",
+              "line": 32,
+              "anchor": "\"空白\": None,",
+              "text": "空白组用 None 表示，tool_spec 会直接省略 description 字段。"
+            },
+            {
+              "id": "n35",
+              "line": 35,
+              "anchor": "\"误导\": \"把两个整数按顺序拼接",
+              "text": "误导描述和 add_numbers 的实现故意不一致；矩阵会把模型的提议交给真实代码执行。"
+            },
+            {
+              "id": "n40",
+              "line": 40,
+              "anchor": "\"拼接\": (\"把 19 和 23 按顺序拼成",
+              "text": "拼接题的期望是“不调用”：检查模型会不会把工具用在它做不到的事上。"
+            },
+            {
+              "id": "n53",
+              "line": 53,
+              "anchor": "function = {\"name\": \"add_numbers\", \"parameters\": PARAMETERS}",
+              "text": "参数结构每次都是同一个 PARAMETERS，矩阵六次请求只有 description 在变。"
             }
           ]
         },
@@ -302,50 +314,50 @@
           "id": "code-paired-run",
           "type": "annotated-source",
           "path": "lessons/lesson_06_prompt_experiments/runtime.py",
-          "start": 63,
-          "end": 127,
+          "start": 105,
+          "end": 129,
           "notes": [
-            {
-              "id": "n66",
-              "line": 66,
-              "anchor": "if scenario == \"missing_input\":",
-              "text": "缺参场景做形式初筛：像不像在询问、是否提到数字、有没有写出数字。命中后仍需人工复核。"
-            },
-            {
-              "id": "n73",
-              "line": 73,
-              "anchor": "and not bool(re.search(r\"不是\\s*42|并非\\s*42|不等于\\s*4",
-              "text": "排除“不是 42”这类否定表达，减少关键词误判。"
-            },
-            {
-              "id": "n89",
-              "line": 89,
-              "anchor": "passed = function.get(\"name\") == \"add_numbers\" a",
-              "text": "配对实验只检查提议的名称和参数是否完全匹配，不执行这次调用。"
-            },
-            {
-              "id": "n97",
-              "line": 97,
-              "anchor": "if context.max_model_calls < 2:",
-              "text": "配对至少需要两次调用，预算不够就直接拒绝，不会只跑一半。"
-            },
-            {
-              "id": "n104",
-              "line": 104,
-              "anchor": "system = \"按用户任务选择工具或回答。\" if scenario == \"tool_de",
-              "text": "工具描述场景的 system 固定，变量放在工具描述里；其他场景的变量就是 system 本身。"
-            },
             {
               "id": "n108",
               "line": 108,
+              "anchor": "if context.max_model_calls < 2:",
+              "text": "配对至少要两次调用，预算不够就直接拒绝，不会只跑一半。"
+            },
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "system = PAIR_SYSTEM if scenario",
+              "text": "工具描述场景的 system 固定；流程规则和缺参场景的变量就是 system 本身。"
+            },
+            {
+              "id": "n119",
+              "line": 119,
               "anchor": "body[\"tools\"] = [tool_spec(variable)]",
               "text": "工具描述场景把变量写进 function.description，参数结构两次完全一样。"
             },
             {
-              "id": "n117",
-              "line": 117,
-              "anchor": "\"title\": \"单变量配对实验\", \"summary\": \"以下为结构或关键词初筛，保留两次",
-              "text": "报告摘要直接写明：单次配对不能推断普遍优劣。"
+              "id": "n121",
+              "line": 121,
+              "anchor": "response = context.complete(body, index)",
+              "text": "模型、用户任务和 temperature 两次都相同；请求与响应由平台原样记录。"
+            },
+            {
+              "id": "n123",
+              "line": 123,
+              "anchor": "answer, passed, detail = evaluate_tool_response(response)",
+              "text": "工具场景只做结构初筛：名称和参数是否匹配。只看提议，不执行这次调用。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "anchor": "passed, detail = evaluate(scenario, answer)",
+              "text": "文本场景做关键词或形式初筛，并排除“不是 42”这类否定；命中仍需人工复核。"
+            },
+            {
+              "id": "n128",
+              "line": 128,
+              "anchor": "rows.append({\"label\": label, \"prompt\": variable",
+              "text": "原文和初筛结论一起留下，报告摘要写明单次配对不能推断普遍优劣。"
             }
           ]
         },
@@ -353,38 +365,62 @@
           "id": "code-matrix",
           "type": "annotated-source",
           "path": "lessons/lesson_06_prompt_experiments/runtime.py",
-          "start": 144,
-          "end": 195,
+          "start": 158,
+          "end": 197,
           "notes": [
             {
-              "id": "n146",
-              "line": 146,
-              "anchor": "if expected_arguments is None:",
-              "text": "拼接题不该调用：没有提议算符合预期，调用了任何工具都算不符合。"
-            },
-            {
-              "id": "n157",
-              "line": 157,
+              "id": "n162",
+              "line": 162,
               "anchor": "if context.max_model_calls < cells:",
-              "text": "六个格子各需一次请求，预算不足就在发出第一次请求前拒绝。"
+              "text": "六个格子各需一次请求，预算不足就在第一次请求前拒绝。"
             },
             {
-              "id": "n166",
-              "line": 166,
-              "anchor": "body = {\"messages\": [{\"role\": \"system\", \"content",
-              "text": "六次请求的 system、用户题和 temperature 都由表格决定，唯一的变量是 tool_spec(description)。"
+              "id": "n165",
+              "line": 165,
+              "anchor": "for label, description in DESCRIPTIONS.items():",
+              "text": "外层是描述，内层是题目：表格每一行是一种描述在两道题上的表现。"
             },
             {
-              "id": "n176",
-              "line": 176,
-              "anchor": "if proposal[\"name\"] == \"add_numbers\" and isinsta",
+              "id": "n171",
+              "line": 171,
+              "anchor": "\"tools\": [tool_spec(description)], \"temperature\": 0}",
+              "text": "唯一的变量是 tool_spec(description)，system、题目和 temperature 六次都相同。"
+            },
+            {
+              "id": "n175",
+              "line": 175,
+              "anchor": "passed, detail = judge_cell(expected, proposal)",
+              "text": "judge_cell 只看提议：求和题要恰好提议 add_numbers(19, 23)，拼接题要不调用。"
+            },
+            {
+              "id": "n178",
+              "line": 178,
+              "anchor": "cell = _matrix_cell(context, response, proposal, index)",
+              "text": "判定之后才执行：执行结果写进表格，但不改变这一格是否符合预期。"
+            },
+            {
+              "id": "n187",
+              "line": 187,
+              "anchor": "if proposal is None:",
+              "text": "没有提议的格子记下模型的文字回答，比如拼接题直接答出 1923。"
+            },
+            {
+              "id": "n192",
+              "line": 192,
+              "anchor": "if proposal[\"name\"] == \"add_numbers\" and isinstance",
               "text": "只有名称是 add_numbers、参数能解析成对象的提议才会执行；其他提议只记录。"
             },
             {
-              "id": "n179",
-              "line": 179,
-              "anchor": "result = context.call_tool(\"add_numbers\", propos",
+              "id": "n193",
+              "line": 193,
+              "anchor": "result = context.call_tool(\"add_numbers\", proposal",
               "text": "执行走 call_tool，白名单里只有这一个纯函数，tool_call 与 tool_result 成对记录。"
+            },
+            {
+              "id": "n196",
+              "line": 196,
+              "anchor": "cell += f\" → 实际返回",
+              "text": "模型照误导描述提议调用时，期待的是 1923，代码返回的却是 42。"
             }
           ]
         },

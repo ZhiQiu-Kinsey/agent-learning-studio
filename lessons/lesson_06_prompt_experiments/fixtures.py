@@ -1,7 +1,7 @@
-"""Deterministic paired responses for offline tests only."""
+"""提示词实验课的离线测试模型：只服务自动化测试，不代表任何真实模型的行为。"""
 import json
 
-# Offline matrix behaviour, keyed by (description label, probe label). Test data, not a claim about real models.
+# 描述矩阵每一格的固定回答，键是（描述组，题目）；这是测试数据，不是对真实模型行为的断言。
 MATRIX_SCRIPT = {
     ("空白", "求和"): {"a": 19, "b": 23},
     ("空白", "拼接"): "1923",
