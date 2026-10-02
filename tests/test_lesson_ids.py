@@ -94,7 +94,9 @@ class RealCatalogTests(unittest.TestCase):
         for item in data["lessons"]:
             with self.subTest(lesson=item["id"]):
                 self.assertRegex(item["id"], r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
-                self.assertTrue(any(alias.isdigit() for alias in item["aliases"]), "保留旧数字 ID 作为别名")
+                # 旧课程保留原数字 ID 作为别名；扩充后新增的课程从未有过数字 ID，可以没有别名。
+                if item["aliases"]:
+                    self.assertTrue(any(alias.isdigit() for alias in item["aliases"]), "别名应为旧数字 ID")
         # 已实现的第 1–10 课显示课号不变，与旧数字 ID 一致。
         for spec in LESSONS:
             self.assertEqual(str(spec["number"]), spec["aliases"][0])
@@ -164,8 +166,10 @@ class LessonIdApiTests(unittest.TestCase):
                                                          "question": "test", "exercise_id": "test"})
                 self.assertEqual((run.status_code, run.json()["code"]), (404, code))
                 self.assertNotIn("data:", run.text)
-        planned = self.client.get("/api/lessons/11").json()["detail"]
-        self.assertIn("第 11 课", planned)
+        planned = self.client.get("/api/lessons/11").json()
+        number = index_catalog(load_curriculum()).numbers["document-loading"]
+        self.assertIn(f"第 {number} 课", planned["detail"])
+        self.assertEqual(planned["params"]["number"], number)
         self.assertNotIn("no-such-lesson", self.client.get("/api/lessons/no-such-lesson").text)
 
 

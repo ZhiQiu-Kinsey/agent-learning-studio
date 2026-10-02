@@ -45,7 +45,10 @@ test("themes persist, follow system changes, sync tabs and cover mobile screens"
     path: capture("theme-code.png"),
   });
   await page.getByTestId("app-curriculum-button").click();
-  await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(8);
+  await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(
+    (await (await page.request.get("/api/curriculum")).json()).categories
+      .length,
+  );
   await page.screenshot({
     animations: "disabled",
     path: capture("theme-curriculum.png"),
@@ -157,7 +160,10 @@ test("reduced motion keeps learning and curriculum headings visible", async ({
     "opacity",
     "1",
   );
-  await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(8);
+  await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(
+    (await (await page.request.get("/api/curriculum")).json()).categories
+      .length,
+  );
 });
 
 test("changing reduced motion immediately restores offscreen lesson text", async ({
