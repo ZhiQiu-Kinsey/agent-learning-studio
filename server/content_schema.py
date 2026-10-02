@@ -464,6 +464,23 @@ def _validate_document(scenes: Scenes, illustrations: dict[str, Illustration]) -
             raise ValueError(f"实验 {experiment.id} 引用了不存在的预测块 {experiment.predict}")
 
 
+CODE_NOTE_MAX = 60
+
+
+class CodeNote(Strict):
+    """正文里提到的一个代码名和它在本课的说明，网页上悬浮在代码样式的名字上。
+    名字必须真的出现在本课登记的源码里（server/code_names.py，校验见 tests/test_lesson_vocabulary.py）。"""
+    name: Annotated[str, Field(pattern=r"^[A-Za-z_][\w.-]*(?: [A-Za-z][\w-]*){0,2}$", max_length=40,
+                               json_schema_extra={"x-fact": True})]
+    note: Text
+
+    @model_validator(mode="after")
+    def _note(self):
+        if len(self.note) > CODE_NOTE_MAX:
+            raise ValueError(f"code_notes.{self.name} 的说明不能超过 {CODE_NOTE_MAX} 个字符")
+        return self
+
+
 # 只在文件里出现（编辑器补全），不进入接口输出。
 SchemaRef = Annotated[str | None, Field(default=None, alias="$schema", exclude=True,
                                        json_schema_extra={"x-fact": True})]
@@ -480,10 +497,12 @@ class LessonContent(Strict):
     capabilities: list[Capability] = []
     scenes: Scenes
     illustrations: dict[str, Illustration] = {}
+    code_notes: list[CodeNote] = []
 
     @model_validator(mode="after")
     def _document(self):
         _validate_document(self.scenes, self.illustrations)
+        _unique([item.name for item in self.code_notes], "code_notes")
         return self
 
 

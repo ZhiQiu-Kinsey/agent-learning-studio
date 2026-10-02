@@ -41,6 +41,8 @@ export type Lesson = {
 };
 export type Detail = Lesson & {
   sources: { path: string; language: string; content: string }[];
+  /** Names defined in the lesson's Python sources (minus glossary names). */
+  code_names?: string[];
   system_prompt: string;
   tools: unknown;
   learning?: LessonContent;

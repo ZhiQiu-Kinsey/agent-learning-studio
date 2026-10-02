@@ -13,14 +13,14 @@ import DecryptedText from "../../components/react-bits/DecryptedText";
 import { useReducedMotion } from "../../motion";
 import {
   assignFirstOccurrences,
+  buildNamePattern,
   keywordKind,
   rehypeGlossary,
-  splitCode,
-  splitText,
+  splitProse,
   type GlossaryEntry,
   type GlossaryMatcher,
-  type Segment,
 } from "./match";
+import { termTier, useVocabulary, VocabularyContext } from "./vocabulary";
 import "../../styles/learning-glossary.css";
 
 /**
@@ -28,7 +28,45 @@ import "../../styles/learning-glossary.css";
  * reading order and decides, once, which text owns the first occurrence of
  * each term; <GlossaryText> / <GlossaryMarkdown> then mark only those. Without
  * a scope (or before the glossary loads) text renders unchanged.
+ *
+ * <LessonVocabulary> wraps a whole lesson page: it tells terms which lesson
+ * they are read in, and turns the lesson's own code names into inline code,
+ * with the lesson's note (if any) as a hover card.
  */
+
+export function LessonVocabulary({
+  lessonId,
+  codeNames,
+  notes,
+  children,
+}: {
+  lessonId: string;
+  codeNames: readonly string[];
+  notes: readonly { name: string; note: string }[];
+  children: ReactNode;
+}) {
+  const signature = codeNames.join("\u0000");
+  const names = useMemo(
+    () => buildNamePattern(codeNames),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signature],
+  );
+  const value = useMemo(
+    () => ({
+      lessonId,
+      names,
+      notes: new Map(notes.map((item) => [item.name, item.note])),
+    }),
+    [lessonId, names, notes],
+  );
+  return (
+    <VocabularyContext.Provider value={value}>
+      <Tooltip.Provider delayDuration={180} skipDelayDuration={240}>
+        {children}
+      </Tooltip.Provider>
+    </VocabularyContext.Provider>
+  );
+}
 
 interface Scope {
   matcher: GlossaryMatcher | null;
@@ -71,7 +109,15 @@ export function GlossaryTerm({
 }) {
   const { t } = useTranslation("blocks", { keyPrefix: "glossary" });
   const reduced = useReducedMotion();
+  const { lessonId } = useVocabulary();
+  const tier = termTier(entry, lessonId);
   const same = entry.zh.toLowerCase() === entry.en.toLowerCase();
+  const kicker =
+    tier === "new"
+      ? t("kickerNew")
+      : tier === "background"
+        ? t("kickerBackground")
+        : t("kicker");
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
@@ -79,6 +125,7 @@ export function GlossaryTerm({
           className="glossary-term"
           tabIndex={0}
           data-term={entry.id}
+          data-tier={tier}
           data-testid="glossary-term"
         >
           {children}
@@ -94,7 +141,7 @@ export function GlossaryTerm({
           data-testid="glossary-card"
         >
           <span className="glossary-card-kicker" aria-hidden="true">
-            {t("kicker")}
+            {kicker}
           </span>
           <strong className="glossary-card-title">
             {entry.zh}
@@ -111,7 +158,7 @@ export function GlossaryTerm({
             )}
           </strong>
           <span className="glossary-card-definition">{entry.definition}</span>
-          {entry.first_lesson_number !== undefined && (
+          {tier !== "new" && entry.first_lesson_number !== undefined && (
             <span className="glossary-card-first">
               {t("firstLesson", { number: entry.first_lesson_number })}
             </span>
@@ -135,40 +182,76 @@ function useOwned(text: string) {
   };
 }
 
-/** Plain string with its owned terms marked. */
+/** Inline code coloured by what it names; the lesson's note, if any, as a hover card. */
+export function CodeName({
+  code,
+  className,
+  ...rest
+}: { code: string } & ComponentProps<"code">) {
+  const { t } = useTranslation("blocks", { keyPrefix: "glossary" });
+  const { notes } = useVocabulary();
+  const { kind, role } = keywordKind(code);
+  const note = notes.get(code.trim());
+  const chip = (
+    <code
+      {...rest}
+      className={`code-keyword ${className ?? ""}`.trim()}
+      data-keyword={kind}
+      data-role={role}
+      data-noted={note ? "" : undefined}
+      tabIndex={note ? 0 : undefined}
+      data-testid={note ? "code-note-trigger" : undefined}
+    >
+      {code}
+    </code>
+  );
+  if (!note) return chip;
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>{chip}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="glossary-card glossary-card-code"
+          side="top"
+          align="center"
+          sideOffset={10}
+          collisionPadding={14}
+          data-testid="code-note-card"
+        >
+          <span className="glossary-card-kicker" aria-hidden="true">
+            {t("codeKicker")}
+          </span>
+          <strong className="glossary-card-title glossary-card-code-name">
+            {code}
+          </strong>
+          <span className="glossary-card-definition">{note}</span>
+          <Tooltip.Arrow
+            className="glossary-card-arrow"
+            width={12}
+            height={6}
+          />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
+/** Plain string with its owned terms marked and code names as inline code. */
 export function GlossaryText({ text }: { text: string }) {
   const { matcher, allowed } = useOwned(text);
-  // Split once per text: code-like tokens first, then owned glossary terms.
-  const segments = useMemo(() => {
-    const remaining = new Set(allowed ?? []);
-    return splitCode(text).flatMap<Segment | { code: string }>((piece) =>
-      typeof piece !== "string"
-        ? [piece]
-        : matcher && remaining.size
-          ? splitText(piece, matcher, remaining)
-          : [piece],
-    );
-  }, [matcher, allowed, text]);
+  const { names } = useVocabulary();
+  const pieces = useMemo(
+    () => splitProse(text, matcher, new Set(allowed ?? []), names),
+    [matcher, allowed, names, text],
+  );
   return (
     <>
-      {segments.map((segment, index) => {
-        if (typeof segment === "string") return segment;
-        if ("code" in segment) {
-          const { kind, role } = keywordKind(segment.code);
-          return (
-            <code
-              key={index}
-              className="code-keyword"
-              data-keyword={kind}
-              data-role={role}
-            >
-              {segment.code}
-            </code>
-          );
-        }
+      {pieces.map((piece, index) => {
+        if (typeof piece === "string") return piece;
+        if ("code" in piece) return <CodeName key={index} code={piece.code} />;
         return (
-          <GlossaryTerm key={index} entry={segment.entry}>
-            {segment.text}
+          <GlossaryTerm key={index} entry={piece.entry}>
+            {piece.text}
           </GlossaryTerm>
         );
       })}
@@ -176,23 +259,30 @@ export function GlossaryText({ text }: { text: string }) {
   );
 }
 
-/** Inline code: same text, coloured by what it names, sweep on hover. */
+/** Inline code in markdown: same text, coloured by what it names, note on hover. */
 function CodeKeyword(props: ComponentProps<"code"> & { node?: unknown }) {
-  const { node: _node, ...rest } = props;
+  const { node: _node, children, ...rest } = props;
   const kind = (rest as Record<string, unknown>)["data-keyword"];
-  if (!kind) return <code {...rest} />;
-  return <code {...rest} className={`code-keyword ${rest.className ?? ""}`} />;
+  if (!kind || typeof children !== "string")
+    return <code {...rest}>{children}</code>;
+  const {
+    "data-keyword": _kind,
+    "data-role": _role,
+    ...others
+  } = rest as Record<string, unknown>;
+  return <CodeName {...(others as ComponentProps<"code">)} code={children} />;
 }
 
 /** Markdown with owned terms marked and inline code styled as keywords. */
 export function GlossaryMarkdown({ children }: { children: string }) {
   const { matcher, allowed } = useOwned(children);
+  const { names } = useVocabulary();
   const plugins = useMemo(
     () =>
-      [[rehypeGlossary, { matcher, allowed }]] as ComponentProps<
+      [[rehypeGlossary, { matcher, allowed, names }]] as ComponentProps<
         typeof Markdown
       >["rehypePlugins"],
-    [matcher, allowed],
+    [matcher, allowed, names],
   );
   const components = useMemo<Components>(
     () => ({

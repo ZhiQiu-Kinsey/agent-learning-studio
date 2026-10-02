@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   assignFirstOccurrences,
   buildMatcher,
+  buildNamePattern,
   keywordKind,
   splitCode,
+  splitNames,
+  splitProse,
   splitText,
   termsIn,
   type GlossaryEntry,
 } from "../glossary/match";
+import { termTier } from "../glossary/vocabulary";
 
 const entry = (id: string, zh: string, en: string, aliases: string[] = []) =>
   ({ id, zh, en, aliases, definition: `${id} definition` }) as GlossaryEntry;
@@ -78,5 +82,98 @@ describe("code keywords", () => {
     expect(keywordKind("tool_call_id").kind).toBe("field");
     expect(keywordKind("add_numbers(19, 23)").kind).toBe("call");
     expect(keywordKind("42").kind).toBe("literal");
+  });
+});
+
+describe("Chinese phrases with another meaning", () => {
+  const zh = buildMatcher([
+    { ...entry("validator", "验证器", "Validator", ["验收器"]) },
+    { ...entry("acceptance", "验收标准", "Acceptance Criteria") },
+    { ...entry("evaluation", "评估", "Evaluation"), not_in: ["评估者"] },
+  ])!;
+
+  it("skips a not_in phrase as a whole and still finds the term elsewhere", () => {
+    expect(termsIn("评估者给出评估", zh)).toEqual(["evaluation"]);
+    expect(termsIn("评估者通过", zh)).toEqual([]);
+    expect(termsIn("验收器对照验收标准", zh)).toEqual([
+      "validator",
+      "acceptance",
+    ]);
+  });
+});
+
+describe("lesson code names", () => {
+  const names = buildNamePattern([
+    "evidence",
+    "stop",
+    "Final Answer",
+    "s-1042",
+  ]);
+
+  it("matches whole names only, never inside identifiers or dotted paths", () => {
+    const pieces = (text: string) =>
+      splitNames(text, names)
+        .filter((piece) => typeof piece !== "string")
+        .map((piece) => (piece as { code: string }).code);
+    expect(pieces("evidence 指向结果，stop 规定何时停")).toEqual([
+      "evidence",
+      "stop",
+    ]);
+    expect(pieces("写出 Final Answer 后，学号 s-1042")).toEqual([
+      "Final Answer",
+      "s-1042",
+    ]);
+    expect(pieces("stopped、evidence_ref、lesson.stop、stop.x")).toEqual([]);
+  });
+
+  it("keeps precedence: code tokens, then owned terms, then code names", () => {
+    const pieces = splitProse(
+      "Token 数写在 usage.total 里，evidence 另记；Token 再出现",
+      matcher,
+      new Set(["token"]),
+      buildNamePattern(["evidence", "Token"]),
+    );
+    const kinds = pieces.map((piece) =>
+      typeof piece === "string"
+        ? "text"
+        : "code" in piece
+          ? `code:${piece.code}`
+          : `term:${piece.text}`,
+    );
+    expect(kinds.filter((kind) => kind !== "text")).toEqual([
+      "term:Token",
+      "code:usage.total",
+      "code:evidence",
+      "code:Token",
+    ]);
+    expect(
+      pieces
+        .map((piece) =>
+          typeof piece === "string"
+            ? piece
+            : "code" in piece
+              ? piece.code
+              : piece.text,
+        )
+        .join(""),
+    ).toBe("Token 数写在 usage.total 里，evidence 另记；Token 再出现");
+  });
+});
+
+describe("term tiers", () => {
+  const concept = {
+    ...entry("task-card", "任务卡", "Task Card"),
+    first_lesson: "task-contract",
+  };
+  const background = {
+    ...entry("tokenizer", "分词器", "Tokenizer"),
+    kind: "background" as const,
+  };
+
+  it("separates new, review and background terms", () => {
+    expect(termTier(concept, "task-contract")).toBe("new");
+    expect(termTier(concept, "context-budget")).toBe("review");
+    expect(termTier(background, "context-budget")).toBe("background");
+    expect(termTier(concept, undefined)).toBeUndefined();
   });
 });

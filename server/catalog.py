@@ -263,5 +263,20 @@ def lesson_detail(spec, locale=None):
     return {**public_lesson(spec), "exercises": exercises, "input_schema": input_schema,
             "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
             "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
-            "sources": sources}
+            "sources": sources, "code_names": lesson_code_names(spec, sources)}
+
+
+def lesson_code_names(spec, sources=None):
+    """正文里按代码显示的名字：取自本课登记的 Python 源码，去掉与术语表重名的。"""
+    from server.code_names import code_names
+    from server.glossary import load_glossary
+    if sources is None:
+        sources = [{**source, "content": _safe_file(spec["root"], source["path"], "lesson sources", source=True)
+                    .read_text(encoding="utf-8")} for source in spec["sources"]]
+    try:
+        terms = load_glossary(spec["root"], CATALOG_INDEX)["terms"]
+    except (LessonValidationError, OSError):
+        terms = []  # 术语表缺失或损坏时课程照常打开，只是代码名不扣除术语
+    forms = [form for term in terms for form in (term["zh"], term["en"], *term.get("aliases", []))]
+    return code_names([source["content"] for source in sources if source["language"] == "python"], forms)
 

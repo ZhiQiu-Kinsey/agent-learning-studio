@@ -301,6 +301,8 @@ def main(argv=None):
         if not args.dry_run:
             write_scaffold(target, files)
         print("课程保持 planned，网页继续置灰；模板通过结构检查不代表课程已完成。")
+        print("写正文前先读 docs/architecture/terminology.md（术语与代码名）；"
+              "写完用 scripts/term_report.py --lesson <slug> --full 检查用词。")
         return 0
     except (OSError, ValueError, KeyError, TypeError, SyntaxError) as error:
         print(f"课程脚手架失败：{error}", file=sys.stderr)

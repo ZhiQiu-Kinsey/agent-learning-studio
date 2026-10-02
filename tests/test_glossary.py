@@ -63,6 +63,10 @@ class GlossaryValidationTests(unittest.TestCase):
             "名称跨条目冲突": lambda d: d["terms"][1].update(aliases=[d["terms"][0]["zh"]]),
             "首课不存在": lambda d: d["terms"][0].update(first_lesson="no-such-lesson"),
             "首课使用别名": lambda d: d["terms"][0].update(first_lesson="1"),
+            "未知类别": lambda d: d["terms"][0].update(kind="other"),
+            "背景词设首课": lambda d: d["terms"][2].update(kind="background"),
+            "not_in 不含术语名": lambda d: d["terms"][0].update(not_in=["无关词组"]),
+            "not_in 不是数组": lambda d: d["terms"][0].update(not_in="词组"),
             "版本错误": lambda d: d.update(schema_version=2),
             "源语言错误": lambda d: d.update(locale="en"),
             "空术语表": lambda d: d.update(terms=[]),
@@ -94,7 +98,9 @@ class GlossaryApiTests(unittest.TestCase):
         self.assertEqual(terms["tool-calling"]["display"], "工具调用（Tool Calling）")
         self.assertEqual(terms["tool-calling"]["first_lesson"], "tool-selection")
         self.assertEqual(terms["tool-calling"]["first_lesson_number"], 1)
-        self.assertNotIn("first_lesson", terms["harness"])
+        self.assertNotIn("first_lesson", terms["sandbox"])
+        self.assertEqual(terms["harness"]["kind"], "concept")
+        self.assertEqual(terms["tokenizer"]["kind"], "background")
         self.assertEqual(terms["rag"]["aliases"], ["RAG"])
 
     def test_broken_glossary_returns_safe_503(self):

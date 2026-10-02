@@ -10,6 +10,7 @@ export interface LessonContent {
   illustrations: {
     [k: string]: Illustration;
   };
+  code_notes: CodeNote[];
 }
 export interface Scenes {
   understand: BlockScene | null;
@@ -409,6 +410,14 @@ export interface IllustrationEvent {
   data: {
     [k: string]: unknown;
   };
+}
+/**
+ * 正文里提到的一个代码名和它在本课的说明，网页上悬浮在代码样式的名字上。
+ * 名字必须真的出现在本课登记的源码里（server/code_names.py，校验见 tests/test_lesson_vocabulary.py）。
+ */
+export interface CodeNote {
+  name: string;
+  note: string;
 }
 
 export interface Onboarding {

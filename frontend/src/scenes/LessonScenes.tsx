@@ -12,6 +12,7 @@ import { formatLessonNumber } from "../lib/lessonIds";
 import { useCurriculum } from "../hooks/useCurriculum";
 import { track } from "../progress";
 import { Tabs, TabsContent } from "../components/ui/tabs";
+import { LessonVocabulary } from "../content/glossary/Glossary";
 import type { StudioState } from "../hooks/useStudio";
 import { LessonMasthead } from "./LessonMasthead";
 import { sceneIds, type SceneId, type SceneProps } from "./types";
@@ -48,16 +49,31 @@ export function requestScene(scene: SceneId) {
   );
 }
 
-export function LessonScenes({
-  studio,
-  visible,
-  onConfigure,
-}: {
+interface LessonScenesProps {
   studio: StudioState;
   /** False while the curriculum map or onboarding covers the lesson page. */
   visible: boolean;
   onConfigure: () => void;
-}) {
+}
+
+const noNames: string[] = [];
+const noNotes: { name: string; note: string }[] = [];
+
+/** Every scene of a lesson reads its words through the lesson's vocabulary. */
+export function LessonScenes(props: LessonScenesProps) {
+  const detail = props.studio.detail;
+  return (
+    <LessonVocabulary
+      lessonId={detail?.id ?? ""}
+      codeNames={detail?.code_names ?? noNames}
+      notes={detail?.learning?.code_notes ?? noNotes}
+    >
+      <LessonScenesBody {...props} />
+    </LessonVocabulary>
+  );
+}
+
+function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
   const { t } = useTranslation("lesson");
   const reduced = useReducedMotion();
   const [scene, setScene] = useState<SceneId>("understand");

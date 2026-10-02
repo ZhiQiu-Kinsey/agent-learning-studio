@@ -52,6 +52,25 @@ def validate_overlays(root, specs):
     return reports
 
 
+def validate_vocabulary(root, specs):
+    """可运行课程的用词检查（术语、中英并列、裸英文词、代码说明）；返回 [(课程, 类别, 说明)]。"""
+    from server.catalog import CATALOG_INDEX, lesson_code_names
+    from server.content import lesson_content_model
+    from server.glossary import load_glossary
+    from server.vocabulary import lesson_problems
+
+    terms = load_glossary(Path(root).resolve(), CATALOG_INDEX)["terms"]
+    runnable = [spec for spec in specs if spec.get("status") == "available"]
+    available = {spec["id"] for spec in runnable}
+    problems = []
+    for spec in runnable:
+        model = lesson_content_model(spec["content_path"], spec)
+        for kind, message in lesson_problems(spec["id"], model, terms, CATALOG_INDEX.numbers,
+                                             lesson_code_names(spec), available):
+            problems.append((spec["id"], kind, message))
+    return problems
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT, help="包含 curriculum/catalog.json 的项目根目录")
@@ -65,6 +84,14 @@ def main(argv=None):
             aliases = "、".join(spec.get("aliases", [])) or "无"
             print(f"  第 {spec['number']} 课 {spec['id']}（别名：{aliases}）[{spec['status']}] {spec['title']}")
         print(f"术语表：{terms} 条。" if terms is not None else "术语表：未找到 curriculum/glossary.json，已跳过。")
+        if terms is not None:
+            problems = validate_vocabulary(args.root, specs)
+            print(f"课程用词：{len(problems)} 个问题。")
+            if problems:
+                for lesson, kind, message in problems:
+                    print(f"用词问题 {lesson} [{kind}] {message}", file=sys.stderr)
+                print("逐课明细：scripts/term_report.py；规则：docs/architecture/terminology.md", file=sys.stderr)
+                return 1
         passed, failures = validate_recordings(args.root, specs)
         print(f"随课录制：{passed} 份通过，{len(failures)} 份未通过。")
         if failures:

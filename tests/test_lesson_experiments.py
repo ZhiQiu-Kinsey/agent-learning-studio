@@ -15,7 +15,6 @@ from fastapi.testclient import TestClient
 from run_support import run_and_read, web
 from server.catalog import CATALOG_INDEX, LESSONS, ROOT
 from server.content import lesson_content_model
-from server.content_overlay import text_slots
 from server.content_schema import Highlight, MicroQuiz, Narrate, Predict, Prose, Seek, Spotlight
 from server.envelope import INSTANT_PREFIXES, SPAN_EVENTS
 from server.run_store import RunStore
@@ -152,49 +151,7 @@ class LessonExperimentTests(unittest.TestCase):
                 self.assertGreaterEqual(quizzes, 1)
 
 
-class TerminologyTests(unittest.TestCase):
-    """术语首次出现写成“中文（English）”，与 curriculum/glossary.json 一致。
-
-    只检查到本课为止已引入的术语（first_lesson 的课号不大于本课）；hero 是展示标题，不计入；
-    出现在更长术语内部的位置（如“持久记忆”中的“记忆”）不算该术语的出现。
-    """
-
-    def texts(self, model):
-        parts = [block for block in model.scenes.understand.blocks if block.type != "hero"]
-        parts.append(model.scenes.lab)
-        values = []
-        for part in parts:
-            values += [slot.value for slot in text_slots(part, part.model_dump(mode="json")).values()]
-        return "\n".join(values)
-
-    def test_first_occurrence_is_bilingual(self):
-        terms = json.loads((ROOT / "curriculum" / "glossary.json").read_text(encoding="utf-8"))["terms"]
-        names = [term["zh"] for term in terms]
-        numbers = CATALOG_INDEX.numbers
-        for spec in LESSONS:
-            text = self.texts(lesson_content_model(spec["content_path"], spec))
-            for term in terms:
-                first_lesson = term.get("first_lesson")
-                if term["zh"] == term["en"] or first_lesson not in numbers or numbers[first_lesson] > numbers[spec["id"]]:
-                    continue
-                zh, pair = term["zh"], f"{term['zh']}（{term['en']}）"
-                with self.subTest(lesson=spec["id"], term=term["id"]):
-                    if first_lesson == spec["id"]:
-                        self.assertIn(pair, text, "引入术语的课程要写出中英并列形式")
-                    first = self.first_standalone(text, zh, [name for name in names if name != zh and zh in name])
-                    if first is not None:
-                        self.assertTrue(text.startswith(pair, first), f"首次出现应写作 {pair}：{text[first:first + 30]}")
-
-    @staticmethod
-    def first_standalone(text, zh, longer):
-        start = 0
-        while (index := text.find(zh, start)) >= 0:
-            inside = any(index - name.find(zh) >= 0 and text.startswith(name, index - name.find(zh))
-                         for name in longer)
-            if not inside:
-                return index
-            start = index + 1
-        return None
+# 术语与代码名的用词检查见 tests/test_lesson_vocabulary.py。
 
 
 if __name__ == "__main__":
