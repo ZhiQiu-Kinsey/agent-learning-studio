@@ -1,0 +1,1081 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "prompt-caching",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "context"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "CONTEXT / PROMPT CACHING",
+          "headline": "开头逐字相同，",
+          "highlight": "服务商才可能复用。",
+          "takeaway": "同一份长资料连续问几次，服务商可能复用已经处理过的开头，并在用量里报告命中了多少 Token。动态内容放在哪里，决定开头能不能保持不变；响应没有报告缓存字段时，只能写“未报告”，不能当成 0。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-cache",
+              "label": "01 / CACHE",
+              "title": "提示缓存",
+              "description": "提示缓存（Prompt Caching）：服务商发现这次请求的开头和之前某次请求逐字相同，就复用那一段已经处理好的结果。模型看到的内容一字不差。",
+              "token": "usage"
+            },
+            {
+              "id": "02-prefix",
+              "label": "02 / PREFIX",
+              "title": "稳定前缀",
+              "description": "稳定前缀（Stable Prefix）：每次请求开头逐字不变的那一段，比如规则和长资料。请求序号、发送时间这类每次都变的动态内容，要放在它后面。",
+              "token": "messages[:-1]"
+            },
+            {
+              "id": "03-hit",
+              "label": "03 / HIT",
+              "title": "缓存命中 Token",
+              "description": "缓存命中 Token（Cached Tokens）：服务商在用量里报告的、这次输入中复用了缓存的 Token 数。各家的字段名不同，本课把它们归一成同一个数。",
+              "token": "cached_tokens"
+            },
+            {
+              "id": "04-unknown",
+              "label": "04 / UNKNOWN",
+              "title": "未报告不是 0",
+              "description": "响应里没有缓存字段，只能说“未报告”。0 是服务商明确说这次没有命中；把未报告写成 0，等于替服务商下了结论。",
+              "token": "None ≠ 0"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "开头每轮都一样，却每轮都重新处理",
+          "paragraphs": [
+            "{{lesson:context-budget}}里我们看到，每次请求都要把整段上下文重新发给模型。Agent 连续工作时，请求的开头往往每轮都一样：系统提示词、工具定义、一份长资料。服务商每收到一次请求，都要把这些内容从头处理一遍；资料越长，这一步越费时间，也越费钱。",
+            "提示缓存让服务商记住已经处理过的开头。下一次请求的开头如果和之前某次逐字相同，这一段就直接复用，只处理后面新增的部分。复用发生在服务商那一侧：模型看到的消息一字不差，回答不会因为命中缓存而改变。省下的是处理时间和费用；命中部分是否打折、打几折，以服务商的价目说明为准。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "只认从第一个字开始的相同",
+          "paragraphs": [
+            "缓存按前缀匹配：拿这次请求和之前的请求从第一个字开始比，一直比到第一个不同的字为止，只有这之前的部分可能被复用。中间改了一个字，它后面再长的相同内容也用不上。",
+            "本课每次请求都发同样三样东西：一段规则、一份 2700 多字的图书馆手册（handbook.md）、一个关于手册的问题。另外还有一行每次都不同的动态内容，例如“请求序号：2；发送时间：2026-10-03T10:15:02+08:00”。这一行写在系统提示词第一行，比到“请求序号：”后面的数字就不同了，后面的规则和手册全都用不上；挪到最后一条 user 消息末尾，规则和手册就成了稳定前缀。"
+          ]
+        },
+        {
+          "id": "predict-hits",
+          "type": "predict",
+          "prompt": "先跑一次：运行“动态内容在前”之前先猜，这次运行会出现几个 lesson.cache_hit 事件（服务商报告命中的请求）？",
+          "experiment": "dynamic-position",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.cache_hit"
+          }
+        },
+        {
+          "id": "mq-position",
+          "type": "micro-quiz",
+          "question": {
+            "id": "position",
+            "prompt": "哪种写法下，第 2 次请求的规则和手册可能被复用？",
+            "options": [
+              {
+                "id": "a",
+                "text": "动态行放在最后一条 user 消息末尾",
+                "feedback": "对。规则和手册都在动态行前面，两次请求从头到手册结尾逐字相同。"
+              },
+              {
+                "id": "b",
+                "text": "动态行放在系统提示词第一行，后面的手册一字不改",
+                "feedback": "不对。第一行的请求序号每次不同，前缀到这里就断了，后面再相同也用不上。"
+              },
+              {
+                "id": "c",
+                "text": "两种都行，只要手册内容不变",
+                "feedback": "不对。缓存比的是从头开始的相同部分，不是“内容里有没有一段相同”。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "位置比内容更要紧：相同的内容要出现在开头，而且它前面不能有任何不同的字。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "从用量里读出命中多少",
+          "paragraphs": [
+            "命中了多少，只能看服务商在响应的用量里怎么报告。本课用的百炼走 OpenAI 兼容接口，命中数写在 usage.prompt_tokens_details.cached_tokens，它是 usage.prompt_tokens 的一部分。例如响应写着 prompt_tokens 为 547、cached_tokens 为 384，意思是 547 个输入 Token 里有 384 个复用了缓存。",
+            "其他服务商写法不同。DeepSeek 官方接口用 prompt_cache_hit_tokens 和 prompt_cache_miss_tokens 分别报告命中与未命中。Anthropic 接口的 input_tokens 不含缓存部分，命中写在 cache_read_input_tokens，新写入缓存的写在 cache_creation_input_tokens，三项相加才是全部输入。本课的 normalize_cache_usage 把这几种写法归一成全部输入、缓存命中 Token、写入缓存的 Token 三个数，并记下命中数取自哪个字段。命中比例就是缓存命中 Token 除以全部输入。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "没有报告，就写未报告",
+          "paragraphs": [
+            "有的服务商或接口不返回缓存字段。这时 normalize_cache_usage 返回 None，实验报告写“未报告”。不能写成 0：0 是服务商明确说“这次没有命中”，None 是我们不知道。两者混在一起，算出的命中比例会把“不知道”当成“没命中”。",
+            "只有字段存在、值是非负整数，才采用这个数；值是 null、字符串或小数时，同样按未报告处理，不猜测换算。离线测试模式下，“稳定前缀 + 预热”组的夹具故意不返回缓存字段，测试就用它检查报告里没有冒出一个 0。"
+          ]
+        },
+        {
+          "id": "mq-unreported",
+          "type": "micro-quiz",
+          "question": {
+            "id": "unreported",
+            "prompt": "一次响应的 usage 里只有 prompt_tokens 和 completion_tokens，没有任何缓存字段。报告里的命中数该写什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "未报告",
+                "feedback": "对。响应没有说，我们就不知道命中了多少。"
+              },
+              {
+                "id": "b",
+                "text": "0",
+                "feedback": "不对。0 表示服务商报告了“没有命中”，这里服务商什么都没报告。"
+              },
+              {
+                "id": "c",
+                "text": "按 prompt_tokens 估一个数",
+                "feedback": "不对。命中多少只有服务商知道，本地估出来的数会冒充服务商的报告。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "“未报告”和“报告为 0”是两种不同的事实，表格和比例都要分开处理。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "前缀哈希：先在本地确认开头没变",
+          "paragraphs": [
+            "命中数由服务商给出，会因为缓存过期、服务器调度等原因波动。运行器自己能确定的，是两次请求的开头到底是不是一样。prefix_hash 把最后一条消息之前的全部消息（本课就是那条 system）序列化，算 sha256，取前 12 位。两次哈希相同，说明前缀逐字相同；不同，说明其中至少有一个字变了。",
+            "报告里还有一列“与上一次相同的前缀（字符）”，由 shared_prefix_chars 算出：把这一次和上一次的消息各自序列化，从头逐字比较，数到第一个不同的字符为止。动态行在开头时，这个数只有十几个字符；动态行在末尾时，它比整份手册还长。这两列都在本地计算，和服务商无关，换一家服务商也一样。"
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "预热：把第一次的冷请求挪到前面",
+          "paragraphs": [
+            "稳定前缀组的第 1 次请求，服务商还没见过这段前缀，通常不会命中，之后的请求才可能命中。预热组先发一次只为写入缓存的请求，只要求回复“已读”，然后才开始测量。这样每一次测量请求前面都有一次相同前缀的请求。预热请求本身要处理全部输入，这一次的费用省不下来。",
+            "每次运行的系统提示词开头还有一行会话标记，是这次运行随机生成的 8 位十六进制字符串。同一次运行里它不变，不破坏前缀；换一次运行它就变，上一次运行留下的缓存不会混进这一次，三组实验互不影响。把参数 isolate_run 改成 false，会话标记固定为“不隔离”，就能观察跨运行的复用。"
+          ]
+        },
+        {
+          "id": "mq-warmup",
+          "type": "micro-quiz",
+          "question": {
+            "id": "warmup",
+            "prompt": "“稳定前缀”组四次请求的前缀哈希都相同。第 1 次报告命中 0，第 2 次起报告了命中。最可能的原因是？",
+            "options": [
+              {
+                "id": "a",
+                "text": "第 1 次时，服务商还没有这段前缀的缓存",
+                "feedback": "对。第 1 次请求把前缀写入缓存，后面的请求才有东西可复用。"
+              },
+              {
+                "id": "b",
+                "text": "第 1 次请求的手册和后面不一样",
+                "feedback": "不对。前缀哈希四次相同，说明手册一字没变。"
+              },
+              {
+                "id": "c",
+                "text": "模型第 1 次没有认真读手册",
+                "feedback": "不对。缓存发生在服务商处理输入的阶段，和模型怎么回答无关。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "先用前缀哈希排除“内容变了”，剩下的解释才轮到缓存什么时候写入。"
+          }
+        },
+        {
+          "id": "section-7",
+          "type": "prose",
+          "title": "Agent 里最容易破坏前缀的写法",
+          "paragraphs": [
+            "真实的 Agent 每轮请求，开头通常是系统提示词和工具定义，后面接越来越长的消息历史。下面几种写法会让开头每轮都变：系统提示词里写当前时间；每次请求生成一个新的随机编号放在开头；工具定义的顺序每次不同，比如从集合里取出来，顺序不固定；把会变的应用状态（当前步骤、剩余预算）塞进系统提示词。",
+            "办法是稳定的放前面，会变的放后面：规则、工具定义、固定资料在前，动态信息作为新消息追加在末尾。消息历史只追加、不改写，上一轮的整段请求就能成为下一轮的前缀。反过来，{{lesson:context-budget}}里的截取窗口和规则压缩会改写较早的消息，改写之后的那一轮，要从改动处开始重新处理。"
+          ]
+        },
+        {
+          "id": "section-8",
+          "type": "prose",
+          "title": "一次运行能说明什么",
+          "paragraphs": [
+            "命中与否由服务商决定。最少多长才能缓存、按多大的块计算命中、缓存保留多久，各家不同，同一家也可能随模型调整。百炼文档写明，达到最小长度也不代表必然命中，还受缓存生成状态、有效期和调度影响；DeepSeek 文档也说缓存是尽力而为。所以一次运行只能说明“这一次服务商报告了什么”，不能证明规律。",
+            "耗时也一样。报告里的耗时是运行器在 complete 前后计时，包括网络往返、排队和生成回答的时间，比 response 事件的 duration_ms 多出记录事件的几毫秒；单次的快慢不能直接归功于缓存。要比较，至少多跑几次，看前缀哈希相同的请求整体是否更快。"
+          ]
+        },
+        {
+          "id": "mq-limits",
+          "type": "micro-quiz",
+          "question": {
+            "id": "limits",
+            "prompt": "“稳定前缀”的第 2、4 次请求报告了命中，第 3 次报告命中 0，四次前缀哈希都相同。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "这一次服务商没有复用缓存；一次运行说明不了规律",
+                "feedback": "对。前缀没变，命中与否由服务商决定，要多跑几次才看得出趋势。"
+              },
+              {
+                "id": "b",
+                "text": "第 3 次请求的前缀被改动了",
+                "feedback": "不对。前缀哈希相同，说明前缀逐字没变。"
+              },
+              {
+                "id": "c",
+                "text": "这个服务商不支持提示缓存",
+                "feedback": "不对。第 2、4 次报告了命中，说明服务商支持；第 3 次只是这一次没有复用。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "本地能核对的是前缀；服务商侧的结果只能如实记录，不能从一次运行推出规律。"
+          }
+        },
+        {
+          "id": "compare-layouts",
+          "type": "compare",
+          "title": "三组请求的差别",
+          "paragraphs": [
+            "三组的规则、手册和问题完全相同，下表只列由代码决定的差别；服务商报告的命中数以你的运行为准。"
+          ],
+          "columns": [
+            "对比项",
+            "动态内容在前",
+            "稳定前缀",
+            "稳定前缀 + 预热"
+          ],
+          "rows": [
+            [
+              "动态行放在哪",
+              "系统提示词第一行",
+              "最后一条 user 消息末尾",
+              "最后一条 user 消息末尾"
+            ],
+            [
+              "各次的前缀哈希",
+              "每次都不同",
+              "每次相同",
+              "每次相同（含预热）"
+            ],
+            [
+              "第 1 次测量请求之前",
+              "没有相同前缀的请求",
+              "没有相同前缀的请求",
+              "有一次预热请求"
+            ],
+            [
+              "默认的模型调用数",
+              "4",
+              "4",
+              "5"
+            ]
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "bailian",
+              "title": "千问模型的 Context Cache 功能（阿里云百炼文档，2026-10-03 核对）",
+              "url": "https://help.aliyun.com/zh/model-studio/context-cache"
+            },
+            {
+              "id": "deepseek",
+              "title": "DeepSeek Context Caching（DeepSeek 文档，2026-10-03 核对）",
+              "url": "https://api-docs.deepseek.com/guides/kv_cache"
+            },
+            {
+              "id": "anthropic",
+              "title": "Prompt Caching（Anthropic 文档，2026-10-03 核对）",
+              "url": "https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "context-budget"
+        },
+        {
+          "id": "code-layout",
+          "type": "annotated-source",
+          "path": "lessons/lesson_prompt_caching/runtime.py",
+          "start": 41,
+          "end": 71,
+          "notes": [
+            {
+              "id": "n43",
+              "line": 43,
+              "anchor": "return f\"请求序号：{number}；发送时间：",
+              "text": "动态行：请求序号和发送时间，每次请求都不同。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "stable = f\"会话标记：{session}\\n{RULES}\\n\\n{HANDBOOK}\"",
+              "text": "稳定部分：会话标记、规则和手册，三组完全相同。"
+            },
+            {
+              "id": "n51",
+              "line": 51,
+              "anchor": "return [{\"role\": \"system\", \"content\": f\"{dynamic}\\n{stable}\"}",
+              "text": "动态内容在前：动态行是系统提示词的第一行。"
+            },
+            {
+              "id": "n54",
+              "line": 54,
+              "anchor": "return [{\"role\": \"system\", \"content\": stable}",
+              "text": "稳定前缀：system 只放稳定部分，动态行跟在问题后面。"
+            },
+            {
+              "id": "n59",
+              "line": 59,
+              "anchor": "sort_keys=True",
+              "text": "固定键的顺序再序列化，同样的消息总是得到同样的字符串。"
+            },
+            {
+              "id": "n64",
+              "line": 64,
+              "anchor": "hashlib.sha256(_serialize(messages[:-1])",
+              "text": "前缀哈希只算最后一条消息之前的部分，相同就说明前缀逐字相同。"
+            },
+            {
+              "id": "n71",
+              "line": 71,
+              "anchor": "os.path.commonprefix",
+              "text": "从头逐字比较两次请求，数到第一个不同的字符为止。"
+            }
+          ]
+        },
+        {
+          "id": "code-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_prompt_caching/runtime.py",
+          "start": 74,
+          "end": 109,
+          "notes": [
+            {
+              "id": "n76",
+              "line": 76,
+              "anchor": "if cache[\"cached_tokens\"] is None:",
+              "text": "先判断有没有报告，再判断是不是 0，三种结果发三种事件。"
+            },
+            {
+              "id": "n84",
+              "line": 84,
+              "anchor": "session = secrets.token_hex(4) if values.isolate_run",
+              "text": "会话标记每次运行生成一次，运行内不变。"
+            },
+            {
+              "id": "n85",
+              "line": 85,
+              "anchor": "plan = ([\"预热\"] if values.layout == \"warmup\"",
+              "text": "预热组在测量请求前多发一次，测量次数三组相同。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "messages = build_messages(values.layout",
+              "text": "每次只换问题和动态行，其余内容不动。"
+            },
+            {
+              "id": "n94",
+              "line": 94,
+              "anchor": "record = {\"round\": number, \"purpose\": purpose, \"prefix_hash\"",
+              "text": "发送之前就算好前缀指纹，它只取决于本地组装的消息。"
+            },
+            {
+              "id": "n98",
+              "line": 98,
+              "anchor": "response = context.complete({\"messages\": messages, \"temperature\": 0",
+              "text": "请求和响应原样记成事件；缓存是否命中由服务商决定。"
+            },
+            {
+              "id": "n102",
+              "line": 102,
+              "anchor": "cache = normalize_cache_usage(response.get(\"usage\"))",
+              "text": "只读响应实际报告的用量，没有缓存字段时命中数是 None。"
+            },
+            {
+              "id": "n104",
+              "line": 104,
+              "anchor": "context.emit(event_kind(cache), record, number)",
+              "text": "每次请求一条记录：前缀哈希、命中数和取值字段放在一起。"
+            },
+            {
+              "id": "n107",
+              "line": 107,
+              "anchor": "_report(context, values, session, records)",
+              "text": "整理成实验报告；表里每个数都能在上面的记录事件里找到。"
+            }
+          ]
+        },
+        {
+          "id": "code-normalize",
+          "type": "annotated-source",
+          "path": "lessons/lesson_prompt_caching/cache_usage.py",
+          "start": 9,
+          "end": 46,
+          "notes": [
+            {
+              "id": "n11",
+              "line": 11,
+              "anchor": "return value if type(value) is int and value >= 0",
+              "text": "只认非负整数：True、小数、字符串都不当成 Token 数。"
+            },
+            {
+              "id": "n14",
+              "line": 14,
+              "anchor": "def normalize_cache_usage(usage) -> dict:",
+              "text": "纯函数：输入响应的用量，输出统一的四项。"
+            },
+            {
+              "id": "n18",
+              "line": 18,
+              "anchor": "if not isinstance(usage, dict):",
+              "text": "响应根本没有用量时，四项都是 None。"
+            },
+            {
+              "id": "n23",
+              "line": 23,
+              "anchor": "if isinstance(details, dict) and _count(details.get(\"cached_tokens\"))",
+              "text": "百炼等 OpenAI 兼容接口：命中数在 prompt_tokens_details 里。"
+            },
+            {
+              "id": "n27",
+              "line": 27,
+              "anchor": "hit = _count(usage.get(\"prompt_cache_hit_tokens\"))",
+              "text": "DeepSeek 官方接口：命中与未命中各有一个字段。"
+            },
+            {
+              "id": "n31",
+              "line": 31,
+              "anchor": "if total is None and miss is not None:",
+              "text": "没有 prompt_tokens 时，用命中加未命中补出全部输入。"
+            },
+            {
+              "id": "n37",
+              "line": 37,
+              "anchor": "read = _count(usage.get(\"cache_read_input_tokens\"))",
+              "text": "Anthropic：命中写在 cache_read_input_tokens。"
+            },
+            {
+              "id": "n39",
+              "line": 39,
+              "anchor": "total = None if base is None else base + read + (write or 0)",
+              "text": "它的 input_tokens 不含缓存读写，三项相加才是全部输入。"
+            },
+            {
+              "id": "n46",
+              "line": 46,
+              "anchor": "return {**EMPTY, \"input_tokens\": total, \"cache_write_tokens\": write}",
+              "text": "哪个缓存字段都没有：命中数保持 None，报告写“未报告”。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "没有报告的缓存字段记成 None，不记成 0",
+          "chosen": "normalize_cache_usage 只采用响应里实际出现、值为非负整数的缓存字段；哪个都没有时 cached_tokens 为 None，事件记为 lesson.cache_unreported，报告写“未报告”，命中比例也不计算。",
+          "alternatives": [
+            {
+              "id": "missing-as-zero",
+              "title": "缺字段时按 0 处理",
+              "why_not": "0 会被读成服务商的结论“这次没有命中”。合计命中比例被拉低；跨服务商对比时，不报告的那一家看起来最差。"
+            },
+            {
+              "id": "estimate-locally",
+              "title": "用本地分词器估算命中数",
+              "why_not": "命中多少取决于服务商的缓存状态，本地无从得知；估出来的数会冒充服务商的报告。"
+            },
+            {
+              "id": "single-provider",
+              "title": "只读当前服务商的字段",
+              "why_not": "换一家服务商，字段名就变了，读不到会被误判。归一化把差异集中在一个函数里，单元测试逐家覆盖。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "dynamic-position",
+          "title": "动态内容放在哪里",
+          "hypothesis": "规则、手册和问题都相同，只把动态行从系统提示词第一行挪到最后一条 user 消息末尾。动态行在前时，各次前缀哈希都不同，服务商没有可以复用的开头；挪到末尾后，从第 2 次请求起前缀哈希相同，服务商可能报告命中。",
+          "predict": "predict-hits",
+          "arms": [
+            {
+              "id": "dynamic-first",
+              "exercise": "dynamic-first",
+              "label": "动态内容在前"
+            },
+            {
+              "id": "stable-prefix",
+              "exercise": "stable-prefix",
+              "label": "稳定前缀"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-system",
+              "text": "第 1 次请求的系统提示词：动态内容在前时，第一行就是动态行。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "last-user",
+              "text": "第 2 次请求的最后一条 user 消息：稳定前缀组的动态行挪到了这里。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[1].content"
+              }
+            },
+            {
+              "id": "usage-2",
+              "text": "第 2 次响应的用量原文：缓存字段就在这里。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.usage"
+              }
+            },
+            {
+              "id": "hash-2",
+              "text": "第 2 次请求的前缀哈希，和第 1 次比较。",
+              "selector": {
+                "round": 2,
+                "path": "data.prefix_hash"
+              }
+            },
+            {
+              "id": "shared-2",
+              "text": "第 2 次请求与第 1 次从头相同的字符数。",
+              "selector": {
+                "round": 2,
+                "path": "data.shared_prefix_chars"
+              }
+            },
+            {
+              "id": "cached-2",
+              "text": "第 2 次请求归一化后的缓存命中 Token。",
+              "selector": {
+                "round": 2,
+                "path": "data.cached_tokens"
+              }
+            },
+            {
+              "id": "table",
+              "text": "实验报告的逐次表格。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组发的是同样的规则、手册和问题，差别只在动态行放在哪里。先看第 1 次请求的系统提示词。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "first-system"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-system"
+            },
+            {
+              "action": "narrate",
+              "text": "动态内容在前时，请求序号和发送时间是第一行；稳定前缀组的第一行是会话标记。"
+            },
+            {
+              "action": "seek",
+              "observe": "last-user"
+            },
+            {
+              "action": "highlight",
+              "observe": "last-user"
+            },
+            {
+              "action": "narrate",
+              "text": "稳定前缀组把动态行放在问题后面，规则和手册之前没有任何会变的字。"
+            },
+            {
+              "action": "seek",
+              "observe": "hash-2"
+            },
+            {
+              "action": "highlight",
+              "observe": "hash-2"
+            },
+            {
+              "action": "narrate",
+              "text": "前缀哈希是运行器在本地算的。和第 1 次比：相同说明前缀逐字没变。"
+            },
+            {
+              "action": "seek",
+              "observe": "shared-2"
+            },
+            {
+              "action": "highlight",
+              "observe": "shared-2"
+            },
+            {
+              "action": "narrate",
+              "text": "这个数是两次请求从头相同的字符数。动态行在前时只有十几个字符。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "usage-2"
+            },
+            {
+              "action": "highlight",
+              "observe": "usage-2"
+            },
+            {
+              "action": "narrate",
+              "text": "这是服务商在第 2 次响应里报告的用量原文，找一找缓存字段。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "cached-2"
+            },
+            {
+              "action": "highlight",
+              "observe": "cached-2"
+            },
+            {
+              "action": "narrate",
+              "text": "归一化后的命中数。None 表示响应没有报告，0 表示服务商报告了没有命中。"
+            },
+            {
+              "action": "seek",
+              "observe": "table"
+            },
+            {
+              "action": "highlight",
+              "observe": "table"
+            },
+            {
+              "action": "narrate",
+              "text": "报告把每次请求排成一张表。对照两组的前缀哈希列和缓存命中 Token 列。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，每次请求的前缀是否逐字相同（前缀哈希、与上一次相同的前缀字符数），以及服务商对每次请求报告了多少缓存命中 Token。",
+              "两组请求只有动态行的位置不同：规则、手册和问题完全相同，可以在 request 事件里逐字核对。"
+            ],
+            "does_not_prove": [
+              "一次运行不能证明服务商总会或总不会命中；命中还受缓存状态、有效期和调度影响。",
+              "耗时的差别不能直接归功于缓存，网络、排队和回答长度都会影响它。",
+              "离线测试模式下的 Token 数与命中数由夹具按前缀是否重复生成，不代表任何服务商。"
+            ]
+          }
+        },
+        {
+          "id": "warmup-effect",
+          "title": "预热请求",
+          "hypothesis": "两组的前缀相同。不预热时，第 1 次测量请求之前没有相同前缀的请求；预热组先发一次预热，测量请求都排在它后面，从第 1 次测量起就可能报告命中。",
+          "arms": [
+            {
+              "id": "no-warmup",
+              "exercise": "stable-prefix",
+              "label": "稳定前缀（不预热）"
+            },
+            {
+              "id": "warmup",
+              "exercise": "warmup",
+              "label": "稳定前缀 + 预热"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-question",
+              "text": "第 1 次请求的最后一条 user 消息：预热组是只要求回复“已读”的预热请求。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[1].content"
+              }
+            },
+            {
+              "id": "purpose-1",
+              "text": "第 1 次请求的用途：预热还是测量。",
+              "selector": {
+                "round": 1,
+                "path": "data.purpose"
+              }
+            },
+            {
+              "id": "cached-1",
+              "text": "第 1 次请求的缓存命中 Token。",
+              "selector": {
+                "round": 1,
+                "path": "data.cached_tokens"
+              }
+            },
+            {
+              "id": "cached-first-measure",
+              "text": "第 2 次请求的缓存命中 Token：预热组的第一次测量就在这里。",
+              "selector": {
+                "round": 2,
+                "path": "data.cached_tokens"
+              }
+            },
+            {
+              "id": "hash-check",
+              "text": "报告的第一项检查：各次请求的前缀哈希是否相同（预热也算在内）。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[0]"
+              }
+            },
+            {
+              "id": "metrics",
+              "text": "测量请求中报告命中的次数和合计命中比例；没有报告时写“未报告”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组前缀相同，差别是预热组先多发一次请求。先看第 1 次请求问了什么。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "first-question"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-question"
+            },
+            {
+              "action": "narrate",
+              "text": "预热请求只要求回复“已读”，它的作用是让服务商先处理一遍这段前缀。"
+            },
+            {
+              "action": "seek",
+              "observe": "purpose-1"
+            },
+            {
+              "action": "highlight",
+              "observe": "purpose-1"
+            },
+            {
+              "action": "narrate",
+              "text": "记录里写明了这次请求是预热还是测量，预热不计入测量统计。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "cached-1"
+            },
+            {
+              "action": "highlight",
+              "observe": "cached-1"
+            },
+            {
+              "action": "narrate",
+              "text": "第 1 次请求之前没有相同前缀的请求，看服务商报告了什么。"
+            },
+            {
+              "action": "seek",
+              "observe": "cached-first-measure"
+            },
+            {
+              "action": "highlight",
+              "observe": "cached-first-measure"
+            },
+            {
+              "action": "narrate",
+              "text": "第 2 次请求：在预热组里它是第一次测量，前面已经有一次相同前缀的请求。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "hash-check"
+            },
+            {
+              "action": "highlight",
+              "observe": "hash-check"
+            },
+            {
+              "action": "narrate",
+              "text": "先确认前缀哈希一致，命中数的比较才有意义。"
+            },
+            {
+              "action": "seek",
+              "observe": "metrics"
+            },
+            {
+              "action": "highlight",
+              "observe": "metrics"
+            },
+            {
+              "action": "narrate",
+              "text": "最后对照两组测量请求的命中次数和合计比例。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "预热组的每次测量请求前面都有一次相同前缀的请求，以及服务商对这些请求各报告了什么。"
+            ],
+            "does_not_prove": [
+              "预热请求本身不省钱：它要处理全部输入。",
+              "缓存能保留多久、预热后隔多久仍然有效，本实验没有测。",
+              "离线测试模式下，预热组的夹具故意不返回缓存字段，只用来测试“未报告”的显示，不代表任何服务商。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "layout",
+          "label": "请求结构",
+          "options": [
+            {
+              "value": "dynamic_first",
+              "label": "动态内容在前"
+            },
+            {
+              "value": "stable_prefix",
+              "label": "稳定前缀"
+            },
+            {
+              "value": "warmup",
+              "label": "稳定前缀 + 预热"
+            }
+          ]
+        },
+        {
+          "name": "repeats",
+          "label": "测量请求次数",
+          "help": "每组连续发几次同类请求（3–5 次）；预热组另加 1 次预热。"
+        },
+        {
+          "name": "isolate_run",
+          "label": "每次运行换一个会话标记",
+          "help": "开启时会话标记由本次运行随机生成，上一次运行留下的缓存用不上；关闭后固定为“不隔离”，可以观察跨运行的复用。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "提示缓存复用的是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "服务商处理过的、与之前请求逐字相同的开头",
+                  "feedback": "对。复用发生在服务商处理输入的阶段，模型看到的内容不变。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型上一次的回答",
+                  "feedback": "不对。回答每次重新生成；复用的只是输入开头的处理结果。"
+                },
+                {
+                  "id": "c",
+                  "text": "整个请求，只要内容大体相似",
+                  "feedback": "不对。必须从第一个字起逐字相同，“大体相似”不算。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "提示缓存只省服务商的重复处理，不改变请求内容，也不复用回答。"
+            },
+            {
+              "id": "q2",
+              "prompt": "一个 Agent 的系统提示词第一行写着“当前时间：10:15:02”。这会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "每轮开头都不同，后面的工具定义和资料都没法复用",
+                  "feedback": "对。改动在最前面，它之后的全部内容都失去了复用的机会。"
+                },
+                {
+                  "id": "b",
+                  "text": "没有影响，时间只占几个字",
+                  "feedback": "不对。占几个字不要紧，要紧的是它在最前面。"
+                },
+                {
+                  "id": "c",
+                  "text": "只有时间这几个字没法复用",
+                  "feedback": "不对。前缀匹配到第一个不同的字就停，不会跳过它接着比。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "会变的内容放到末尾，稳定前缀才能保持不变。"
+            },
+            {
+              "id": "q3",
+              "prompt": "DeepSeek 官方接口的一次响应里 prompt_cache_hit_tokens 为 0；百炼的另一次响应里没有 prompt_tokens_details。两者分别该记成什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "前者报告为 0，后者未报告",
+                  "feedback": "对。字段存在、值为 0 是服务商明确报告；字段不存在就是不知道。"
+                },
+                {
+                  "id": "b",
+                  "text": "都记成 0",
+                  "feedback": "不对。后者没有任何缓存字段，记成 0 等于替服务商下结论。"
+                },
+                {
+                  "id": "c",
+                  "text": "都记成未报告",
+                  "feedback": "不对。前者字段存在、值为 0，是服务商明确报告的“没有命中”。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "先看字段在不在，再看值是多少。"
+            },
+            {
+              "id": "q4",
+              "prompt": "两次请求的前缀哈希相同，第二次却报告命中 0。哪种说法对？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "前缀逐字相同，这次没有复用是服务商那一侧的原因",
+                  "feedback": "对。本地能确认的只是前缀没变，命中与否由服务商决定。"
+                },
+                {
+                  "id": "b",
+                  "text": "哈希算错了，前缀一定变了",
+                  "feedback": "不对。sha256 相同，就说明序列化后的前缀逐字相同。"
+                },
+                {
+                  "id": "c",
+                  "text": "命中缓存会改变模型看到的内容，所以这次没命中",
+                  "feedback": "不对。命中与否都不改变模型看到的内容。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "前缀哈希把“我们这边有没有变”和“服务商有没有复用”分开。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“稳定前缀”，找出服务商第一次报告命中的那次请求。",
+          "target": {
+            "event": "lesson.cache_hit"
+          },
+          "explanation": "lesson.cache_hit 只在响应报告的缓存命中 Token 大于 0 时出现，事件里有这次的前缀哈希、命中数和取值字段。对照它前面那次请求，前缀哈希相同。如果你的运行里没有这条事件，看看 lesson.cache_miss 和 lesson.cache_unreported：前者是服务商报告了 0，后者是响应里没有缓存字段。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我对比了“动态内容在前”和“稳定前缀”两次运行的前缀哈希列，能指出是哪一行让前缀断开。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在一次 response 事件的用量里找到了缓存字段，并和报告里的缓存命中 Token 对上了数。"
+            },
+            {
+              "id": "item-3",
+              "text": "我关掉“每次运行换一个会话标记”，连续运行两次“稳定前缀”，比较了第二次运行第 1 次请求报告的命中。"
+            },
+            {
+              "id": "item-4",
+              "text": "我能说出 Agent 里两种会破坏前缀的写法，以及动态信息应该放在哪里。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "cached_tokens",
+      "note": "百炼等 OpenAI 兼容接口报告缓存命中的字段，位于用量的 prompt_tokens_details 下。"
+    },
+    {
+      "name": "prefix_hash",
+      "note": "运行器算的前缀指纹：最后一条消息之前的全部消息序列化后，取 sha256 前 12 位。"
+    },
+    {
+      "name": "shared_prefix_chars",
+      "note": "这次与上一次请求序列化后从头逐字相同的字符数；第一次请求没有比较对象。"
+    },
+    {
+      "name": "normalize_cache_usage",
+      "note": "把各服务商的缓存字段归一成全部输入、命中、写入缓存三个数；没报告的记 None。"
+    },
+    {
+      "name": "lesson.cache_hit",
+      "note": "响应报告的缓存命中 Token 大于 0 时发布，带前缀哈希、命中数和取值字段。"
+    },
+    {
+      "name": "lesson.cache_miss",
+      "note": "响应报告了缓存字段、值为 0 时发布：服务商明确说这次没有命中。"
+    },
+    {
+      "name": "lesson.cache_unreported",
+      "note": "响应里没有任何缓存字段时发布：命中数未知，不是 0。"
+    },
+    {
+      "name": "isolate_run",
+      "note": "参数：开启时每次运行生成新的会话标记，上一次运行的缓存用不上。"
+    }
+  ]
+}
