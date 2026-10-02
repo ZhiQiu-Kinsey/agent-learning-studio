@@ -28,9 +28,10 @@
 | --- | --- |
 | `src/stage/` | `deriveStage`（纯函数：拓扑、span、信号、胶片）、`replay.ts`（回放时钟，带版本令牌）、`AgentStage`、`ContextFilm`、`Timeline`、`ToolCards`、`Lenses`（标准教学事件族的通用视图） |
 | `src/content/` | 生成的 v2 类型 `types.gen.ts`、`view.ts`、选择器引擎 `selector.ts`、导览 `guide.ts`、预测 `predict.ts`、块渲染 `blocks/` |
-| `src/motion/` | `MotionProvider`（合并系统减少动画、用户设置、WebGL 与页面可见性）、`useMotionBudget`（离屏暂停，WebGL 同屏最多一个）、`MotionIntent` 意图注册表、动效令牌 |
+| `src/motion/` | `MotionProvider`（合并系统减少动画、WebGL 与页面可见性）、`useMotionBudget`（离屏暂停，WebGL 同屏最多两个）、`MotionIntent` 意图注册表、动效令牌 |
 | `src/i18n/` | i18next、语言注册表、按命名空间组织的 `locales/zh-CN/*.json`、错误码翻译 |
 | `src/progress/` | 本机学习进度（localStorage，有独立版本线与迁移阶梯），只记录真实动作 |
+| `src/components/backdrops/` | 英雄带动态背景：`Backdrop` 按预设懒加载 React Bits WebGL 着色器，离屏卸载，静态时退化为同色渐变；`backdropFor(category)` 给每个课程领域分配一种氛围。开发预览：`/dev/backdrops.html` |
 | `src/hooks/useStudio.ts` | 课程、参数、运行（`POST /api/runs`，断线后按 seq 续读）与回放状态 |
 | `src/components/command/` | ⌘K 命令面板（cmdk，懒加载） |
 | `src/scenes/lab/` | 实验面板、导览栏、录制视图、实验快捷键 |
@@ -48,7 +49,7 @@
 
 ## 动效
 
-- **动效级别**：`<html data-motion="full|reduced|static">` 由首屏脚本和 `MotionProvider` 写入。“跟随系统”时，系统开启减少动画会映射为 static。
+- **动效级别**：`<html data-motion="full|static">` 由首屏脚本和 `MotionProvider` 写入，只跟随系统的“减少动画”设置，没有页面内开关。
 - **CSS 写法**：统一使用 `:root:not([data-motion="full"])`，Tailwind 的 `motion-reduce:` 和 `motion-safe:` 已跟随这个属性。
 - **重效果**：通过 `MotionIntent` 或 `useMotionBudget` 接入，做到按需加载、离屏暂停、WebGL 同屏最多一个，并且都有静态降级。
 - **主动动画**：除了加载时的一次入场，界面不主动动；每个真实事件只发一次信号。

@@ -119,7 +119,7 @@ AgentStart/
 
 教学示意由同一个舞台渲染，但画成虚线，并加上“教学示意 · 非运行记录”水印。
 
-动效由统一的动效层管理，可选“跟随系统 / 完整 / 简洁 / 静态”。系统开启减少动画时，“跟随系统”会使页面静止；重效果按需加载、离屏暂停，WebGL 同屏最多一个。⌘K（Ctrl+K）打开命令面板；实验中可用空格、方向键和 `[ ]` 控制回放，`?` 查看全部快捷键。结构见 [前端结构](docs/architecture/frontend-workspace.md)，方案见 [平台重构方案](docs/architecture/redesign-plan.md)。
+动效由统一的动效层管理，只跟随系统的“减少动画”设置：系统开启时页面静止，动态背景退化为同色渐变；重效果按需加载、离屏暂停，WebGL 同屏最多两个。⌘K（Ctrl+K）打开命令面板；实验中可用空格、方向键和 `[ ]` 控制回放，`?` 查看全部快捷键。结构见 [前端结构](docs/architecture/frontend-workspace.md)，方案见 [平台重构方案](docs/architecture/redesign-plan.md)。
 
 ## 开发与验证
 
