@@ -41,7 +41,7 @@ async function catalog(page: Page) {
   };
 }
 
-test("⌘K opens the palette, finds lessons by slug, alias or title and enters them", async ({
+test("⌘K opens the palette, finds lessons by slug, number or title and enters them", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -71,7 +71,8 @@ test("⌘K opens the palette, finds lessons by slug, alias or title and enters t
   await expect(input).toBeFocused();
   await input.fill(second.id);
   await expect(lessonItem(page, second.id)).toBeVisible();
-  await input.fill(second.aliases[0]);
+  // 显示课号也能搜到（课号随目录顺序计算，不是 ID）。
+  await input.fill(String(second.number).padStart(2, "0"));
   await expect(lessonItem(page, second.id)).toBeVisible();
   await input.fill(second.title);
   await expect(lessonItem(page, second.id)).toBeVisible();

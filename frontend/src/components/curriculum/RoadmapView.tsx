@@ -129,7 +129,7 @@ function RoadmapCanvas({
                 });
               }}
               fitViewOptions={{ padding: 0.08 }}
-              minZoom={0.25}
+              minZoom={0.1}
               maxZoom={1.6}
               nodesDraggable={false}
               nodesConnectable={false}

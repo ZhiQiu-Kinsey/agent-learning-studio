@@ -45,7 +45,15 @@ test("chapters two and three expose complete guides and run every real preset th
     await request.get("/api/curriculum")
   ).json();
   const lessons = catalog.lessons.filter((lesson) =>
-    ["4", "5", "6", "7", "8", "9", "10"].includes(lesson.aliases[0]),
+    [
+      "task-contract",
+      "structured-output",
+      "prompt-experiments",
+      "messages-context",
+      "application-state",
+      "context-budget",
+      "persistent-memory",
+    ].includes(lesson.id),
   );
   expect(lessons).toHaveLength(7);
   expect(lessons.every((lesson) => lesson.status === "available")).toBe(true);

@@ -148,7 +148,7 @@ test("interactive lesson explanations are different for all three lessons and ne
     if (isRunCreation(req)) runs++;
   });
   await page.goto("/");
-  for (const id of ["1", "2", "3"]) {
+  for (const id of ["tool-selection", "dependent-calls", "fail-safely"]) {
     const detail = await (await request.get(`/api/lessons/${id}`)).json();
     await page
       .getByTestId("course-nav")

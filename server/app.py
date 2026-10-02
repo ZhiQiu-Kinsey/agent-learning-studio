@@ -23,11 +23,12 @@ from course.runner import RunCancelled
 from course.api_client import send_bailian
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
-from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, lesson_code_view,
+from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, curriculum_outline,
+                            lesson_code_view,
                             lesson_detail, lesson_runtime, lesson_spec, public_lesson)
 from server.content import load_onboarding
 from server.content_overlay import LOCALE
-from server.curriculum import public_curriculum, roadmap
+from server.curriculum import roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
 from server.lesson_refs import resolve_refs
@@ -192,7 +193,7 @@ def lessons():
 
 @app.get("/api/curriculum")
 def curriculum():
-    return public_curriculum()
+    return curriculum_outline()
 
 
 @app.get("/api/onboarding")

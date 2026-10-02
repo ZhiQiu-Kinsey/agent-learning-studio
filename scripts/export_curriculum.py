@@ -12,6 +12,13 @@ from server.curriculum import index_catalog  # noqa: E402
 from server.lesson_refs import resolve_refs  # noqa: E402
 
 
+def document():
+    """课程表文档：catalog 加上可运行课的小节、是否调用模型与本课术语（与 /api/curriculum 相同来源）。"""
+    from server.catalog import curriculum_outline
+
+    return render(curriculum_outline())
+
+
 def render(catalog):
     # 显示课号由目录顺序计算；同时完成 slug、别名与先修引用的校验。
     numbers = index_catalog(catalog).numbers
@@ -28,7 +35,7 @@ def render(catalog):
                     if available else "当前课程均为教学计划，尚未开放运行。")
     lines = [f"# {catalog['title']}", "", f"版本：{catalog['version']}。适用环境：Python、多供应商模型接入、本地网页教学平台；百炼是当前已验证配置。", "",
              "> 此文档由 `curriculum/catalog.json` 生成。课程目录、网页和文档使用同一份数据；修改后运行 `python scripts/export_curriculum.py`。", "",
-             "> 课号按目录顺序计算，仅用于显示；接口与链接使用课程 ID（slug），旧数字编号作为别名继续可用。", "",
+             "> 课号按目录顺序计算，仅用于显示；接口与链接使用课程 ID（slug）。可运行课的小节来自该课正文，规划课的小节是计划。", "",
              "课程按 **大类 → 模块 → 课次 → 知识点 → 实验 → 验收** 组织。" + availability, "",
              "## 学习原则", ""]
     lines.extend(f"- {item}" for item in catalog["principles"])
@@ -45,10 +52,26 @@ def render(catalog):
                 state = "已可运行" if item["status"] == "available" else "规划中"
                 prerequisites = "、".join(f"{label(p)} {lessons[p]['title']}" for p in item["prerequisites"]) or "Python 函数、字典、异常与 JSON 基础"
                 aliases = "、".join(f"`{alias}`" for alias in item.get("aliases", []))
+                facts = [f"**层级：** {item['level']}", f"**状态：** {state}"]
+                if item.get("difficulty"):
+                    facts.append(f"**难度：** {item['difficulty']}")
+                if item.get("estimated_minutes"):
+                    facts.append(f"**预计：** 约 {item['estimated_minutes']} 分钟")
+                calls = item.get("calls_model")
+                if calls is not None:
+                    facts.append("**模型：** " + ("调用真实模型" if calls else "本课不调用模型"))
                 lines.extend(["", f"#### {label(lesson_id)} · {item['title']}", "",
                               f"**课程 ID：** `{lesson_id}`" + (f"（别名 {aliases}）" if aliases else ""), "",
-                              f"**层级：** {item['level']}　**状态：** {state}", "",
-                              f"**先修：** {prerequisites}", "", item["summary"], "", "**学习目标**", ""])
+                              "　".join(facts), "",
+                              f"**先修：** {prerequisites}", "", item["summary"], ""])
+                if item.get("key_terms"):
+                    lines.extend(["**本课术语：** " + "、".join(item["key_terms"]), ""])
+                if item.get("sections"):
+                    lines.extend(["**小节**", ""])
+                    lines.extend(f"{i}. **{section['title']}**：{section['gist']}"
+                                 for i, section in enumerate(item["sections"], 1))
+                    lines.append("")
+                lines.extend(["**学习目标**", ""])
                 lines.extend(f"- {value}" for value in item["objectives"])
                 lines.extend(["", "**知识点与分节**", ""])
                 lines.extend(f"- {value}" for value in item["topics"])
@@ -85,7 +108,7 @@ def main():
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     catalog = json.loads((ROOT / "curriculum/catalog.json").read_text(encoding="utf-8"))
-    output = render(catalog)
+    output = document()
     target = ROOT / "docs/course-plan.md"
     if args.check:
         if not target.exists() or target.read_text(encoding="utf-8") != output:

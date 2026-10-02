@@ -17,6 +17,26 @@ import { lessonMarks } from "./graph";
 import { ProgressMarks } from "./ProgressMarks";
 import { TextList } from "./TextList";
 
+/** 难度、预计时长与是否调用模型，跟在课号后面的一行小字。 */
+export function LessonFacts({ lesson }: { lesson: CurriculumLesson }) {
+  const { t } = useTranslation("curriculum");
+  const facts = [
+    lesson.difficulty,
+    lesson.estimated_minutes
+      ? t("facts.minutes", { value: lesson.estimated_minutes })
+      : null,
+    lesson.calls_model === false ? t("facts.noModel") : null,
+  ].filter(Boolean);
+  if (!facts.length) return null;
+  return (
+    <span className="curriculum-facts" data-testid="curriculum-lesson-facts">
+      {facts.map((fact) => (
+        <span key={fact as string}>{fact}</span>
+      ))}
+    </span>
+  );
+}
+
 /** One lesson row of the list view; expands into the full lesson plan. */
 export function LessonPlan({
   lesson,
@@ -77,6 +97,7 @@ export function LessonPlan({
                 number: formatLessonNumber(lesson.number),
                 level: lesson.level,
               })}
+              <LessonFacts lesson={lesson} />
             </small>
           </span>
           <ProgressMarks marks={marks} testId="curriculum-lesson-progress" />
@@ -94,6 +115,32 @@ export function LessonPlan({
                 : t("list.noPrerequisites")}
             </p>
           </div>
+          {!!lesson.sections?.length && (
+            <section
+              className="curriculum-sections"
+              data-testid="curriculum-lesson-sections"
+            >
+              <h4>{t(live ? "list.sections" : "list.plannedSections")}</h4>
+              <ol>
+                {lesson.sections.map((section) => (
+                  <li key={section.title}>
+                    <strong>{section.title}</strong>
+                    <span>{section.gist}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {!!lesson.key_terms?.length && (
+            <div className="curriculum-terms">
+              <strong>{t("list.keyTerms")}</strong>
+              <div className="curriculum-topics">
+                {lesson.key_terms.map((term) => (
+                  <span key={term}>{term}</span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="curriculum-detail-grid">
             <section>
               <h4>{t("list.objectives")}</h4>

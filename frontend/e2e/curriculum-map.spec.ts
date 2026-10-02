@@ -30,7 +30,9 @@ async function load(request: import("@playwright/test").APIRequestContext) {
   const catalog: CurriculumData = await (
     await request.get("/api/curriculum")
   ).json();
-  const first: Detail = await (await request.get("/api/lessons/tool-selection")).json();
+  const first: Detail = await (
+    await request.get("/api/lessons/tool-selection")
+  ).json();
   return { catalog, first };
 }
 
@@ -54,7 +56,9 @@ test("domain cards and roadmap show real counts, and a run mark appears only aft
     if (isRunCreation(req)) runs++;
   });
   const firstLesson = catalog.lessons.find((lesson) => lesson.id === first.id)!;
-  const planned = catalog.lessons.find((lesson) => lesson.status === "planned")!;
+  const planned = catalog.lessons.find(
+    (lesson) => lesson.status === "planned",
+  )!;
   await page.goto("/");
   await expect(lessonHeading(page, first.title)).toBeVisible();
   await openMap(page);
@@ -86,7 +90,9 @@ test("domain cards and roadmap show real counts, and a run mark appears only aft
   await page.getByTestId("curriculum-view-roadmap").click();
   const nodes = page.getByTestId("roadmap-node");
   await expect(nodes).toHaveCount(catalog.lessons.length);
-  await expect(nodes.and(page.locator('[data-status="available"]'))).toHaveCount(
+  await expect(
+    nodes.and(page.locator('[data-status="available"]')),
+  ).toHaveCount(
     catalog.lessons.filter((lesson) => lesson.status === "available").length,
   );
   const firstNode = nodes.and(page.locator(byLesson(first.id)));
@@ -128,6 +134,8 @@ test("keyboard moves between roadmap lessons, Enter opens an available lesson on
   page.on("request", (req) => {
     if (isRunCreation(req)) runs++;
   });
+  // Home 回到目录里的第 1 课；它右边的第 2 课可能已开放，也可能还在规划中。
+  const start = catalog.lessons.find((lesson) => lesson.number === 1)!;
   const next = catalog.lessons.find((lesson) => lesson.number === 2)!;
   const last = [...catalog.lessons].sort((a, b) => b.number - a.number)[0];
   await page.goto("/");
@@ -151,14 +159,18 @@ test("keyboard moves between roadmap lessons, Enter opens an available lesson on
   }
 
   await page.keyboard.press("Home");
-  await expect(focused).toHaveAttribute("data-lesson-id", first.id);
+  await expect(focused).toHaveAttribute("data-lesson-id", start.id);
   await page.keyboard.press("ArrowRight");
   await expect(focused).toHaveAttribute("data-lesson-id", next.id);
   await page.keyboard.press("ArrowLeft");
-  await expect(focused).toHaveAttribute("data-lesson-id", first.id);
+  await expect(focused).toHaveAttribute("data-lesson-id", start.id);
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Enter");
-  await expect(lessonHeading(page, next.title)).toBeVisible();
+  if (next.status === "available") {
+    await expect(lessonHeading(page, next.title)).toBeVisible();
+  } else {
+    await expect(detail.getByTestId("roadmap-detail-planned")).toBeVisible();
+  }
   expect(runs).toBe(0);
 });
 
@@ -178,7 +190,10 @@ test("on a phone-width screen the route becomes a list and nothing scrolls sidew
   const items = list.getByTestId("roadmap-list-item");
   await expect(items).toHaveCount(catalog.lessons.length);
   await expect(
-    items.and(page.locator('[data-status="planned"]')).first().getByRole("button"),
+    items
+      .and(page.locator('[data-status="planned"]'))
+      .first()
+      .getByRole("button"),
   ).toHaveCount(0);
   const noSideways = () =>
     page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);

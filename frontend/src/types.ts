@@ -147,6 +147,15 @@ export type CurriculumLesson = {
   experiments: { title: string; steps: string[]; deliverable: string }[];
   acceptance: string[];
   references: { source: string; locator: string }[];
+  /** 预计学习时长（分钟）与难度，来自 catalog。 */
+  estimated_minutes?: number;
+  difficulty?: string;
+  /** 小节：可运行课来自正文节标题，规划课来自 catalog 的计划。 */
+  sections?: { title: string; gist: string }[];
+  /** 是否调用真实模型；规划课未定时为 null。 */
+  calls_model?: boolean | null;
+  /** 本课引入的课程概念（术语表 first_lesson 为本课）。 */
+  key_terms?: string[];
 };
 export type CurriculumData = {
   title: string;

@@ -5,6 +5,7 @@ import { useReducedMotion } from "../../../motion";
 import type { CurriculumLesson } from "../../../types";
 import { Button } from "../../ui/button";
 import type { LessonMarks, RoadmapNode } from "../graph";
+import { LessonFacts } from "../LessonPlan";
 import { ProgressMarks } from "../ProgressMarks";
 
 /** Detail of the lesson in focus, described by every node (aria-describedby). */
@@ -43,11 +44,27 @@ export function RoadmapDetail({
         <small>
           {t("lessonNumber", { number: lesson.number })} ·{" "}
           {t(`status.${lesson.status}`)}
+          <LessonFacts lesson={lesson} />
         </small>
         <strong>{lesson.title}</strong>
         <ProgressMarks marks={marks} testId="roadmap-detail-progress" />
       </div>
       <p>{lesson.summary}</p>
+      {!!lesson.sections?.length && (
+        <ol
+          className="roadmap-detail-sections"
+          data-testid="roadmap-detail-sections"
+          aria-label={t(
+            lesson.status === "available"
+              ? "list.sections"
+              : "list.plannedSections",
+          )}
+        >
+          {lesson.sections.map((section) => (
+            <li key={section.title}>{section.title}</li>
+          ))}
+        </ol>
+      )}
       <p className="roadmap-detail-prereqs">
         {node.prerequisites.length
           ? t("roadmap.prerequisites", {

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from server.app import app
 from server.catalog import LESSONS
 from server.curriculum import load_curriculum
-from scripts.export_curriculum import ROOT, render
+from scripts.export_curriculum import ROOT, document
 
 
 class CurriculumTests(unittest.TestCase):
@@ -64,8 +64,18 @@ class CurriculumTests(unittest.TestCase):
         self.assertNotIn("data:", response.text)
 
     def test_readable_curriculum_matches_the_single_source(self):
-        catalog = load_curriculum()
-        self.assertEqual((ROOT / "docs/course-plan.md").read_text(encoding="utf-8"), render(catalog))
+        self.assertEqual((ROOT / "docs/course-plan.md").read_text(encoding="utf-8"), document())
+
+    def test_every_lesson_has_time_difficulty_and_an_outline(self):
+        from server.catalog import curriculum_outline
+
+        for lesson in curriculum_outline()["lessons"]:
+            with self.subTest(lesson=lesson["id"]):
+                self.assertIsInstance(lesson["estimated_minutes"], int)
+                self.assertIn(lesson["difficulty"], ("入门", "进阶", "挑战"))
+                if lesson["status"] == "available":
+                    self.assertGreaterEqual(len(lesson["sections"]), 2, "可运行课的小节来自正文节标题")
+                    self.assertIsInstance(lesson["calls_model"], bool)
 
 
 if __name__ == "__main__":

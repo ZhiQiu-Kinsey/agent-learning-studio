@@ -10,6 +10,7 @@ from server.code_reading import compare_target, lesson_code, source_role, valida
 from server.content import lesson_content_model, load_lesson_content
 from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
 from server.lesson_refs import check_refs, resolve_refs
+from server.outline import check_details, enrich
 
 ROOT = Path(__file__).resolve().parents[1]
 _MANIFEST_FIELDS = {
@@ -176,6 +177,7 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
         _require(isinstance(objectives, list) and objectives, "curriculum", "objectives 必须为非空数组")
         for objective in objectives:
             _text(objective, "curriculum.lessons.objectives")
+        check_details(entry, f"curriculum.lessons[{identifier}]")
         catalog[identifier] = {**entry, "number": index.numbers[identifier], "aliases": index.aliases(identifier)}
     found = {}
     for path in sorted((root / "lessons").glob("lesson_*/lesson.json")):
@@ -270,6 +272,33 @@ def lesson_detail(spec, locale=None):
             "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
             "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
             "sources": sources, "code_names": lesson_code_names(spec, sources)}
+
+
+_learning_cache: dict = {}
+
+
+def _learning(spec):
+    """课程表细纲用的 content 输出（已换好课号），按文件修改时间缓存。"""
+    path = spec["content_path"]
+    stat = path.stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in _learning_cache:
+        if len(_learning_cache) > 128:
+            _learning_cache.clear()
+        learning, _ = load_lesson_content(path, spec)
+        _learning_cache[key] = resolve_refs(learning, CATALOG_INDEX.numbers)
+    return _learning_cache[key]
+
+
+def curriculum_outline():
+    """/api/curriculum 与课程表文档：在 catalog 之上补小节、是否调用模型与本课术语（见 server/outline.py）。"""
+    from server.curriculum import public_curriculum
+    from server.glossary import load_glossary
+    try:
+        terms = load_glossary(ROOT, CATALOG_INDEX)["terms"]
+    except (LessonValidationError, OSError):
+        terms = []
+    return enrich(public_curriculum(), LESSONS, _learning, terms)
 
 
 def lesson_code_names(spec, sources=None):
