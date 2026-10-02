@@ -17,11 +17,16 @@ import {
   useVelocity,
 } from "motion/react";
 import { useReducedMotion } from "../../motion";
-
-const SETTLE = 9.23;
-const FULL_SPEED = 320;
-const MIN_REACH = 1.5;
-const FLAT = 0.002;
+import {
+  SETTLE,
+  FULL_SPEED,
+  MIN_REACH,
+  FLAT,
+  clamp,
+  smoothstep,
+  toPct,
+  snap,
+} from "./WakeSlider/math";
 
 export interface WakeSliderProps {
   value?: number;
@@ -48,21 +53,6 @@ export interface WakeSliderProps {
   ariaLabel?: string;
   className?: string;
 }
-
-const clamp = (v: number, lo: number, hi: number) =>
-  Math.min(hi, Math.max(lo, v));
-const smoothstep = (s: number) => s * s * (3 - 2 * s);
-const toPct = (v: number, min: number, max: number) =>
-  max > min ? ((v - min) / (max - min)) * 100 : 0;
-const snap = (v: number, min: number, max: number, step: number) => {
-  if (!(max > min)) return min;
-  if (!(step > 0)) return clamp(v, min, max);
-  const lastWhole = min + Math.floor(+((max - min) / step).toFixed(6)) * step;
-  const grid = clamp(Math.round((v - min) / step) * step + min, min, lastWhole);
-  return +(
-    lastWhole < max && Math.abs(v - max) <= Math.abs(v - grid) ? max : grid
-  ).toFixed(6);
-};
 
 const WakeSlider: React.FC<WakeSliderProps> = ({
   value: valueProp,

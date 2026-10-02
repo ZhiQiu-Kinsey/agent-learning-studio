@@ -1,7 +1,6 @@
 "use client";
 
 import React, {
-  forwardRef,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -9,15 +8,10 @@ import React, {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  animate,
-  motion,
-  motionValue,
-  useTransform,
-  type HTMLMotionProps,
-  type MotionValue,
-} from "motion/react";
+import { animate, motionValue } from "motion/react";
 import { useReducedMotion } from "../../motion";
+import { type ChipValues, Chip } from "./JellyRadio/Chip";
+import { type Config, DEFAULT_ITEMS, SIZES, spring } from "./JellyRadio/config";
 
 export type JellyRadioItem =
   | string
@@ -47,56 +41,6 @@ export interface JellyRadioProps {
   ariaDescribedBy?: string;
   className?: string;
 }
-
-interface ChipValues {
-  x: MotionValue<number>;
-  sx: MotionValue<number>;
-  sy: MotionValue<number>;
-}
-
-interface ChipProps extends HTMLMotionProps<"button"> {
-  mv: ChipValues;
-}
-
-interface Config {
-  swell: number;
-  barge: number;
-  shrink: number;
-  jelly: number;
-  bounce: number;
-  stagger: number;
-  stiffness: number;
-  reduce: boolean | null;
-  count: number;
-}
-
-const DEFAULT_ITEMS: JellyRadioItem[] = ["Off", "Low", "Medium", "High", "Max"];
-const SIZES: Record<string, [number, number, number]> = {
-  sm: [28, 12, 12],
-  md: [36, 13, 16],
-  lg: [44, 14, 20],
-};
-
-const spring = (k: number, m: number, bounce: number) => ({
-  type: "spring" as const,
-  stiffness: k,
-  damping: 2 * Math.sqrt(k * m) * (1 - bounce),
-  mass: m,
-});
-
-const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
-  { mv, children, ...rest },
-  ref,
-) {
-  const transform = useTransform(
-    () => `translateX(${mv.x.get()}px) scale(${mv.sx.get()}, ${mv.sy.get()})`,
-  );
-  return (
-    <motion.button ref={ref} style={{ transform }} {...rest}>
-      {children}
-    </motion.button>
-  );
-});
 
 const JellyRadio: React.FC<JellyRadioProps> = ({
   items = DEFAULT_ITEMS,
