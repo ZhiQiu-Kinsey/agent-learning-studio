@@ -1,8 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { animate, motion, useInView } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight } from "lucide-react";
-import { revealProps, useMotionBudget, useReducedMotion } from "../../motion";
+import {
+  revealProps,
+  useBeat,
+  useMotionBudget,
+  useReducedMotion,
+} from "../../motion";
 import { Backdrop } from "../backdrops/Backdrop";
 import ShinyText from "../react-bits/ShinyText";
 import { formatLessonNumber } from "../../lib/lessonIds";
@@ -63,17 +68,6 @@ const TRACE: {
   { who: "model", code: "answer: 19 + 23 = ", value: "42" },
 ];
 const TRACE_ROWS = TRACE.filter((item) => item.who).length;
-
-/** One beat drives the loop phrase and the trace; it only runs on screen at full motion. */
-function useBeat(active: boolean) {
-  const [beat, setBeat] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    const id = window.setInterval(() => setBeat((value) => value + 1), 1400);
-    return () => window.clearInterval(id);
-  }, [active]);
-  return beat;
-}
 
 /**
  * The observatory band: living backdrop, a two-line title with an accent,
