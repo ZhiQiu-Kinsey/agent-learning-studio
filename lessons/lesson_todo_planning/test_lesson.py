@@ -1,4 +1,4 @@
-"""第 14 课行为测试：确定性模型数据，工具与验收器在 Python 中真实执行。"""
+"""TODO 规划课行为测试：确定性模型数据，工具与验收器在 Python 中真实执行。"""
 import json
 import unittest
 
@@ -60,9 +60,9 @@ class WorkspaceTests(unittest.TestCase):
         card = [{"lesson": key, "note_id": note_id, "summary": "s"} for key, note_id in real.items()]
         self.assertTrue(all(c["passed"] for c in runtime.verify_card(card, real)))
         self.assertFalse(runtime.verify_card(card[:2], real)[1]["passed"])
-        forged = [{**card[0], "note_id": "n7-99"}, *card[1:]]
+        forged = [{**card[0], "note_id": "mc-99"}, *card[1:]]
         self.assertFalse(runtime.verify_card(forged, real)[2]["passed"])
-        self.assertFalse(runtime.verify_card(card, {"7": "n7-31"})[2]["passed"], "没查过的课不能算数")
+        self.assertFalse(runtime.verify_card(card, {"messages-context": "mc-31"})[2]["passed"], "没查过的课不能算数")
         self.assertFalse(any(c["passed"] for c in runtime.verify_card(None, real)))
 
 
@@ -94,7 +94,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(request[-1]["content"], injected[0][0]["text"])
         snapshots = of(events, "lesson.todo")
         self.assertEqual([s["version"] for s in snapshots], [1, 2, 3])
-        self.assertEqual(snapshots[1]["diff"]["changed"][0], {"id": "l7", "from": "in_progress", "to": "done"})
+        self.assertEqual(snapshots[1]["diff"]["changed"][0], {"id": "ctx", "from": "in_progress", "to": "done"})
         self.assertEqual(metric(events, "运行层提醒次数"), 2)
         self.assertEqual(metric(events, "TODO 自报完成"), "4/4")
 
@@ -112,7 +112,7 @@ class RunTests(unittest.TestCase):
     def test_budget_and_cancel(self):
         def forever(body, key):
             return {"choices": [{"message": {"content": None, "tool_calls": [{"id": "c", "type": "function", "function": {
-                "name": "lookup_note", "arguments": "{\"lesson\": \"7\"}"}}]}}]}
+                "name": "lookup_note", "arguments": "{\"lesson\": \"messages-context\"}"}}]}}]}
         answer, events = run_case("todo", {"condition": "todo"}, forever, budget=3)
         self.assertEqual(len(of(events, "request")), 3)
         self.assertIn("3 次调用内没有结束", answer)

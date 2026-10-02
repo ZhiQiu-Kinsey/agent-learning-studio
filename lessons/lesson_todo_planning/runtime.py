@@ -9,7 +9,6 @@ from typing import Literal
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
-from course.runner import execute_tool
 
 
 class Inputs(LessonInputs):
@@ -18,13 +17,19 @@ class Inputs(LessonInputs):
 
 
 INPUT_MODEL = Inputs
+# 三课的复习要点，键是课程 slug：显示课号会随课程表插入新课而变化，slug 不会。
+# 要点编号没有规律，模型猜不到；编出来的编号拿去和本次查询结果一比就对不上。
 NOTES = {
-    "7": {"lesson": "7", "note_id": "n7-31", "note": "模型只看到本次请求里的消息，历史要由程序重发。"},
-    "8": {"lesson": "8", "note_id": "n8-12", "note": "应用状态记录目标和证据，消息列表不会自动更新它。"},
-    "9": {"lesson": "9", "note_id": "n9-47", "note": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。"},
+    "messages-context": {"lesson": "messages-context", "note_id": "mc-31",
+                         "note": "模型只看到本次请求里的消息，历史要由程序重发。"},
+    "application-state": {"lesson": "application-state", "note_id": "as-12",
+                          "note": "应用状态记录目标和证据，消息列表不会自动更新它。"},
+    "context-budget": {"lesson": "context-budget", "note_id": "cb-47",
+                       "note": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。"},
 }
-REQUIRED = ("7", "8", "9")
-TASK = "帮我做一张复习卡：分别查第 7、8、9 课的要点，把三条要点连同要点编号存进复习卡，然后告诉我完成了。"
+REQUIRED = tuple(NOTES)
+TASK = ("帮我做一张复习卡：分别查 messages-context（消息与上下文）、application-state（应用状态与运行生命周期）、"
+        "context-budget（上下文预算与截取窗口）三课的要点，把三条要点连同要点编号存进复习卡，然后告诉我完成了。")
 BASE_SYSTEM = "你是学习助教。需要资料时调用工具，不要猜测要点内容或编号。全部完成后用一两句话说明结果。"
 TODO_RULES = ("开始动手前，先用 todo_write 列出步骤。每完成一步就调用 todo_write 更新状态："
               "pending 未开始，in_progress 进行中，done 已完成；同一时间最多一项 in_progress。")
@@ -40,6 +45,7 @@ class Workspace:
         self.card: list[dict] | None = None
 
     def todo_write(self, todos: list) -> dict:
+        """用完整清单整体替换当前清单；全部校验通过才生效，版本号加一。"""
         if not isinstance(todos, list) or not 1 <= len(todos) <= 12:
             raise ValueError("todos 必须是 1–12 项的列表。")
         cleaned, ids = [], set()
@@ -55,6 +61,7 @@ class Workspace:
                 raise ValueError("status 只能是 pending、in_progress 或 done。")
             ids.add(todo_id)
             cleaned.append({"id": todo_id, "content": content.strip(), "status": status})
+        # 同一时间最多一项进行中：清单要反映“现在在做哪一步”，而不是一堆半成品。
         if sum(item["status"] == "in_progress" for item in cleaned) > 1:
             raise ValueError("同一时间最多一项 in_progress。")
         self.todos, self.version = cleaned, self.version + 1
@@ -62,7 +69,7 @@ class Workspace:
 
     def lookup_note(self, lesson: str) -> dict:
         if lesson not in NOTES:
-            raise ValueError("只有第 7、8、9 课的要点。")
+            raise ValueError("只有 messages-context、application-state、context-budget 三课的要点。")
         return NOTES[lesson]
 
     def save_card(self, items: list) -> dict:
@@ -84,28 +91,13 @@ def todo_diff(before: list[dict], after: list[dict]) -> dict:
                         for key in new if key in old and old[key]["status"] != new[key]["status"]]}
 
 
-def verify_card(card: list[dict] | None, looked_up: dict[str, str]) -> list[dict]:
-    """独立验收：只看复习卡与本次真实查询结果，不看模型怎么说、TODO 怎么标。"""
-    lessons = sorted(item["lesson"] for item in card) if card else []
-    wrong = [item["lesson"] for item in card or [] if looked_up.get(item["lesson"]) != item["note_id"]]
-    return [
-        {"label": "复习卡已保存", "passed": card is not None,
-         "detail": "save_card 成功返回" if card is not None else "没有成功的 save_card"},
-        {"label": "卡片覆盖第 7、8、9 课", "passed": lessons == list(REQUIRED),
-         "detail": "卡片里的课：" + ("、".join(lessons) or "无")},
-        {"label": "每条要点编号来自本次查询", "passed": card is not None and not wrong,
-         "detail": "全部能对上本次 lookup_note 的结果" if card is not None and not wrong
-         else "对不上的课：" + ("、".join(wrong) or "（没有卡片）")},
-    ]
-
-
 def tool_specs(condition: str) -> list[dict]:
     def spec(name, description, properties, required):
         return {"type": "function", "function": {"name": name, "description": description, "parameters": {
             "type": "object", "properties": properties, "required": required, "additionalProperties": False}}}
     specs = [
         spec("lookup_note", "查询某一课的复习要点和要点编号。", {"lesson": {"type": "string", "enum": list(REQUIRED)}}, ["lesson"]),
-        spec("save_card", "把要点存进复习卡。每条要点写明课号、要点编号和一句话摘要。", {"items": {"type": "array", "items": {
+        spec("save_card", "把要点存进复习卡。每条要点写明课程（lookup_note 用的 lesson）、要点编号和一句话摘要。", {"items": {"type": "array", "items": {
             "type": "object", "properties": {"lesson": {"type": "string"}, "note_id": {"type": "string"}, "summary": {"type": "string"}},
             "required": ["lesson", "note_id", "summary"], "additionalProperties": False}}}, ["items"]),
     ]
@@ -125,10 +117,11 @@ def reminder_text(rounds: int) -> str:
 
 
 def run(context: RunContext) -> str:
+    """同一个任务在三种条件下运行：给不给 todo_write、运行层提不提醒；最后都交给同一个验收器。"""
     values = Inputs.model_validate(context.inputs)
-    condition = values.condition
-    workspace = Workspace()
+    condition, workspace = values.condition, Workspace()
     tools = {"lookup_note": workspace.lookup_note, "save_card": workspace.save_card}
+    # 无 TODO 组既看不到也执行不了 todo_write：工具定义和白名单里都没有它。
     if condition != "no_todo":
         tools["todo_write"] = workspace.todo_write
     system = BASE_SYSTEM if condition == "no_todo" else BASE_SYSTEM + TODO_RULES
@@ -136,46 +129,74 @@ def run(context: RunContext) -> str:
     looked_up: dict[str, str] = {}
     timeline, answer, reminders, since_update, model_calls = [], None, 0, 0, 0
     for round_number in range(1, context.max_model_calls + 1):
-        context.check_cancelled()
+        # 1. 发请求：每轮都带完整消息历史和本组可用的工具。
         response = context.complete({"messages": messages, "tools": tool_specs(condition), "tool_choice": "auto",
                                      "temperature": 0}, round_number)
         model_calls += 1
         message = response["choices"][0].get("message", {})
         calls = message.get("tool_calls") or []
+        # 2. 没有调用提议就结束。模型说“完成了”只是声明，后面还要验收。
         if not calls:
             answer = message.get("content") or ""
             break
+        # 3. 执行调用提议，把工具结果写回历史；记下这一轮有没有成功更新清单。
         messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": calls})
         updated = False
         for call in calls:
-            context.check_cancelled()
             name = call.get("function", {}).get("name")
             before = list(workspace.todos)
-            context.emit("tool_call", call, round_number)
-            result = execute_tool(call, tools)
-            context.emit("tool_result", {"tool_call_id": call.get("id"), "name": name, "result": result}, round_number)
+            result = context.execute_proposal(call, tools)
             messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": json.dumps(result, ensure_ascii=False)})
             if name == "lookup_note" and result.get("ok"):
                 looked_up[result["result"]["lesson"]] = result["result"]["note_id"]
             if name == "todo_write" and result.get("ok"):
                 updated = True
-                diff = todo_diff(before, workspace.todos)
-                context.emit("lesson.todo", {"version": workspace.version, "todos": workspace.todos, "diff": diff},
-                             round_number)
-                timeline.append([round_number, workspace.version,
-                                 sum(item["status"] == "done" for item in workspace.todos), len(workspace.todos),
-                                 "；".join(f"{c['id']} {c['from']}→{c['to']}" for c in diff["changed"]) or
-                                 ("新增 " + "、".join(diff["added"]) if diff["added"] else "无变化")])
+                _publish_todo(context, workspace, before, round_number, timeline)
+        # 4. 运行层提醒：连续 reminder_after 轮没更新清单，就追加一条 user 消息。
         since_update = 0 if updated else since_update + 1
         if condition == "todo_reminder" and since_update >= values.reminder_after:
-            # 提醒作为单独的 user 消息，放在本轮全部 tool 消息之后；OpenAI 兼容接口要求 tool 消息紧跟调用。
+            # 提醒排在本轮所有 tool 消息之后：OpenAI 兼容接口要求 tool 消息紧跟带调用的 assistant 消息。
             text = reminder_text(since_update)
             messages.append({"role": "user", "content": text})
             context.emit("lesson.harness_injected", {"kind": "todo_reminder", "source": "harness", "text": text,
                                                      "rounds_since_update": since_update}, round_number)
             reminders += 1
             since_update = 0
+    # 5. 验收：只看复习卡和本次真实查询结果，模型的说法和清单上的 done 都不算数。
     checks = verify_card(workspace.card, looked_up)
+    return _report(context, condition, checks, workspace, timeline, reminders, model_calls, answer)
+
+
+def verify_card(card: list[dict] | None, looked_up: dict[str, str]) -> list[dict]:
+    """独立验收：只看复习卡与本次真实查询结果，不看模型怎么说、TODO 怎么标。"""
+    lessons = sorted(item["lesson"] for item in card) if card else []
+    # 编号必须和本次 lookup_note 的返回一致；没查过的课，填什么编号都不算。
+    wrong = [item["lesson"] for item in card or [] if looked_up.get(item["lesson"]) != item["note_id"]]
+    return [
+        {"label": "复习卡已保存", "passed": card is not None,
+         "detail": "save_card 成功返回" if card is not None else "没有成功的 save_card"},
+        {"label": "卡片覆盖全部三课", "passed": lessons == sorted(REQUIRED),
+         "detail": "卡片里的课：" + ("、".join(lessons) or "无")},
+        {"label": "每条要点编号来自本次查询", "passed": card is not None and not wrong,
+         "detail": "全部能对上本次 lookup_note 的结果" if card is not None and not wrong
+         else "对不上的课：" + ("、".join(wrong) or "（没有卡片）")},
+    ]
+
+
+def _publish_todo(context: RunContext, workspace: Workspace, before: list[dict], round_number: int,
+                  timeline: list[list]) -> None:
+    """清单每变一次，就发布一版快照和差异（lesson.todo），并在报告的时间线里记一行。"""
+    diff = todo_diff(before, workspace.todos)
+    context.emit("lesson.todo", {"version": workspace.version, "todos": workspace.todos, "diff": diff}, round_number)
+    timeline.append([round_number, workspace.version,
+                     sum(item["status"] == "done" for item in workspace.todos), len(workspace.todos),
+                     "；".join(f"{c['id']} {c['from']}→{c['to']}" for c in diff["changed"]) or
+                     ("新增 " + "、".join(diff["added"]) if diff["added"] else "无变化")])
+
+
+def _report(context: RunContext, condition: str, checks: list[dict], workspace: Workspace, timeline: list[list],
+            reminders: int, model_calls: int, answer: str | None) -> str:
+    """发布实验报告（lesson.report）并返回最终回答：验收结论在前，模型的说法只作记录。"""
     accepted = all(check["passed"] for check in checks)
     done = sum(item["status"] == "done" for item in workspace.todos)
     context.emit("lesson.report", {

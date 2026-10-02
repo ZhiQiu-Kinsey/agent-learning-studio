@@ -23,7 +23,7 @@ from server.selectors import count_events, select_events
 STAGE_ROLES = {"user", "runtime", "model", "tool", "memory"}
 # “先跑一次”：predict 放在第一道微测之前。这些课还按旧版放在理解场景末尾，改好一课删一课（只减不增）。
 PREDICT_AT_END = {"tool-selection", "dependent-calls", "fail-safely", "structured-output", "messages-context",
-                  "application-state", "context-budget", "persistent-memory", "todo-planning", "plan-and-replan",
+                  "application-state", "context-budget", "persistent-memory", "plan-and-replan",
                   "reflection-revision", "workflow-patterns", "orchestrator-evaluator"}
 
 
