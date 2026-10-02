@@ -78,7 +78,12 @@ class RealLessonTests(unittest.TestCase):
         self.assertIsNone(data["whats_new"]["compare_with"])
         self.assertEqual(data["whats_new"]["changed"], [])
         names = {item["name"] for item in data["whats_new"]["added"]}
-        self.assertTrue({"TOOLS", "add_numbers", "get_current_time", "SYSTEM_PROMPT", "run_agent"} <= names)
+        self.assertTrue({"TOOLS", "add_numbers", "get_current_time", "SYSTEM_PROMPT"} <= names)
+        # 平台代码与测试夹具不算本课新增：run_agent 在 course/，create_completion 在 fixtures.py。
+        self.assertFalse({"run_agent", "create_completion", "call_bailian"} & names)
+        roles = {item["path"]: item["role"] for item in data["files"]}
+        self.assertEqual(roles["course/runner.py"], "platform")
+        self.assertEqual(roles["lessons/lesson_01_tool_selection/tools.py"], "lesson")
         self.assertEqual([item["path"] for item in data["files"]], [s["path"] for s in LESSONS[0]["sources"]])
 
     def test_second_lesson_compares_with_previous_and_keeps_shared_tools(self):
@@ -88,7 +93,8 @@ class RealLessonTests(unittest.TestCase):
         self.assertEqual({item["name"] for item in news["changed"]}, {"SYSTEM_PROMPT", "main"})
         self.assertEqual(news["added"], [])
         unchanged = {item["name"] for item in news["unchanged"]}
-        self.assertTrue({"TOOLS", "add_numbers", "run_agent"} <= unchanged)
+        self.assertTrue({"TOOLS", "add_numbers"} <= unchanged)
+        self.assertNotIn("run_agent", unchanged)
         prompt = next(item for item in news["changed"] if item["name"] == "SYSTEM_PROMPT")
         source = (Path(web.ROOT) / prompt["path"]).read_text(encoding="utf-8").splitlines()
         self.assertTrue(source[prompt["start"] - 1].startswith("SYSTEM_PROMPT"))

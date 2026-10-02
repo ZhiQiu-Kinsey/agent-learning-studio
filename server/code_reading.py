@@ -172,6 +172,16 @@ def _file_symbols(path: Path) -> list[dict[str, Any]]:
     return [dict(symbol) for symbol in _cache[key]]
 
 
+def source_role(path: str) -> str:
+    """源码在读码页里的角色：课程代码（lesson）、平台代码（platform）或只服务自动化测试的夹具（fixture）。"""
+    name = path.rsplit("/", 1)[-1]
+    if not path.startswith("lessons/"):
+        return "platform"
+    if name == "fixtures.py" or name.startswith("test_"):
+        return "fixture"
+    return "lesson"
+
+
 def _files(spec: dict[str, Any]) -> list[dict[str, Any]]:
     from server.catalog import _safe_file  # 延迟导入：catalog 在加载课程时也会导入本模块
 
@@ -179,7 +189,7 @@ def _files(spec: dict[str, Any]) -> list[dict[str, Any]]:
     for source in spec["sources"]:
         path = _safe_file(spec["root"], source["path"], "lesson sources", source=True)
         python = path.suffix.casefold() == ".py"
-        files.append({"path": source["path"], "language": source["language"],
+        files.append({"path": source["path"], "language": source["language"], "role": source_role(source["path"]),
                       "lines": line_count(path.read_text(encoding="utf-8")),
                       "symbols": _file_symbols(path) if python else []})
     return files
@@ -206,14 +216,19 @@ def _ref(path: str, symbol: dict[str, Any]) -> dict[str, Any]:
 
 def lesson_code(spec: dict[str, Any], lessons: list[dict[str, Any]], learning: dict[str, Any]) -> dict[str, Any]:
     """GET /api/lessons/{id}/code 的响应体；learning 是已合并译文层的 content v2 输出。"""
+    # “本课新增”只比较课程代码：平台代码和测试夹具不是本课要学的内容，不计入新增或变化。
     files = _files(spec)
     baseline_spec = _baseline(spec, lessons)
-    baseline = ([symbol for item in _files(baseline_spec) for symbol in item["symbols"]]
+    baseline = ([symbol for item in _files(baseline_spec) if item["role"] == "lesson" for symbol in item["symbols"]]
                 if baseline_spec else None)
-    statuses = classify([symbol for item in files for symbol in item["symbols"]], baseline)
+    statuses = classify([symbol for item in files if item["role"] == "lesson" for symbol in item["symbols"]],
+                        baseline)
     groups: dict[str, list[dict[str, Any]]] = {"added": [], "changed": [], "unchanged": []}
     for item in files:
         for symbol in item["symbols"]:
+            if item["role"] != "lesson":
+                symbol["status"] = "context"
+                continue
             symbol["status"] = statuses[symbol["name"]]
             groups[symbol["status"]].append(_ref(item["path"], symbol))
     blocks = (learning.get("scenes", {}).get("code") or {}).get("blocks", [])

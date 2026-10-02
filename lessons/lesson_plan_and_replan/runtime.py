@@ -210,7 +210,7 @@ def react(context: RunContext) -> tuple[str, dict, list[list]]:
             context.check_cancelled()
             calls += 1
             context.emit("tool_call", call, round_number)
-            result = execute_tool(call, AVAILABLE_TOOLS, quiet=True)
+            result = execute_tool(call, AVAILABLE_TOOLS)
             name = call.get("function", {}).get("name")
             context.emit("tool_result", {"tool_call_id": call.get("id"), "name": name, "result": result}, round_number)
             if result.get("ok"):

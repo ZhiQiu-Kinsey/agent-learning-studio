@@ -170,7 +170,7 @@ def run_native(context: RunContext, student_id: str, max_steps: int) -> str:
             context.check_cancelled()
             # 调用由模型在 tool_calls 里提出，按模型给的 id 记录；执行方式与第 1 课的原生循环相同。
             context.emit("tool_call", call, step_number)
-            result = execute_tool(call, AVAILABLE_TOOLS, quiet=True)
+            result = execute_tool(call, AVAILABLE_TOOLS)
             context.emit("tool_result", {"tool_call_id": call.get("id"), "name": call.get("function", {}).get("name"),
                                          "result": result}, step_number)
             messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": json.dumps(result, ensure_ascii=False)})

@@ -193,23 +193,23 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
 
             import unittest
 
-            from course.runner import run_agent
+            from course.runner import execute_tool, run_agent
             from lessons.{directory} import main
             from lessons.{directory}.fixtures import create_completion
 
 
             class LessonTests(unittest.TestCase):
                 def test_real_tool_round_trip(self):
-                    events = []
-                    answer = run_agent(
-                        question="请复述：课程脚手架。", api_key="", model="offline-script",
-                        system_prompt=main.SYSTEM_PROMPT, tools=main.TOOLS,
-                        available_tools=main.AVAILABLE_TOOLS, max_tool_rounds=3,
-                        completion=create_completion("starter"),
-                        emit=lambda kind, data, number: events.append((kind, data)), quiet=True,
-                    )
-                    result = next(data for kind, data in events if kind == "tool_result")
-                    self.assertEqual(result["result"], {{"ok": True, "result": {{"text": "课程脚手架"}}}})
+                    results = []
+                    completion = create_completion("starter")
+
+                    def execute(tool_call, available_tools):
+                        results.append(execute_tool(tool_call, available_tools))
+                        return results[-1]
+
+                    answer = run_agent("请复述：课程脚手架。", main.SYSTEM_PROMPT, main.TOOLS, main.AVAILABLE_TOOLS, 3,
+                                       complete=lambda body, number: completion(body, ""), execute=execute)
+                    self.assertEqual(results[0], {{"ok": True, "result": {{"text": "课程脚手架"}}}})
                     self.assertIn("课程脚手架", answer)
 
 

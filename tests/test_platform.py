@@ -7,7 +7,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from course.api_client import send_bailian
-from course.runner import RunCancelled, run_agent
+from course.execution import RunContext
+from course.runner import RunCancelled
 from server.catalog import lesson_runtime, lesson_spec
 from server.offline import completion_for
 from run_support import run_and_read, use_temporary_run_store
@@ -15,13 +16,21 @@ from run_support import run_and_read, use_temporary_run_store
 web = importlib.import_module("server.app")
 
 
-def execute(lesson_id, exercise_id, **kwargs):
+def native_context(events, completion, *, cancelled=lambda: False, model="offline-script", budget=3,
+                   representation="local", emit=None):
+    """原生课程在网页里的运行方式：RunContext 提供 complete 与 execute_proposal，循环本身来自 course.runner。"""
+    return RunContext(lesson_id="native", exercise_id="test", question="练习", mode="offline", model=model,
+                      representation=representation, inputs={}, api_key="test-secret", completion=completion,
+                      emit_event=emit or (lambda kind, data, number: events.append({"type": kind, "data": data})),
+                      cancelled=cancelled, max_model_calls=budget)
+
+
+def execute(lesson_id, exercise_id):
     spec = lesson_spec(lesson_id)
     module = lesson_runtime(spec)
     events = []
-    run_agent("练习", "", module.SYSTEM_PROMPT, module.TOOLS, module.AVAILABLE_TOOLS,
-              spec["runtime"]["max_rounds"], model="offline-script", completion=completion_for(spec, exercise_id),
-              emit=lambda kind, data, number: events.append({"type": kind, "data": data}), quiet=True, **kwargs)
+    context = native_context(events, completion_for(spec, exercise_id), budget=spec["runtime"]["max_rounds"])
+    context.run_native(module, spec["runtime"]["max_rounds"], publish_answer=True)
     return events
 
 
@@ -60,8 +69,7 @@ class RunnerTests(unittest.TestCase):
             return completion_for(lesson_spec("tool-selection"), "sum")(body, key)
         with patch.dict(module.AVAILABLE_TOOLS, {"add_numbers": lambda **_: self.fail("cancelled tool ran")}):
             with self.assertRaises(RunCancelled):
-                run_agent("x", "", module.SYSTEM_PROMPT, module.TOOLS, module.AVAILABLE_TOOLS, 3,
-                          model="offline", completion=complete, cancelled=lambda: should_stop, quiet=True)
+                native_context([], complete, cancelled=lambda: should_stop).run_native(module, 3)
 
     def test_exact_transport_request_matches_trace(self):
         from types import SimpleNamespace
@@ -75,11 +83,12 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(request.get_header("Authorization"), "Bearer test-secret")
             return Response()
         events = []
+        module = SimpleNamespace(SYSTEM_PROMPT="system", TOOLS=[], AVAILABLE_TOOLS={})
         with patch.dict("sys.modules", {"local_config": SimpleNamespace(API_URL="https://example.invalid/chat", MODEL="test")}):
             with patch("urllib.request.urlopen", open_request):
-                run_agent("hello", "test-secret", "system", [], {}, 1, model="test", quiet=True,
-                          emit=lambda k, d, r: events.append((k, d)))
-        self.assertEqual(bodies[0], events[0][1]["body"])
+                native_context(events, send_bailian, model="test", budget=1,
+                               representation="http_body").run_native(module, 1)
+        self.assertEqual(bodies[0], events[0]["data"]["body"])
         self.assertNotIn("test-secret", json.dumps(events))
 
     def test_cancel_after_tool_result_prevents_next_request(self):
@@ -93,9 +102,8 @@ class RunnerTests(unittest.TestCase):
             if kind == "tool_result":
                 stopped = True
         with self.assertRaises(RunCancelled):
-            run_agent("x", "", module.SYSTEM_PROMPT, module.TOOLS, module.AVAILABLE_TOOLS, 3,
-                      model="offline", completion=completion_for(lesson_spec("tool-selection"), "sum"), cancelled=lambda: stopped,
-                      emit=emit, quiet=True)
+            native_context([], completion_for(lesson_spec("tool-selection"), "sum"), cancelled=lambda: stopped,
+                           emit=emit).run_native(module, 3)
         self.assertEqual(len(requests), 1)
 
 

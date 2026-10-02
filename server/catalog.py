@@ -6,7 +6,7 @@ from importlib import import_module
 from pathlib import Path, PurePosixPath
 
 # LessonValidationError 定义在 server.curriculum，这里继续导出以保持原有导入路径。
-from server.code_reading import compare_target, lesson_code, validate_code_scene
+from server.code_reading import compare_target, lesson_code, source_role, validate_code_scene
 from server.content import lesson_content_model, load_lesson_content
 from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
 from server.lesson_refs import check_refs, resolve_refs
@@ -256,7 +256,7 @@ def lesson_detail(spec, locale=None):
     sources = []
     for source in spec["sources"]:
         path = _safe_file(spec["root"], source["path"], "lesson sources", source=True)
-        sources.append({**source, "content": path.read_text(encoding="utf-8")})
+        sources.append({**source, "role": source_role(source["path"]), "content": path.read_text(encoding="utf-8")})
     # Publish actual validated presets, including model defaults, so the parameter
     # editor shows every value the lesson will receive rather than hidden values.
     learning, learning_i18n = load_lesson_content(content_path, spec, locale)

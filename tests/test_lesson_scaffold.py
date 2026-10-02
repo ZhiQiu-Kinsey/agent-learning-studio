@@ -36,7 +36,7 @@ class LessonScaffoldTests(unittest.TestCase):
         self.assertEqual(self.catalog_path.read_bytes(), before)
 
     def test_native_scaffold_runs_real_tool_with_its_own_fixture(self):
-        from course.runner import run_agent
+        from course.runner import execute_tool, run_agent
 
         target, files = build_scaffold(self.root, "task-card", "task_contract")
         write_scaffold(target, files)
@@ -48,15 +48,16 @@ class LessonScaffoldTests(unittest.TestCase):
         fixture = {}
         exec(compile(files["tools.py"], "tools.py", "exec"), tools)
         exec(compile(files["fixtures.py"], "fixtures.py", "exec"), fixture)
-        events = []
-        answer = run_agent(
-            question="请复述：课程脚手架。", api_key="", model="offline-script",
-            system_prompt="复述", tools=tools["TOOLS"], available_tools=tools["AVAILABLE_TOOLS"],
-            max_tool_rounds=3, completion=fixture["create_completion"]("starter"),
-            emit=lambda kind, data, number: events.append((kind, data)), quiet=True,
-        )
-        result = next(data for kind, data in events if kind == "tool_result")
-        self.assertEqual(result["result"], {"ok": True, "result": {"text": "课程脚手架"}})
+        results = []
+        completion = fixture["create_completion"]("starter")
+
+        def execute(tool_call, available_tools):
+            results.append(execute_tool(tool_call, available_tools))
+            return results[-1]
+
+        answer = run_agent("请复述：课程脚手架。", "复述", tools["TOOLS"], tools["AVAILABLE_TOOLS"], 3,
+                           complete=lambda body, number: completion(body, ""), execute=execute)
+        self.assertEqual(results[0], {"ok": True, "result": {"text": "课程脚手架"}})
         self.assertIn("课程脚手架", answer)
         with self.assertRaises(ValueError):
             fixture["create_completion"]("does-not-exist")

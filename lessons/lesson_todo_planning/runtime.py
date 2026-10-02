@@ -152,7 +152,7 @@ def run(context: RunContext) -> str:
             name = call.get("function", {}).get("name")
             before = list(workspace.todos)
             context.emit("tool_call", call, round_number)
-            result = execute_tool(call, tools, quiet=True)
+            result = execute_tool(call, tools)
             context.emit("tool_result", {"tool_call_id": call.get("id"), "name": name, "result": result}, round_number)
             messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": json.dumps(result, ensure_ascii=False)})
             if name == "lookup_note" and result.get("ok"):
