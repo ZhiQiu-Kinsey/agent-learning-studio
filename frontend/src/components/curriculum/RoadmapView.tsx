@@ -13,8 +13,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import { motion } from "motion/react";
 import {
   Background,
   Controls,
@@ -31,7 +33,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
-import { useReducedMotion } from "../../motion";
+import { useMotionBudget, useReducedMotion } from "../../motion";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import type { ProgressRecord } from "../../progress";
 import type { CurriculumLesson } from "../../types";
@@ -44,7 +46,12 @@ import {
   type LessonMarks,
   type RoadmapNode,
 } from "./graph";
-import { layoutRoadmap, NODE_HEIGHT, NODE_WIDTH, type Positions } from "./layout";
+import {
+  layoutRoadmap,
+  NODE_HEIGHT,
+  NODE_WIDTH,
+  type Positions,
+} from "./layout";
 import { ProgressMarks } from "./ProgressMarks";
 
 export interface RoadmapViewProps {
@@ -60,6 +67,8 @@ type LessonNodeData = {
   node: RoadmapNode;
   marks: LessonMarks;
   dimmed: boolean;
+  /** Entrance stagger: one beat per layout column, left to right. */
+  enterDelay: number;
 };
 type LessonFlowNode = Node<LessonNodeData, "lesson">;
 
@@ -81,13 +90,15 @@ const keyDirections: Record<string, Direction> = {
 function LessonNode({ data }: NodeProps<LessonFlowNode>) {
   const { t } = useTranslation("curriculum");
   const controls = useContext(NodeControlsContext)!;
-  const { node, marks, dimmed } = data;
+  const { node, marks, dimmed, enterDelay } = data;
   const status = t(`status.${node.status}`);
   return (
     <div
       className="roadmap-node"
       data-status={node.status}
       data-dimmed={dimmed}
+      data-focused={controls.focusedId === node.id}
+      style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <button
@@ -140,13 +151,22 @@ function RoadmapDetail({
   onSelectLesson: (id: string) => void;
 }) {
   const { t } = useTranslation("curriculum");
+  const reduced = useReducedMotion();
   return (
-    <div
+    <motion.div
       className="roadmap-detail"
       id="roadmap-detail"
       data-testid="roadmap-detail"
       data-lesson-id={lesson.id}
       data-status={lesson.status}
+      initial={reduced ? false : { opacity: 0, y: 10, filter: "blur(6px)" }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        filter: "blur(0px)",
+        transitionEnd: { filter: "none" },
+      }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="roadmap-detail-head">
         <small>
@@ -174,11 +194,14 @@ function RoadmapDetail({
           <ArrowRight size={14} />
         </Button>
       ) : (
-        <p className="curriculum-planned-note" data-testid="roadmap-detail-planned">
+        <p
+          className="curriculum-planned-note"
+          data-testid="roadmap-detail-planned"
+        >
           {t("roadmap.plannedNote")}
         </p>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -193,6 +216,14 @@ function RoadmapCanvas({
   const reduced = useReducedMotion();
   const flow = useReactFlow<LessonFlowNode>();
   const containerRef = useRef<HTMLDivElement>(null);
+  // Edge current and node entrances run only on screen in a visible tab.
+  const { ref: flowRef, active: flowActive } =
+    useMotionBudget<HTMLDivElement>("css");
+  // Nodes arrive once, the first time the canvas is seen; never replayed.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (flowActive) setEntered(true);
+  }, [flowActive]);
   const [positions, setPositions] = useState<Positions | null>(null);
   const [error, setError] = useState("");
   const ordered = useMemo(
@@ -238,6 +269,13 @@ function RoadmapCanvas({
     () => new Map(lessons.map((lesson) => [lesson.id, lesson])),
     [lessons],
   );
+  // Layout columns, left to right, so nodes can arrive one column at a time.
+  const columnOf = useMemo(() => {
+    const columns = [
+      ...new Set([...(positions?.values() ?? [])].map((p) => Math.round(p.x))),
+    ].sort((a, b) => a - b);
+    return (x: number) => Math.max(0, columns.indexOf(Math.round(x)));
+  }, [positions]);
   const nodes = useMemo<LessonFlowNode[]>(
     () =>
       positions
@@ -254,10 +292,14 @@ function RoadmapCanvas({
               node,
               marks: lessonMarks(progress, lessonById.get(node.id) ?? node),
               dimmed: !matches.has(node.id),
+              enterDelay: Math.min(
+                columnOf(positions.get(node.id)?.x ?? 0) * 90,
+                1100,
+              ),
             },
           }))
         : [],
-    [positions, graph, progress, lessonById, matches],
+    [positions, graph, progress, lessonById, matches, columnOf],
   );
   const statusOf = useMemo(
     () => new Map(graph.nodes.map((node) => [node.id, node.status])),
@@ -269,6 +311,8 @@ function RoadmapCanvas({
         const open =
           statusOf.get(edge.source) === "available" &&
           statusOf.get(edge.target) === "available";
+        // Prerequisite links of the lesson in focus light up.
+        const linked = edge.source === focusedId || edge.target === focusedId;
         return {
           id: edge.id,
           source: edge.source,
@@ -276,11 +320,12 @@ function RoadmapCanvas({
           type: "smoothstep",
           focusable: false,
           selectable: false,
-          className: open ? "is-available" : "is-planned",
+          zIndex: linked ? 1 : 0,
+          className: `${open ? "is-available" : "is-planned"}${linked ? " is-linked" : ""}`,
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
         };
       }),
-    [graph, statusOf],
+    [graph, statusOf, focusedId],
   );
   const centers = useMemo(
     () =>
@@ -356,7 +401,15 @@ function RoadmapCanvas({
         moveFocus(target);
       },
     }),
-    [focusedId, statusOf, onSelectLesson, ensureVisible, centers, ordered, moveFocus],
+    [
+      focusedId,
+      statusOf,
+      onSelectLesson,
+      ensureVisible,
+      centers,
+      ordered,
+      moveFocus,
+    ],
   );
 
   const focusedNode = graph.nodes.find((node) => node.id === focusedId);
@@ -376,59 +429,67 @@ function RoadmapCanvas({
   return (
     <NodeControlsContext.Provider value={controls}>
       <div
-        ref={containerRef}
-        className="roadmap-canvas"
-        data-testid="curriculum-roadmap"
-        role="group"
-        aria-label={t("roadmap.label")}
-        aria-busy={!positions}
+        ref={flowRef}
+        className="roadmap-flow-stage"
+        data-flow={flowActive}
+        data-entered={entered}
       >
-        {positions ? (
-          <ReactFlow<LessonFlowNode>
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onInit={(instance) => {
-              // Start readable: the focused lesson at the left edge, vertically centred.
-              const box = containerRef.current?.getBoundingClientRect();
-              const start = focusedId ? positions.get(focusedId) : undefined;
-              if (!box || !start) {
-                void instance.fitView({ padding: 0.12 });
-                return;
-              }
-              const zoom = 0.9;
-              void instance.setViewport({
-                x: 32 - start.x * zoom,
-                y: box.height / 2 - (start.y + NODE_HEIGHT / 2) * zoom,
-                zoom,
-              });
-            }}
-            fitViewOptions={{ padding: 0.08 }}
-            minZoom={0.25}
-            maxZoom={1.6}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            nodesFocusable={false}
-            edgesFocusable={false}
-            elementsSelectable={false}
-            disableKeyboardA11y
-            zoomOnScroll={false}
-            zoomOnDoubleClick={false}
-            preventScrolling={false}
-            panOnScroll={false}
-          >
-            <Background gap={24} size={1} />
-            <Controls showInteractive={false} position="bottom-right" />
-          </ReactFlow>
-        ) : (
-          <p className="roadmap-loading" role="status">
-            <LoaderCircle size={18} className="spin" aria-hidden="true" />
-            {t("roadmap.loading")}
-          </p>
-        )}
+        <div
+          ref={containerRef}
+          className="roadmap-canvas"
+          data-testid="curriculum-roadmap"
+          role="group"
+          aria-label={t("roadmap.label")}
+          aria-busy={!positions}
+        >
+          {positions ? (
+            <ReactFlow<LessonFlowNode>
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onInit={(instance) => {
+                // Start readable: the focused lesson at the left edge, vertically centred.
+                const box = containerRef.current?.getBoundingClientRect();
+                const start = focusedId ? positions.get(focusedId) : undefined;
+                if (!box || !start) {
+                  void instance.fitView({ padding: 0.12 });
+                  return;
+                }
+                const zoom = 0.9;
+                void instance.setViewport({
+                  x: 32 - start.x * zoom,
+                  y: box.height / 2 - (start.y + NODE_HEIGHT / 2) * zoom,
+                  zoom,
+                });
+              }}
+              fitViewOptions={{ padding: 0.08 }}
+              minZoom={0.25}
+              maxZoom={1.6}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              nodesFocusable={false}
+              edgesFocusable={false}
+              elementsSelectable={false}
+              disableKeyboardA11y
+              zoomOnScroll={false}
+              zoomOnDoubleClick={false}
+              preventScrolling={false}
+              panOnScroll={false}
+            >
+              <Background gap={24} size={1} />
+              <Controls showInteractive={false} position="bottom-right" />
+            </ReactFlow>
+          ) : (
+            <p className="roadmap-loading" role="status">
+              <LoaderCircle size={18} className="spin" aria-hidden="true" />
+              {t("roadmap.loading")}
+            </p>
+          )}
+        </div>
       </div>
       {focusedLesson && focusedNode && (
         <RoadmapDetail
+          key={focusedLesson.id}
           lesson={focusedLesson}
           node={focusedNode}
           marks={lessonMarks(progress, focusedLesson)}
