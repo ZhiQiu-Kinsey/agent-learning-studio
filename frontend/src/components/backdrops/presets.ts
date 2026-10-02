@@ -195,6 +195,27 @@ export const backdropPresets = {
     props: { hue: 0, hoverIntensity: 0.35, rotateOnHover: true, backgroundColor: brand.ink },
     fallback: `radial-gradient(40% 60% at 50% 50%, ${brand.violet}55 0%, transparent 70%), ${brand.ink}`,
   },
+  lightfall: {
+    load: () => import("../react-bits/Lightfall"),
+    props: {
+      colors: [brand.lilac, brand.violet, brand.teal, "#d6ceff"],
+      backgroundColor: brand.violet,
+      speed: 0.45,
+      streakCount: 3,
+      streakWidth: 1,
+      streakLength: 1.1,
+      glow: 0.9,
+      density: 0.7,
+      twinkle: 0.8,
+      zoom: 3,
+      backgroundGlow: 0.6,
+      opacity: 1,
+      dpr: 1,
+      mouseInteraction: false,
+      lightMode: false,
+    },
+    fallback: glow(brand.lilac, brand.violet),
+  },
 } satisfies Record<string, Preset>;
 
 export type BackdropName = keyof typeof backdropPresets;
