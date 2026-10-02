@@ -3,10 +3,27 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import GlideSelect from "./react-bits/GlideSelect";
 
-type Theme = "light" | "dark" | "system";
+export type Theme = "light" | "dark" | "system";
 const storageKey = "agent-lab-theme";
 const parseTheme = (value: string | null | undefined): Theme =>
   value === "light" || value === "dark" ? value : "system";
+export const themePreferences = ["system", "light", "dark"] as const;
+
+/** Current choice, for entry points outside the switch (command palette). */
+export const themePreferenceNow = (): Theme =>
+  parseTheme(document.documentElement.dataset.themePreference);
+
+/** Changes the theme from elsewhere; every mounted ThemeSwitch follows via its storage listener. */
+export function setThemePreference(theme: Theme) {
+  try {
+    localStorage.setItem(storageKey, theme);
+  } catch {
+    /* The event below still updates this session. */
+  }
+  window.dispatchEvent(
+    new StorageEvent("storage", { key: storageKey, newValue: theme }),
+  );
+}
 
 export function ThemeSwitch() {
   const { t } = useTranslation();
@@ -51,7 +68,7 @@ export function ThemeSwitch() {
       <GlideSelect
         ariaLabel={t("theme.label")}
         value={preference}
-        options={(["system", "light", "dark"] as const).map((value) => ({
+        options={themePreferences.map((value) => ({
           value,
           label: t(`theme.${value}`),
         }))}

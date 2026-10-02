@@ -16,7 +16,7 @@ export const locales = {
 export type Locale = keyof typeof locales;
 export const sourceLocale: Locale = "zh-CN";
 export const localeStorageKey = "agent-lab-locale";
-export const namespaces = ["common", "settings", "quiz", "lab", "errors", "stage", "lesson", "blocks"] as const;
+export const namespaces = ["common", "settings", "quiz", "lab", "errors", "stage", "lesson", "blocks", "command"] as const;
 export type Namespace = (typeof namespaces)[number];
 
 /** Object-form fallback chain: every locale ends at the source locale. */

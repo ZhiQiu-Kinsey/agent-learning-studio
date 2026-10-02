@@ -69,7 +69,8 @@ test("progress records only real local actions and survives a reload", async ({
   expect(lesson.scenes.lab).toBeTruthy();
   expect(lesson.runs.lastRunId).toMatch(/\S/);
   await page.getByTestId("lab-replay-rewind").click();
-  await page.reload();
+  // Let the reloaded page finish its requests so the status route never outlives the test.
+  await page.reload({ waitUntil: "networkidle" });
   expect((await progressOf(page)).lessons[detail.id].runs.count).toBe(1);
 });
 
