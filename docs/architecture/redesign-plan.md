@@ -116,7 +116,7 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 | 读码 | LineSidebar、GradualBlur |
 | 实验参数 | PromptBar、ScrubField、RubberSegment、SquishSwitch、GlideSelect |
 | 实验舞台 | LatticeLoader、CallChip、StatusMark、ElectricBorder、GlitchText、WakeSlider |
-| 课程专属 | SloshGauge（第 9 课预算）、Shredder（第 10 课删除）、TearTicket（第 4 课任务卡）、SpringCheck |
+| 课程专属 | SloshGauge（`context-budget` 预算）、Shredder（记忆删除）、TearTicket（`task-contract` 任务卡）、SpringCheck |
 | 自检与回顾 | JellyRadio、PeekRating、SpringCheck、CountUp、ClickSpark |
 | 全局 | GooeyNav、SwipeToast、FaultyTerminal（后端离线）、Noise |
 

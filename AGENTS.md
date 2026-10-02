@@ -220,7 +220,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 
 ## 提交与拉取请求
 
-- 提交标题用中文，带类型前缀：`feat:`、`fix:`、`docs:`、`test:`、`refactor:`。例如 `feat: 第 13 课文本动作与原生工具调用`。
+- 提交标题用中文，带类型前缀：`feat:`、`fix:`、`docs:`、`test:`、`refactor:`。例如 `feat: 新课“文本动作与原生工具调用`。
 - 一次提交只做一件事。课程内容、平台代码和文档能分开就分开。
 - PR 要写清：
   - 行为变化；

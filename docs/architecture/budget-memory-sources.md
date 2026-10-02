@@ -1,4 +1,6 @@
-# 第 9–10 课参考范围与取舍
+# 上下文预算、压缩与持久记忆的参考范围与取舍
+
+适用课程：`context-budget`、`context-compaction`、`persistent-memory`、`memory-lifecycle`（2026-10-03 由原第 9、10 课各拆为两课）。
 
 当前课程参考范围于 2026-10-01 调整为三份正式教程。
 
@@ -10,4 +12,4 @@
 | Microsoft AI Agents for Beginners | `25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595` | `STUDY_GUIDE.md` 的 Context、Memory 与复习问题；`13-agent-memory/README.md` 的工作、短期、长期记忆及生成、存储、检索、更新、遗忘 | 借鉴分层与生命周期，不移植 Mem0、Azure AI Search 或其账号依赖。 |
 | Hugging Face Agents Course | `b3946b1d09d29c65736e219d48a8a736a2c52154` | `units/en/unit1/messages-and-special-tokens.mdx` 的消息历史与角色；`agent-steps-and-structure.mdx` 的观察进入下一次决策 | 第 9 课用合法消息布局比较可见证据；不把教材聊天模板写成单一供应商协议。 |
 
-第 9 课报告的本地长度为序列化 JSON 字符数，并单列供应商实际返回的 `usage`；两者不能换算为同一个精确值。第 10 课 namespace 只是教学分区，不能替代用户认证。
+`context-budget` 报告的本地长度为序列化 JSON 字符数，并单列供应商实际返回的 `usage`；两者不能换算为同一个精确值。`persistent-memory` 的 namespace 只是教学分区，不能替代用户认证。

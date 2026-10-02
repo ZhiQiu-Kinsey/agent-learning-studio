@@ -87,7 +87,7 @@
 | 规则 | 怎么做 | 检查 |
 | --- | --- | --- |
 | 先读课程代码 | `lesson.json` 的 `sources` 把本课文件放前面；平台文件（`course/`）只在本课确实要讲它时列出 | 前端标出“平台”“测试夹具” |
-| 每个读码块不超过约 40 行 | 一个块只讲一个职责；超长函数拆块或把与本课无关的行放进 `folds` | 人工 |
+| 每个读码块不超过约 40 行，每课最多 3 个块 | 一个块只讲一个职责；超长函数拆块或把与本课无关的行放进 `folds`；没放进读码块的代码仍可在文件视图里展开阅读 | 块数由 `tests/test_code_reading.py` 检查，行数人工把握 |
 | 批注带锚点 | `notes[].anchor` 写该行必须包含的一段原文；源码移动后跑 `scripts/realign_notes.py` | `validate_lessons` |
 | 批注密度 | 展示范围内每 8 个非空、未折叠行至少 1 条，连续无批注不超过 12 行；优先写函数签名、循环开头、停止条件 | `validate_lessons`、`tests/test_code_note_density.py`（旧块在只减不增的基线里） |
 | 平台代码折叠 | 事件发布、计时、报告拼装等与教学点无关的行，用 `folds: [{id, start, end, label}]` 收起，label 说清折叠了什么（如“平台：发布报告事件”） | 折叠内不能有批注 |
@@ -202,14 +202,15 @@ def run(context: RunContext):
 | 方法 | 用途 |
 | --- | --- |
 | `context.complete(body, round_number=1, branch=None)` | 使用当前模型连接并记录请求、响应与表示方式；并行发出多个请求时给每个分支一个不同的 `branch`，时间线按它配对请求与响应 |
-| `context.call_tool(name, arguments, available_tools, round_number=1)` | 执行登记的真实工具并记录调用与结果 |
+| `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对 |
+| `context.call_tool(name, arguments, available_tools, round_number=1)` | 由课程程序（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |
 | `context.check_cancelled()` | 在阶段与副作用操作前响应平台停止请求 |
 
 运行器可以是同步或异步函数。返回字符串时平台自动记录最终回答；也可以自行发布 `answer` 后返回 `None`。开始、结束和执行锁由平台管理，课程不能自行伪造生命周期事件。共享服务统一保留模型连接、事件快照、脱敏与回放；不要从课程另建 SSE、绕过连接管理直读密钥，或从回放触发执行。
 
-停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。第 10 课（`persistent-memory`）已提供教学用 SQLite 持久记忆实现，可参考其跨运行读取、版本冲突和过期处理；共享扩展接口本身不提供通用记忆服务。
+停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。`lessons/lesson_10_persistent_memory/store.py` 提供教学用 SQLite 持久记忆实现（`persistent-memory` 讲保存、重开与召回，`memory-lifecycle` 讲版本冲突、过期与范围），可参考；共享扩展接口本身不提供通用记忆服务。
 
 ## 独立页面与可视化
 
