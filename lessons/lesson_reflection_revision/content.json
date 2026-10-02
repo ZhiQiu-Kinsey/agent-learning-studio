@@ -1,0 +1,755 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "reflection-revision",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "REASONING / LESSON 16",
+          "headline": "让模型检查自己，",
+          "highlight": "还要有一样它改不了的依据。",
+          "takeaway": "修订循环由评审驱动。评审可以来自模型自己，也可以来自真实测试；两者都要有迭代上限和明确的停止原因，最终版本一律用同一组测试检查。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-draft",
+              "label": "01 / DRAFT",
+              "title": "草稿有版本",
+              "description": "每一版正则都记成 lesson.draft，带上一版的内容，能看出改了什么。",
+              "token": "v0 … vn"
+            },
+            {
+              "id": "02-self",
+              "label": "02 / SELF",
+              "title": "模型自评",
+              "description": "让模型读需求和自己的正则，输出 pass 或 revise。它看不到任何运行结果。",
+              "token": "source: model"
+            },
+            {
+              "id": "03-tests",
+              "label": "03 / TESTS",
+              "title": "测试评审",
+              "description": "用固定用例真实执行 re.fullmatch，失败的用例就是评审意见。",
+              "token": "source: tests"
+            },
+            {
+              "id": "04-stop",
+              "label": "04 / STOP",
+              "title": "停止原因",
+              "description": "评审通过、达到上限、改完没变化、评审不合格式，每次停下都写明是哪一种。",
+              "token": "stop_reason"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "先写，再评，再改",
+          "paragraphs": [
+            "反思（Reflection）指让 Agent 回头检查自己的产出，再据此修订（Revise）。最小的循环是三步：写一版草稿，评审，评审说要改就带着意见写下一版。循环本身不难，难的是评审的依据从哪里来，以及什么时候停。",
+            "本课的任务很小：写一条正则表达式匹配学号，规则是小写 s、连字符、四位数字，第一位不能是 0。产物是一条正则，测试是 9 个固定用例，用 Python 的 re.fullmatch 真实执行。程序不运行模型写的任何代码，只把它写的字符串当正则编译。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "模型自评：看不到运行结果",
+          "paragraphs": [
+            "自评组让模型扮演评审：读需求，读自己的正则，输出 JSON：verdict 为 pass 或 revise，附上问题列表。评审只能凭“读”来判断，它没有执行过任何一个用例。正则里一个 [0-9] 和 [1-9] 的差别，读起来很容易放过去。",
+            "自评说 pass，循环就停。为了看清自评靠不靠得住，运行器在循环结束后，用同一组真实用例检查最终版本，记成 version 为 final 的 lesson.tests。自评的结论和测试的结论放在同一份报告里。"
+          ]
+        },
+        {
+          "id": "mq-self",
+          "type": "micro-quiz",
+          "question": {
+            "id": "self-review-evidence",
+            "prompt": "自评组的评审说 pass，最终测试却有 1 个用例失败。说明了什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "模型的自评没有执行用例，漏掉了一个它读不出来的错误",
+                "feedback": "对。自评是读，测试是跑。"
+              },
+              {
+                "id": "b",
+                "text": "测试写错了，应该以评审为准",
+                "feedback": "不对。用例是固定的需求，测试结果是真实执行出来的。"
+              },
+              {
+                "id": "c",
+                "text": "再自评一次就一定能发现",
+                "feedback": "不一定。同一个模型用同样的方式再读一遍，可能还是看不出来。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "没有外部依据的评审，只是换个角色再看一遍。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "测试评审：失败用例就是意见",
+          "paragraphs": [
+            "测试组不让模型评审。运行器直接执行 9 个用例，把失败的写成评审意见，比如“s-0420 应该不匹配，实际匹配”，记成 source 为 tests 的 lesson.review。下一轮修订时，模型拿到的就是这几条真实失败。",
+            "测试评审的意见不会说错，但也只覆盖用例想到的情况。用例里没写“s-1042 后面带空格”，测试就不会替你检查。用例设计决定了这类评审能看见什么。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "停下来的四种原因",
+          "paragraphs": [
+            "修订循环必须能停。本课有四种停止原因：评审通过；达到迭代上限（max_iters，1 到 3）；修订后正则没有任何变化，再改下去也是原地打转；评审输出不合格式，没法判断下一步。报告里的“停止原因”只会是其中一种。",
+            "报告还记录了累计 total_tokens，取自服务商在每次响应里报告的用量（Usage）。某次响应没有报告，就如实标出几次未报告，不拿估算补上。离线测试模式下的用量由测试脚本生成，不是服务商数据。"
+          ]
+        },
+        {
+          "id": "mq-stop",
+          "type": "micro-quiz",
+          "question": {
+            "id": "stop-unchanged",
+            "prompt": "第 2 版正则和第 1 版一模一样，这时该怎么办？",
+            "options": [
+              {
+                "id": "a",
+                "text": "停止，原因记为“修订后没有变化”",
+                "feedback": "对。没有变化的修订不会让结果更好。"
+              },
+              {
+                "id": "b",
+                "text": "继续，直到用完迭代上限",
+                "feedback": "不对。同样的输入大概率得到同样的输出，只是白花调用。"
+              },
+              {
+                "id": "c",
+                "text": "把评审结论改成 pass",
+                "feedback": "不对。停止和通过是两回事，结论要如实写。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "每种停止都要有明确的原因，而且不改变验收结论。"
+          }
+        },
+        {
+          "id": "compare-reviewers",
+          "type": "compare",
+          "title": "两种评审",
+          "columns": [
+            "评审来源",
+            "依据",
+            "额外的模型请求",
+            "可能漏掉什么"
+          ],
+          "rows": [
+            [
+              "模型自评",
+              "读需求和正则",
+              "每轮 1 次",
+              "读不出来的边界情况"
+            ],
+            [
+              "测试结果",
+              "真实执行 9 个用例",
+              "无",
+              "用例没有覆盖的情况"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一轮修订",
+          "description": "按步骤说明测试组的一轮修订，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "草稿",
+              "actor": "模型",
+              "title": "写出一版正则",
+              "body": "输出 JSON，运行器取出 regex 字段。",
+              "code": "pattern = extract_json(reply)[\"regex\"]",
+              "language": "python",
+              "evidence": "lesson.draft"
+            },
+            {
+              "id": "step-2",
+              "label": "测试",
+              "actor": "程序",
+              "title": "执行固定用例",
+              "body": "编译正则，对每个用例做 re.fullmatch。",
+              "code": "tests = run_tests(pattern)",
+              "language": "python",
+              "evidence": "lesson.tests"
+            },
+            {
+              "id": "step-3",
+              "label": "评审",
+              "actor": "程序",
+              "title": "失败用例就是意见",
+              "body": "没有失败就是 pass。",
+              "code": "issues = failures_of(tests)",
+              "language": "python",
+              "evidence": "lesson.review（source=tests）"
+            },
+            {
+              "id": "step-4",
+              "label": "修订",
+              "actor": "模型",
+              "title": "带着失败用例改一版",
+              "body": "提示里写上一版正则和评审意见。",
+              "code": "draft(f\"上一版正则：{previous}\\n评审意见：{issues}\")",
+              "language": "python",
+              "evidence": "下一条 lesson.draft 的 previous"
+            },
+            {
+              "id": "step-5",
+              "label": "收尾",
+              "actor": "程序",
+              "title": "停下并做最终检查",
+              "body": "写明停止原因，用同一组用例检查最终版本。",
+              "code": "final = run_tests(pattern)",
+              "language": "python",
+              "evidence": "lesson.tests（version=final）"
+            }
+          ]
+        },
+        {
+          "id": "predict-reviews",
+          "type": "predict",
+          "prompt": "运行“测试结果驱动修订”之前先猜：这次运行会出现几个 lesson.review 事件？",
+          "experiment": "reviewer-source",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.review"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "structured-output"
+        },
+        {
+          "id": "code-tests",
+          "type": "annotated-source",
+          "path": "lessons/lesson_reflection_revision/runtime.py",
+          "start": 23,
+          "end": 67,
+          "notes": [
+            {
+              "id": "n23",
+              "line": 23,
+              "text": "9 个固定用例，含“第一位是 0”这类容易读漏的情况。"
+            },
+            {
+              "id": "n49",
+              "line": 49,
+              "text": "只把模型写的字符串当正则编译，不执行任何模型写的代码。"
+            },
+            {
+              "id": "n52",
+              "line": 52,
+              "text": "每个用例都真实执行 re.fullmatch，实际结果和期望结果并列记录。"
+            }
+          ]
+        },
+        {
+          "id": "code-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_reflection_revision/runtime.py",
+          "start": 70,
+          "end": 153,
+          "notes": [
+            {
+              "id": "n104",
+              "line": 104,
+              "text": "测试组的评审意见完全来自失败用例。"
+            },
+            {
+              "id": "n109",
+              "line": 109,
+              "text": "自评组多一次模型请求，评审只看需求和正则。"
+            },
+            {
+              "id": "n112",
+              "line": 112,
+              "text": "评审结论只接受 pass 或 revise，其他输出记为不合格式。"
+            },
+            {
+              "id": "n120",
+              "line": 120,
+              "text": "第一种停止：评审通过。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "text": "第二种停止：达到迭代上限，不再请求修订。"
+            },
+            {
+              "id": "n131",
+              "line": 131,
+              "text": "第三种停止：修订后没有变化。"
+            },
+            {
+              "id": "n135",
+              "line": 135,
+              "text": "不论评审来源，最终版本都用同一组用例检查。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "text": "只累加服务商报告的 total_tokens，缺失的次数单独写明。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "评审依据与停止条件分开处理",
+          "chosen": "两组共用同一个修订循环，只换评审来源；循环有迭代上限和四种明确的停止原因；最终版本无论哪组都用同一组真实用例检查。",
+          "alternatives": [
+            {
+              "id": "self-only",
+              "title": "只用模型自评，不跑测试",
+              "why_not": "自评说通过时没有任何东西可以核对，实验也就分不出自评对不对。"
+            },
+            {
+              "id": "loop-until-pass",
+              "title": "一直修订到通过为止",
+              "why_not": "模型可能永远改不对，或者每轮给出同一版；没有上限就没有停止条件。"
+            },
+            {
+              "id": "llm-judge",
+              "title": "换一个更强的模型当评审",
+              "why_not": "依据仍然是“读”，只是换了个读者。评委校准留到评估课用人工标注去做。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "reviewer-source",
+          "title": "自评与测试评审",
+          "hypothesis": "模型自评看不到运行结果，可能放过读不出来的错误；以真实测试结果为评审依据时，修订有明确的失败用例可以对照。两组的最终版本用同一组测试检查。",
+          "predict": "predict-reviews",
+          "arms": [
+            {
+              "id": "self",
+              "exercise": "self-review",
+              "label": "模型自评驱动修订"
+            },
+            {
+              "id": "tests",
+              "exercise": "test-review",
+              "label": "测试结果驱动修订"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-draft",
+              "text": "第一版正则。",
+              "selector": {
+                "event": "lesson.draft",
+                "path": "data.regex"
+              }
+            },
+            {
+              "id": "review",
+              "text": "第一次评审：来源、结论和意见。",
+              "selector": {
+                "event": "lesson.review",
+                "path": "data"
+              }
+            },
+            {
+              "id": "revised-draft",
+              "text": "修订后的正则和它的上一版。",
+              "selector": {
+                "event": "lesson.draft",
+                "round": 2,
+                "path": "data.previous"
+              }
+            },
+            {
+              "id": "final-tests",
+              "text": "最终版本在真实用例上的结果。",
+              "selector": {
+                "event": "lesson.tests",
+                "path": "data.failed"
+              }
+            },
+            {
+              "id": "stop-reason",
+              "text": "停止原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[0]"
+              }
+            },
+            {
+              "id": "tokens",
+              "text": "累计 total_tokens：只来自服务商报告。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[4]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组用同一个修订循环，只换评审的来源。先看第一版正则。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "first-draft"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-draft"
+            },
+            {
+              "action": "narrate",
+              "text": "这是模型的第一版。规则里“第一位不能是 0”最容易漏。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "review"
+            },
+            {
+              "action": "highlight",
+              "observe": "review"
+            },
+            {
+              "action": "narrate",
+              "text": "看评审从哪里来：source 是 model 还是 tests，结论是什么。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "revised-draft"
+            },
+            {
+              "action": "highlight",
+              "observe": "revised-draft"
+            },
+            {
+              "action": "narrate",
+              "text": "测试组拿到失败用例后改了一版，previous 是被替换掉的那一版。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "final-tests"
+            },
+            {
+              "action": "highlight",
+              "observe": "final-tests"
+            },
+            {
+              "action": "narrate",
+              "text": "循环结束后，最终版本一律用同一组用例检查。自评说通过的那一组，这里是几个失败？"
+            },
+            {
+              "action": "seek",
+              "observe": "stop-reason"
+            },
+            {
+              "action": "highlight",
+              "observe": "stop-reason"
+            },
+            {
+              "action": "narrate",
+              "text": "每次停下都写明原因。"
+            },
+            {
+              "action": "seek",
+              "observe": "tokens"
+            },
+            {
+              "action": "highlight",
+              "observe": "tokens"
+            },
+            {
+              "action": "narrate",
+              "text": "最后看代价。用量只取服务商报告的数字。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每一版正则、每次评审的来源和结论、循环为什么停，都有事件可查。",
+              "两组最终版本的测试结果来自同一组真实用例，可以直接比较。"
+            ],
+            "does_not_prove": [
+              "一次运行不能说明模型自评普遍不可靠，也不能说明它普遍可靠。",
+              "测试评审只覆盖 9 个用例；全部通过只说明这些情况没问题。",
+              "离线测试模式下的草稿、自评和用量都由固定脚本生成。"
+            ]
+          }
+        },
+        {
+          "id": "iteration-limit",
+          "title": "迭代上限",
+          "hypothesis": "上限为 1 时没有修订机会，循环在第一次评审后停止，并如实报告达到上限。",
+          "arms": [
+            {
+              "id": "three",
+              "exercise": "test-review",
+              "label": "测试驱动，上限 3 轮"
+            },
+            {
+              "id": "one",
+              "exercise": "test-review-once",
+              "label": "测试驱动，上限 1 轮"
+            }
+          ],
+          "observe": [
+            {
+              "id": "limit-input",
+              "text": "这次运行的迭代上限。",
+              "selector": {
+                "event": "run_start",
+                "path": "data.inputs.max_iters"
+              }
+            },
+            {
+              "id": "limit-reason",
+              "text": "停止原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[0]"
+              }
+            },
+            {
+              "id": "limit-calls",
+              "text": "模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[3]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组只差迭代上限。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "limit-input"
+            },
+            {
+              "action": "highlight",
+              "observe": "limit-input"
+            },
+            {
+              "action": "narrate",
+              "text": "这是你这次设的上限。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "limit-reason"
+            },
+            {
+              "action": "highlight",
+              "observe": "limit-reason"
+            },
+            {
+              "action": "narrate",
+              "text": "上限为 1 时，第一次评审后就停，原因是达到上限。"
+            },
+            {
+              "action": "seek",
+              "observe": "limit-calls"
+            },
+            {
+              "action": "highlight",
+              "observe": "limit-calls"
+            },
+            {
+              "action": "narrate",
+              "text": "调用数也随之减少。上限是在代价和质量之间做选择。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "循环次数由上限决定，停止原因如实写在报告里。"
+            ],
+            "does_not_prove": [
+              "不能说明多少轮最合适；那取决于任务难度和每轮的代价。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "reviewer",
+          "label": "评审来源",
+          "options": [
+            {
+              "value": "self",
+              "label": "模型自评"
+            },
+            {
+              "value": "tests",
+              "label": "测试结果"
+            }
+          ]
+        },
+        {
+          "name": "max_iters",
+          "label": "迭代上限",
+          "help": "1 到 3 轮。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "测试组的评审意见从哪里来？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "失败用例的真实执行结果",
+                  "feedback": "对。这是模型改不了的依据。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型对自己正则的判断",
+                  "feedback": "不对。那是自评组。"
+                },
+                {
+                  "id": "c",
+                  "text": "运行器随机挑的建议",
+                  "feedback": "不对。意见完全由失败用例生成。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "外部依据来自真实执行。"
+            },
+            {
+              "id": "q2",
+              "prompt": "自评组说 pass 就停下了，为什么还要跑一次最终测试？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "为了核对自评的结论，两组用同一标准比较",
+                  "feedback": "对。不核对就无法知道自评对不对。"
+                },
+                {
+                  "id": "b",
+                  "text": "为了让自评组再修订一次",
+                  "feedback": "不对。最终测试只检查，不再修订。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为评审输出不合格式",
+                  "feedback": "不对。这和评审格式无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "评审结论本身也需要验证。"
+            },
+            {
+              "id": "q3",
+              "prompt": "某次响应没有 usage 字段，累计 total_tokens 应该怎么写？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "累加已报告的部分，并注明几次未报告",
+                  "feedback": "对。缺失要写明，不拿估算补上。"
+                },
+                {
+                  "id": "b",
+                  "text": "按回答长度估算补上",
+                  "feedback": "不对。估算不是服务商报告的用量。"
+                },
+                {
+                  "id": "c",
+                  "text": "记为 0",
+                  "feedback": "不对。没有数据不等于用量为零。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "用量只来自服务商报告。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“测试结果驱动修订”，找出模型第一次拿到真实失败用例作为评审意见的那一步。",
+          "target": {
+            "event": "lesson.review",
+            "path": "data.issues[0]"
+          },
+          "explanation": "这条 lesson.review 的 source 是 tests，issues 里是失败用例，例如“s-0420 应该不匹配，实际匹配”。下一次请求把这些意见原样交给模型修订。如果第一版就全部通过，就不会有带意见的评审。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我运行了两种评审来源，比较了两组最终版本的测试结果。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能说出本课四种停止原因，并在自己的运行里找到其中一种。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能解释为什么自评说 pass 之后仍要用测试核对。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
