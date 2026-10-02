@@ -1,7 +1,8 @@
 """读码批注密度门槛：新块必须达标；基线里已经达标的块要从基线删除（基线只许减少）。"""
 import unittest
 
-from scripts.validate_lessons import DENSITY_BASELINE, ROOT, validate, validate_note_density
+from scripts.validate_lessons import (DENSITY_BASELINE, MAX_NEW_CONCEPTS, ROOT, validate, validate_concept_load,
+                                     validate_note_density)
 from server.code_reading import MAX_GAP, NOTE_EVERY, note_density
 from server.content_schema import AnnotatedSource
 
@@ -11,6 +12,10 @@ class NoteDensityTests(unittest.TestCase):
         new, fixed = validate_note_density(ROOT, validate(ROOT))
         self.assertEqual(new, [], "新的读码块批注不足，规则见 docs/architecture/curriculum-plan-2026-10.md 8.4")
         self.assertEqual(fixed, [], f"这些块已达标，请从 {'/'.join(DENSITY_BASELINE)} 删除")
+
+    def test_no_lesson_introduces_more_than_five_concepts(self):
+        self.assertEqual(MAX_NEW_CONCEPTS, 5)
+        self.assertEqual(validate_concept_load(ROOT, validate(ROOT)), [], "一课只学一件事：拆课或把概念挪到前后课")
 
     def test_folded_and_blank_lines_do_not_count(self):
         lines = ["a = 1", "", "b = 2", "c = 3", "d = 4"]

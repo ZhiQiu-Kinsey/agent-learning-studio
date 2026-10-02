@@ -72,6 +72,22 @@ def validate_vocabulary(root, specs):
 
 
 DENSITY_BASELINE = ("tests", "baselines", "code-note-density.json")
+# 一课只学一件事：术语表里 first_lesson 指向同一课的课程概念不超过这个数。
+MAX_NEW_CONCEPTS = 5
+
+
+def validate_concept_load(root, specs):
+    """返回 [(课程, 概念数, 概念名)]：本课引入的课程概念超过上限的课。"""
+    from server.catalog import CATALOG_INDEX
+    from server.glossary import load_glossary
+
+    terms = load_glossary(Path(root).resolve(), CATALOG_INDEX)["terms"]
+    by_lesson = {}
+    for term in terms:
+        if term.get("kind", "concept") == "concept" and term.get("first_lesson"):
+            by_lesson.setdefault(term["first_lesson"], []).append(term["zh"])
+    return [(spec["id"], len(by_lesson[spec["id"]]), "、".join(by_lesson[spec["id"]]))
+            for spec in specs if len(by_lesson.get(spec["id"], [])) > MAX_NEW_CONCEPTS]
 
 
 def validate_note_density(root, specs):
@@ -117,6 +133,13 @@ def main(argv=None):
                 for lesson, kind, message in problems:
                     print(f"用词问题 {lesson} [{kind}] {message}", file=sys.stderr)
                 print("逐课明细：scripts/term_report.py；规则：docs/architecture/terminology.md", file=sys.stderr)
+                return 1
+        if terms is not None:
+            overloaded = validate_concept_load(args.root, specs)
+            print(f"本课新概念：{len(overloaded)} 门课超过 {MAX_NEW_CONCEPTS} 个。")
+            if overloaded:
+                for lesson, count, names in overloaded:
+                    print(f"概念过多 {lesson} {count} 个：{names}（拆课，或挪到前后课）", file=sys.stderr)
                 return 1
         density, fixed = validate_note_density(args.root, specs)
         print(f"读码批注密度：{len(density)} 个新问题，{len(fixed)} 个基线块已达标。")
