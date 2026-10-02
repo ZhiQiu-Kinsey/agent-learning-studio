@@ -41,7 +41,7 @@ test("progress records only real local actions and survives a reload", async ({
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   await page.goto("/");
-  const detail = await (await request.get("/api/lessons/1")).json();
+  const detail = await (await request.get("/api/lessons/tool-selection")).json();
   await expect
     .poll(async () => (await progressOf(page))?.lastLessonId)
     .toBe(detail.id);
@@ -115,7 +115,7 @@ test("trace hunt uses the learner's own run, and review shows exactly the local 
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   await page.goto("/");
-  const detail: Detail = await (await request.get("/api/lessons/1")).json();
+  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
   const curriculum: CurriculumData = await (
     await request.get("/api/curriculum")
   ).json();

@@ -36,7 +36,7 @@ class ProviderTests(unittest.TestCase):
         web.provider_registry, web.session_key = self.previous_registry, self.previous_key
 
     def exercise(self):
-        return {"lesson_id": "1", "mode": "live", "question": "19+23", "exercise_id": "sum"}
+        return {"lesson_id": "tool-selection", "mode": "live", "question": "19+23", "exercise_id": "sum"}
 
     def events(self, response):
         return response.events

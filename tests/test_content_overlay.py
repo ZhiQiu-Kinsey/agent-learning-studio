@@ -99,13 +99,13 @@ class OverlayApiTests(unittest.TestCase):
         self.client = TestClient(web.app, base_url="http://localhost")
 
     def test_lang_parameter_falls_back_and_rejects_malformed_codes(self):
-        detail = self.client.get("/api/lessons/1?lang=en-US").json()
+        detail = self.client.get("/api/lessons/tool-selection?lang=en-US").json()
         self.assertEqual(detail["learning_i18n"]["locale"], "zh-CN")
         self.assertEqual(detail["learning_i18n"]["requested"], "en-US")
         self.assertGreater(len(detail["learning_i18n"]["missing"]), 20)
-        self.assertEqual(self.client.get("/api/lessons/1").json()["learning_i18n"]["missing"], [])
+        self.assertEqual(self.client.get("/api/lessons/tool-selection").json()["learning_i18n"]["missing"], [])
         for bad in ("english", "en_US", "../x"):
-            response = self.client.get("/api/lessons/1", params={"lang": bad})
+            response = self.client.get("/api/lessons/tool-selection", params={"lang": bad})
             self.assertEqual((response.status_code, response.json()["code"]), (400, "invalid_locale"))
         self.assertEqual(self.client.get("/api/onboarding?lang=en-US").json()["i18n"]["locale"], "zh-CN")
 

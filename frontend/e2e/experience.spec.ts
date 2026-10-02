@@ -17,7 +17,7 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
     if (isRunCreation(req)) runs++;
   });
   const firstLesson: Detail = await (
-    await request.get("/api/lessons/1")
+    await request.get("/api/lessons/tool-selection")
   ).json();
   await page.goto("/");
   // First visit lands on the home page; chapter 0 (onboarding) is one click away.

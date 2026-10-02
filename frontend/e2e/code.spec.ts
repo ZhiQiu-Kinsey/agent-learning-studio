@@ -27,9 +27,9 @@ test("reading code shows files, code and notes side by side, and what's new jump
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const code: LessonCode = await (
-    await request.get("/api/lessons/1/code")
+    await request.get("/api/lessons/tool-selection/code")
   ).json();
-  const detail: Detail = await (await request.get("/api/lessons/1")).json();
+  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
   await openCodeScene(page);
 
   // 三栏：文件列表、代码、批注在同一行从左到右排列。

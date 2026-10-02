@@ -35,7 +35,7 @@ test("source is served from the lesson, and replay never sends another run", asy
   page.on("request", (req) => {
     if (isRunCreation(req)) runCount++;
   });
-  const detail: Detail = await (await request.get("/api/lessons/1")).json();
+  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: detail.title, exact: true }),
@@ -85,7 +85,7 @@ test("dependent call receives the real time result, and the full trace can be ex
   page,
   request,
 }) => {
-  const detail: Detail = await (await request.get("/api/lessons/2")).json();
+  const detail: Detail = await (await request.get("/api/lessons/dependent-calls")).json();
   await page.goto("/");
   await page
     .getByTestId("course-nav")
@@ -173,7 +173,7 @@ test("zero division returns an error result and live mode excludes fault injecti
   page,
   request,
 }) => {
-  const detail: Detail = await (await request.get("/api/lessons/3")).json();
+  const detail: Detail = await (await request.get("/api/lessons/fail-safely")).json();
   const zero = detail.exercises.find((item) => item.id === "zero")!;
   const live = detail.exercises.filter((item) => !item.offline_only);
   const injected = detail.exercises.filter((item) => item.offline_only);
@@ -213,7 +213,7 @@ test("small screen opens course navigation and keeps content within viewport", a
   page,
   request,
 }) => {
-  const detail: Detail = await (await request.get("/api/lessons/2")).json();
+  const detail: Detail = await (await request.get("/api/lessons/dependent-calls")).json();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByTestId("app-open-course-menu").click();
@@ -279,7 +279,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   page.on("request", (req) => {
     if (isRunCreation(req)) runs++;
   });
-  const lesson = await (await request.get("/api/lessons/1")).json();
+  const lesson = await (await request.get("/api/lessons/tool-selection")).json();
   const submit = page.getByRole("button", {
     name: t("quiz:submit"),
     exact: true,
@@ -396,7 +396,7 @@ test("the complete curriculum groups real plans and only starts implemented less
     await request.get("/api/curriculum")
   ).json();
   const firstLesson: Detail = await (
-    await request.get("/api/lessons/1")
+    await request.get("/api/lessons/tool-selection")
   ).json();
   let runs = 0;
   page.on("request", (req) => {

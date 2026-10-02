@@ -1,5 +1,5 @@
 /**
- * 课程 ID 约定：slug（如 "tool-selection"）是主 ID，旧数字 ID 作为别名由服务端返回。
+ * 课程 ID 约定：slug（如 "tool-selection"）是主 ID；改名前的旧 slug 作为别名由服务端返回（不使用数字别名）。
  * 任何来自旧链接、旧下载记录或本机存储的课程 ID 都应先经过 resolveLessonId 迁移为 slug。
  */
 export type LessonIdentity = { id: string; aliases?: readonly string[] };

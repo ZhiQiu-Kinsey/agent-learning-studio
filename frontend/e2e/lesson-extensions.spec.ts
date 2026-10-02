@@ -14,7 +14,7 @@ async function fixtureLesson(
   request: APIRequestContext,
   changes: Partial<Detail> = {},
 ) {
-  const source: Detail = await (await request.get("/api/lessons/1")).json();
+  const source: Detail = await (await request.get("/api/lessons/tool-selection")).json();
   const lesson: Detail = {
     ...source,
     id: "44",
@@ -338,7 +338,7 @@ test("lesson three custom inspector follows real tool outcomes, event selection 
       json: { model: "fixture", config_ready: true, api_key_configured: true },
     }),
   );
-  const detail: Detail = await (await request.get("/api/lessons/3")).json();
+  const detail: Detail = await (await request.get("/api/lessons/fail-safely")).json();
   const zero = detail.exercises.find((item) => item.id === "zero")!;
   const passed = (n: number) => `${t("lab:toolOutcomes.passed")} ${n}`;
   const failed = (n: number) => `${t("lab:toolOutcomes.failed")} ${n}`;

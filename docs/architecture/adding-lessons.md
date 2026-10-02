@@ -6,12 +6,12 @@
 
 `curriculum/catalog.json` 是课程 ID、别名、标题、简介、学习目标、层级、先修和状态的唯一来源；显示课号由它的目录顺序计算（见下一节）。`lessons/lesson_*/lesson.json` 描述实现位置；后端自动发现清单，不再编辑 `server/catalog.py` 加分支。
 
-以下使用仍处于规划中的 `document-loading`（第 11 课，别名 `11`）演示命令，按实际课程替换。`--id` 接受课程 slug 或旧数字别名；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
+以下使用仍处于规划中的 `document-loading` 演示命令，按实际课程替换。`--id` 接受课程 slug（或改名前的旧 slug 别名）；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
 
 ```powershell
 # 先预览文件清单，不写文件
 .\.venv\Scripts\python.exe scripts/new_lesson.py --id document-loading --dry-run
-# 创建使用通用 Agent 循环的课程（--id 11 效果相同）
+# 创建使用通用 Agent 循环的课程
 .\.venv\Scripts\python.exe scripts/new_lesson.py --id document-loading
 # 复杂流程可以改用 --kind custom（同一目录只能创建一次）
 ```
@@ -31,13 +31,13 @@
 | 概念 | 规则 |
 | --- | --- |
 | 课程 ID（主 ID） | `catalog.json` 中每课的 `id`，稳定的 kebab-case slug，如 `tool-selection`；正则 `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`，不超过 48 字符。接口、事件、链接、前端状态都只用它 |
-| 别名 | 每课的 `aliases`：旧数字 ID（如 `"1"`），以及将来改名前的旧 slug。只用于解析旧请求，接口从不以别名作为返回的 `id` |
+| 别名 | 每课的 `aliases`：改名前的旧 slug，只用于解析旧请求，接口从不以别名作为返回的 `id`。不接受数字别名：显示课号随目录顺序变化，数字别名会和它混淆（2026-10-03 起删除了全部旧数字别名） |
 | 显示课号 | `number`，按 `lessons` 数组顺序从 1 计算，不写进 JSON。插入新课只会改变其后课程的显示课号，不改变任何 ID |
 | 目录内引用 | 模块 `lesson_ids`、`prerequisites`、选修 `prerequisites` 一律写 slug；误写别名时校验会提示应改成哪个 slug |
 
 校验（`server/curriculum.py` 的 `index_catalog`，由课程加载、`validate_lessons.py`、`export_curriculum.py` 和 `new_lesson.py` 共用）：
 
-- slug 格式合法且唯一；别名格式合法（不以 0 开头的数字或 kebab-case），不与任何 slug 或其他别名冲突，也不等于本课 slug。
+- slug 格式合法且唯一；别名必须是 kebab-case slug（不能是数字），不与任何 slug 或其他别名冲突，也不等于本课 slug。
 - 先修引用的课程必须存在，并且排在本课之前（同时排除循环）；选修的先修也必须存在。
 - 大类 → 模块 → 课程的遍历顺序必须与 `lessons` 顺序一致，每课只登记在一个模块中，使导航与显示课号不会错位。
 

@@ -361,7 +361,7 @@ class RecordingApiTests(RecordingTestCase):
             detail = self.client.get(f"/api/lessons/{lesson_id}/recordings/demo-run").json()
             self.assertEqual(detail["events"], load_document(self.path)["events"])
             self.assertTrue(all(event["provenance"] == "recorded_run" for event in detail["events"]))
-        real = self.client.get("/api/lessons/1/recordings").json()
+        real = self.client.get("/api/lessons/tool-selection/recordings").json()
         self.assertEqual(real, {"lesson_id": "tool-selection", "recordings": []})
         # 录制不进入运行存储，也不出现在“你的运行”列表中。
         self.assertEqual(self.client.get("/api/runs").json(), {"runs": []})

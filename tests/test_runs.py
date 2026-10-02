@@ -27,7 +27,7 @@ from server.run_store import RunStore
 web = importlib.import_module("server.app")
 
 
-def offline_body(lesson_id="1", exercise_id="sum"):
+def offline_body(lesson_id="tool-selection", exercise_id="sum"):
     spec = web.lesson_spec(lesson_id)
     exercise = next(e for e in spec["exercises"] if e["id"] == exercise_id)
     return {"lesson_id": lesson_id, "mode": "offline", "question": exercise["question"], "exercise_id": exercise_id}
@@ -84,7 +84,7 @@ class RunApiTestCase(unittest.TestCase):
 
 class EnvelopeAndSpanTests(RunApiTestCase):
     def test_seq_is_monotonic_and_every_event_carries_the_v2_envelope(self):
-        result = run_and_read(self.client, offline_body("2", "chain"))
+        result = run_and_read(self.client, offline_body("dependent-calls", "chain"))
         events = result.events
         self.assertEqual([e["seq"] for e in events], list(range(1, len(events) + 1)))
         for event in events:
@@ -101,7 +101,7 @@ class EnvelopeAndSpanTests(RunApiTestCase):
         self.assertEqual(stored, events)
 
     def test_request_response_and_tool_call_result_form_paired_spans_under_round_steps(self):
-        events = run_and_read(self.client, offline_body("2", "chain")).events
+        events = run_and_read(self.client, offline_body("dependent-calls", "chain")).events
         root = events[0]
         self.assertEqual((root["span_kind"], root["parent_span_id"]), ("run", None))
         self.assertEqual(events[-1]["span_id"], root["span_id"])
@@ -210,7 +210,7 @@ class RepresentationTests(RunApiTestCase):
         stack.enter_context(patch.dict(os.environ, environment))
         stack.enter_context(patch.dict("sys.modules", {"local_config": SimpleNamespace(
             API_URL="https://native.example.invalid/v1/chat/completions", MODEL="native-model")}))
-        self.live = {"lesson_id": "1", "mode": "live", "question": "19+23", "exercise_id": "sum"}
+        self.live = {"lesson_id": "tool-selection", "mode": "live", "question": "19+23", "exercise_id": "sum"}
 
     def model_events(self, events):
         return [e for e in events if e["type"] in ("request", "response")]
@@ -320,7 +320,7 @@ class StorageTests(RunApiTestCase):
 
     def test_list_metadata_and_clear(self):
         first = run_and_read(self.client, offline_body())
-        second = run_and_read(self.client, offline_body("3", "zero"))
+        second = run_and_read(self.client, offline_body("fail-safely", "zero"))
         listed = self.client.get("/api/runs").json()["runs"]
         self.assertEqual([run["run_id"] for run in listed], [second.run_id, first.run_id])
         meta = self.client.get(f"/api/runs/{first.run_id}").json()

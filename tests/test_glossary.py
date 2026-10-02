@@ -62,7 +62,7 @@ class GlossaryValidationTests(unittest.TestCase):
             "别名与中文名相同": lambda d: d["terms"][0].update(aliases=[d["terms"][0]["zh"]]),
             "名称跨条目冲突": lambda d: d["terms"][1].update(aliases=[d["terms"][0]["zh"]]),
             "首课不存在": lambda d: d["terms"][0].update(first_lesson="no-such-lesson"),
-            "首课使用别名": lambda d: d["terms"][0].update(first_lesson="1"),
+            "首课写成数字": lambda d: d["terms"][0].update(first_lesson="1"),
             "未知类别": lambda d: d["terms"][0].update(kind="other"),
             "背景词设首课": lambda d: d["terms"][2].update(kind="background"),
             "not_in 不含术语名": lambda d: d["terms"][0].update(not_in=["无关词组"]),
@@ -74,8 +74,11 @@ class GlossaryValidationTests(unittest.TestCase):
         for name, change in cases.items():
             with self.subTest(name), self.assertRaises(LessonValidationError):
                 validate_glossary(mutate(change), CATALOG_INDEX)
+        # 真实目录已没有别名；用带旧 slug 别名的最小目录检查“首课不能写别名”。
+        from server.curriculum import index_catalog
+        renamed = index_catalog({"lessons": [{"id": "tool-selection", "aliases": ["tool-old"], "status": "available"}]})
         with self.assertRaisesRegex(LessonValidationError, "slug「tool-selection」"):
-            validate_glossary(mutate(lambda d: d["terms"][0].update(first_lesson="1")), CATALOG_INDEX)
+            validate_glossary(mutate(lambda d: d["terms"][0].update(first_lesson="tool-old")), renamed)
 
     def test_display_format_and_translatable_fields(self):
         self.assertEqual(display_label({"zh": "运行层", "en": "Harness"}), "运行层（Harness）")

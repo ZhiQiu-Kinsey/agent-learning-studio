@@ -27,7 +27,7 @@ def execute(lesson_id, exercise_id, **kwargs):
 
 class RunnerTests(unittest.TestCase):
     def test_chain_uses_actual_time_and_immutable_history(self):
-        events = execute("2", "chain")
+        events = execute("dependent-calls", "chain")
         results = [e["data"]["result"] for e in events if e["type"] == "tool_result"]
         calls = [e["data"] for e in events if e["type"] == "tool_call"]
         actual = results[0]["result"]
@@ -41,7 +41,7 @@ class RunnerTests(unittest.TestCase):
     def test_zero_and_injected_failures_are_returned_not_retried(self):
         for case in ("zero", "unknown", "malformed"):
             with self.subTest(case=case):
-                events = execute("3", case)
+                events = execute("fail-safely", case)
                 results = [e for e in events if e["type"] == "tool_result"]
                 self.assertEqual(len(results), 1)
                 self.assertFalse(results[0]["data"]["result"]["ok"])
@@ -49,15 +49,15 @@ class RunnerTests(unittest.TestCase):
 
     def test_offline_does_not_import_local_config(self):
         with patch.dict("sys.modules", {"local_config": None}):
-            self.assertEqual(execute("1", "sum")[-1]["type"], "answer")
+            self.assertEqual(execute("tool-selection", "sum")[-1]["type"], "answer")
 
     def test_cancel_after_response_prevents_tool_execution(self):
-        module = lesson_runtime(lesson_spec("1"))
+        module = lesson_runtime(lesson_spec("tool-selection"))
         should_stop = False
         def complete(body, key):
             nonlocal should_stop
             should_stop = True
-            return completion_for(lesson_spec("1"), "sum")(body, key)
+            return completion_for(lesson_spec("tool-selection"), "sum")(body, key)
         with patch.dict(module.AVAILABLE_TOOLS, {"add_numbers": lambda **_: self.fail("cancelled tool ran")}):
             with self.assertRaises(RunCancelled):
                 run_agent("x", "", module.SYSTEM_PROMPT, module.TOOLS, module.AVAILABLE_TOOLS, 3,
@@ -83,7 +83,7 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("test-secret", json.dumps(events))
 
     def test_cancel_after_tool_result_prevents_next_request(self):
-        module = lesson_runtime(lesson_spec("1"))
+        module = lesson_runtime(lesson_spec("tool-selection"))
         stopped = False
         requests = []
         def emit(kind, data, number):
@@ -94,7 +94,7 @@ class RunnerTests(unittest.TestCase):
                 stopped = True
         with self.assertRaises(RunCancelled):
             run_agent("x", "", module.SYSTEM_PROMPT, module.TOOLS, module.AVAILABLE_TOOLS, 3,
-                      model="offline", completion=completion_for(lesson_spec("1"), "sum"), cancelled=lambda: stopped,
+                      model="offline", completion=completion_for(lesson_spec("tool-selection"), "sum"), cancelled=lambda: stopped,
                       emit=emit, quiet=True)
         self.assertEqual(len(requests), 1)
 
@@ -108,7 +108,7 @@ class ApiTests(unittest.TestCase):
     def tearDown(self):
         web.session_key = self.old_key
 
-    def body(self, lesson_id="1", case="sum"):
+    def body(self, lesson_id="tool-selection", case="sum"):
         spec = lesson_spec(lesson_id)
         exercise = next(e for e in spec["exercises"] if e["id"] == case)
         return {"lesson_id": lesson_id, "mode": "offline", "question": exercise["question"], "exercise_id": case}
@@ -149,7 +149,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(web.scrub({secret: ["echo " + secret]}, [secret]), {"[REDACTED]": ["echo [REDACTED]"]})
 
     def test_sources_whitelist(self):
-        response = self.client.get("/api/lessons/1").json()
+        response = self.client.get("/api/lessons/tool-selection").json()
         self.assertTrue(any(s["path"] == "course/runner.py" for s in response["sources"]))
         self.assertFalse(any(s["path"] == "local_config.py" for s in response["sources"]))
         self.assertEqual(self.client.get("/api/lessons/local_config.py").status_code, 404)

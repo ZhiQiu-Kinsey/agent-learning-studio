@@ -17,8 +17,8 @@ class LessonScaffoldTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         (self.root / "curriculum").mkdir()
         self.catalog = {"lessons": [
-            {"id": "tool-selection", "aliases": ["1"], "title": "已有课程", "status": "available"},
-            {"id": "task-contract", "aliases": ["4"], "title": "任务契约", "status": "planned"},
+            {"id": "tool-selection", "aliases": ["tool-old"], "title": "已有课程", "status": "available"},
+            {"id": "task-contract", "aliases": ["task-card"], "title": "任务契约", "status": "planned"},
         ]}
         self.catalog_path = self.root / "curriculum" / "catalog.json"
         self.catalog_path.write_text(json.dumps(self.catalog, ensure_ascii=False), encoding="utf-8")
@@ -27,7 +27,7 @@ class LessonScaffoldTests(unittest.TestCase):
         output = io.StringIO()
         before = self.catalog_path.read_bytes()
         with redirect_stdout(output):
-            result = main(["--root", str(self.root), "--id", "4", "--slug", "task_contract", "--dry-run"])
+            result = main(["--root", str(self.root), "--id", "task-card", "--slug", "task_contract", "--dry-run"])
         self.assertEqual(result, 0)
         self.assertIn("lesson_task_contract", output.getvalue())
         self.assertIn("lesson.json", output.getvalue())
@@ -38,7 +38,7 @@ class LessonScaffoldTests(unittest.TestCase):
     def test_native_scaffold_runs_real_tool_with_its_own_fixture(self):
         from course.runner import run_agent
 
-        target, files = build_scaffold(self.root, "4", "task_contract")
+        target, files = build_scaffold(self.root, "task-card", "task_contract")
         write_scaffold(target, files)
         manifest = json.loads((target / "lesson.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["runtime"]["kind"], "native")
@@ -65,7 +65,7 @@ class LessonScaffoldTests(unittest.TestCase):
         from types import SimpleNamespace
         from pydantic import ValidationError
 
-        _, files = build_scaffold(self.root, "4", "task_contract", "custom")
+        _, files = build_scaffold(self.root, "task-card", "task_contract", "custom")
         manifest = json.loads(files["lesson.json"])
         self.assertFalse(manifest["runtime"]["requires_model"])
         self.assertEqual(manifest["runtime"]["entrypoint"], "runtime:run")
@@ -81,28 +81,28 @@ class LessonScaffoldTests(unittest.TestCase):
             namespace["INPUT_MODEL"](label="")
 
     def test_existing_directory_and_duplicate_manifest_preserve_files(self):
-        target, files = build_scaffold(self.root, "4", "task_contract")
+        target, files = build_scaffold(self.root, "task-card", "task_contract")
         write_scaffold(target, files)
         original = (target / "main.py").read_bytes()
         for slug in ("task_contract", "different_name"):
             with self.subTest(slug=slug), self.assertRaises(ValueError):
-                build_scaffold(self.root, "4", slug)
+                build_scaffold(self.root, "task-card", slug)
         with self.assertRaises(FileExistsError):
             write_scaffold(target, {"main.py": "overwritten"})
         self.assertEqual((target / "main.py").read_bytes(), original)
         self.assertFalse((self.root / "lessons" / "lesson_different_name").exists())
 
     def test_rejects_invalid_targets_before_any_write(self):
-        for lesson_id, slug in [("1", "available"), ("999", "missing"), ("../4", "bad"),
-                                ("4", "../escape"), ("4", "UpperCase"), ("4", "trailing_"),
-                                ("4", "with/slash"), ("04", "leading_zero")]:
+        for lesson_id, slug in [("tool-old", "available"), ("999", "missing"), ("../task-card", "bad"),
+                                ("task-card", "../escape"), ("task-card", "UpperCase"), ("task-card", "trailing_"),
+                                ("task-card", "with/slash"), ("04", "leading_zero")]:
             with self.subTest(lesson_id=lesson_id, slug=slug), self.assertRaises(ValueError):
                 build_scaffold(self.root, lesson_id, slug)
         self.assertFalse((self.root / "lessons").exists())
 
     def test_slug_or_alias_resolve_to_one_slug_directory_and_manifest(self):
         by_slug, files = build_scaffold(self.root, "task-contract")
-        by_alias, _ = build_scaffold(self.root, "4", "task-contract")
+        by_alias, _ = build_scaffold(self.root, "task-card", "task-contract")
         self.assertEqual(by_slug, by_alias)
         self.assertEqual(by_slug.name, "lesson_task_contract")
         self.assertEqual(json.loads(files["lesson.json"])["id"], "task-contract")
@@ -112,7 +112,7 @@ class LessonScaffoldTests(unittest.TestCase):
         target, files = build_scaffold(self.root, "task-contract")
         write_scaffold(target, files)
         # 已有清单无论用 slug 还是别名再次生成都会被拒绝。
-        for identifier in ("task-contract", "4"):
+        for identifier in ("task-contract", "task-card"):
             with self.subTest(identifier=identifier), self.assertRaisesRegex(ValueError, "已有实现清单"):
                 build_scaffold(self.root, identifier)
 
@@ -121,7 +121,7 @@ class LessonScaffoldTests(unittest.TestCase):
         existing.mkdir(parents=True)
         (existing / "lesson.json").write_text("{invalid", encoding="utf-8")
         with redirect_stderr(io.StringIO()):
-            result = main(["--root", str(self.root), "--id", "4", "--slug", "task_contract"])
+            result = main(["--root", str(self.root), "--id", "task-card", "--slug", "task_contract"])
         self.assertEqual(result, 1)
         self.assertFalse((self.root / "lessons" / "lesson_task_contract").exists())
 
@@ -129,7 +129,7 @@ class LessonScaffoldTests(unittest.TestCase):
         from scripts.validate_lessons import main as validate_main
         from server.catalog import load_lessons
 
-        self.catalog["lessons"] = [{"id": "task-contract", "aliases": ["4"], "title": "任务契约", "status": "planned",
+        self.catalog["lessons"] = [{"id": "task-contract", "aliases": ["task-card"], "title": "任务契约", "status": "planned",
                                     "summary": "测试课程", "objectives": ["核对实际结果"]}]
         self.catalog_path.write_text(json.dumps(self.catalog, ensure_ascii=False), encoding="utf-8")
         for kind in ("native", "custom"):
@@ -137,7 +137,7 @@ class LessonScaffoldTests(unittest.TestCase):
                 kind_root = self.root / kind
                 (kind_root / "curriculum").mkdir(parents=True)
                 (kind_root / "curriculum" / "catalog.json").write_bytes(self.catalog_path.read_bytes())
-                target, files = build_scaffold(kind_root, "4", "task_contract", kind)
+                target, files = build_scaffold(kind_root, "task-card", "task_contract", kind)
                 write_scaffold(target, files)
                 self.assertEqual(load_lessons(root=kind_root), [])
                 specs = load_lessons(root=kind_root, include_planned=True)
@@ -151,10 +151,10 @@ class LessonScaffoldTests(unittest.TestCase):
     def test_validator_rejects_broken_draft_content_with_local_diagnostic(self):
         from scripts.validate_lessons import main as validate_main
 
-        self.catalog["lessons"] = [{"id": "task-contract", "aliases": ["4"], "title": "任务契约", "status": "planned",
+        self.catalog["lessons"] = [{"id": "task-contract", "aliases": ["task-card"], "title": "任务契约", "status": "planned",
                                     "summary": "测试课程", "objectives": ["核对实际结果"]}]
         self.catalog_path.write_text(json.dumps(self.catalog, ensure_ascii=False), encoding="utf-8")
-        target, files = build_scaffold(self.root, "4", "task_contract")
+        target, files = build_scaffold(self.root, "task-card", "task_contract")
         content = json.loads(files["content.json"])
         content["quiz"][0]["correct_option"] = "missing-option"
         files["content.json"] = json.dumps(content, ensure_ascii=False)

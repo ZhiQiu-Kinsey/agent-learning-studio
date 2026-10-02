@@ -44,7 +44,7 @@ test("home shows a labelled illustration, the journey and a way back to the last
   // No local history yet: no "continue" button.
   await expect(page.getByTestId("home-continue")).toHaveCount(0);
   await page.getByTestId("home-first-lesson").click();
-  const first = await (await request.get("/api/lessons/1")).json();
+  const first = await (await request.get("/api/lessons/tool-selection")).json();
   await expect(page.getByTestId("lesson-badge")).toHaveText(
     String(first.number).padStart(2, "0"),
   );

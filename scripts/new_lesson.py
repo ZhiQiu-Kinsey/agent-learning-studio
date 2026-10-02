@@ -27,7 +27,7 @@ def lesson_directory(slug):
 def build_scaffold(root, lesson_id, slug=None, kind="native"):
     """先验证所有输入并生成内存中的文件计划，不写文件。
 
-    lesson_id 可以是课程 slug 或旧数字别名；slug 参数可省略，提供时必须与目录中的 slug 一致
+    lesson_id 可以是课程 slug 或改名前的旧 slug 别名；slug 参数可省略，提供时必须与目录中的 slug 一致
     （允许写成 snake_case），仅为兼容旧命令保留。
     """
     root = Path(root).resolve()
@@ -40,7 +40,7 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
     index = index_catalog(catalog, str(catalog_path))
     canonical = index.resolve(str(lesson_id))
     if canonical is None:
-        raise ValueError(f"{catalog_path}: 必须先登记课程 {lesson_id}（课程 slug 或数字别名）。")
+        raise ValueError(f"{catalog_path}: 必须先登记课程 {lesson_id}（课程 slug 或旧 slug 别名）。")
     if slug is not None and slug.replace("_", "-") != canonical:
         raise ValueError(f"--slug 与目录中的课程 slug「{canonical}」不一致；可以省略 --slug。")
     lesson = index.entries[canonical]
@@ -287,7 +287,7 @@ def write_scaffold(target, files):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--id", required=True, help="curriculum/catalog.json 中已有 planned 课程的 slug 或数字别名")
+    parser.add_argument("--id", required=True, help="curriculum/catalog.json 中已有 planned 课程的 slug")
     parser.add_argument("--slug", help="可选；兼容旧命令，必须与目录中的课程 slug 一致（可写成 snake_case）")
     parser.add_argument("--kind", choices=("native", "custom"), default="native")
     parser.add_argument("--root", type=Path, default=ROOT, help="项目根目录，默认当前脚本所属项目")

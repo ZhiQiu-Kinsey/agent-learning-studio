@@ -1,4 +1,4 @@
-"""课程 slug 主 ID、数字别名、显示课号与目录引用校验。"""
+"""课程 slug 主 ID、旧 slug 别名、显示课号与目录引用校验。"""
 import copy
 import json
 import re
@@ -24,7 +24,7 @@ def lesson(slug, *aliases, prerequisites=(), **fields):
 
 class CatalogIndexTests(unittest.TestCase):
     def test_numbers_follow_catalog_order_and_survive_insertions(self):
-        base = catalog(lesson("alpha", "1"), lesson("beta", "2"), lesson("gamma", "3"))
+        base = catalog(lesson("alpha"), lesson("beta", "beta-old"), lesson("gamma"))
         index = index_catalog(base)
         self.assertEqual(index.numbers, {"alpha": 1, "beta": 2, "gamma": 3})
         inserted = copy.deepcopy(base)
@@ -32,8 +32,10 @@ class CatalogIndexTests(unittest.TestCase):
         moved = index_catalog(inserted)
         # 插入新课只改变显示课号，slug 与别名解析保持不变。
         self.assertEqual(moved.numbers, {"alpha": 1, "new-topic": 2, "beta": 3, "gamma": 4})
-        self.assertEqual(moved.resolve("2"), "beta")
+        self.assertEqual(moved.resolve("beta-old"), "beta")
         self.assertEqual(moved.resolve("beta"), "beta")
+        # 显示课号不是 ID：数字不解析为任何课程。
+        self.assertIsNone(moved.resolve("2"))
         self.assertIsNone(moved.resolve("4"))
         self.assertIsNone(moved.resolve(4))
 
@@ -49,10 +51,11 @@ class CatalogIndexTests(unittest.TestCase):
             "重复 slug": catalog(lesson("alpha"), lesson("alpha")),
             "别名与其他 slug 相同": catalog(lesson("alpha", "beta"), lesson("beta")),
             "slug 与先出现的别名相同": catalog(lesson("alpha", "beta-old"), lesson("beta-old")),
-            "两个课程共用别名": catalog(lesson("alpha", "1"), lesson("beta", "1")),
-            "同课重复别名": catalog(lesson("alpha", "1", "1")),
+            "两个课程共用别名": catalog(lesson("alpha", "old"), lesson("beta", "old")),
+            "同课重复别名": catalog(lesson("alpha", "old", "old")),
             "别名等于本课 slug": catalog(lesson("alpha", "alpha")),
-            "别名格式非法": catalog(lesson("alpha", "01")),
+            "别名格式非法": catalog(lesson("alpha", "Old_Alpha")),
+            "数字别名会和显示课号混淆": catalog(lesson("alpha", "1")),
             "别名不是字符串": catalog(lesson("alpha", 1)),
         }
         for name, value in cases.items():
@@ -63,7 +66,7 @@ class CatalogIndexTests(unittest.TestCase):
         with self.assertRaisesRegex(LessonValidationError, "不存在"):
             index_catalog(catalog(lesson("alpha", prerequisites=["missing"])))
         with self.assertRaisesRegex(LessonValidationError, "slug「alpha」"):
-            index_catalog(catalog(lesson("alpha", "1"), lesson("beta", prerequisites=["1"])))
+            index_catalog(catalog(lesson("alpha", "alpha-old"), lesson("beta", prerequisites=["alpha-old"])))
         with self.assertRaisesRegex(LessonValidationError, "之前"):
             index_catalog(catalog(lesson("alpha", prerequisites=["beta"]), lesson("beta")))
         with self.assertRaisesRegex(LessonValidationError, "之前"):
@@ -86,7 +89,7 @@ class CatalogIndexTests(unittest.TestCase):
 
 
 class RealCatalogTests(unittest.TestCase):
-    def test_every_lesson_has_slug_and_legacy_numeric_alias(self):
+    def test_every_lesson_has_a_slug_and_no_numeric_alias(self):
         data = load_curriculum()
         index = index_catalog(data)
         aliases = [alias for item in data["lessons"] for alias in item["aliases"]]
@@ -94,15 +97,8 @@ class RealCatalogTests(unittest.TestCase):
         for item in data["lessons"]:
             with self.subTest(lesson=item["id"]):
                 self.assertRegex(item["id"], r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
-                # 旧课程保留原数字 ID 作为别名；扩充后新增的课程从未有过数字 ID，可以没有别名。
-                if item["aliases"]:
-                    self.assertTrue(any(alias.isdigit() for alias in item["aliases"]), "别名应为旧数字 ID")
-        # 已实现的第 1–10 课显示课号不变，与旧数字 ID 一致；扩充后新增的课程没有数字别名。
-        for spec in LESSONS:
-            if spec["aliases"]:
-                self.assertEqual(str(spec["number"]), spec["aliases"][0])
-        self.assertEqual(index.numbers["tool-selection"], 1)
-        self.assertEqual(index.resolve("10"), "persistent-memory")
+                self.assertFalse(any(alias.isdigit() for alias in item["aliases"]), "数字别名会和显示课号混淆")
+        self.assertIsNone(index.resolve("1"))
 
     def test_manifest_directories_follow_slug_naming_convention(self):
         # 映射约定：lesson.json 的 id 决定课程身份；旧目录为 lesson_NN_<slug 下划线形式>，新目录为 lesson_<slug 下划线形式>。
@@ -121,7 +117,7 @@ class LessonIdApiTests(unittest.TestCase):
         lessons = self.client.get("/api/lessons").json()["lessons"]
         self.assertEqual([item["id"] for item in lessons], [spec["id"] for spec in LESSONS])
         first = lessons[0]
-        self.assertEqual((first["id"], first["number"], first["aliases"]), ("tool-selection", 1, ["1"]))
+        self.assertEqual((first["number"], first["aliases"]), (1, []))
         curriculum = self.client.get("/api/curriculum").json()
         self.assertEqual([item["number"] for item in curriculum["lessons"]],
                          list(range(1, len(curriculum["lessons"]) + 1)))
@@ -129,14 +125,12 @@ class LessonIdApiTests(unittest.TestCase):
                    for module in category["modules"] for lesson_id in module["lesson_ids"]]
         self.assertEqual(modules, [item["id"] for item in curriculum["lessons"]])
 
-    def test_detail_by_slug_or_alias_returns_the_same_lesson(self):
+    def test_detail_by_slug_returns_the_lesson_and_numbers_are_not_ids(self):
         by_slug = self.client.get("/api/lessons/tool-selection")
-        by_alias = self.client.get("/api/lessons/1")
         self.assertEqual(by_slug.status_code, 200)
-        self.assertEqual(by_slug.json(), by_alias.json())
-        self.assertEqual(by_alias.json()["id"], "tool-selection")
-        self.assertEqual(by_alias.json()["number"], 1)
-        self.assertIs(lesson_spec("1"), lesson_spec("tool-selection"))
+        self.assertEqual(by_slug.json()["id"], "tool-selection")
+        self.assertEqual(self.client.get("/api/lessons/1").json()["code"], "lesson_not_found")
+        self.assertIsNone(lesson_spec("1"))
 
     def run_events(self, lesson_id):
         spec = lesson_spec(lesson_id)
@@ -146,17 +140,15 @@ class LessonIdApiTests(unittest.TestCase):
         self.assertTrue(result.events, result)
         return result.events
 
-    def test_run_by_slug_or_alias_records_the_canonical_slug(self):
-        for requested in ("tool-selection", "1"):
-            with self.subTest(requested=requested):
-                events = self.run_events(requested)
-                self.assertEqual(events[0]["type"], "run_start")
-                self.assertEqual(events[0]["data"]["lesson_id"], "tool-selection")
-                self.assertEqual(events[-1]["data"]["status"], "completed")
+    def test_run_by_slug_records_the_slug(self):
+        events = self.run_events("tool-selection")
+        self.assertEqual(events[0]["type"], "run_start")
+        self.assertEqual(events[0]["data"]["lesson_id"], "tool-selection")
+        self.assertEqual(events[-1]["data"]["status"], "completed")
 
     def test_unknown_and_planned_ids_return_404_with_codes(self):
         cases = {"no-such-lesson": "lesson_not_found", "999": "lesson_not_found", "01": "lesson_not_found",
-                 "document-loading": "lesson_not_available", "11": "lesson_not_available"}
+                 "document-loading": "lesson_not_available", "11": "lesson_not_found"}
         for requested, code in cases.items():
             with self.subTest(requested=requested):
                 detail = self.client.get("/api/lessons/" + requested)
@@ -167,7 +159,7 @@ class LessonIdApiTests(unittest.TestCase):
                                                          "question": "test", "exercise_id": "test"})
                 self.assertEqual((run.status_code, run.json()["code"]), (404, code))
                 self.assertNotIn("data:", run.text)
-        planned = self.client.get("/api/lessons/11").json()
+        planned = self.client.get("/api/lessons/document-loading").json()
         number = index_catalog(load_curriculum()).numbers["document-loading"]
         self.assertIn(f"第 {number} 课", planned["detail"])
         self.assertEqual(planned["params"]["number"], number)

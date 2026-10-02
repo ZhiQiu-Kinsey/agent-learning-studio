@@ -15,7 +15,7 @@ test("themes persist, follow system changes, sync tabs and cover mobile screens"
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   page.on("pageerror", (error) => errors.push(error.message));
-  const detail: Detail = await (await request.get("/api/lessons/1")).json();
+  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
   const root = page.locator("html");
@@ -146,7 +146,7 @@ test("reduced motion keeps learning and curriculum headings visible", async ({
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
-  const detail: Detail = await (await request.get("/api/lessons/1")).json();
+  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await expect(

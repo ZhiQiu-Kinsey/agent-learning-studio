@@ -2,7 +2,8 @@
 
 课程 ID 规则：
 - 每课的主 ID 是稳定的 kebab-case slug（如 ``tool-selection``），对外接口一律返回 slug。
-- 旧的数字 ID 保存在 ``aliases`` 中，只用于解析旧链接、旧请求和旧存储；别名不得与任何 slug 或其他别名重复。
+- ``aliases`` 只保存改名前的旧 slug，用于解析旧链接、旧请求和旧存储；别名不得与任何 slug 或其他别名重复。
+  不接受数字别名：数字会和按目录顺序计算的显示课号混淆（插入新课后，旧数字指向的课程与显示课号不再一致）。
 - 显示课号（``number``）由 ``lessons`` 数组的目录顺序计算，从 1 开始，不在 JSON 中手写。
 - 目录内对课程的引用（模块 ``lesson_ids``、``prerequisites``、选修先修）一律写 slug。
 """
@@ -14,8 +15,8 @@ from pathlib import Path
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "curriculum" / "catalog.json"
 SLUG_MAX_LENGTH = 48
 _SLUG = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
-# 别名可以是旧数字 ID，也可以是将来改名前的旧 slug。
-_ALIAS = re.compile(r"[1-9][0-9]{0,5}|[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+# 别名只能是改名前的旧 slug；数字会和显示课号混淆，不再接受。
+_ALIAS = _SLUG
 
 
 class LessonValidationError(ValueError):
@@ -75,7 +76,7 @@ def index_catalog(catalog, location="curriculum"):
         _require(isinstance(aliases, list), where + ".aliases", "必须是字符串数组")
         for alias in aliases:
             _require(isinstance(alias, str) and _ALIAS.fullmatch(alias) is not None, where + ".aliases",
-                     "别名必须是不以 0 开头的数字或 kebab-case slug")
+                     "别名必须是 kebab-case slug（改名前的旧 slug），不能是数字")
             _require(alias != identifier, where + ".aliases", "别名不能与本课 slug 相同")
             _require(alias not in lookup, location, f"别名「{alias}」与其他课程 slug 或别名冲突")
             lookup[alias] = identifier

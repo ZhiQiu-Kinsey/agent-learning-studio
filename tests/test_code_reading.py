@@ -214,8 +214,8 @@ class ValidationTests(unittest.TestCase):
 
     def test_compare_with_accepts_alias_and_resolves_to_slug(self):
         self.course("one", [{"id": "news", "type": "whats-new"}])
-        self.course("two", [{"id": "news", "type": "whats-new", "compare_with": "1"}])
-        self.catalog["lessons"][0]["aliases"] = ["1"]
+        self.course("two", [{"id": "news", "type": "whats-new", "compare_with": "old-one"}])
+        self.catalog["lessons"][0]["aliases"] = ["old-one"]
         specs = self.load()
         self.assertEqual([spec["code_compare"] for spec in specs], [None, "one"])
 
@@ -224,10 +224,11 @@ class CodeApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(web.app, base_url="http://localhost")
 
-    def test_slug_and_alias_return_the_same_payload(self):
+    def test_slug_returns_the_code_payload_and_numbers_are_not_ids(self):
         by_slug = self.client.get("/api/lessons/fail-safely/code")
         self.assertEqual(by_slug.status_code, 200)
-        self.assertEqual(by_slug.json(), self.client.get("/api/lessons/3/code").json())
+        # 显示课号不是 ID：插入新课会改变课号，接口只认 slug。
+        self.assertEqual(self.client.get("/api/lessons/3/code").json()["code"], "lesson_not_found")
         data = by_slug.json()
         self.assertEqual(set(data), {"lesson_id", "files", "whats_new", "annotations"})
         self.assertEqual(data["lesson_id"], "fail-safely")
@@ -236,8 +237,8 @@ class CodeApiTests(unittest.TestCase):
 
     def test_unknown_planned_and_invalid_locale_use_error_codes(self):
         cases = {"/api/lessons/no-such-lesson/code": (404, "lesson_not_found"),
-                 "/api/lessons/11/code": (404, "lesson_not_available"),
-                 "/api/lessons/1/code?lang=bad%20code": (400, "invalid_locale")}
+                 "/api/lessons/document-loading/code": (404, "lesson_not_available"),
+                 "/api/lessons/tool-selection/code?lang=bad%20code": (400, "invalid_locale")}
         for url, (status, code) in cases.items():
             with self.subTest(url=url):
                 response = self.client.get(url)
@@ -246,7 +247,7 @@ class CodeApiTests(unittest.TestCase):
     def test_unparsable_source_returns_code_unavailable(self):
         with patch("server.code_reading.extract_symbols", side_effect=SyntaxError("broken")), \
                 patch("server.code_reading._cache", {}):
-            response = self.client.get("/api/lessons/1/code")
+            response = self.client.get("/api/lessons/tool-selection/code")
         self.assertEqual((response.status_code, response.json()["code"]), (503, "code_unavailable"))
         self.assertNotIn("broken", response.text)
 
