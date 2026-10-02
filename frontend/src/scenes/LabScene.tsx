@@ -6,6 +6,7 @@ import { Laboratory } from "../components/workspace/Laboratory";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
 import { Button } from "../components/ui/button";
 import RubberSegment from "../components/react-bits/RubberSegment";
+import ElectricBorder from "../components/react-bits/ElectricBorder";
 import { ExperimentPanel } from "./lab/ExperimentPanel";
 import { GuideBar } from "./lab/GuideBar";
 import { RecordingView, type RecordingMeta } from "./lab/RecordingView";
@@ -168,20 +169,32 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
               </section>
             </div>
           )}
-          <LessonExtension
-            slot="lab"
-            extensionKey={detail.ui?.lab}
-            studio={studio}
-            active={active}
-            onConfigure={onConfigure}
-          >
-            <Laboratory
+          <div className="lab-frame" data-running={studio.running || undefined}>
+            {/* Decoration only while a real run is in progress. */}
+            {studio.running && (
+              <ElectricBorder
+                className="lab-running-border"
+                color="#8f7dff"
+                chaos={0.08}
+                speed={1.2}
+                borderRadius={18}
+              />
+            )}
+            <LessonExtension
+              slot="lab"
+              extensionKey={detail.ui?.lab}
               studio={studio}
               active={active}
               onConfigure={onConfigure}
-              spotlight={spotlight}
-            />
-          </LessonExtension>
+            >
+              <Laboratory
+                studio={studio}
+                active={active}
+                onConfigure={onConfigure}
+                spotlight={spotlight}
+              />
+            </LessonExtension>
+          </div>
           {experiment && guideStep !== null && finished && (
             <GuideBar
               experiment={experiment}

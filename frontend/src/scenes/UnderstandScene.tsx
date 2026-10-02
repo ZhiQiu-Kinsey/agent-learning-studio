@@ -1,5 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { motion } from "motion/react";
+import { useReducedMotion } from "../motion";
 import { LessonHero } from "../components/learning/LessonHero";
 import { UnderstandBlocks } from "../content/blocks/UnderstandBlocks";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
@@ -10,6 +12,7 @@ import "../styles/learning-experience.css";
 /** 理解：principle first, illustrations clearly labelled, then a way into code and lab. */
 export function UnderstandScene({ studio, active, goTo }: SceneProps) {
   const { t } = useTranslation("lesson");
+  const reduced = useReducedMotion();
   const detail = studio.detail!;
   return (
     <div
@@ -38,12 +41,32 @@ export function UnderstandScene({ studio, active, goTo }: SceneProps) {
           </LessonExtension>
         </div>
         <aside className="learn-sidebar" aria-label={t("objectives.eyebrow")}>
-          <section className="learn-objectives">
+          <section className="learn-objectives scene-objectives">
             <span className="reading-eyebrow">{t("objectives.eyebrow")}</span>
             <h2>{t("objectives.title")}</h2>
             <ul>
               {detail.objectives.map((objective, index) => (
-                <li key={index}>{objective}</li>
+                <motion.li
+                  key={`${detail.id}-${index}`}
+                  initial={
+                    reduced
+                      ? false
+                      : { opacity: 0, x: 18, scale: 0.96, filter: "blur(6px)" }
+                  }
+                  whileInView={
+                    reduced
+                      ? undefined
+                      : { opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }
+                  }
+                  viewport={{ once: true, amount: 0.6 }}
+                  transition={{
+                    delay: 0.15 + index * 0.09,
+                    duration: 0.5,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                >
+                  {objective}
+                </motion.li>
               ))}
             </ul>
           </section>

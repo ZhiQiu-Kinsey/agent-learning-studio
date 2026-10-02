@@ -1,3 +1,5 @@
+import type { PointerEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUpRight,
@@ -14,6 +16,16 @@ import Magnet from "../react-bits/Magnet";
 import { lessonView } from "../../content/view";
 import { prefersReducedMotionNow, useMotionBudget } from "../../motion";
 
+/** Pointer-following spotlight (SpotlightCard style) driven by CSS variables. */
+const trackPointer = (event: PointerEvent<HTMLElement>) => {
+  const box = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.style.setProperty(
+    "--mx",
+    `${event.clientX - box.left}px`,
+  );
+  event.currentTarget.style.setProperty("--my", `${event.clientY - box.top}px`);
+};
+
 export function LessonHero({
   detail,
   onSource,
@@ -21,13 +33,14 @@ export function LessonHero({
   detail: Detail;
   onSource: () => void;
 }) {
+  const { t } = useTranslation("lesson", { keyPrefix: "hero" });
   const view = lessonView(detail.learning);
   const presentation = view.hero;
   const { ref, active } = useMotionBudget<HTMLElement>();
   if (!presentation)
     return (
       <div className="reading-intro">
-        <span className="reading-eyebrow">理解原理，再动手验证</span>
+        <span className="reading-eyebrow">{t("tagline")}</span>
         <p>{detail.description}</p>
       </div>
     );
@@ -36,8 +49,10 @@ export function LessonHero({
       ref={ref}
       className={`lesson-hero ${active ? "is-animating" : ""}`}
       data-testid="lesson-hero"
-      aria-label="本课导读概览"
+      aria-label={t("region")}
+      onPointerMove={active ? trackPointer : undefined}
     >
+      <span className="lesson-hero-spotlight" aria-hidden="true" />
       <div className="lesson-hero-copy">
         <div className="lesson-hero-eyebrow">
           <span className="lesson-hero-dot" />
@@ -47,7 +62,12 @@ export function LessonHero({
           <BlurText text={presentation.headline} />
           <br />
           {presentation.highlight && (
-            <GradientText>{presentation.highlight}</GradientText>
+            <GradientText
+              colors={["#7562e9", "#b98aff", "#49dec6", "#7562e9"]}
+              animationSpeed={7}
+            >
+              {presentation.highlight}
+            </GradientText>
           )}
         </h2>
         <p className="lesson-hero-description">{detail.description}</p>
@@ -62,21 +82,21 @@ export function LessonHero({
                 })
               }
             >
-              探索调用过程
+              {t("explore")}
               <ArrowDown size={16} />
             </button>
           </Magnet>
           <button className="lesson-hero-source" onClick={onSource}>
-            对照本课源码
+            {t("source")}
             <ArrowUpRight size={16} />
           </button>
         </div>
         <div className="lesson-hero-meta">
           <span>
             <Sparkles size={13} />
-            理解原理，再动手验证
+            {t("tagline")}
           </span>
-          <span>{view.sections.length} 个核心概念</span>
+          <span>{t("concepts", { count: view.sections.length })}</span>
         </div>
       </div>
       <div className="lesson-orbit" aria-hidden="true">
@@ -86,26 +106,31 @@ export function LessonHero({
         <div className="lesson-orbit-sweep">
           <i />
         </div>
+        <div className="lesson-orbit-sweep lesson-orbit-sweep-outer">
+          <i />
+        </div>
         <div className="lesson-orbit-core">
           <Cpu size={32} strokeWidth={1.25} />
           <strong>Agent</strong>
-          <span>感知 · 决策 · 行动</span>
+          <span>{t("orbit.core")}</span>
         </div>
         <div className="lesson-orbit-node orbit-node-tools">
           <Braces size={17} />
           <span>
-            Python 工具<small>执行与校验</small>
+            {t("orbit.tools")}
+            <small>{t("orbit.toolsHint")}</small>
           </span>
         </div>
         <div className="lesson-orbit-node orbit-node-context">
           <Network size={17} />
           <span>
-            消息历史<small>观察与上下文</small>
+            {t("orbit.context")}
+            <small>{t("orbit.contextHint")}</small>
           </span>
         </div>
         <div className="lesson-orbit-caption">
           <span />
-          让每一步都有迹可循
+          {t("orbit.caption")}
         </div>
       </div>
     </section>

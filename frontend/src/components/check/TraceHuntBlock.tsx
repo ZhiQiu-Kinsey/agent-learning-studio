@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { Check, FlaskConical, Search, X } from "lucide-react";
+import SparkBurst from "../react-bits/SparkBurst";
 import { useTranslation } from "react-i18next";
 import { toolNameOf } from "../../content/selector";
-import { huntState, judgeHunt, type HuntVerdict } from "../../content/traceHunt";
+import {
+  huntState,
+  judgeHunt,
+  type HuntVerdict,
+} from "../../content/traceHunt";
 import type { TraceHunt } from "../../content/types.gen";
 import { huntEvidenceId, track, useProgress } from "../../progress";
 import type { Trace } from "../../types";
@@ -122,7 +127,13 @@ export function TraceHuntBlock({
                   key={`${event.seq ?? index}-${event.type}`}
                   data-testid="trace-hunt-event"
                   data-index={index}
-                  data-chosen={chosen ? (picked!.verdict.correct ? "correct" : "incorrect") : undefined}
+                  data-chosen={
+                    chosen
+                      ? picked!.verdict.correct
+                        ? "correct"
+                        : "incorrect"
+                      : undefined
+                  }
                 >
                   <Button
                     type="button"
@@ -160,6 +171,7 @@ export function TraceHuntBlock({
             data-correct={picked.verdict.correct}
           >
             <strong>
+              {picked.verdict.correct && <SparkBurst key={picked.index} />}
               {picked.verdict.correct ? (
                 <Check size={15} aria-hidden="true" />
               ) : (

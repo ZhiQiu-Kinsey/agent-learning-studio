@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Markdown from "react-markdown";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -6,6 +7,7 @@ import { useReducedMotion } from "../../motion";
 import type { Detail, Trace } from "../../types";
 import SpotlightCard from "../../components/react-bits/SpotlightCard";
 import ScrollReveal from "../../components/react-bits/ScrollReveal";
+import FadeContent from "../../components/react-bits/FadeContent";
 import {
   Accordion,
   AccordionContent,
@@ -48,6 +50,11 @@ export function UnderstandBlocks({
   const observe =
     content?.scenes.lab?.experiments.flatMap((item) => item.observe) ?? [];
   let section = 0;
+  const reveal = (key: string, node: ReactNode) => (
+    <FadeContent key={key} className="block-reveal">
+      {node}
+    </FadeContent>
+  );
 
   const render = (block: Block) => {
     switch (block.type) {
@@ -67,27 +74,34 @@ export function UnderstandBlocks({
                 {block.items.map((concept, index) => {
                   const Icon = conceptIcons[index % conceptIcons.length];
                   return (
-                    <SpotlightCard
-                      className="learn-concept"
+                    <FadeContent
+                      className="learn-concept-cell"
                       key={concept.id}
-                      spotlightColor="rgba(135, 110, 240, 0.16)"
+                      delay={index * 0.12}
+                      distance={28}
                     >
-                      <div className="learn-concept-top">
-                        <span>
-                          <Icon size={18} />
-                        </span>
-                        <small>{concept.label}</small>
-                      </div>
-                      <h3>{concept.title}</h3>
-                      <p>{concept.description}</p>
-                      {concept.token && <code>{concept.token}</code>}
-                    </SpotlightCard>
+                      <SpotlightCard
+                        className="learn-concept"
+                        spotlightColor="rgba(135, 110, 240, 0.22)"
+                      >
+                        <div className="learn-concept-top">
+                          <span>
+                            <Icon size={18} />
+                          </span>
+                          <small>{concept.label}</small>
+                        </div>
+                        <h3>{concept.title}</h3>
+                        <p>{concept.description}</p>
+                        {concept.token && <code>{concept.token}</code>}
+                      </SpotlightCard>
+                    </FadeContent>
                   );
                 })}
               </div>
             </section>
             {hero?.takeaway && (
-              <aside
+              <FadeContent
+                as="aside"
                 className="lesson-takeaway"
                 aria-label={t("takeaway.region")}
               >
@@ -96,7 +110,7 @@ export function UnderstandBlocks({
                   <span>{t("takeaway.label")}</span>
                   <ScrollReveal>{hero.takeaway}</ScrollReveal>
                 </div>
-              </aside>
+              </FadeContent>
             )}
           </div>
         );
@@ -107,11 +121,14 @@ export function UnderstandBlocks({
             className="reading-section"
             data-testid="learn-reading-section"
             key={block.id}
-            initial={reduced ? false : { opacity: 0.65, y: 14 }}
-            animate={reduced ? { opacity: 1, y: 0 } : undefined}
-            whileInView={reduced ? undefined : { opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.1 }}
-            transition={{ duration: reduced ? 0 : 0.4 }}
+            initial={
+              reduced ? false : { opacity: 0.35, y: 22, filter: "blur(6px)" }
+            }
+            whileInView={
+              reduced ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }
+            }
+            viewport={{ once: true, amount: 0.08 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className="reading-section-heading">
               <span aria-hidden="true">{String(section).padStart(2, "0")}</span>
@@ -126,39 +143,38 @@ export function UnderstandBlocks({
         );
       }
       case "walkthrough":
-        return <AgentFlow key={block.id} flow={block} />;
+        return reveal(block.id, <AgentFlow flow={block} />);
       case "flow": {
         const illustration = content?.illustrations[block.illustration];
-        return illustration ? (
-          <IllustrationFlow
-            key={block.id}
-            block={block}
-            illustration={illustration}
-          />
-        ) : null;
+        return illustration
+          ? reveal(
+              block.id,
+              <IllustrationFlow block={block} illustration={illustration} />,
+            )
+          : null;
       }
       case "micro-quiz":
-        return <MicroQuizBlock key={block.id} block={block} />;
+        return reveal(block.id, <MicroQuizBlock block={block} />);
       case "predict":
-        return (
+        return reveal(
+          block.id,
           <PredictBlock
-            key={block.id}
             block={block}
             lessonId={detail.id}
             events={events}
             onRun={onRun}
-          />
+          />,
         );
       case "steps":
-        return <StepsBlock key={block.id} block={block} />;
+        return reveal(block.id, <StepsBlock block={block} />);
       case "compare":
-        return <CompareBlock key={block.id} block={block} />;
+        return reveal(block.id, <CompareBlock block={block} />);
       case "callout":
-        return <CalloutBlock key={block.id} block={block} />;
+        return reveal(block.id, <CalloutBlock block={block} />);
       case "misconception":
-        return <MisconceptionBlock key={block.id} block={block} />;
+        return reveal(block.id, <MisconceptionBlock block={block} />);
       case "references":
-        return <ReferencesBlock key={block.id} block={block} />;
+        return reveal(block.id, <ReferencesBlock block={block} />);
       default:
         return null; // hero is rendered by LessonHero; scene-specific blocks live in their scenes
     }

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Check, RotateCcw, X } from "lucide-react";
 import JellyRadio from "../../components/react-bits/JellyRadio";
 import { Button } from "../../components/ui/button";
+import SparkBurst from "../../components/react-bits/SparkBurst";
 import type { MicroQuiz } from "../types.gen";
 
 /** One question inside the reading flow; every option explains itself after answering. */
@@ -51,6 +52,7 @@ export function MicroQuizBlock({ block }: { block: MicroQuiz }) {
           data-correct={correct}
         >
           <strong>
+            {correct && <SparkBurst />}
             {correct ? <Check size={15} /> : <X size={15} />}
             {correct ? t("correct") : t("incorrect")}
           </strong>
