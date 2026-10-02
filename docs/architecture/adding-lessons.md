@@ -19,7 +19,7 @@
 生成目录为 `lessons/lesson_document_loading/`，包含 `lesson.json`、`content.json`、`README.md`、`__init__.py` 和冒烟测试 `test_lesson.py`。原生课程另有 `main.py`、`tools.py`、`fixtures.py`；定制课程另有 `runtime.py`。示例只验证接入通路，正文与练习明确标记待编写。
 
 1. 根据目录中的学习目标与验收要求实现本课。补齐引言、机制、示例、实验、观察点和自测，保留“概念 → 最小实现 → 运行证据 → 实验 → 自检”的顺序。
-2. 运行课程自己的测试，例如 `python -m unittest lessons.lesson_document_loading.test_lesson -v`。补充真实 Python 行为、错误处理、输入与停止等测试；冒烟示例通过不代表课程完成。
+2. 运行课程自己的测试，例如 `python -m unittest lessons.lesson_document_loading.test_lesson -v`。补充真实 Python 行为、错误处理、输入与停止等测试；冒烟示例通过不代表课程完成。各课目录下的 `test_lesson.py` 由 `tests/test_lesson_local_suites.py` 并入完整测试，不需要另外登记。
 3. 执行 `python scripts/validate_lessons.py`，检查所有实现清单，包括仍为 `planned` 的作者草稿。校验不调用模型；结构校验通过也不代表教学验收完成。
 4. 课程验收通过后，才把 `curriculum/catalog.json` 中的状态改为 `available`，再执行 `python scripts/export_curriculum.py`、完整后端测试并重启服务。
 5. 在网页检查导航、导读、源码、实际运行、停止和回放；若新增前端组件，还需构建前端并运行相应浏览器测试。
@@ -167,7 +167,7 @@ def run(context: RunContext):
 
 | 方法 | 用途 |
 | --- | --- |
-| `context.complete(body, round_number=1)` | 使用当前模型连接并记录请求、响应与表示方式 |
+| `context.complete(body, round_number=1, branch=None)` | 使用当前模型连接并记录请求、响应与表示方式；并行发出多个请求时给每个分支一个不同的 `branch`，时间线按它配对请求与响应 |
 | `context.call_tool(name, arguments, available_tools, round_number=1)` | 执行登记的真实工具并记录调用与结果 |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |

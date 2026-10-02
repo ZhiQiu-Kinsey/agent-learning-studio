@@ -176,7 +176,7 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 | 4 全局入口 | 完成 | 首页（`149420d`）；课程地图：领域卡片与先修路线图（`a8ecc24`）；⌘K 命令面板与实验快捷键（`6a8f4d5`）；手机端面板入口（`633d36a`） |
 | 5 收尾 | 完成 | 课程表扩充到 42 课（`356e7b8`）；axe-core 无障碍扫描零严重问题（`dfcb9d7`）；文档更新；首屏 JS 约 184 KB（gzip），路线图（elkjs）按需加载 |
 
-后续工作（不在本轮重构范围内）：按优先级逐课实现新增的规划课程（先实现 P1：11–16，见 curriculum-research.md 第 9 节决策 1），并在真实模型上录制随课运行（`scripts/export_recording.py`）；需要英文等其他语言时，新增 `frontend/src/i18n/locales/<语言>/` 与各课 `content.<语言>.json` 译文层即可。
+后续工作（不在本轮重构范围内）：按优先级逐课实现新增的规划课程（先实现 P1：11–16，见 curriculum-research.md 第 9 节决策 1；2026-10 的执行情况见 [curriculum-plan-2026-10.md](curriculum-plan-2026-10.md)），并在真实模型上录制随课运行（`scripts/export_recording.py`）；需要英文等其他语言时，新增 `frontend/src/i18n/locales/<语言>/` 与各课 `content.<语言>.json` 译文层即可。
 
 ## 9. 现状速查（重建上下文用）
 
