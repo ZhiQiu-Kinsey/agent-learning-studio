@@ -26,28 +26,28 @@
               "id": "01-text",
               "label": "01 / TEXT",
               "title": "文本动作协议",
-              "description": "模型按 Thought、Action、Action Input 的格式写字，程序用正则从文本里取出工具名和参数。",
+              "description": "文本动作协议（Text Action Protocol）：模型把思考、工具名和参数分别写在 Thought、Action、Action Input 后面，程序用正则表达式从文本里取出动作。",
               "token": "Action · Action Input"
             },
             {
               "id": "02-stop",
               "label": "02 / STOP",
               "title": "停在该停的地方",
-              "description": "请求带上 stop: [\"Observation:\"]，模型写到这里就被截断，控制权回到程序。",
+              "description": "工具结果由程序以观察结果（Observation）的形式贴回。请求带上 stop: [\"Observation:\"]，模型写到这里就被截断，控制权回到程序。",
               "token": "stop"
             },
             {
               "id": "03-fake",
               "label": "03 / FAKE",
               "title": "编出来的 Observation",
-              "description": "没有 stop 时，模型可能接着写出 Observation 和最终答案。那些数字是猜的。",
+              "description": "没有 stop 时，模型可能接着写出 Observation 和最终回答。那些数字是猜的。",
               "token": "Observation:"
             },
             {
               "id": "04-native",
               "label": "04 / NATIVE",
               "title": "原生调用：tool_calls 字段",
-              "description": "动作放在响应的 tool_calls 字段里，结构由服务商保证，程序不用解析自由文本。",
+              "description": "原生工具调用（Function Calling）把动作放在响应的 tool_calls 字段里，结构由服务商保证，程序不用解析自由文本。",
               "token": "tool_calls"
             }
           ]
@@ -57,8 +57,8 @@
           "type": "prose",
           "title": "模型只会输出文本",
           "paragraphs": [
-            "第 1 课里，模型通过 tool_calls 字段提出工具调用（Tool Calling），平台执行后把工具结果（Tool Result）放进 tool 消息。早期的 Agent 没有这个字段：模型的每一步都写在普通文本里，由程序自己读懂。这种做法叫文本动作协议，ReAct（Reasoning + Acting）是最常见的格式：Thought 写思考，Action 写工具名，Action Input 写参数，程序执行后把结果以观察结果（Observation）的形式贴回去。",
-            "学这个协议有两个用处。一是不少框架和开源项目还在用它，比如给不支持原生工具调用的本地模型用；二是它把“模型提出动作、程序执行动作”这层分工摆在了明面上，原生调用只是把同一件事做成了结构化字段。"
+            "第 1 课里，模型通过 tool_calls 字段提出工具调用，平台执行后把工具结果放进 tool 消息。早期的 Agent 没有这个字段：模型的每一步都写在普通文本里，由程序自己读懂，这就是文本动作协议。它常用来实现 ReAct（Reasoning + Acting）模式：模型交替写出推理和动作，程序执行动作后交回观察结果，模型再决定下一步。",
+            "ReAct 最常见的文本格式是：Thought 写思考，Action 写工具名，Action Input 写 JSON 参数；能回答时改写 Final Answer，后面跟给用户的回答。原生工具调用也能实现 ReAct，只是把动作放进结构化字段。学文本格式有两个用处：不少框架和开源项目还在用它，比如给不支持原生工具调用的本地模型用；它也把“模型提出动作、程序执行动作”这层分工摆在了明面上。"
           ]
         },
         {
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "stop：让模型在该停的地方停下",
           "paragraphs": [
-            "模型写完 Action Input 后应该停下，等程序把真实结果贴回来。可模型自己并不知道要停，它只是按概率往下写。停止序列（Stop Sequence）解决这个问题：请求里写 stop: [\"Observation:\"]，服务商在输出这串字符之前截断，返回的 finish_reason 是 stop。",
+            "模型写完 Action Input 后应该停下，等程序把真实结果贴回来。可模型自己并不知道要停，它只是按概率往下写。停止序列（Stop Sequence）解决这个问题：请求参数 stop 写成 [\"Observation:\"]，服务商在模型输出这串字符之前截断。这时响应的 finish_reason 是 stop。",
             "带 stop 的那组实验，每次请求都带着这个参数。第 1 次响应停在 Action Input 之后；程序执行 lookup_quiz_score，把结果写成“Observation: …”追加为一条 user 消息，再发第 2 次请求。模型看到真实成绩后写出 Final Answer。"
           ]
         },
@@ -103,7 +103,7 @@
           "title": "去掉 stop：模型替你写好 Observation",
           "paragraphs": [
             "把 stop 去掉，模型可能一口气写下去：Action Input 之后接着写“Observation: {\"score\": …}”，再写 Final Answer。这些数字是模型猜的，它根本没看到成绩表。程序如果直接采用这个 Final Answer，用户拿到的就是编出来的成绩。",
-            "本课的运行器发现模型自己写了 Observation，会把它切下来记成 lesson.fabricated_observation 事件，然后照常执行工具，只把 Observation 之前的文本和真实结果放回上下文。事件里并列写着模型编的内容和真实结果，可以直接对比。模型会不会编、编成什么样，取决于你用的模型和这一次采样，以本次记录为准。"
+            "本课的运行器发现模型自己写了 Observation，会把它切下来记成 lesson.fabricated_observation 事件，然后照常执行工具，只把 Observation 之前的文本和真实结果放回上下文。事件里并列写着模型编的内容和真实结果，可以直接对比。模型会不会编、编成什么样，取决于你用的模型，同一个模型每次也可能不同，以本次记录为准。"
           ]
         },
         {
@@ -130,7 +130,7 @@
               }
             ],
             "correct": "a",
-            "explanation": "模型可以提议动作，但不能替环境回答。"
+            "explanation": "模型可以提出动作，但不能替工具给出结果。"
           }
         },
         {
@@ -139,7 +139,7 @@
           "title": "解析失败要记下来，不要偷偷修",
           "paragraphs": [
             "文本协议的另一个弱点是格式。模型可能漏写 Action Input，可能把 JSON 写成 {student_id: s-1042}，也可能直接用一句话作答。解析器遇到这些情况，最省事的办法是猜：补引号、补括号、从句子里抠数字。这样做会让错误变得看不见。",
-            "本课的解析器只做一件宽容的事：用 json.JSONDecoder.raw_decode 读 Action Input 开头的那个 JSON 值，允许后面跟着换行或别的文字。除此之外，任何不合格式的输出都记成 ok 为 false 的 lesson.parse 事件，带上原文和错误原因，然后停止运行。"
+            "本课的解析器只做一件宽容的事：用 Python 标准库的 json.JSONDecoder.raw_decode 读 Action Input 开头的那个 JSON 值，允许后面跟着换行或别的文字。除此之外，任何不合格式的输出都记成 ok 为 false 的 lesson.parse 事件，带上原文和错误原因，然后停止运行。"
           ]
         },
         {
@@ -148,7 +148,7 @@
           "title": "原生工具调用把解析交给服务商",
           "paragraphs": [
             "原生组用同一个问题，改为在请求里提供 tools，让模型在 tool_calls 字段里返回调用。工具名是字段值，参数是一段 JSON 字符串，不用从自由文本里找。这一轮的 finish_reason 是 tool_calls，程序按 tool_call_id 把结果配回去。",
-            "原生调用也会出错：参数可能不是合法 JSON，工具名可能不在登记表里，这些第 3 课已经见过。区别在于错误出在结构化字段里，比从一段话里猜格式容易发现。原生调用也不会出现编造观察结果的问题，工具结果只能由 tool 消息带回来。"
+            "原生调用也会出错：参数可能不是合法 JSON，工具名可能不在白名单里，这些第 3 课已经见过。区别在于错误出在结构化字段里，比从一段话里猜格式容易发现。原生调用也不会出现编造观察结果的问题，工具结果只能由 tool 消息带回来。"
           ]
         },
         {
@@ -210,7 +210,7 @@
             [
               "可能出的问题",
               "格式错误、漏写字段",
-              "编造 Observation 和最终答案",
+              "编造 Observation 和最终回答",
               "参数 JSON 错误、工具名不存在"
             ]
           ]
@@ -312,7 +312,7 @@
             {
               "id": "n89",
               "line": 89,
-              "text": "既没有动作也没有最终答案，就判为解析失败，不从句子里猜。"
+              "text": "既没有动作也没有 Final Answer，就判为解析失败，不从句子里猜。"
             }
           ]
         },
@@ -341,7 +341,7 @@
             {
               "id": "n122",
               "line": 122,
-              "text": "工具由程序按解析结果执行，事件标记为课程程序发起。"
+              "text": "工具由程序按解析结果执行，事件标记为运行器发起。"
             },
             {
               "id": "n126",
@@ -409,7 +409,7 @@
         {
           "id": "stop-vs-no-stop",
           "title": "带 stop 与去掉 stop",
-          "hypothesis": "去掉 stop 后，模型可能在 Action Input 后面接着写出 Observation 和最终答案；这些内容与真实工具结果不一定一致，运行器把它们切下来单独记录，不让它们进入上下文。",
+          "hypothesis": "去掉 stop 后，模型可能在 Action Input 后面接着写出 Observation 和最终回答；这些内容与真实工具结果不一定一致，运行器把它们切下来单独记录，不让它们进入上下文。",
           "predict": "predict-fabricated",
           "arms": [
             {
@@ -930,5 +930,31 @@
         }
       ]
     }
-  }
+  },
+  "code_notes": [
+    {
+      "name": "stop",
+      "note": "请求参数，值是停止序列列表。本课为 [\"Observation:\"]，只有“带 stop”组发送。"
+    },
+    {
+      "name": "finish_reason",
+      "note": "响应里说明输出为何结束：stop 是自然结束或遇到停止序列，tool_calls 是提出了工具调用。"
+    },
+    {
+      "name": "tool_calls",
+      "note": "assistant 消息里的结构化字段：每条调用带 id、工具名和 JSON 字符串形式的参数。"
+    },
+    {
+      "name": "lesson.parse",
+      "note": "每次模型输出的解析记录：原文、结果类型（动作/最终回答/失败）、ok、error。"
+    },
+    {
+      "name": "lesson.fabricated_observation",
+      "note": "模型自写 Observation 时发布：并列它编的内容、真实工具结果和它据此写的 Final Answer。"
+    },
+    {
+      "name": "raw_decode",
+      "note": "Python 标准库方法：只解析字符串开头的一个 JSON 值，后面多出的文字不报错。"
+    }
+  ]
 }
