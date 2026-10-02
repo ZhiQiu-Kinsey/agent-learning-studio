@@ -7,7 +7,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useMotionBudget, useReducedMotion } from "../../motion";
+import {
+  EffectBoundary,
+  useMotionBudget,
+  useReducedMotion,
+} from "../../motion";
 import { scenes, type LessonProgress } from "../../progress";
 import Shuffle from "../react-bits/Shuffle";
 
@@ -159,11 +163,13 @@ function BadgeStage({ face }: { face: Face }) {
               </div>
             ))}
           </dl>
-          <Suspense fallback={<StaticBadge face={face} />}>
-            <div aria-hidden="true" className="learning-badge-canvas">
-              <Lanyard frontImage={image} active={active} />
-            </div>
-          </Suspense>
+          <EffectBoundary fallback={<StaticBadge face={face} />}>
+            <Suspense fallback={<StaticBadge face={face} />}>
+              <div aria-hidden="true" className="learning-badge-canvas">
+                <Lanyard frontImage={image} active={active} />
+              </div>
+            </Suspense>
+          </EffectBoundary>
         </>
       ) : (
         <StaticBadge face={face} />

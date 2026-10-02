@@ -54,7 +54,8 @@ test("source is served from the lesson, and replay never sends another run", asy
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await expect(requests).toHaveCount(2);
   expect(
-    await requests.first().evaluate((el) => el.getBoundingClientRect().height),
+    // Layout height: entrance animations scale rows briefly.
+    await requests.first().evaluate((el) => (el as HTMLElement).offsetHeight),
   ).toBeGreaterThanOrEqual(64);
   await requests.nth(1).click();
   await expect(eventJson).toContainText("tool_call_id");
@@ -677,6 +678,8 @@ test("understand scene leads into the lab by keyboard and metrics settle on real
   const metrics = page
     .getByTestId("lab-run-metrics")
     .locator('b [aria-hidden="true"]');
+  // Counters animate when scrolled into view, as a learner would see them.
+  await metrics.nth(0).scrollIntoViewIfNeeded();
   await expect(metrics.nth(0)).toHaveText("2");
   await expect(metrics.nth(1)).toHaveText("1");
 });

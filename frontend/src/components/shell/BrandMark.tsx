@@ -1,7 +1,11 @@
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Waypoints } from "lucide-react";
-import { useMotionBudget, useReducedMotion } from "../../motion";
+import {
+  EffectBoundary,
+  useMotionBudget,
+  useReducedMotion,
+} from "../../motion";
 import ShinyText from "../react-bits/ShinyText";
 
 const ElectricLogo = lazy(() => import("../react-bits/ElectricLogo"));
@@ -22,23 +26,25 @@ function BrandSpark() {
   return (
     <span ref={ref} className="rail-brand-spark" aria-hidden="true">
       {granted && (
-        <Suspense fallback={null}>
-          <ElectricLogo
-            src={glyph}
-            color="#efeaff"
-            glowColor="#8f7dff"
-            scale={0.36}
-            glow={0.55}
-            intensity={0.85}
-            thickness={1.3}
-            strands={3}
-            crackle={1.2}
-            arcs={1.4}
-            speed={2}
-            interactive={false}
-            theme="dark"
-          />
-        </Suspense>
+        <EffectBoundary>
+          <Suspense fallback={null}>
+            <ElectricLogo
+              src={glyph}
+              color="#efeaff"
+              glowColor="#8f7dff"
+              scale={0.36}
+              glow={0.55}
+              intensity={0.85}
+              thickness={1.3}
+              strands={3}
+              crackle={1.2}
+              arcs={1.4}
+              speed={2}
+              interactive={false}
+              theme="dark"
+            />
+          </Suspense>
+        </EffectBoundary>
       )}
     </span>
   );

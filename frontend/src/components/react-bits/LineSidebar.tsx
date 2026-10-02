@@ -238,7 +238,7 @@ const LineSidebar = ({
               className="relative inline-flex items-baseline leading-[1.2] [color:color-mix(in_srgb,var(--accent-color)_calc(var(--effect,0)*100%),var(--text-color))] [font-size:var(--font-size)] [transform:translateX(calc(var(--effect,0)*var(--max-shift)))]"
             >
               {showIndex && (
-                <span className="mr-[0.6rem] font-mono text-[0.85em] [opacity:calc(0.55+var(--effect,0)*0.45)]">
+                <span className="mr-[0.6rem] font-mono text-[0.85em]">
                   {String(index + 1).padStart(2, "0")}
                 </span>
               )}

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { useMotion, useMotionBudget } from "../motion";
+import { EffectBoundary, useMotion, useMotionBudget } from "../motion";
 import { duration, ease } from "../motion/tokens";
 import type { Trace } from "../types";
 import LatticeLoader from "../components/react-bits/LatticeLoader";
@@ -21,19 +21,21 @@ function EmptyStageDecor() {
   return (
     <div ref={ref} className="stage-empty-decor" aria-hidden="true">
       {active && (
-        <Suspense fallback={null}>
-          <MetaBalls
-            color="#8f7dff"
-            cursorBallColor="#49dec6"
-            cursorBallSize={2.4}
-            ballCount={14}
-            animationSize={20}
-            clumpFactor={1.25}
-            speed={0.22}
-            hoverSmoothness={0.06}
-            enableTransparency
-          />
-        </Suspense>
+        <EffectBoundary>
+          <Suspense fallback={null}>
+            <MetaBalls
+              color="#8f7dff"
+              cursorBallColor="#49dec6"
+              cursorBallSize={2.4}
+              ballCount={14}
+              animationSize={20}
+              clumpFactor={1.25}
+              speed={0.22}
+              hoverSmoothness={0.06}
+              enableTransparency
+            />
+          </Suspense>
+        </EffectBoundary>
       )}
     </div>
   );

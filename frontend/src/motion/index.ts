@@ -9,3 +9,4 @@ export {
 } from "./level";
 export * as motionTokens from "./tokens";
 export { revealProps } from "./reveal";
+export { EffectBoundary } from "./EffectBoundary";

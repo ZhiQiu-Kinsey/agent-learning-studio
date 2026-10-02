@@ -115,6 +115,9 @@ export default function EchoText({
             key={index}
             aria-hidden="true"
             className="rb-echo-copy"
+            // Painted from the attribute so the heading's text content (copy,
+            // find-in-page, tests) holds the title once.
+            data-text={text}
             ref={(element) => {
               copies.current[index] = element;
             }}
@@ -124,9 +127,7 @@ export default function EchoText({
                 opacity: 0,
               } as CSSProperties
             }
-          >
-            {text}
-          </span>
+          />
         ))}
       <span
         className="rb-echo-front"

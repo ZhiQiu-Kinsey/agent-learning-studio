@@ -4,7 +4,7 @@ import {
   type ComponentType,
   type LazyExoticComponent,
 } from "react";
-import { useMotionBudget } from "../../motion";
+import { EffectBoundary, useMotionBudget } from "../../motion";
 import { backdropPresets, type BackdropName } from "./presets";
 import "../../styles/backdrops.css";
 
@@ -52,11 +52,13 @@ export function Backdrop({
       style={{ background: preset.fallback }}
     >
       {active && (
-        <Suspense fallback={null}>
-          <div className="backdrop-canvas" key={name}>
-            <Effect {...preset.props} {...props} />
-          </div>
-        </Suspense>
+        <EffectBoundary key={name}>
+          <Suspense fallback={null}>
+            <div className="backdrop-canvas">
+              <Effect {...preset.props} {...props} />
+            </div>
+          </Suspense>
+        </EffectBoundary>
       )}
     </div>
   );
