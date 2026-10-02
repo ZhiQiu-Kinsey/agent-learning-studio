@@ -1,0 +1,1068 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "context-compaction",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "context"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "CHAPTER 03 / COMPACTION",
+          "headline": "压缩之后，",
+          "highlight": "问一个只有旧信息才能答的问题。",
+          "takeaway": "把旧历史改写得更短，有三种常见做法，各有各的丢法。用一个只有最早那次工具结果才能回答的问题，检查它还在不在。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-rule",
+              "label": "01 / RULE",
+              "title": "规则压缩",
+              "description": "程序按固定字段把目标、约束、来源、事实和待办拼成一条记录；装不下关键证据就报错。",
+              "token": "rule_record"
+            },
+            {
+              "id": "02-clear",
+              "label": "02 / CLEAR",
+              "title": "清理旧工具结果",
+              "description": "较早的工具结果留在原位，内容换成一句“已清理”；调用和工具结果仍然成对。",
+              "token": "clear_old_tool_results"
+            },
+            {
+              "id": "03-summary",
+              "label": "03 / SUMMARY",
+              "title": "摘要压缩",
+              "description": "多发一次请求，让模型把较早的对话写成摘要；留下什么由模型决定。",
+              "token": "summary_body"
+            },
+            {
+              "id": "04-probe",
+              "label": "04 / PROBE",
+              "title": "探针问题",
+              "description": "只有最早那次工具结果才能回答的问题。压缩之后再问一次，就知道这条信息还在不在。",
+              "token": "PROBE"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "截掉之外的另一条路",
+          "paragraphs": [
+            "{{lesson:context-budget}}的截取窗口只做一件事：装不下的旧消息整组舍弃。被舍弃的工具结果里如果有后面还要用的事实，之后的请求就看不到了。另一条路是把旧内容改写得更短再留下来，这叫上下文压缩（Context Compression）。",
+            "本课用同一段历史比较三种压缩。运行器先后真实读取两份资料 messages-context 和 application-state，两次读取之间夹着 8 轮旁支讨论。目标、第一次读取和旁支讨论算较早部分，第二次读取和最后一轮旁支讨论算最近部分。三种压缩都只改写较早部分，最近部分原样保留；另有一组不压缩，作对照。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "探针问题：只有旧信息才能答",
+          "paragraphs": [
+            "压缩之后信息丢没丢，看长度看不出来。本课用一个探针问题来查：“最早读取的那份资料来自哪一项？它的原话是什么？”这个问题只能靠第一次 lookup_lesson 的结果回答，每组压缩之后都问一次。",
+            "实验报告把两件事分开写。原话还在不在上下文里，是程序对实际请求做的本地字符串检查；回答有没有同时答出来源名和原话，是关键词初筛，命中了也要回到原文核对。前者说明信息有没有送到模型面前，后者说明模型有没有用上它。"
+          ]
+        },
+        {
+          "id": "predict-requests",
+          "type": "predict",
+          "prompt": "先跑一次。在实验台运行“三种压缩，同一个探针问题”之前先猜：这次运行会出现几个 request 事件？提示：不压缩的对照组也要问一次，摘要压缩还要先多发一次请求。",
+          "experiment": "three-ways",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-probe-target",
+          "type": "micro-quiz",
+          "question": {
+            "id": "why-earliest",
+            "prompt": "探针问题为什么问最早那次工具结果，而不问最近那次？",
+            "options": [
+              {
+                "id": "a",
+                "text": "最近那次在每一组里都原样保留，问它看不出三种压缩的差别",
+                "feedback": "对。探针要问会被压缩改写的那部分信息。"
+              },
+              {
+                "id": "b",
+                "text": "最近那次工具结果是运行器编出来的",
+                "feedback": "不对。两次工具结果都来自真实的 lookup_lesson 读取。"
+              },
+              {
+                "id": "c",
+                "text": "模型只会回答关于第一条消息的问题",
+                "feedback": "不对。模型能看到请求里的全部消息；问最早那次，是因为只有它被压缩改写了。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "探针问题要只依赖被压缩的那部分信息，答案才能说明压缩丢了什么。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "规则压缩：程序决定留什么",
+          "paragraphs": [
+            "规则压缩由程序按固定字段拼一条记录：目标、约束、来源、事实、待办，不调用模型。事实只从真实的工具结果里取，所以记录里的原话与那次读取一字不差。字段要写到模型看得懂：来源一栏写的是“第 1 次读取 messages-context”，而不只是一个名字，探针问“最早”时，模型才分得清先后。",
+            "拼好后先量长度：记录超过 char_budget 就报错，这一组不发请求，而不是悄悄删掉来源或事实。代价是规则事先写死了留什么：字段之外的信息，比如旁支讨论里某句后来才发现有用的话，会被整段丢掉。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "清理旧工具结果：位置还在，内容没了",
+          "paragraphs": [
+            "长任务里，早先的工具结果往往占掉大半长度。清理旧工具结果只把较早那次 tool 消息的内容换成一句说明（cleared 为 true），消息条数不变，调用和工具结果仍然成对，协议检查照样通过。它最省事：不调用模型，也不用设计字段。",
+            "代价是内容真的没了。真实系统清理之后通常允许模型重新调用工具去查，本课的请求没有提供工具，模型没法重查。另外，本课的工具结果很短，清理省下的字符不多；工具结果越长，清理省下的越多。"
+          ]
+        },
+        {
+          "id": "mq-clear",
+          "type": "micro-quiz",
+          "question": {
+            "id": "probe-after-clearing",
+            "prompt": "清理旧工具结果那组的探针答不出来。最可能的原因是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "最早那次工具结果的内容被换成了说明，上下文里已经没有那句原话",
+                "feedback": "对。清理只留下位置，内容没了，模型无从回答。"
+              },
+              {
+                "id": "b",
+                "text": "调用和工具结果被拆开，请求被服务商拒绝了",
+                "feedback": "不对。清理只换内容，配对还在，请求是合法的。"
+              },
+              {
+                "id": "c",
+                "text": "请求太长，模型读不到后面的内容",
+                "feedback": "不对。清理之后请求反而更短；问题出在信息本身不在了。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "长度变短不代表需要的信息还在，要用只依赖旧信息的问题去查。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "摘要压缩：模型决定留什么",
+          "paragraphs": [
+            "摘要压缩多发一次请求：把较早部分原样交给模型，再附一条压缩指令，让它写一段摘要；之后的请求用这段摘要代替较早部分。这次额外请求也计入模型调用数，它的用量单独列在实验报告里。",
+            "摘要里留下什么由模型决定，指令能影响它。默认指令要求保留每次工具调用的来源和结果原文；“简短指令：用一两句话概括”那组只要求一两句话。摘要原文就在第 4 轮的 response 里，读它就知道这一组的探针为什么答得出或答不出。"
+          ]
+        },
+        {
+          "id": "mq-summary",
+          "type": "micro-quiz",
+          "question": {
+            "id": "summary-miss",
+            "prompt": "摘要压缩那组的探针初筛没命中，最该先看哪里？",
+            "options": [
+              {
+                "id": "a",
+                "text": "第 4 轮 response 里的摘要原文：来源名和原话有没有写进去",
+                "feedback": "对。摘要没写进去，后面的请求里就没有这条信息。"
+              },
+              {
+                "id": "b",
+                "text": "摘要压缩那组的消息条数",
+                "feedback": "不对。条数说明不了摘要里写了什么。"
+              },
+              {
+                "id": "c",
+                "text": "多重跑几次，直到初筛命中为止",
+                "feedback": "不对。重跑只是换一次采样，会掩盖摘要丢信息这件事。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "摘要压缩丢没丢信息，先读摘要原文；探针结果是第二步。"
+          }
+        },
+        {
+          "id": "compare-ways",
+          "type": "compare",
+          "title": "三种压缩各丢什么",
+          "columns": [
+            "做法",
+            "谁决定留什么",
+            "额外的模型请求",
+            "可能丢掉的信息"
+          ],
+          "rows": [
+            [
+              "规则压缩",
+              "程序，按事先写好的字段",
+              "没有",
+              "字段之外的一切"
+            ],
+            [
+              "清理旧工具结果",
+              "程序，按消息位置",
+              "没有",
+              "较早工具结果的全部内容"
+            ],
+            [
+              "摘要压缩",
+              "模型，受指令影响",
+              "一次",
+              "模型没写进摘要的内容"
+            ]
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "实验报告怎么读",
+          "paragraphs": [
+            "实验报告的表格每组一行：消息数、JSON 字符数、原话还在上下文里、探针回答、初筛结果和服务商用量。规则压缩被拒绝时，这一行不出现，原因写在检查项“规则压缩装下了关键证据”和 lesson.compaction 事件里。",
+            "这些请求都不带工具定义，但模型偶尔仍会提出工具调用而不写文本；这时回答一栏写明它提出了什么调用，运行器不执行。一次运行只说明这一次：初筛命中不等于回答正确，没命中也要读原文；一个探针只检查一条信息，摘要可能留下了这一条，却丢了别的。"
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "context-budget"
+        },
+        {
+          "id": "code-history",
+          "type": "annotated-source",
+          "path": "lessons/lesson_context_compaction/runtime.py",
+          "start": 39,
+          "end": 47,
+          "notes": [
+            {
+              "id": "n43",
+              "line": 43,
+              "anchor": "checked_fact(results[key], key)",
+              "text": "工具结果不对就停下：压缩的输入必须是真实读取到的资料。"
+            },
+            {
+              "id": "n44",
+              "line": 44,
+              "anchor": "older = [{\"role\": \"user\", \"content\": GOAL}, *tool",
+              "text": "较早部分：目标、第一次读取、旁支讨论。三种压缩改写的都是这一段。"
+            },
+            {
+              "id": "n46",
+              "line": 46,
+              "anchor": "recent = [*tool_pair(\"compaction_lookup_2\", seco",
+              "text": "最近部分：第二次读取和最后一轮旁支讨论，每一组都原样保留。"
+            }
+          ]
+        },
+        {
+          "id": "code-strategies",
+          "type": "annotated-source",
+          "path": "lessons/lesson_context_compaction/runtime.py",
+          "start": 50,
+          "end": 82,
+          "notes": [
+            {
+              "id": "n52",
+              "line": 52,
+              "anchor": "sources = \"；\".join(f\"第 {number} 次读取 {key}\"",
+              "text": "来源一栏写明第几次读取：探针问“最早”，记录里就得留下先后顺序。"
+            },
+            {
+              "id": "n53",
+              "line": 53,
+              "anchor": "facts = \"；\".join(checked_fact(result, key) for",
+              "text": "事实只取自真实的工具结果，不让模型改写。"
+            },
+            {
+              "id": "n56",
+              "line": 56,
+              "anchor": "f\"约束：不能把无来源的猜测当事实\\n来源：{sources}",
+              "text": "目标、约束、来源、事实、待办，五个字段写死在程序里。"
+            },
+            {
+              "id": "n58",
+              "line": 58,
+              "anchor": "if message_chars([record]) > char_budget:",
+              "text": "超过字符预算就报错，不会为了装下而删掉来源或事实。"
+            },
+            {
+              "id": "n66",
+              "line": 66,
+              "anchor": "cleared = set(tool_indexes[:-keep_latest] if kee",
+              "text": "最近 keep_latest 次工具结果保留，更早的都要清理。"
+            },
+            {
+              "id": "n68",
+              "line": 68,
+              "anchor": "return [{**message, \"content\": json.dumps(CLEARED",
+              "text": "只换 content，消息本身和 tool_call_id 都不动，配对仍然完整。"
+            },
+            {
+              "id": "n74",
+              "line": 74,
+              "anchor": "messages = [{\"role\": \"system\", \"content\": SUMMARY_",
+              "text": "摘要请求带着较早部分的原文，最后一条是压缩指令。"
+            },
+            {
+              "id": "n82",
+              "line": 82,
+              "anchor": "return any(name in answer for name in PROBE_SOURC",
+              "text": "初筛要求来源（键或名称都行）和原话同时出现，只答出其中一个不算。"
+            }
+          ]
+        },
+        {
+          "id": "code-compare",
+          "type": "annotated-source",
+          "path": "lessons/lesson_context_compaction/runtime.py",
+          "start": 85,
+          "end": 123,
+          "notes": [
+            {
+              "id": "n88",
+              "line": 88,
+              "anchor": "validate_tool_history(messages)",
+              "text": "每组发出前都跑协议检查：压缩不能留下孤立的工具结果。"
+            },
+            {
+              "id": "n91",
+              "line": 91,
+              "anchor": "\"phrase_in_context\": has_text(messages, PROBE_PHRASE)",
+              "text": "本地字符串检查：发出之前，先记下原话在不在这组上下文里。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "response = context.complete({\"messages\": messages",
+              "text": "每组问一次探针问题，请求和响应由平台原样记录。"
+            },
+            {
+              "id": "n93",
+              "line": 93,
+              "anchor": "answer = answer_text(response)",
+              "text": "模型没写文本、改为提出工具调用时，回答一栏如实写明，运行器不执行这些调用。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "anchor": "results = {key: context.call_tool(\"lookup_lesson\"",
+              "text": "两次读取都由运行器发起，事件里标为运行器调用。"
+            },
+            {
+              "id": "n106",
+              "line": 106,
+              "anchor": "rows = [ask_probe(context, \"不压缩\"",
+              "text": "对照组带着全部历史，用来确认探针问题本身答得出。"
+            },
+            {
+              "id": "n109",
+              "line": 109,
+              "anchor": "record, refused = rule_record([(SOURCES[0], resul",
+              "text": "规则压缩只用第一次读取的结果拼记录，因为只有它在较早部分里。"
+            },
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "context.emit(\"lesson.compaction\", {\"kind\": \"refused\"",
+              "text": "装不下就记下拒绝原因，这一组不发请求，第 2 轮留空。"
+            },
+            {
+              "id": "n117",
+              "line": 117,
+              "anchor": "rows.append(ask_probe(context, \"清理旧工具结果\"",
+              "text": "清理组的消息条数和不压缩组一样，只有较早那条工具结果的内容变了。"
+            },
+            {
+              "id": "n119",
+              "line": 119,
+              "anchor": "summary_response = context.complete(summary_body(",
+              "text": "摘要压缩的额外请求在第 4 轮，它的用量单独记进实验报告。"
+            },
+            {
+              "id": "n121",
+              "line": 121,
+              "anchor": "rows.append(ask_probe(context, \"摘要压缩\"",
+              "text": "摘要替换较早部分，最近部分原样跟在后面。"
+            },
+            {
+              "id": "n122",
+              "line": 122,
+              "anchor": "context.emit(\"lesson.report\", _report(",
+              "text": "实验报告的拼装放在 _report 里，不在这里展开。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "三种压缩并列，用同一个探针问题对照",
+          "chosen": "同一段历史只改写较早部分，最近部分原样保留；规则压缩装不下关键证据就拒绝；每组发出前跑协议检查；探针结果把本地字符串检查和关键词初筛分开写。",
+          "alternatives": [
+            {
+              "id": "summary-only",
+              "title": "只用模型摘要",
+              "why_not": "摘要留什么由模型决定，不问探针就不知道丢了什么；每次压缩还要多花一次请求。"
+            },
+            {
+              "id": "model-judge",
+              "title": "再请模型判断探针回答对不对",
+              "why_not": "又多一次请求，判断本身也可能出错。本课先用关键词初筛，并提示回到原文核对。"
+            },
+            {
+              "id": "delete-tool",
+              "title": "直接删掉旧的 tool 消息",
+              "why_not": "删掉工具结果而留下 assistant 调用，协议就不合法；要删就和调用一起删，那就是{{lesson:context-budget}}的截取窗口。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "three-ways",
+          "title": "三种压缩，同一个探针问题",
+          "hypothesis": "规则压缩把最早那次工具结果的来源和事实写进了记录，原话仍在上下文里；清理旧工具结果之后，上下文里不再有那句原话；摘要压缩之后原话还在不在，取决于模型写的摘要。",
+          "predict": "predict-requests",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "compare",
+              "label": "两次读取、8 轮旁支：不压缩、规则压缩、清理旧结果、摘要压缩"
+            }
+          ],
+          "observe": [
+            {
+              "id": "lookups",
+              "text": "两次 lookup_lesson 的实际返回：先 messages-context，后 application-state。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result",
+                "name": "lookup_lesson"
+              }
+            },
+            {
+              "id": "control",
+              "text": "不压缩那组：消息数、字符数，原话在上下文里。",
+              "selector": {
+                "event": "lesson.compaction",
+                "round": 1,
+                "path": "data"
+              }
+            },
+            {
+              "id": "rule-record",
+              "text": "规则压缩的记录：目标、约束、来源、事实、待办写在一条消息里。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[1].content"
+              }
+            },
+            {
+              "id": "cleared-result",
+              "text": "清理组的第一条工具结果：内容换成了说明，调用和工具结果仍成对。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.messages[3].content"
+              }
+            },
+            {
+              "id": "cleared-answer",
+              "text": "清理组对探针问题的回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 3,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "summary-text",
+              "text": "模型写的摘要原文：最早那份资料的来源和原话还在不在？",
+              "selector": {
+                "event": "response",
+                "round": 4,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "probe-table",
+              "text": "实验报告：每组的长度、原话是否还在上下文里、探针回答和初筛结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "四组请求问同一个探针问题。先看两份资料从哪里来。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "lookups"
+            },
+            {
+              "action": "highlight",
+              "observe": "lookups"
+            },
+            {
+              "action": "narrate",
+              "text": "两次读取都是真实的本地 Python 执行。探针问的是第一次。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "control"
+            },
+            {
+              "action": "highlight",
+              "observe": "control"
+            },
+            {
+              "action": "narrate",
+              "text": "对照组带着全部历史。记下它的字符数，后面三组都和它比。"
+            },
+            {
+              "action": "seek",
+              "observe": "rule-record"
+            },
+            {
+              "action": "highlight",
+              "observe": "rule-record"
+            },
+            {
+              "action": "narrate",
+              "text": "规则压缩把较早部分换成这一条记录，来源和事实来自第一次读取。"
+            },
+            {
+              "action": "seek",
+              "observe": "cleared-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "cleared-result"
+            },
+            {
+              "action": "narrate",
+              "text": "清理组没有调用模型，只把第一次读取的工具结果换成一句说明。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "cleared-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "cleared-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "读清理组的回答：模型有没有说明自己缺少依据，还是编了一个答案？"
+            },
+            {
+              "action": "seek",
+              "observe": "summary-text"
+            },
+            {
+              "action": "highlight",
+              "observe": "summary-text"
+            },
+            {
+              "action": "narrate",
+              "text": "这是模型自己写的摘要。找一找 messages-context 和那句原话在不在里面。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "probe-table"
+            },
+            {
+              "action": "highlight",
+              "observe": "probe-table"
+            },
+            {
+              "action": "narrate",
+              "text": "最后对照实验报告：先看原话在不在上下文里，再看初筛。初筛只看关键词，命中和未命中都要回到原文核对。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "四组请求各自发出的上下文里，最早那次工具结果的原话还在不在（本地字符串检查）。",
+              "摘要是当前模型在本次运行中写的，原文在第 4 轮响应里；摘要压缩那组能否答出，和摘要留下了什么直接相关。"
+            ],
+            "does_not_prove": [
+              "探针初筛只看关键词，命中不等于回答正确，未命中也要读原文。",
+              "一个探针只检查一条信息；摘要可能留下了这一条，却丢了别的。",
+              "真实系统清理旧结果后通常允许模型重新调用工具，本实验的请求没有提供工具。",
+              "离线测试模式下的摘要和回答由夹具生成，不是模型写的。"
+            ]
+          }
+        },
+        {
+          "id": "tight-budget",
+          "title": "规则压缩的预算装不下证据",
+          "hypothesis": "字符预算小于记录所需的长度时，规则压缩直接拒绝，这一组不发请求；其余各组照常运行，模型调用数少一次。",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "compare",
+              "label": "预算 300 字符"
+            },
+            {
+              "id": "tight-budget",
+              "exercise": "tight-budget",
+              "label": "预算 100 字符，其余不变"
+            }
+          ],
+          "observe": [
+            {
+              "id": "budget-setting",
+              "text": "本次运行的输入：规则压缩记录的字符预算。",
+              "selector": {
+                "event": "run_start",
+                "path": "data.inputs.char_budget"
+              }
+            },
+            {
+              "id": "refusal",
+              "text": "规则压缩被拒绝时的事件：写明预算和保留关键证据所需的字符数。",
+              "selector": {
+                "event": "lesson.compaction",
+                "round": 2,
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "budget-check",
+              "text": "实验报告的检查项：规则压缩装下了关键证据。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[1]"
+              }
+            },
+            {
+              "id": "call-count",
+              "text": "实验报告里的模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[0]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组只差一个输入：规则压缩记录的字符预算。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "budget-setting"
+            },
+            {
+              "action": "highlight",
+              "observe": "budget-setting"
+            },
+            {
+              "action": "narrate",
+              "text": "这是你这次运行的 char_budget。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "refusal"
+            },
+            {
+              "action": "highlight",
+              "observe": "refusal"
+            },
+            {
+              "action": "narrate",
+              "text": "预算装不下时，规则压缩不删来源也不删事实，直接拒绝，原因写在这里。预算够用的那组没有这条事件。"
+            },
+            {
+              "action": "seek",
+              "observe": "budget-check"
+            },
+            {
+              "action": "highlight",
+              "observe": "budget-check"
+            },
+            {
+              "action": "narrate",
+              "text": "实验报告里这一项如实标为未通过，不会被其他组的结果掩盖。"
+            },
+            {
+              "action": "seek",
+              "observe": "call-count"
+            },
+            {
+              "action": "highlight",
+              "observe": "call-count"
+            },
+            {
+              "action": "narrate",
+              "text": "被拒绝的那组没有发请求，对比两组的模型调用数。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "预算装不下关键证据时，规则压缩拒绝并写明原因，那一组没有发出请求。",
+              "其余各组照常运行，模型调用数按实际发出的请求计算。"
+            ],
+            "does_not_prove": [
+              "字符预算不是 Token 数；装得下多少 Token 要看服务商的分词和用量。",
+              "拒绝只是不发残缺的记录；真实系统还要决定下一步怎么办，比如换一种压缩或请人处理。"
+            ]
+          }
+        },
+        {
+          "id": "summary-instruction",
+          "title": "摘要指令决定留下什么",
+          "hypothesis": "默认指令要求保留来源和结果原文，摘要更可能留下最早那次资料；只要求一两句话时，摘要更可能丢掉来源名和原话，摘要压缩那组的探针随之答不出。",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "compare",
+              "label": "默认指令：保留来源和结果原文"
+            },
+            {
+              "id": "brief-summary",
+              "exercise": "brief-summary",
+              "label": "简短指令：用一两句话概括"
+            }
+          ],
+          "observe": [
+            {
+              "id": "instruction",
+              "text": "摘要请求的最后一条消息：这次用的压缩指令。",
+              "selector": {
+                "event": "request",
+                "round": 4,
+                "path": "data.body.messages[20].content"
+              }
+            },
+            {
+              "id": "summary",
+              "text": "模型写的摘要原文。",
+              "selector": {
+                "event": "response",
+                "round": 4,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "phrase-kept",
+              "text": "摘要压缩那组的上下文里还有没有那句原话（本地字符串检查）。",
+              "selector": {
+                "event": "lesson.compaction",
+                "round": 5,
+                "path": "data.phrase_in_context"
+              }
+            },
+            {
+              "id": "summary-answer",
+              "text": "摘要压缩那组对探针问题的回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 5,
+                "path": "data.body.choices[0].message.content"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组只差摘要指令。先看这次用的是哪一条。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "instruction"
+            },
+            {
+              "action": "highlight",
+              "observe": "instruction"
+            },
+            {
+              "action": "narrate",
+              "text": "指令写在摘要请求的最后一条 user 消息里，前面是较早部分的原文。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "summary"
+            },
+            {
+              "action": "highlight",
+              "observe": "summary"
+            },
+            {
+              "action": "narrate",
+              "text": "读摘要原文：messages-context 和那句原话写进去了吗？"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "phrase-kept"
+            },
+            {
+              "action": "highlight",
+              "observe": "phrase-kept"
+            },
+            {
+              "action": "narrate",
+              "text": "程序在发出前检查原话还在不在。这里的结果只取决于摘要写了什么。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "summary-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "summary-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "最后读这一组的探针回答，和另一组对比。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "两次运行的摘要指令、模型写出的摘要原文，以及摘要压缩那组的上下文里原话还在不在。"
+            ],
+            "does_not_prove": [
+              "一次对照不能说明哪条指令总是更好；同一条指令换一次采样，摘要也可能不同。",
+              "摘要留下了原话，也不保证它留下了其他后面要用的信息。",
+              "离线测试模式下的摘要由夹具生成，不是模型写的。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "noise_repeats",
+          "label": "旁支讨论重复次数"
+        },
+        {
+          "name": "char_budget",
+          "label": "规则压缩的字符预算",
+          "help": "规则压缩记录允许的最大 JSON 字符数；装不下关键证据时这一组被拒绝。"
+        },
+        {
+          "name": "summary_style",
+          "label": "摘要指令",
+          "options": [
+            {
+              "value": "keep_sources",
+              "label": "保留来源和结果原文"
+            },
+            {
+              "value": "brief",
+              "label": "用一两句话概括"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "rule-overflow",
+              "prompt": "规则压缩的记录超过了字符预算，正确的做法是？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "报错，写明预算和所需字符数，这一组不发请求",
+                  "feedback": "对。宁可不发，也不发一条缺了证据的记录。"
+                },
+                {
+                  "id": "b",
+                  "text": "删掉来源，只留事实",
+                  "feedback": "不对。没有来源的事实无法核对，模型也说不出依据在哪。"
+                },
+                {
+                  "id": "c",
+                  "text": "把事实截掉后半句，凑进预算",
+                  "feedback": "不对。截断后的原话可能意思全变，探针也就答不对了。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "规则压缩的承诺是关键证据要么完整保留，要么明确报错。"
+            },
+            {
+              "id": "clear-count",
+              "prompt": "清理旧工具结果之后，请求里的消息条数会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不变，只是较早那条工具结果的内容换成了说明",
+                  "feedback": "对。位置和配对都保留，内容换掉了。"
+                },
+                {
+                  "id": "b",
+                  "text": "少两条，调用和工具结果一起删掉",
+                  "feedback": "不对。一起删掉的是截取窗口的做法，清理只换内容。"
+                },
+                {
+                  "id": "c",
+                  "text": "多一条，用来存放清理说明",
+                  "feedback": "不对。说明写进原来那条 tool 消息的内容里，不另加消息。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "清理保住了协议和位置，代价是内容。"
+            },
+            {
+              "id": "screen-hit",
+              "prompt": "摘要压缩那组的探针初筛命中了，可以得出什么结论？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "回答里同时出现了来源名和原话，还要读原文确认答得对",
+                  "feedback": "对。初筛只看关键词，结论要回到原文核对。"
+                },
+                {
+                  "id": "b",
+                  "text": "摘要保留了较早部分的全部信息",
+                  "feedback": "不对。一个探针只检查一条信息，别的信息可能已经丢了。"
+                },
+                {
+                  "id": "c",
+                  "text": "摘要压缩总比规则压缩好",
+                  "feedback": "不对。一次运行说明不了一般表现，两种做法的丢法也不同。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "初筛结果只是起点：它说明关键词出现了，不说明回答正确，也不说明别的信息还在。"
+            },
+            {
+              "id": "visible-but-missed",
+              "prompt": "实验报告里某组“原话还在上下文里”为是，但探针初筛没命中。最可能是什么情况？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "信息送到了模型面前，但回答没有同时写出来源名和原话",
+                  "feedback": "对。要读回答原文：可能是改写了原话，也可能是没用上这条信息。"
+                },
+                {
+                  "id": "b",
+                  "text": "本地字符串检查出错了",
+                  "feedback": "不对。字符串检查只看原话是否原样出现在请求里，结果是确定的。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务商没有收到这条消息",
+                  "feedback": "不对。request 事件记录的就是实际发出的内容，原话在里面。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "两个检查分开写，才能分清是信息没送到，还是模型没用上。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "找出清理旧工具结果那组请求里，被换成说明的那条工具结果。",
+          "target": {
+            "event": "request",
+            "round": 3,
+            "path": "data.body.messages[3].content"
+          },
+          "explanation": "这是第 3 轮请求的第四条消息：tool_call_id 没变，前面的 assistant 调用也还在，只是内容换成了 cleared 为 true 的说明。消息条数和不压缩那组一样，原话已经不在这次请求里了。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我对照了四组请求的消息条数和字符数，能说出每种压缩改写了哪一部分。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能分清“原话还在上下文里”和“探针初筛命中”是两个不同的检查。"
+            },
+            {
+              "id": "item-3",
+              "text": "我读过第 4 轮的摘要原文，能说出摘要压缩那组的探针为什么答得出或答不出。"
+            },
+            {
+              "id": "item-4",
+              "text": "小扩展：把 clear_old_tool_results 的 keep_latest 默认值改成 0（两次工具结果都清理），重启后端再跑一次，看清理组的上下文里还剩哪份资料。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "char_budget",
+      "note": "本课输入：规则压缩记录允许的最大 JSON 字符数；装不下关键证据就拒绝这一组。"
+    },
+    {
+      "name": "lookup_lesson",
+      "note": "本地工具：按 source_key 返回一条资料的 source 与 fact，每次真实执行。"
+    },
+    {
+      "name": "lesson.compaction",
+      "note": "本课事件：每组记字符数和原话是否还在上下文里；规则压缩被拒绝时记原因。"
+    },
+    {
+      "name": "keep_latest",
+      "note": "清理时保留最近几次工具结果，默认 1；更早的工具结果内容换成说明。"
+    }
+  ]
+}

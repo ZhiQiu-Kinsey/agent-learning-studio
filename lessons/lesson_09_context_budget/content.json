@@ -13,61 +13,71 @@
           "id": "hero",
           "type": "hero",
           "eyebrow": "CHAPTER 03 / BUDGET",
-          "headline": "压缩上下文，",
-          "highlight": "不能压掉依据。",
-          "takeaway": "截短上下文能省长度，也可能丢掉依据。压缩之后要查两件事：协议是否合法，关键事实还在不在。"
+          "headline": "预算装不下时，",
+          "highlight": "先看截掉了什么。",
+          "takeaway": "请求的长度有上限。截取窗口能把请求压进预算，代价是早先的工具结果可能整组被舍弃；截断时，工具调用和工具结果必须一起留下或一起舍弃。"
         },
         {
           "id": "concepts",
           "type": "concepts",
           "items": [
             {
-              "id": "01-full",
-              "label": "01 / FULL",
-              "title": "完整历史",
-              "description": "保存工具证据，也保存与本题无关的旁支讨论；长度随对话增长。",
-              "token": "full messages"
+              "id": "01-window",
+              "label": "01 / WINDOW",
+              "title": "上下文窗口",
+              "description": "模型一次请求能处理的长度有上限，输入的消息和模型的输出共用这个上限。",
+              "token": "context window"
             },
             {
-              "id": "02-window",
-              "label": "02 / WINDOW",
+              "id": "02-budget",
+              "label": "02 / BUDGET",
+              "title": "上下文预算",
+              "description": "程序给一次请求定的长度上限。本课用字符数衡量；Token 数和费用以服务商报告为准。",
+              "token": "char_budget"
+            },
+            {
+              "id": "03-cut",
+              "label": "03 / CUT",
               "title": "截取窗口",
-              "description": "成组移除早期工具交互，可能失去来源。",
-              "token": "recent only"
+              "description": "从最新的消息往回装，装满预算就停。最早的工具调用和工具结果会整组被舍弃。",
+              "token": "fit_window"
             },
             {
-              "id": "03-summary",
-              "label": "03 / SUMMARY",
-              "title": "规则压缩",
-              "description": "把目标、约束、来源、事实和待办写成一条可检查的记录。",
-              "token": "source + fact"
-            },
-            {
-              "id": "04-probe",
-              "label": "04 / PROBE",
-              "title": "探针问题",
-              "description": "问一个只有早先工具结果才能回答的问题，看压缩之后还答不答得出来。",
-              "token": "probe · recall"
+              "id": "04-pair",
+              "label": "04 / PAIR",
+              "title": "调用与结果成对",
+              "description": "只保留最后几条消息，可能把一对拆开，留下没有调用的工具结果。",
+              "token": "naive_tail"
             }
           ]
         },
         {
           "id": "section-1",
           "type": "prose",
-          "title": "预算量的是哪一种长度",
+          "title": "一次请求能装多少",
           "paragraphs": [
-            "模型一次请求能处理的内容有上限，这个上限叫上下文窗口（Context Window）。每次请求都要在这个上限里给指令、历史、工具结果和输出分配容量，这就是上下文预算（Context Budget）。",
-            "本课的预算按字符算：char_budget 量的是本地序列化 JSON 的字符数，方便直观比较大小。它不是模型分词后的 Token 数，也不等于账单。",
-            "Token 数要看服务商报告的用量（Usage）。响应里带了这个字段，报告就原样列出；没带就写“未知”，不记成零。"
+            "模型一次请求能处理的长度有上限，这个上限叫上下文窗口（Context Window），输入的消息和模型的输出共用它。程序每次发请求前，都要决定给历史、工具结果和问题各留多少长度，这个由程序定下的上限就是上下文预算（Context Budget）。",
+            "本课的预算是输入 char_budget，默认 600。运行器先真实读取一条资料，再拼出一段带旁支讨论的历史：默认参数下，这段完整历史超过 1000 字符，装不进 600 的预算。本课要回答的是：装不下的时候，截掉了什么。"
           ]
         },
         {
           "id": "section-2",
           "type": "prose",
-          "title": "保留完整历史的代价",
+          "title": "字符数、Token 和用量",
           "paragraphs": [
-            "本课先用本地工具 lookup_lesson 真实读取一条资料。历史消息由运行器组装：其中 assistant 的工具调用消息和旁支回复不是模型之前生成的，工具结果来自这次真实的 Python 读取。旁支讨论是和本题无关的填充对话，只用来拉长历史。完整请求包含目标、工具调用与结果、旁支讨论和追问。把 noise_repeats 调大，旁支讨论多几轮，完整请求就跟着变长。"
+            "char_budget 量的是把 messages 序列化成紧凑 JSON 之后的字符数。它在本地就能算，每次结果相同，适合比较两种布局谁长谁短。但它不是 Token：Token 是模型切分文本的单位，同样多的字符，中文、英文和 JSON 切出来的 Token 数各不相同。",
+            "Token 数要看服务商在响应里报告的用量（Usage），也就是 response 里的 usage 字段。报告里有，实验报告就原样列出；没有就写“未报告”，不记成 0，也不拿字符数冒充。"
           ]
+        },
+        {
+          "id": "predict-tool-calls",
+          "type": "predict",
+          "prompt": "先跑一次。在实验台运行“资料 messages-context，预算 600 字符”之前先猜：这次运行会出现几个 tool_call 事件？提示：完整历史里那条 assistant 工具调用是运行器拼进去的，它算不算一次执行？",
+          "experiment": "full-vs-window",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
         },
         {
           "id": "mq-char-budget",
@@ -79,37 +89,39 @@
               {
                 "id": "a",
                 "text": "本地序列化后 JSON 的字符数，不是 Token 数",
-                "feedback": "对。它只是直观的长度指标。"
+                "feedback": "对。它只是在本地比较长短用的指标。"
               },
               {
                 "id": "b",
                 "text": "模型上下文窗口的 Token 上限",
-                "feedback": "不对。Token 由模型的分词器决定，字符数只能粗略估计。"
+                "feedback": "不对。Token 由模型的分词器决定，字符数只能粗略对应。"
               },
               {
                 "id": "c",
                 "text": "服务商账单的费用上限",
-                "feedback": "不对。费用按服务商报告的用量计算。"
+                "feedback": "不对。费用按服务商报告的用量计算，本课没有费用上限。"
               }
             ],
             "correct": "a",
-            "explanation": "预算的单位要说清楚：本地字符数、Token 和费用是三种不同的量。"
+            "explanation": "预算的单位要说清楚：本地字符数、Token 数和费用是三种不同的量。"
           }
         },
         {
           "id": "section-3",
           "type": "prose",
-          "title": "截取窗口可能丢掉什么",
+          "title": "完整历史的代价",
           "paragraphs": [
-            "同一个追问可以配上不同的 messages，本课把每一种叫一个布局。完整布局带着全部历史；窗口布局用截取窗口的办法，只保留 system、最近两条旁支消息和同一个追问。工具调用和结果作为一组被移除，协议仍然合法，但早先的目标、来源、事实和待办都看不到了。模型如果答得像模像样，也要看它有没有给出来源，不能只凭措辞判对。"
+            "完整历史把所有消息原样带上：目标、那次工具调用和工具结果、旁支讨论和最后的追问。旁支讨论是和本题无关的填充对话，只用来拉长历史。这些消息由运行器组装：assistant 的工具调用和旁支回复不是模型之前生成的，工具结果来自这次真实的 Python 读取。",
+            "noise_repeats 每加 1，历史就多一问一答两条消息。把它从 8 调到 20，完整历史从 21 条消息变成 45 条，字符数接近翻倍；有用的信息一条没多，每次请求却都要带上这些长度。"
           ]
         },
         {
           "id": "section-4",
           "type": "prose",
-          "title": "规则压缩保留关键证据",
+          "title": "截取窗口：从最新的消息往回装",
           "paragraphs": [
-            "压缩布局用的是规则压缩，属于上下文压缩（Context Compression）的一种：用本次读取结果拼出一条结构化任务记录，写明目标、约束、来源、事实和待办。这是程序按规则挑选信息，不是模型读完全文后写的摘要。拼好后先检查字符预算；关键证据装不下就报错，不会悄悄删掉来源。"
+            "截取窗口先留下 system 和当前问题，再从最新的消息往回，一组一组地装，下一组装不下就停。tool 消息和它前面那条 assistant 调用算同一组，要么一起装进来，要么一起舍弃，所以截出来的历史在协议上总是合法的。",
+            "代价也在这里。本课把工具交互放在历史开头，窗口最先舍弃的就是它：默认预算下，窗口里只剩最近几轮旁支讨论，目标、来源和事实都看不到了。模型的回答即使通顺，也要看它有没有给出来源，不能只凭措辞判对。"
           ]
         },
         {
@@ -117,79 +129,35 @@
           "type": "micro-quiz",
           "question": {
             "id": "window-loss",
-            "prompt": "窗口布局把早先的工具调用和工具结果成组移除，会发生什么？",
+            "prompt": "截取窗口把早先的工具调用和工具结果整组舍弃，会发生什么？",
             "options": [
               {
                 "id": "a",
-                "text": "消息协议仍然合法，但来源和事实可能不再可见",
-                "feedback": "对。成组移除保住了协议，丢掉的是证据。"
+                "text": "请求在协议上仍然合法，但来源和事实不再可见",
+                "feedback": "对。整组舍弃保住了协议，丢掉的是证据。"
               },
               {
                 "id": "b",
                 "text": "请求会因为孤立的 tool 消息被拒绝",
-                "feedback": "不对。正因为成组移除，才不会留下孤立的工具结果。"
+                "feedback": "不对。正因为整组舍弃，才不会留下孤立的工具结果。"
               },
               {
                 "id": "c",
                 "text": "信息没有损失，只是变短了",
-                "feedback": "不对。被移除的正是来源和事实。"
+                "feedback": "不对。被舍弃的正是来源和事实，这次请求里已经没有它们。"
               }
             ],
             "correct": "a",
-            "explanation": "压缩要同时守住协议合法和关键证据，二者缺一不可。"
+            "explanation": "截取要同时守住两件事：协议合法，以及弄清楚哪些证据被截掉了。"
           }
         },
         {
           "id": "section-5",
           "type": "prose",
-          "title": "报告应如何读",
+          "title": "按条数截断会拆开配对",
           "paragraphs": [
-            "三种布局各发一次真实请求。request 里是最终发出的 messages，response 里是那一次的回答，追问文本三组共用。报告里的字符数、有无来源、有无事实都从实际请求逐条检查；usage 只在响应里真的有时才显示。完整和压缩的回答不同，也可能只是模型输出的波动，采样温度设为 0 也不保证每次相同；一次对照说明不了一般表现。"
-          ]
-        },
-        {
-          "id": "section-compaction",
-          "type": "prose",
-          "title": "清理旧结果、模型摘要与探针问题",
-          "paragraphs": [
-            "长任务里，早先的工具结果往往占掉大半上下文。常见做法有两种。清理旧工具结果：保留调用和工具结果的位置，只把较早工具结果的内容换成一句“已清理”。摘要压缩：让模型把较早的对话写成一段摘要，再用摘要替换原文。前者便宜，但内容真的没了；后者多花一次请求，留下什么由模型决定。",
-            "怎么知道压缩后信息还在？压缩对照用一个探针问题：“最早读取的那份资料来自哪一项？它的原话是什么？”这个问题只能靠第一次 lookup_lesson 的结果回答。三种策略各问一次，报告并列写出两件事：原话还在不在上下文里（本地字符串检查），回答有没有答出来源和原话（关键词初筛）。"
-          ]
-        },
-        {
-          "id": "mq-probe",
-          "type": "micro-quiz",
-          "question": {
-            "id": "probe-after-clearing",
-            "prompt": "清理旧工具结果之后，探针问题答不出来。最可能的原因是什么？",
-            "options": [
-              {
-                "id": "a",
-                "text": "最早那次工具结果的内容被换成了占位说明，上下文里已经没有那句原话",
-                "feedback": "对。清理只留下位置，内容没了，模型无从回答。"
-              },
-              {
-                "id": "b",
-                "text": "调用和工具结果被拆开，请求被服务商拒绝了",
-                "feedback": "不对。清理只换内容，配对还在，请求是合法的。"
-              },
-              {
-                "id": "c",
-                "text": "上下文窗口满了，模型读不到后面的内容",
-                "feedback": "不对。清理之后上下文反而更短。"
-              }
-            ],
-            "correct": "a",
-            "explanation": "压缩之后要用只依赖旧信息的问题去检查，长度变短不代表需要的信息还在。"
-          }
-        },
-        {
-          "id": "section-broken",
-          "type": "prose",
-          "title": "拆开调用与工具结果会怎样",
-          "paragraphs": [
-            "前面的布局都把调用和工具结果成组处理。最常见的错误写法是“只保留最后 N 条消息”：切点一旦落在两者之间，请求就以一条孤立的 tool 消息开头。{{lesson:messages-context}}的协议检查会拒绝这种历史；如果绕过检查直接发出去，OpenAI 兼容接口一般会返回 HTTP 400，但各家服务商的处理并不一样，以本次记录为准。",
-            "拆开配对实验把同一段历史按两种方式截断后原样发送：一次按条数截断，一次在切点落进配对时多保留那条 assistant 调用。服务商拒绝时，运行器把状态码、错误类型和原文记成 lesson.provider_error，不重试，也不改写。离线测试没有真实服务商，这时的 400 由测试夹具模拟，事件里的 source 写作 offline_fixture。"
+            "另一种常见写法是“只保留最后 N 条消息”。条数和长度无关，更大的问题在切点：切点一旦落在 assistant 调用和工具结果之间，请求就以一条孤立的 tool 消息开头。{{lesson:messages-context}}的协议检查会拒绝这种历史。如果绕过检查直接发出去，有的服务商返回 HTTP 400，有的照样接受并回答，以本次记录为准；接受了也不代表没问题，模型看到一条没有调用的工具结果，未必能正确理解它。",
+            "“拆开工具调用与工具结果”这组实验把同一段历史按两种方式截断后原样发出：一次按条数截断，一次在切点落进配对时多保留那条 assistant 调用。服务商拒绝时，运行器把状态码、错误类型和原文记成 lesson.provider_error，不重试，也不改写。离线测试模式没有真实服务商，这时的 400 由夹具模拟，事件里的 source 写作 offline_fixture。"
           ]
         },
         {
@@ -201,13 +169,13 @@
             "options": [
               {
                 "id": "a",
-                "text": "移动切点，让调用和工具结果一起保留或一起删掉",
-                "feedback": "对。按配对截断就是这样做的。"
+                "text": "移动切点，让调用和工具结果一起保留或一起舍弃",
+                "feedback": "对。按配对截断和截取窗口都是这样做的。"
               },
               {
                 "id": "b",
                 "text": "只保留工具结果，服务商会自己补上调用",
-                "feedback": "不对。服务商不会补；OpenAI 兼容接口一般直接拒绝这种请求。"
+                "feedback": "不对。服务商不会补上调用；有的直接拒绝，有的照收不误，但请求本身已经不合协议。"
               },
               {
                 "id": "c",
@@ -216,96 +184,65 @@
               }
             ],
             "correct": "a",
-            "explanation": "调用和工具结果是一个整体，截断、清理和压缩都不能把它们拆开。"
+            "explanation": "工具调用和工具结果是一个整体，截断时不能把它们拆开。"
           }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "实验报告怎么读",
+          "paragraphs": [
+            "实验报告把两种布局并排：消息数、JSON 字符数、是否在预算内、有没有来源和事实，都从实际发出的请求逐条检查；服务商用量只在响应里真的有时才显示。两次回答不同，也可能只是模型输出的波动：采样温度设为 0 也不保证每次相同，一次对照说明不了一般表现。",
+            "被截掉的内容并没有消失，只是这次请求看不到。想在预算里保住关键信息，就要把旧内容改写得更短，{{lesson:context-compaction}}比较几种压缩做法，并检查压缩之后丢了什么。"
+          ]
         },
         {
           "id": "walkthrough",
           "type": "walkthrough",
-          "title": "同一问题，三种可见上下文",
-          "description": "按步骤说明三组实验的构造，代码是简化的示意。真实请求与回答以运行事件为准。",
+          "title": "一次运行里的两种布局",
+          "description": "按步骤说明“完整历史与截取窗口”的构造，代码是简化的示意。真实请求与回答以运行事件为准。",
           "steps": [
             {
               "id": "step-1",
               "label": "01",
               "actor": "本地工具",
-              "title": "读取事实",
-              "body": "运行器调用工具并得到工具结果。",
-              "code": "result = context.call_tool('lookup_lesson', args, tools)",
+              "title": "读取资料",
+              "body": "运行器调用 lookup_lesson，得到一条带来源和事实的工具结果。",
+              "code": "result = lookup_once(context, source_key)",
               "language": "python",
               "evidence": "tool_call / tool_result"
             },
             {
               "id": "step-2",
               "label": "02",
-              "actor": "程序",
-              "title": "构造完整历史",
-              "body": "保留调用与工具结果成组的记录。",
-              "code": "full = [system, goal, call, receipt, *noise, question]",
+              "actor": "运行器",
+              "title": "拼出完整历史",
+              "body": "工具调用和工具结果放在开头，后面跟着旁支讨论和追问。",
+              "code": "full = [system, goal, call, result, *side_talk, question]",
               "language": "python",
               "evidence": "request.messages"
             },
             {
               "id": "step-3",
               "label": "03",
-              "actor": "程序",
-              "title": "截取窗口",
-              "body": "舍弃早期记录与工具对。",
-              "code": "window = [system, *recent, question]",
+              "actor": "运行器",
+              "title": "按预算截取",
+              "body": "从最新的一组往回装，装不下就停；工具调用和工具结果整组进出。",
+              "code": "window = fit_window(full, char_budget)",
               "language": "python",
-              "evidence": "request.messages"
+              "evidence": "lesson.context_variant"
             },
             {
               "id": "step-4",
               "label": "04",
-              "actor": "程序",
-              "title": "保留证据",
-              "body": "按任务字段组织来源与事实。",
-              "code": "compressed = [system, summary(source, fact), question]",
-              "language": "python",
-              "evidence": "request.messages"
-            },
-            {
-              "id": "step-5",
-              "label": "05",
               "actor": "模型",
-              "title": "逐项比较",
-              "body": "每种布局分别调用一次模型。",
-              "code": "answers = [context.complete({'messages': m}) for m in variants]",
+              "title": "各问一次",
+              "body": "同一个追问，两种布局各发一次请求，回答和用量逐项对照。",
+              "code": "for messages in (full, window):\n    context.complete({'messages': messages})",
               "language": "python",
               "evidence": "response / lesson.report"
-            },
-            {
-              "id": "step-6",
-              "label": "06",
-              "actor": "程序 / 模型",
-              "title": "清理或摘要",
-              "body": "清理组只换掉较早工具结果的内容；摘要组先请求一次摘要，再用它替换较早的历史。",
-              "code": "cleared = clear_old_tool_results(history)\nsummary = context.complete(summary_body)",
-              "language": "python",
-              "evidence": "lesson.compaction / request"
-            },
-            {
-              "id": "step-7",
-              "label": "07",
-              "actor": "程序",
-              "title": "按配对截断",
-              "body": "切点落进调用与工具结果之间时，往前多保留一条，直到配对完整。",
-              "code": "while tail[0][\"role\"] == \"tool\":\n    keep += 1",
-              "language": "python",
-              "evidence": "request.messages / lesson.provider_error"
             }
           ]
-        },
-        {
-          "id": "predict-tool-calls",
-          "type": "predict",
-          "prompt": "在实验中运行“资料 lesson-07，旁支重复 8 次”之前先猜：这次运行会出现几个 tool_call 事件？想一想，消息里那条 assistant 工具调用是不是一次真实执行。",
-          "experiment": "three-layouts",
-          "rule": {
-            "kind": "count_events",
-            "event": "tool_call"
-          }
         }
       ]
     },
@@ -317,148 +254,180 @@
           "compare_with": "messages-context"
         },
         {
-          "id": "code-variants",
+          "id": "code-cut",
           "type": "annotated-source",
           "path": "lessons/lesson_09_context_budget/runtime.py",
-          "start": 50,
-          "end": 103,
+          "start": 41,
+          "end": 78,
           "notes": [
             {
-              "id": "n51",
-              "line": 51,
-              "anchor": "return len(json.dumps(messages, ensure_ascii=Fal",
-              "text": "长度按紧凑 JSON 的字符数计算。字符数不等于 Token，本课不做 Token 估算。"
+              "id": "n45",
+              "line": 45,
+              "anchor": "if message.get(\"role\") == \"tool\" and groups:",
+              "text": "tool 消息并进前一组，也就是它的 assistant 调用所在的组。"
             },
             {
-              "id": "n68",
-              "line": 68,
-              "anchor": "receipt = {\"role\": \"tool\", \"tool_call_id\": tool_",
-              "text": "工具结果来自本次真实执行的 lookup_lesson；assistant 调用消息由运行器组装。"
+              "id": "n56",
+              "line": 56,
+              "anchor": "if message_chars([system, question]) > char_budget:",
+              "text": "system 和当前问题是底线；连它们都装不下就报错，不发残缺的请求。"
             },
             {
-              "id": "n95",
-              "line": 95,
-              "anchor": "window = [system, *noise[-2:], final_question]",
-              "text": "窗口布局只留最后两条旁支，目标、工具调用和工具结果一起丢掉。"
+              "id": "n60",
+              "line": 60,
+              "anchor": "for group in reversed(message_groups(history)):",
+              "text": "从最新的一组往回装：越近的消息越先进窗口。"
+            },
+            {
+              "id": "n62",
+              "line": 62,
+              "anchor": "break  # 3.",
+              "text": "装不下就停，不跳过这一组去装更早的消息，窗口始终是连续的最近历史。"
+            },
+            {
+              "id": "n69",
+              "line": 69,
+              "anchor": "return [messages[0], *messages[1:][-keep:]]",
+              "text": "按条数截断只数条数，不看配对，切点可能正好落在调用和工具结果之间。"
+            },
+            {
+              "id": "n75",
+              "line": 75,
+              "anchor": "while tail and tail[0].get(\"role\") == \"tool\" and",
+              "text": "按配对截断：开头是 tool 就往前多留一条，直到把它的 assistant 调用也留下。"
+            }
+          ]
+        },
+        {
+          "id": "code-layouts",
+          "type": "annotated-source",
+          "path": "lessons/lesson_09_context_budget/runtime.py",
+          "start": 91,
+          "end": 123,
+          "notes": [
+            {
+              "id": "n94",
+              "line": 94,
+              "anchor": "full = [{\"role\": \"system\", \"content\": SYSTEM}, {\"r",
+              "text": "完整历史：工具调用和工具结果在开头，旁支讨论在后，追问在最后。"
             },
             {
               "id": "n97",
               "line": 97,
-              "anchor": "summary = {\"role\": \"user\", \"content\": f\"压缩的任务记录：",
-              "text": "规则压缩只用已读取的来源和事实按模板拼接，不让模型在没有依据时写摘要。"
+              "anchor": "window = fit_window(full, char_budget)",
+              "text": "截取窗口从同一份完整历史里截出来，两种布局只差这一步。"
             },
             {
-              "id": "n101",
-              "line": 101,
-              "anchor": "if _chars(compressed) > char_budget:",
-              "text": "压缩版超过字符预算时直接报错，不会悄悄截掉证据。"
-            }
-          ]
-        },
-        {
-          "id": "code-compaction",
-          "type": "annotated-source",
-          "path": "lessons/lesson_09_context_budget/runtime.py",
-          "start": 106,
-          "end": 139,
-          "notes": [
+              "id": "n99",
+              "line": 99,
+              "anchor": "validate_tool_history(messages)",
+              "text": "两种布局发出前都跑协议检查，截取不能留下孤立的工具结果。"
+            },
             {
-              "id": "n111",
-              "line": 111,
-              "anchor": "*_pair(\"lesson9_lookup_1\", \"lesson-07\", results[",
-              "text": "第一次查阅（lesson-07）在较早部分，探针问题问的就是它。"
+              "id": "n105",
+              "line": 105,
+              "anchor": "result = lookup_once(context, values.source_key)",
+              "text": "资料由运行器真实读取一次，两种布局用的是同一个工具结果。"
+            },
+            {
+              "id": "n110",
+              "line": 110,
+              "anchor": "context.emit(\"lesson.context_variant\", {",
+              "text": "把窗口保留和舍弃了几条消息、工具结果还在不在记成事件，先于两次请求出现在时间线上。"
             },
             {
               "id": "n119",
               "line": 119,
-              "anchor": "cleared = set(tool_indexes[:-keep_latest] if kee",
-              "text": "只清理较早工具结果的内容，最近一次保留；消息条数和配对都不变。"
+              "anchor": "response = context.complete({\"messages\": messages",
+              "text": "同一个追问，两种布局各发一次请求；请求和响应由平台原样记录。"
             },
             {
-              "id": "n125",
-              "line": 125,
-              "anchor": "return PROBE_SOURCE in answer and PROBE_PHRASE i",
-              "text": "探针初筛同时要求来源和原话，只答出其中一个不算。"
-            },
+              "id": "n122",
+              "line": 122,
+              "anchor": "context.emit(\"lesson.report\", _layout_report(",
+              "text": "实验报告的拼装放在 _layout_report 里，不在这里展开。"
+            }
+          ],
+          "folds": [
             {
-              "id": "n130",
-              "line": 130,
-              "anchor": "return [messages[0], *messages[1:][-keep:]]",
-              "text": "按条数截断不看配对，切点可能正好落在调用和工具结果之间。"
-            },
-            {
-              "id": "n136",
-              "line": 136,
-              "anchor": "while tail and tail[0].get(\"role\") == \"tool\" and",
-              "text": "按配对截断：开头是 tool 就往前多留一条，直到配对完整。"
+              "id": "fold-variant-data",
+              "start": 111,
+              "end": 114,
+              "label": "lesson.context_variant 的数据：预算、保留与舍弃的消息数、构造说明"
             }
           ]
         },
         {
-          "id": "code-budget-run",
+          "id": "code-broken-pair",
           "type": "annotated-source",
           "path": "lessons/lesson_09_context_budget/runtime.py",
-          "start": 191,
-          "end": 285,
+          "start": 151,
+          "end": 184,
           "notes": [
             {
-              "id": "n204",
-              "line": 204,
-              "anchor": "summary_body = {\"messages\": [{\"role\": \"system\", ",
-              "text": "摘要请求把较早的历史原样交给模型，再附一条压缩指令；这次请求也计入用量。"
+              "id": "n155",
+              "line": 155,
+              "anchor": "history = [{\"role\": \"system\", \"content\": SYSTEM}",
+              "text": "这次工具交互放在最后，只留最后 2 条时切点正好落在配对中间。"
             },
             {
-              "id": "n212",
-              "line": 212,
-              "anchor": "\"摘要压缩\": [system, {\"role\": \"user\", \"content\": \"此前",
-              "text": "摘要组用模型写的摘要替换较早部分，最近的调用与工具结果保持原样。"
-            },
-            {
-              "id": "n217",
-              "line": 217,
-              "anchor": "validate_tool_history(messages)",
-              "text": "三种策略发出前都过一遍协议检查，清理和摘要都不能破坏协议。"
-            },
-            {
-              "id": "n250",
-              "line": 250,
+              "id": "n158",
+              "line": 158,
               "anchor": "attempts = {\"按条数截断（保留最后 2 条）\": naive_tail(histor",
               "text": "同一段历史，两种截断，各发一次。"
             },
             {
-              "id": "n265",
-              "line": 265,
-              "anchor": "except Exception as error:  # 服务商拒绝请求时如实记录，不重试，也",
-              "text": "服务商拒绝时只记录，不重试，也不改写请求。"
+              "id": "n165",
+              "line": 165,
+              "anchor": "validate_tool_history(messages)",
+              "text": "本地协议检查只记下结论，不拦截：本实验就是要看服务商怎么回应。"
             },
             {
-              "id": "n268",
-              "line": 268,
+              "id": "n171",
+              "line": 171,
+              "anchor": "response = context.complete({\"messages\": messages",
+              "text": "请求原样发出，不改写。"
+            },
+            {
+              "id": "n174",
+              "line": 174,
+              "anchor": "except Exception as error:  # 3.",
+              "text": "服务商拒绝时只记录，不重试；停止请求仍然向上抛出。"
+            },
+            {
+              "id": "n177",
+              "line": 177,
               "anchor": "context.emit(\"lesson.provider_error\", {",
-              "text": "lesson.provider_error 记录状态码、错误类型、原文和来源；离线时 source 是 offline_fixture。"
+              "text": "lesson.provider_error 记录状态码、错误类型、原文和 source；离线时 source 是 offline_fixture。"
+            },
+            {
+              "id": "n183",
+              "line": 183,
+              "anchor": "context.emit(\"lesson.report\", _pair_report(",
+              "text": "两次的本地协议检查结论和服务商结果并列进实验报告。"
             }
           ]
         },
         {
           "id": "code-decision",
           "type": "decision",
-          "title": "保留证据的规则压缩，对照截取窗口",
-          "chosen": "用固定模板把目标、来源和事实写进一条 user 消息，并检查字符预算；与完整布局、窗口布局各发一次，对照回答与 usage。",
+          "title": "按字符预算截取窗口，调用与工具结果整组进出",
+          "chosen": "从最新的消息往回装，装满字符预算就停；tool 消息和它的 assistant 调用算一组。发出前跑协议检查，Token 数只看服务商报告的用量。",
           "alternatives": [
             {
-              "id": "sliding-window",
-              "title": "只保留最近 N 条消息",
-              "why_not": "实验里的“窗口”布局就是它：工具调用与工具结果被成组移除，来源和事实一起丢失。"
-            },
-            {
-              "id": "llm-summary",
-              "title": "先让模型总结历史再继续",
-              "why_not": "摘要不保证保留来源，还要多花一次请求，所以布局对照不用它。压缩对照里的“摘要压缩”就是这种做法，用探针问题检查它丢没丢信息。"
+              "id": "last-n",
+              "title": "只保留最后 N 条消息",
+              "why_not": "条数和长度无关，装得下多少说不准；切点还可能落在调用和工具结果之间，留下不合协议的请求。"
             },
             {
               "id": "token-count",
               "title": "在本地按 Token 计算预算",
-              "why_not": "不同服务商分词方式不同，本地只能准确计算字符数；Token 只展示响应中实际返回的 usage。"
+              "why_not": "不同服务商的分词方式不同，本地只能准确计算字符数；Token 数只展示响应中实际返回的用量。"
+            },
+            {
+              "id": "trim-result",
+              "title": "装不下时把工具结果截掉一半",
+              "why_not": "截掉一半的 JSON 可能不再合法，模型也分不清哪部分被删了。要在预算里保住关键信息，{{lesson:context-compaction}}比较了几种压缩做法。"
             }
           ]
         }
@@ -467,20 +436,20 @@
     "lab": {
       "experiments": [
         {
-          "id": "three-layouts",
-          "title": "同一问题，三种可见上下文",
-          "hypothesis": "截取窗口会成组移除早先的工具调用与工具结果，因而丢掉来源和事实；规则压缩只保留目标、来源、事实和待办，比完整历史短得多，却仍保留回答所需的依据。",
+          "id": "full-vs-window",
+          "title": "完整历史与截取窗口",
+          "hypothesis": "字符预算装不下完整历史时，截取窗口从最新的消息往回装，最早的工具调用和工具结果整组被舍弃，来源和事实随之不可见；预算放宽到装得下全部历史时，窗口与完整历史相同。",
           "predict": "predict-tool-calls",
           "arms": [
             {
               "id": "compare",
               "exercise": "compare",
-              "label": "资料 lesson-07，旁支重复 8 次"
+              "label": "资料 messages-context，预算 600 字符"
             },
             {
-              "id": "alternate",
-              "exercise": "alternate",
-              "label": "换成资料 lesson-08，其余不变"
+              "id": "wide-budget",
+              "exercise": "wide_budget",
+              "label": "预算放宽到 4000 字符，其余不变"
             }
           ],
           "observe": [
@@ -494,16 +463,16 @@
               }
             },
             {
-              "id": "construction-note",
-              "text": "构造说明：三组消息由运行器组装，旁支回复与 assistant 工具调用不是模型生成的。",
+              "id": "window-event",
+              "text": "截取窗口保留和舍弃了几条消息，工具结果还在不在。",
               "selector": {
                 "event": "lesson.context_variant",
-                "path": "data.detail"
+                "path": "data"
               }
             },
             {
-              "id": "full-receipt",
-              "text": "完整布局的 messages[3]：工具结果还在，带着 tool_call_id。",
+              "id": "full-tool-result",
+              "text": "完整历史的 messages[3]：工具结果还在，带着 tool_call_id。",
               "selector": {
                 "event": "request",
                 "round": 1,
@@ -512,7 +481,7 @@
             },
             {
               "id": "window-messages",
-              "text": "窗口布局的 messages：只剩 system、最近两条旁支和追问，工具调用与工具结果成组移除。",
+              "text": "截取窗口的 messages：system 之后是最近几轮旁支讨论，最后是追问。",
               "selector": {
                 "event": "request",
                 "round": 2,
@@ -521,20 +490,11 @@
             },
             {
               "id": "window-answer",
-              "text": "窗口布局的回答原文。",
+              "text": "截取窗口那次请求的回答原文。",
               "selector": {
                 "event": "response",
                 "round": 2,
                 "path": "data.body.choices[0].message.content"
-              }
-            },
-            {
-              "id": "compressed-record",
-              "text": "压缩布局的任务记录：目标、约束、来源、证据和待办写在一条消息里。",
-              "selector": {
-                "event": "request",
-                "round": 3,
-                "path": "data.body.messages[1].content"
               }
             },
             {
@@ -550,7 +510,7 @@
           "guide": [
             {
               "action": "narrate",
-              "text": "三种布局回答同一个问题。先看证据从哪里来。"
+              "text": "两种布局回答同一个追问。先看资料从哪里来。"
             },
             {
               "action": "spotlight",
@@ -566,7 +526,7 @@
             },
             {
               "action": "narrate",
-              "text": "资料来自一次真实的本地 Python 读取：source 和 fact 都在这里。"
+              "text": "资料来自一次真实的本地 Python 读取，source 和 fact 都在这里。"
             },
             {
               "action": "spotlight",
@@ -574,27 +534,27 @@
             },
             {
               "action": "seek",
-              "observe": "construction-note"
+              "observe": "window-event"
             },
             {
               "action": "highlight",
-              "observe": "construction-note"
+              "observe": "window-event"
             },
             {
               "action": "narrate",
-              "text": "注意：三组消息都是程序组装的受控样本，其中的 assistant 工具调用和旁支回复不是模型生成的。"
+              "text": "截取窗口在发请求之前就算好了：看它保留了几条、舍弃了几条，工具结果还在不在。两种预算各跑一次，对比这里的数字。"
             },
             {
               "action": "seek",
-              "observe": "full-receipt"
+              "observe": "full-tool-result"
             },
             {
               "action": "highlight",
-              "observe": "full-receipt"
+              "observe": "full-tool-result"
             },
             {
               "action": "narrate",
-              "text": "完整布局保留了工具调用和工具结果，来源与事实都可见，代价是长度。"
+              "text": "完整历史带着工具调用和工具结果，来源与事实都可见，代价是长度。"
             },
             {
               "action": "seek",
@@ -606,7 +566,7 @@
             },
             {
               "action": "narrate",
-              "text": "窗口布局只留最近几条。调用和工具结果成组移除，协议仍然合法，但来源和事实不见了。"
+              "text": "预算 600 时，窗口里只剩最近几轮旁支讨论；工具调用和工具结果整组不见了，协议仍然合法。"
             },
             {
               "action": "spotlight",
@@ -622,27 +582,7 @@
             },
             {
               "action": "narrate",
-              "text": "读窗口布局的回答：没有来源时，模型是否说明了缺少依据？"
-            },
-            {
-              "action": "spotlight",
-              "target": "runtime"
-            },
-            {
-              "action": "seek",
-              "observe": "compressed-record"
-            },
-            {
-              "action": "highlight",
-              "observe": "compressed-record"
-            },
-            {
-              "action": "narrate",
-              "text": "压缩布局把目标、来源、事实和待办写成一条记录。它由程序从实际的 lookup_lesson 返回值生成，不是模型摘要。"
-            },
-            {
-              "action": "spotlight",
-              "target": "model"
+              "text": "读截取窗口那次的回答：没有来源时，模型有没有说明自己缺少依据？"
             },
             {
               "action": "seek",
@@ -654,25 +594,25 @@
             },
             {
               "action": "narrate",
-              "text": "最后看 usage：这是服务商在响应里报告的用量。没有返回时报告写“未知”，不拿字符数冒充。离线测试模式下的 usage 是脚本粗略生成的。"
+              "text": "最后看 usage：这是服务商在响应里报告的用量。没有返回时报告写“未报告”，不拿字符数冒充。离线测试模式下的 usage 是夹具粗略生成的。"
             }
           ],
           "conclusion": {
             "proves": [
-              "这次三种布局实际发出的 messages 各包含哪些信息，以及各自得到的回答。",
-              "压缩记录是否保留来源和事实、是否低于字符预算，由程序从实际请求计算。"
+              "这次两种布局实际发出的 messages 各包含哪些信息，以及各自得到的回答。",
+              "截取窗口保留和舍弃了哪些消息、是否在预算内、是否还有来源，都由程序从实际请求计算。"
             ],
             "does_not_prove": [
-              "字符数不是 Token 数，也不等于账单；只有响应返回的 usage 才是服务商报告的用量。",
-              "单次对照中答案的差异也可能来自模型的不确定性，不能证明压缩在一般情况下更好。",
-              "离线测试模式下的回答和 usage 由测试脚本生成，不是服务商数据。"
+              "字符数不是 Token 数，也不等于费用；只有响应返回的 usage 才是服务商报告的用量。",
+              "单次对照中回答的差异也可能来自模型输出的波动，不能证明截取窗口在一般情况下更差。",
+              "离线测试模式下的回答和 usage 由夹具生成，不是服务商数据。"
             ]
           }
         },
         {
           "id": "noise-growth",
           "title": "增加旁支历史：谁变长了",
-          "hypothesis": "只把 noise_repeats 从 8 调到 20 时，完整布局的长度随之增长，窗口与压缩布局的长度基本不变。",
+          "hypothesis": "只把 noise_repeats 从 8 调到 20 时，完整历史的长度随之增长，截取窗口的长度始终不超过字符预算。",
           "arms": [
             {
               "id": "compare",
@@ -688,7 +628,7 @@
           "observe": [
             {
               "id": "noise-setting",
-              "text": "本次运行的输入：旁支历史重复次数。",
+              "text": "本次运行的输入：旁支讨论重复次数。",
               "selector": {
                 "event": "run_start",
                 "path": "data.inputs.noise_repeats"
@@ -696,7 +636,7 @@
             },
             {
               "id": "full-messages",
-              "text": "完整布局的 messages：条数随旁支次数增长。",
+              "text": "完整历史的 messages：条数随旁支讨论增长。",
               "selector": {
                 "event": "request",
                 "round": 1,
@@ -705,33 +645,25 @@
             },
             {
               "id": "full-chars",
-              "text": "报告中完整布局的 JSON 字符数。",
+              "text": "实验报告中完整历史的 JSON 字符数。",
               "selector": {
                 "event": "lesson.report",
-                "path": "data.table.rows[0][1]"
+                "path": "data.table.rows[0][2]"
               }
             },
             {
               "id": "window-chars",
-              "text": "报告中窗口布局的 JSON 字符数。",
+              "text": "实验报告中截取窗口的 JSON 字符数。",
               "selector": {
                 "event": "lesson.report",
-                "path": "data.table.rows[1][1]"
-              }
-            },
-            {
-              "id": "compressed-chars",
-              "text": "报告中压缩布局的 JSON 字符数。",
-              "selector": {
-                "event": "lesson.report",
-                "path": "data.table.rows[2][1]"
+                "path": "data.table.rows[1][2]"
               }
             }
           ],
           "guide": [
             {
               "action": "narrate",
-              "text": "两组只差一个输入：旁支历史重复次数。先确认这一点。"
+              "text": "两组只差一个输入：旁支讨论重复次数。先确认这一点。"
             },
             {
               "action": "spotlight",
@@ -763,7 +695,7 @@
             },
             {
               "action": "narrate",
-              "text": "完整布局把每一条旁支都带上，消息条数随之增加。"
+              "text": "完整历史把每一轮旁支讨论都带上，消息条数随之增加。"
             },
             {
               "action": "seek",
@@ -775,7 +707,7 @@
             },
             {
               "action": "narrate",
-              "text": "记下完整布局的字符数，再和另一组比较。"
+              "text": "记下完整历史的字符数，再和另一组比较。"
             },
             {
               "action": "seek",
@@ -787,201 +719,16 @@
             },
             {
               "action": "narrate",
-              "text": "窗口布局只保留最近两条旁支，长度几乎不受影响。"
-            },
-            {
-              "action": "seek",
-              "observe": "compressed-chars"
-            },
-            {
-              "action": "highlight",
-              "observe": "compressed-chars"
-            },
-            {
-              "action": "narrate",
-              "text": "压缩记录不随旁支增长。字符数只是本地长度指标，不是 Token 数。"
+              "text": "截取窗口按预算装，旁支再多，它也不超过 char_budget。字符数只是本地长度指标，不是 Token 数。"
             }
           ],
           "conclusion": {
             "proves": [
-              "两组运行中完整布局的消息条数和字符数是否随旁支次数增长，压缩布局的字符数是否保持不变。"
+              "两组运行中完整历史的消息条数和字符数是否随旁支讨论增长，截取窗口是否始终在预算内。"
             ],
             "does_not_prove": [
               "不能证明更长的上下文一定让回答变差，这里只比较了长度。",
               "字符数的增长不能直接换算成 Token 数或费用。"
-            ]
-          }
-        },
-        {
-          "id": "compaction",
-          "title": "清理旧结果与模型摘要：探针还答得出来吗",
-          "hypothesis": "清理旧工具结果后，上下文里不再有最早那次工具结果的原话，探针问题答不出；模型摘要能否答出，取决于摘要有没有留下来源和原话。",
-          "arms": [
-            {
-              "id": "compaction",
-              "exercise": "compaction",
-              "label": "两次查阅、8 轮旁支：不压缩 / 清理旧结果 / 摘要"
-            }
-          ],
-          "observe": [
-            {
-              "id": "summary-request",
-              "text": "摘要请求：较早的历史，加一条“请压缩”的指令。",
-              "selector": {
-                "event": "request",
-                "round": 1,
-                "path": "data.body.messages"
-              }
-            },
-            {
-              "id": "summary-text",
-              "text": "模型写的摘要原文：最早那份资料的来源和原话还在不在？",
-              "selector": {
-                "event": "response",
-                "round": 1,
-                "path": "data.body.choices[0].message.content"
-              }
-            },
-            {
-              "id": "cleared-receipt",
-              "text": "清理组的第一条工具结果：内容换成了占位说明，调用和工具结果仍成对。",
-              "selector": {
-                "event": "request",
-                "round": 3,
-                "path": "data.body.messages[3].content"
-              }
-            },
-            {
-              "id": "fact-visible",
-              "text": "清理组的上下文里还有没有那句原话（本地检查）。",
-              "selector": {
-                "event": "lesson.compaction",
-                "round": 3,
-                "path": "data.fact_visible"
-              }
-            },
-            {
-              "id": "cleared-answer",
-              "text": "清理组对探针问题的回答原文。",
-              "selector": {
-                "event": "response",
-                "round": 3,
-                "path": "data.body.choices[0].message.content"
-              }
-            },
-            {
-              "id": "probe-table",
-              "text": "报告：三种策略的长度、原话是否可见、探针回答和初筛结果。",
-              "selector": {
-                "event": "lesson.report",
-                "path": "data.table.rows"
-              }
-            }
-          ],
-          "guide": [
-            {
-              "action": "narrate",
-              "text": "这组实验比较三种处理旧历史的方式，用同一个探针问题检查信息还在不在。"
-            },
-            {
-              "action": "spotlight",
-              "target": "model"
-            },
-            {
-              "action": "seek",
-              "observe": "summary-request"
-            },
-            {
-              "action": "highlight",
-              "observe": "summary-request"
-            },
-            {
-              "action": "narrate",
-              "text": "摘要组要先多花一次请求：把较早的历史交给模型，让它压缩。"
-            },
-            {
-              "action": "seek",
-              "observe": "summary-text"
-            },
-            {
-              "action": "highlight",
-              "observe": "summary-text"
-            },
-            {
-              "action": "narrate",
-              "text": "这是模型自己写的摘要。留下什么、丢掉什么，由它决定。"
-            },
-            {
-              "action": "spotlight",
-              "target": "runtime"
-            },
-            {
-              "action": "seek",
-              "observe": "cleared-receipt"
-            },
-            {
-              "action": "highlight",
-              "observe": "cleared-receipt"
-            },
-            {
-              "action": "narrate",
-              "text": "清理组没有调用模型做摘要，只把旧工具结果的内容换成一句占位说明。"
-            },
-            {
-              "action": "seek",
-              "observe": "fact-visible"
-            },
-            {
-              "action": "highlight",
-              "observe": "fact-visible"
-            },
-            {
-              "action": "narrate",
-              "text": "本地检查显示，那句原话已经不在这次请求的上下文里。"
-            },
-            {
-              "action": "spotlight",
-              "target": "model"
-            },
-            {
-              "action": "seek",
-              "observe": "cleared-answer"
-            },
-            {
-              "action": "highlight",
-              "observe": "cleared-answer"
-            },
-            {
-              "action": "narrate",
-              "text": "读清理组的回答：模型有没有说明自己缺少依据，还是编了一个答案？"
-            },
-            {
-              "action": "spotlight",
-              "target": "runtime"
-            },
-            {
-              "action": "seek",
-              "observe": "probe-table"
-            },
-            {
-              "action": "highlight",
-              "observe": "probe-table"
-            },
-            {
-              "action": "narrate",
-              "text": "最后对照报告。初筛只看关键词，命中和未命中都要回到原文核对。"
-            }
-          ],
-          "conclusion": {
-            "proves": [
-              "三种策略各自发出的上下文里，最早那次工具结果的原话还在不在（本地字符串检查）。",
-              "摘要是当前模型在本次运行中写的，原文在第 1 轮响应里；探针能否答出，与摘要留下了什么直接相关。"
-            ],
-            "does_not_prove": [
-              "探针初筛只看关键词，命中不等于回答正确，未命中也要读原文。",
-              "一个探针只检查一条信息；摘要可能留下了这一条，却丢了别的。",
-              "真实系统清理旧结果时通常允许模型重新调用工具，本实验的请求没有提供工具，模型无法重新查。",
-              "离线测试模式下的摘要和回答由确定性脚本生成。"
             ]
           }
         },
@@ -1023,6 +770,14 @@
               }
             },
             {
+              "id": "naive-outcome",
+              "text": "实验报告里按条数截断那一行的服务商结果：被拒绝（带状态码），还是已接受。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows[0][3]"
+              }
+            },
+            {
               "id": "pair-messages",
               "text": "按配对截断的请求：多保留了那条 assistant 调用。",
               "selector": {
@@ -1033,7 +788,7 @@
             },
             {
               "id": "pair-answer",
-              "text": "修正后的请求得到的回答。",
+              "text": "配对完整的请求得到的回答。",
               "selector": {
                 "event": "response",
                 "round": 2,
@@ -1088,11 +843,23 @@
             },
             {
               "action": "narrate",
-              "text": "这是服务商的回应。看 source：如果是 offline_fixture，这个 400 是测试夹具模拟的，不是服务商返回的。"
+              "text": "服务商拒绝时，这里记着状态码、原文和 source；source 是 offline_fixture 的话，这个 400 是夹具模拟的。本次没有这条证据，说明服务商没有拒绝。"
             },
             {
               "action": "spotlight",
               "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "naive-outcome"
+            },
+            {
+              "action": "highlight",
+              "observe": "naive-outcome"
+            },
+            {
+              "action": "narrate",
+              "text": "实验报告把这一次的结果写成一格：被拒绝还是已接受。已接受也不代表没问题，读一读第 1 轮的回答，看模型怎么理解那条没有调用的工具结果。"
             },
             {
               "action": "seek",
@@ -1120,7 +887,7 @@
             },
             {
               "action": "narrate",
-              "text": "配对完整的请求得到了正常回答。"
+              "text": "读这次的回答：配对完整的请求是否被接受，以本次记录为准。"
             }
           ],
           "conclusion": {
@@ -1143,11 +910,7 @@
           "options": [
             {
               "value": "layouts",
-              "label": "三种布局：完整、窗口、规则压缩"
-            },
-            {
-              "value": "compaction",
-              "label": "压缩策略与探针问题"
+              "label": "两种布局：完整历史与截取窗口"
             },
             {
               "value": "broken_pair",
@@ -1160,22 +923,23 @@
           "label": "资料来源",
           "options": [
             {
-              "value": "lesson-07",
+              "value": "messages-context",
               "label": "{{lesson:messages-context}}资料"
             },
             {
-              "value": "lesson-08",
+              "value": "application-state",
               "label": "{{lesson:application-state}}资料"
             }
           ]
         },
         {
           "name": "noise_repeats",
-          "label": "旁支历史重复次数"
+          "label": "旁支讨论重复次数"
         },
         {
           "name": "char_budget",
-          "label": "字符预算"
+          "label": "字符预算",
+          "help": "截取窗口允许的最大 JSON 字符数；只在两种布局对照中使用。"
         }
       ]
     },
@@ -1187,107 +951,107 @@
           "questions": [
             {
               "id": "unit",
-              "prompt": "报告里的 JSON 字符数可以直接当作 Token 吗？",
+              "prompt": "实验报告里的 JSON 字符数可以直接当作 Token 数吗？",
               "options": [
                 {
                   "id": "a",
                   "text": "可以，两者单位相同",
-                  "feedback": "字符和 Token 是不同单位，换算比例随语言、内容和分词器变化，不能直接当作 Token。"
+                  "feedback": "不对。字符和 Token 是不同单位，换算比例随语言、内容和分词器变化。"
                 },
                 {
                   "id": "b",
-                  "text": "不可以，Token 要看服务商报告的用量或准确的分词器",
-                  "feedback": "对。字符数是本地可复现的大小指标；Token 要看服务商返回的 usage 或对应模型的分词器。"
+                  "text": "不可以，Token 数要看服务商报告的用量或对应模型的分词器",
+                  "feedback": "对。字符数是本地可复现的长度指标，Token 数由模型分词和服务商统计决定。"
                 },
                 {
                   "id": "c",
-                  "text": "只要除以四就是精确 Token",
-                  "feedback": "“除以四”只是英文文本的粗略经验，对中文和 JSON 都不准，更不是精确值。"
+                  "text": "只要除以四就是精确的 Token 数",
+                  "feedback": "不对。“除以四”只是英文文本的粗略经验，对中文和 JSON 都不准，更不是精确值。"
                 }
               ],
               "correct": "b",
-              "explanation": "字符数只是本地可复现的大小指标；Token 由模型分词与服务商统计决定。"
+              "explanation": "字符数只是本地长度指标；Token 数由模型分词与服务商统计决定。"
             },
             {
               "id": "pair",
-              "prompt": "截取窗口去掉工具证据时，应该怎样处理工具消息？",
+              "prompt": "截取窗口装不下早先的工具交互时，应该怎样处理那对消息？",
               "options": [
                 {
                   "id": "a",
                   "text": "只留工具结果",
-                  "feedback": "只留工具结果会变成孤立消息，前面没有对应的 assistant 调用，协议非法。"
+                  "feedback": "不对。只留工具结果会变成孤立消息，前面没有对应的 assistant 调用，协议不合法。"
                 },
                 {
                   "id": "b",
-                  "text": "调用与工具结果一起移除",
-                  "feedback": "对。调用与工具结果要么成组保留，要么成组移除；本课三种布局都通过了这项协议检查。"
+                  "text": "调用与工具结果一起舍弃",
+                  "feedback": "对。调用与工具结果要么一起留下，要么一起舍弃；本课的截取窗口就是按组装入的。"
                 },
                 {
                   "id": "c",
                   "text": "只留 assistant 调用",
-                  "feedback": "只留 assistant 调用，后面缺少匹配的工具结果，同样是不合法的工具历史。"
+                  "feedback": "不对。只留调用，后面缺少匹配的工具结果，同样是不合法的工具历史。"
                 }
               ],
               "correct": "b",
-              "explanation": "调用与工具结果必须保持配对；单独留下任一侧可能使协议非法。"
+              "explanation": "调用与工具结果必须保持配对；单独留下任一侧都会让协议不合法。"
             },
             {
-              "id": "source",
-              "prompt": "压缩结果必须优先保留什么？",
+              "id": "loss",
+              "prompt": "截取窗口那次的回答通顺、语气肯定，但窗口里已经没有工具结果。应该怎么判断这个回答？",
               "options": [
                 {
                   "id": "a",
-                  "text": "旁支讨论的每个寒暄",
-                  "feedback": "旁支寒暄与当前问题无关，正是压缩时可以舍弃的部分。"
+                  "text": "回答通顺，说明模型还记得之前的资料",
+                  "feedback": "不对。模型只看到本次请求里的消息，窗口里没有的资料它看不到。"
                 },
                 {
                   "id": "b",
-                  "text": "目标、约束、事实、来源与待办",
-                  "feedback": "对。下一步决策需要目标、约束、事实及其来源和待办；本课的压缩记录保留的就是这些字段。"
+                  "text": "看它有没有给出来源；没有来源的结论不能当事实",
+                  "feedback": "对。来源和事实已被截掉，回答里的内容要么是说明缺少依据，要么是猜的。"
                 },
                 {
                   "id": "c",
-                  "text": "只有最终问题",
-                  "feedback": "只留问题会丢掉证据和来源，模型只能回答缺少来源，和截取窗口的结果一样。"
+                  "text": "只要在预算内，回答就是可靠的",
+                  "feedback": "不对。在预算内只说明请求够短，不说明需要的证据还在。"
                 }
               ],
               "correct": "b",
-              "explanation": "压缩要服务下一步决策；来源与约束丢失会让答案无法核对。"
+              "explanation": "截取之后先查证据还在不在，再看回答；措辞通顺不等于有依据。"
             },
             {
               "id": "usage",
-              "prompt": "服务商未返回 usage 时应怎样写？",
+              "prompt": "服务商没有返回 usage 时，实验报告应该怎样写？",
               "options": [
                 {
                   "id": "a",
                   "text": "prompt_tokens=0",
-                  "feedback": "写成 0 会把“没有数据”伪装成“用量为零”，后续统计都会出错。"
+                  "feedback": "不对。写成 0 会把“没有数据”伪装成“用量为零”，后续统计都会出错。"
                 },
                 {
                   "id": "b",
-                  "text": "未知，并保留本地字符数为另一指标",
-                  "feedback": "对。没有实测值就标为未知，本地字符数作为另一种指标单独保留并注明。"
+                  "text": "未报告，并把本地字符数作为另一个指标单独列出",
+                  "feedback": "对。没有实测值就标为未报告，本地字符数单独保留并注明单位。"
                 },
                 {
                   "id": "c",
-                  "text": "从回答长度推断精确账单",
-                  "feedback": "回答长度推不出提示词的 Token，更推不出精确账单。"
+                  "text": "从回答长度推算精确的费用",
+                  "feedback": "不对。回答长度推不出输入的 Token 数，更推不出精确费用。"
                 }
               ],
               "correct": "b",
-              "explanation": "没有实测值就不能记成零，估算也必须单独标识。"
+              "explanation": "没有实测值就不能记成零，估算也必须单独标明。"
             }
           ]
         },
         {
           "id": "check-hunt",
           "type": "trace-hunt",
-          "prompt": "找出仍然保留着工具调用与工具结果配对（带 tool_call_id 的 tool 消息）的那次请求。",
+          "prompt": "找出仍然带着工具调用与工具结果配对（带 tool_call_id 的 tool 消息）的那次请求。",
           "target": {
             "event": "request",
             "path": "data.body.messages[3].tool_call_id"
           },
-          "explanation": "这是完整布局的那次请求：assistant 的 tool_calls 后面紧跟着带相同 tool_call_id 的工具结果。窗口布局把这对消息一起去掉，只剩最后的旁支讨论；压缩布局把来源和事实改写成一条文字记录。三种布局都保持协议合法。"
+          "explanation": "这是完整历史那次请求：assistant 的 tool_calls 后面紧跟着带相同 tool_call_id 的工具结果。预算 600 时，截取窗口把这对消息整组舍弃，只剩最近的旁支讨论；两次请求都通过了协议检查。"
         },
         {
           "id": "check-points",
@@ -1297,23 +1061,23 @@
           "items": [
             {
               "id": "item-1",
-              "text": "我比较了完整、窗口、压缩三次请求的消息条数，以及各自是否保留来源。"
+              "text": "我比较了完整历史和截取窗口两次请求的消息条数、字符数，以及各自有没有来源。"
             },
             {
               "id": "item-2",
-              "text": "我能说明字符数与服务商 usage 里的 Token 为什么不能互换。"
+              "text": "我能说明字符数与服务商用量里的 Token 数为什么不能互换。"
             },
             {
               "id": "item-3",
-              "text": "我能解释工具调用与工具结果为什么要成组保留或成组移除。"
+              "text": "我用真实模型跑过“拆开工具调用与工具结果”，看过服务商对孤立 tool 消息的真实回应：拒绝时的状态码和原文，或者接受后的回答（离线测试模式的 400 不算）。"
             },
             {
               "id": "item-4",
-              "text": "我跑过压缩对照，能说出哪种策略让探针问题答不出来、原因是什么。"
+              "text": "小扩展：把 char_budget 改成 1200 再跑一次两种布局，在 lesson.context_variant 里确认窗口多装了几轮旁支讨论，工具调用和工具结果是否仍被整组舍弃。"
             },
             {
               "id": "item-5",
-              "text": "我用真实模型跑过“拆开工具调用与工具结果”，看过服务商返回的状态码和原文（离线测试模式的 400 不算）。"
+              "text": "小扩展：把资料来源换成{{lesson:application-state}}资料再跑一次，确认实验报告里的来源和事实跟着变了。"
             }
           ]
         }
@@ -1323,19 +1087,19 @@
   "code_notes": [
     {
       "name": "char_budget",
-      "note": "本课输入：规则压缩记录允许的最大 JSON 字符数；装不下关键证据就直接报错。"
+      "note": "本课输入：截取窗口允许的最大 JSON 字符数；不是 Token 数。"
     },
     {
       "name": "noise_repeats",
-      "note": "本课输入：旁支讨论重复几轮；只让完整布局变长，窗口布局只留最后两条。"
+      "note": "本课输入：旁支讨论重复几轮；只让完整历史变长，截取窗口按预算装。"
     },
     {
       "name": "lookup_lesson",
       "note": "本课的本地工具：按 source_key 返回一条资料的 source 与 fact，每次真实执行。"
     },
     {
-      "name": "lesson.compaction",
-      "note": "压缩对照的事件：先记构造说明，再按策略记字符数和原话是否还在上下文里。"
+      "name": "lesson.context_variant",
+      "note": "截取窗口的事件：预算、保留与舍弃的消息数，以及工具结果是否还在窗口里。"
     },
     {
       "name": "lesson.provider_error",
@@ -1344,10 +1108,6 @@
     {
       "name": "offline_fixture",
       "note": "lesson.provider_error 的 source 取值：这次拒绝由离线夹具模拟，不是服务商返回的。"
-    },
-    {
-      "name": "prompt_tokens",
-      "note": "usage 里的输入 Token 数；服务商没返回 usage 时，不能拿 0 填。"
     }
   ]
 }

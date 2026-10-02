@@ -1,17 +1,22 @@
-# 上下文预算与压缩（`context-budget`）
+# 上下文预算与截取窗口（`context-budget`）
 
-本课有三组实验，都需要真实模型连接，`experiment` 输入决定跑哪一组。
+本课有两组运行，都需要真实模型连接，`experiment` 输入决定跑哪一组。
 
-| 实验 | 本地工具调用 | 模型请求 | 看什么 |
+| 运行 | 本地工具调用 | 模型请求 | 看什么 |
 | --- | --- | --- | --- |
-| `layouts` 三种布局 | 1 次 `lookup_lesson` | 3 次：完整、窗口、规则压缩 | 每种布局保留了哪些信息，回答有没有来源 |
-| `compaction` 压缩策略 | 2 次 `lookup_lesson` | 4 次：1 次摘要 + 3 次探针 | 不压缩、清理旧工具结果、模型摘要之后，最早那次结果还答不答得出来 |
+| `layouts` 两种布局 | 1 次 `lookup_lesson` | 2 次：完整历史、截取窗口 | 窗口按 `char_budget` 截掉了哪些消息，回答有没有来源 |
 | `broken_pair` 拆开配对 | 1 次 `lookup_lesson` | 2 次：按条数截断、按配对截断 | 孤立的 tool 消息发给服务商后得到什么回应 |
 
-`char_budget` 是 JSON 字符数上限，只约束规则压缩；它不是 token 数。响应里有 `usage` 就原样列出，没有就写“未知”。
+`char_budget` 是截取窗口允许的 JSON 字符数上限，不是 Token 数。`fit_window` 先留下 system 和当前问题，再从最新的消息往回一组一组地装，装不下就停；tool 消息和它的 assistant 调用算同一组，整组进出。响应里有 `usage` 就原样列出，没有就写“未报告”。
 
-历史消息由运行器组装：assistant 工具调用和旁支回复不是模型之前生成的，工具结果来自本次真实的 Python 读取。规则压缩只用读取结果拼模板，不调用模型；压缩对照里的摘要由当前模型生成，原文记录在第 1 轮响应里。
+历史消息由运行器组装：assistant 工具调用和旁支回复不是模型之前生成的，工具结果来自本次真实的 Python 读取。资料键用课程 slug（`messages-context`、`application-state`）。
 
-拆开配对实验故意绕过“消息与上下文”一课的本地校验，把孤立的 tool 消息原样发出。服务商拒绝时记为 `lesson.provider_error`（状态码、错误类型、原文、`source`），不重试也不改写。离线测试里的 400 由 `fixtures.py` 模拟，`source` 为 `offline_fixture`；要看服务商真实的回应，需要用真实模型运行。`fixtures.py` 只服务自动化测试。
+拆开配对实验故意绕过“消息与上下文”一课的本地协议检查，把孤立的 tool 消息原样发出。服务商拒绝时记为 `lesson.provider_error`（状态码、错误类型、原文、`source`），不重试也不改写。离线测试里的 400 由 `fixtures.py` 模拟，`source` 为 `offline_fixture`；要看服务商真实的回应，需要用真实模型运行。`fixtures.py` 只服务自动化测试。
+
+规则压缩、清理旧工具结果和模型摘要放在下一课“上下文压缩与探针问题”（`lessons/lesson_context_compaction/`）；它从本课 `runtime.py` 导入字符数、本地字符串检查、组装工具配对与旁支讨论等小工具。
 
 参考与取舍见 `docs/architecture/budget-memory-sources.md`。
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_lessons_budget_memory -v
+```
