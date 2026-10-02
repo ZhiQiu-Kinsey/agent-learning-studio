@@ -31,21 +31,23 @@ export function ExperimentPanel({
       data-testid="experiment-panel"
     >
       {experiments.length > 1 && (
-        <RubberSegment
-          aria-label={t("experiments")}
-          size="sm"
-          items={experiments.map((item) => ({
-            value: item.id,
-            label: item.title,
-          }))}
-          value={selected.id}
-          onChange={onSelect}
-          disabled={studio.running}
-          trackColor="var(--surface-muted)"
-          thumbColor="var(--surface)"
-          textColor="var(--text-muted)"
-          activeTextColor="var(--text)"
-        />
+        <div className="experiment-switch">
+          <RubberSegment
+            aria-label={t("experiments")}
+            size="sm"
+            items={experiments.map((item) => ({
+              value: item.id,
+              label: item.title,
+            }))}
+            value={selected.id}
+            onChange={onSelect}
+            disabled={studio.running}
+            trackColor="var(--surface-muted)"
+            thumbColor="var(--surface)"
+            textColor="var(--text-muted)"
+            activeTextColor="var(--text)"
+          />
+        </div>
       )}
       <h3>{selected.title}</h3>
       {selected.hypothesis && (

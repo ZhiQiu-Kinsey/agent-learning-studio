@@ -23,6 +23,7 @@ export function MicroQuizBlock({ block }: { block: MicroQuiz }) {
       <fieldset disabled={checked}>
         <legend>{question.prompt}</legend>
         <JellyRadio
+          className="quiz-jelly-options"
           ariaLabel={question.prompt}
           ariaDescribedBy={checked ? feedbackId : undefined}
           value={answer}
