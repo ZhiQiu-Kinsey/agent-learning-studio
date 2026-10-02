@@ -68,6 +68,8 @@ npm.cmd --prefix frontend run dev               # Vite 开发服务器，/api �
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v       # 全部 Python 测试（含各课 test_lesson.py）
 .\.venv\Scripts\python.exe scripts/validate_lessons.py             # 实现清单、内容、术语表、用词、录制、译文层
 .\.venv\Scripts\python.exe scripts/term_report.py --lesson <slug> --full   # 一课的术语、代码说明与用词问题
+.\.venv\Scripts\python.exe scripts/realign_notes.py              # 源码移动后按锚点重新对准读码批注（--check 只检查）
+.\.venv\Scripts\python.exe scripts/run_live.py <slug> [练习] --url http://127.0.0.1:8765   # 真实运行练习并打印事件摘要（会产生模型用量）
 .\.venv\Scripts\python.exe scripts/export_curriculum.py            # 改了 catalog.json 后重新生成 docs/course-plan.md（--check 只检查）
 .\.venv\Scripts\python.exe scripts/export_trace_contract.py        # 改了 server/envelope.py 后生成前端镜像（--check 只检查）
 .\.venv\Scripts\python.exe scripts/migrate_content.py --check      # 内容 v2 迁移与格式规范
@@ -127,11 +129,14 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
    - 最小实现用原生 Python 写清机制，不引入框架；确实需要依赖时先评估成熟库。
    - 夹具 `fixtures.py` 提供 `create_completion(exercise_id, inputs)`，只服务测试。
    - 在 `test_lesson.py` 写行为测试：真实工具执行、错误路径、停止条件、输入校验。
-4. 写 `content.json`，规则见下文“教学内容”和“术语与代码名”。
+4. 写 `content.json`，规则见下文“教学内容”和“术语与代码名”，并遵守 `adding-lessons.md` 的“节奏与读码规范”：
+   - 一课只学一件事，本课引入的课程概念不超过 5 个；`predict` 放在第一道微测之前；
+   - 读码批注带锚点，每 8 行至少 1 条、连续无批注不超过 12 行，平台代码用 `folds` 收起，每课最多 3 个读码块；
+   - 提到其他课写 `{{lesson:<slug>}}`，课程文本与源码都不写死课号。
 5. 验证。
    - 依次运行 `validate_lessons.py`、`term_report.py --lesson <slug> --full`、`migrate_content.py --check`、完整 Python 测试。
    - 用到新前端视图时，再跑构建、vitest 和浏览器测试。
-6. 验收通过后，把状态改为 `available`，重新生成课程大纲，在网页里跑一遍真实运行和回放。
+6. 验收通过后，把状态改为 `available`，重新生成课程大纲；每个练习用 `run_live.py` 或网页真实运行一次，核对正文说法，再看一遍回放。
 7. 在 `docs/architecture/reference-study.md` 登记借鉴的参考资料（固定版本、范围、许可证）。
 
 ## 扩展课程
