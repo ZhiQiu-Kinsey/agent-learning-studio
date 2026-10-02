@@ -117,7 +117,9 @@ class LessonIdApiTests(unittest.TestCase):
         lessons = self.client.get("/api/lessons").json()["lessons"]
         self.assertEqual([item["id"] for item in lessons], [spec["id"] for spec in LESSONS])
         first = lessons[0]
-        self.assertEqual((first["number"], first["aliases"]), (1, []))
+        # 显示课号按目录顺序计算：第一门可运行课不一定是第 1 课（前面可能还有规划课）。
+        numbers = index_catalog(load_curriculum()).numbers
+        self.assertEqual((first["number"], first["aliases"]), (numbers[first["id"]], []))
         curriculum = self.client.get("/api/curriculum").json()
         self.assertEqual([item["number"] for item in curriculum["lessons"]],
                          list(range(1, len(curriculum["lessons"]) + 1)))

@@ -100,7 +100,7 @@ class GlossaryApiTests(unittest.TestCase):
         self.assertEqual(len(terms), len(source()["terms"]))
         self.assertEqual(terms["tool-calling"]["display"], "工具调用（Tool Calling）")
         self.assertEqual(terms["tool-calling"]["first_lesson"], "tool-selection")
-        self.assertEqual(terms["tool-calling"]["first_lesson_number"], 1)
+        self.assertEqual(terms["tool-calling"]["first_lesson_number"], CATALOG_INDEX.numbers["tool-selection"])
         self.assertNotIn("first_lesson", terms["sandbox"])
         self.assertEqual(terms["harness"]["kind"], "concept")
         self.assertEqual(terms["tokenizer"]["kind"], "background")

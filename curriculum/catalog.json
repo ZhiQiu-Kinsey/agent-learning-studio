@@ -5,14 +5,25 @@
     {
       "id": "A",
       "title": "原生基础",
-      "description": "从真实 Python 工具调用出发，看懂模型决策、执行结果和失败边界。",
+      "description": "从一次模型请求出发，到真实的 Python 工具调用，看懂模型决策、执行结果和失败边界。",
       "modules": [
         {
+          "id": "A0",
+          "title": "模型调用基础",
+          "description": "一次请求、多轮历史与采样波动：后面每一课都建立在这三件事上。",
+          "lesson_ids": [
+            "chat-request",
+            "multi-turn-history",
+            "sampling-variance"
+          ]
+        },
+        {
           "id": "A1",
-          "title": "工具决策与数据依赖",
-          "description": "观察一次调用循环及多个工具之间的实际数据传递。",
+          "title": "工具调用",
+          "description": "从调用提议到执行回传，再到工具之间的数据依赖。",
           "lesson_ids": [
             "tool-selection",
+            "tool-results",
             "dependent-calls"
           ]
         },
@@ -69,7 +80,8 @@
           "title": "上下文预算与压缩",
           "description": "在有限预算中保留目标、约束、来源和未完成工作。",
           "lesson_ids": [
-            "context-budget"
+            "context-budget",
+            "context-compaction"
           ]
         },
         {
@@ -77,7 +89,8 @@
           "title": "持久记忆",
           "description": "管理记忆的来源、存储、检索、更新与遗忘。",
           "lesson_ids": [
-            "persistent-memory"
+            "persistent-memory",
+            "memory-lifecycle"
           ]
         },
         {
@@ -136,6 +149,8 @@
           "description": "加载、分块和比较关键词、向量及混合检索。",
           "lesson_ids": [
             "document-loading",
+            "keyword-retrieval",
+            "embedding-retrieval",
             "hybrid-retrieval"
           ]
         },
@@ -170,6 +185,7 @@
           "description": "构造可解释的状态图，判断依赖、并发和取消边界。",
           "lesson_ids": [
             "langgraph-state",
+            "streaming-cancel",
             "async-concurrency"
           ]
         },
@@ -275,7 +291,8 @@
           "title": "长时任务",
           "description": "后台执行、定时触发与目标循环的边界。",
           "lesson_ids": [
-            "long-running-tasks"
+            "long-running-tasks",
+            "goal-loops"
           ]
         },
         {
@@ -284,6 +301,7 @@
           "description": "形成可启动、可恢复、可评估的完整应用。",
           "lesson_ids": [
             "local-delivery",
+            "backup-upgrade",
             "capstone-study-assistant"
           ]
         }
@@ -292,43 +310,203 @@
   ],
   "lessons": [
     {
+      "id": "chat-request",
+      "aliases": [],
+      "title": "一次模型请求",
+      "category_id": "A",
+      "module_id": "A0",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [],
+      "summary": "发出一次不带工具的真实模型请求，读懂请求体里的 model 与 messages、响应里的回答、结束原因和用量。",
+      "objectives": [
+        "说出一次模型请求由哪些字段组成",
+        "从响应中找到回答、结束原因与用量",
+        "解释系统提示词和输出长度上限如何改变一次回答"
+      ],
+      "topics": [
+        "请求体：model 与 messages",
+        "消息角色：system、user、assistant",
+        "响应：choices[0].message.content",
+        "结束原因 finish_reason：stop 与 length",
+        "用量 usage 与 Token",
+        "密钥只在后端"
+      ],
+      "experiments": [
+        {
+          "title": "同一问题：有无系统提示词、限制输出长度",
+          "steps": [
+            "先预测去掉系统提示词、把输出上限设得很小时，回答和结束原因会怎样变化。",
+            "分别运行三个练习，展开请求体与响应，标出 messages、content、finish_reason 和 usage。",
+            "比较三次的提示 Token 与回答长度，说明哪些差异来自请求本身。"
+          ],
+          "deliverable": "三次真实请求的字段标注与对照说明。"
+        }
+      ],
+      "acceptance": [
+        "能指出请求体里的 model、messages 和每条消息的角色。",
+        "能从响应读出回答、结束原因和服务商报告的用量；没有报告的用量写“未报告”。",
+        "能解释输出被截断时 finish_reason 为什么是 length。"
+      ],
+      "references": [
+        {
+          "source": "huggingface",
+          "locator": "units/en/unit1/messages-and-special-tokens.mdx"
+        },
+        {
+          "source": "book",
+          "locator": "book/chapter1.md"
+        }
+      ],
+      "estimated_minutes": 20,
+      "difficulty": "入门"
+    },
+    {
+      "id": "multi-turn-history",
+      "aliases": [],
+      "title": "多轮对话：程序重发历史",
+      "category_id": "A",
+      "module_id": "A0",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "chat-request"
+      ],
+      "summary": "连续提问两次，比较带上与不带上一轮消息的请求，看清模型不会自己记住上一轮，多轮对话靠程序重发消息历史。",
+      "objectives": [
+        "解释模型调用之间不保存状态",
+        "按轮把 assistant 回复放回消息历史",
+        "从用量看出历史越长、每次请求越大"
+      ],
+      "topics": [
+        "一次调用不保存状态",
+        "消息历史与 assistant 回复回填",
+        "带历史与不带历史的对照",
+        "提示 Token 随轮次增长",
+        "上下文就是这一次请求里的全部内容"
+      ],
+      "experiments": [
+        {
+          "title": "第二个问题：带历史与不带历史",
+          "steps": [
+            "先预测只发第二个问题时，模型能否回答依赖第一轮的内容。",
+            "运行带历史与不带历史两个练习，对照两次请求的 messages。",
+            "运行三轮对话，记录每轮的提示 Token。"
+          ],
+          "deliverable": "两种请求的消息对照与三轮用量变化。"
+        }
+      ],
+      "acceptance": [
+        "能指出第二次请求里哪几条消息来自上一轮。",
+        "能解释不带历史时模型为什么无法回答。",
+        "能从用量记录说明历史增长带来的成本。"
+      ],
+      "references": [
+        {
+          "source": "huggingface",
+          "locator": "units/en/unit1/messages-and-special-tokens.mdx"
+        },
+        {
+          "source": "book",
+          "locator": "chapter1/context/agent.py"
+        }
+      ],
+      "estimated_minutes": 20,
+      "difficulty": "入门"
+    },
+    {
+      "id": "sampling-variance",
+      "aliases": [],
+      "title": "采样与不确定性",
+      "category_id": "A",
+      "module_id": "A0",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "chat-request"
+      ],
+      "summary": "同一提示连续运行多次，比较低温与高温下回答的差异，理解为什么一次运行不能证明结论、实验要重复。",
+      "objectives": [
+        "解释模型输出来自采样",
+        "比较采样温度对回答波动的影响",
+        "说明对照实验为什么要固定条件并重复运行"
+      ],
+      "topics": [
+        "采样与概率分布",
+        "采样温度 temperature",
+        "温度为 0 也不保证完全相同",
+        "重复运行与不同回答数",
+        "一次运行能证明什么、不能证明什么"
+      ],
+      "experiments": [
+        {
+          "title": "同一提示：低温与高温各运行 5 次",
+          "steps": [
+            "先预测温度为 0 与较高温度时，5 次回答会有几种不同说法。",
+            "分别运行两个练习，每次连续发出 5 个相同请求。",
+            "比较不同回答数与用量，说明后面的对照实验为什么要多跑几次。"
+          ],
+          "deliverable": "两组各 5 次真实回答的对照表。"
+        }
+      ],
+      "acceptance": [
+        "每个回答都来自真实响应，不同回答数由程序统计。",
+        "能说明温度只改变采样方式，不改变请求里的信息。",
+        "能指出一次运行的差异可能只是波动。"
+      ],
+      "references": [
+        {
+          "source": "book",
+          "locator": "book/chapter1.md"
+        },
+        {
+          "source": "huggingface",
+          "locator": "units/en/unit1/what-are-llms.mdx"
+        }
+      ],
+      "estimated_minutes": 25,
+      "difficulty": "入门"
+    },
+    {
       "id": "tool-selection",
       "aliases": [],
-      "title": "工具选择",
+      "title": "工具定义与调用提议",
       "category_id": "A",
       "module_id": "A1",
       "level": "必修",
       "status": "available",
-      "prerequisites": [],
-      "summary": "观察模型如何从工具定义提出调用，再由 Python 执行并回传结果，形成一次完整回答。",
+      "prerequisites": [
+        "chat-request"
+      ],
+      "summary": "把工具定义随请求发给模型，只看模型提出的调用：选哪个工具、参数是什么，本课不执行任何工具。",
       "objectives": [
-        "识别工具名称、描述和参数 Schema",
-        "区分模型提出调用与程序实际执行",
-        "追踪 tool_call_id 如何连接请求、调用和工具结果"
+        "读懂工具定义里的名称、描述和参数 JSON Schema",
+        "从响应找到 tool_calls 与 JSON 字符串形式的参数",
+        "区分“模型提出调用”和“程序执行工具”"
       ],
       "topics": [
-        "百炼兼容接口与模型请求",
         "tools 与 JSON Schema",
-        "tool_calls 和 arguments",
-        "Python 工具登记与分派",
-        "tool_call_id 与结果回传",
-        "真实模型请求与实际工具证据"
+        "工具描述决定何时被选中",
+        "tool_calls 与 arguments",
+        "finish_reason 为 tool_calls",
+        "不需要工具时直接回答",
+        "调用提议不等于执行"
       ],
       "experiments": [
         {
-          "title": "加法、时间与独立任务对照",
+          "title": "加法、查时间与闲聊：模型提出什么",
           "steps": [
-            "先预测加法、查时间和两个独立任务各需什么工具，再分别运行现有练习。",
-            "展开模型请求与响应，标出工具名称、实际参数、工具结果和后续请求。",
-            "比较三条真实运行 trace，解释工具结果如何进入最终回答，确认回放只移动记录游标。"
+            "先预测三个问题各会不会提出调用、提出哪个工具。",
+            "分别运行三个练习，展开响应里的 tool_calls 和 arguments。",
+            "确认事件里没有工具结果：本课只观察提议。"
           ],
-          "deliverable": "三条标注后的运行记录与一次调用循环说明。"
+          "deliverable": "三条调用提议的标注记录。"
         }
       ],
       "acceptance": [
-        "能从 trace 找到工具定义、模型调用实参和实际工具结果。",
-        "能用同一个 tool_call_id 对应调用与结果回传，并指出后续模型请求。",
-        "能解释 Python 执行由程序完成，回放没有再次调用模型或工具。"
+        "能从响应找到工具名和 JSON 字符串参数。",
+        "能解释闲聊问题为什么没有调用提议。",
+        "能指出本课运行里没有任何工具被执行。"
       ],
       "references": [
         {
@@ -339,7 +517,64 @@
           "source": "book",
           "locator": "book/chapter1.md"
         }
-      ]
+      ],
+      "estimated_minutes": 30,
+      "difficulty": "入门"
+    },
+    {
+      "id": "tool-results",
+      "aliases": [],
+      "title": "执行工具与回传结果",
+      "category_id": "A",
+      "module_id": "A1",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "tool-selection",
+        "multi-turn-history"
+      ],
+      "summary": "让 Python 按白名单执行模型提出的调用，把工具结果用同一个调用 id 写回消息历史，再请求一次模型，形成最小 Agent 循环。",
+      "objectives": [
+        "说明运行器如何按名字分派到登记的函数",
+        "用 tool_call_id 把调用和工具结果配对",
+        "追踪工具结果如何进入下一次请求并成为回答依据"
+      ],
+      "topics": [
+        "登记的工具与分派",
+        "role=tool 消息与 tool_call_id",
+        "第二次请求里的工具结果",
+        "最小 Agent 循环的四步",
+        "轮数上限",
+        "回放只读取已有记录"
+      ],
+      "experiments": [
+        {
+          "title": "加法与查时间：完整的一次循环",
+          "steps": [
+            "先预测一次加法会产生几次模型请求、几个工具结果。",
+            "运行练习，按顺序标出调用提议、工具结果和第二次请求。",
+            "在第二次请求的 messages 里找到工具结果，说明回答的依据。"
+          ],
+          "deliverable": "一次完整循环的事件标注与调用 id 连线。"
+        }
+      ],
+      "acceptance": [
+        "能用同一个 tool_call_id 对应调用与工具结果。",
+        "能指出第二次请求比第一次多了哪两条消息。",
+        "能解释工具由 Python 执行，回放没有再次调用模型或工具。"
+      ],
+      "references": [
+        {
+          "source": "microsoft",
+          "locator": "04-tool-use/README.md"
+        },
+        {
+          "source": "book",
+          "locator": "book/chapter1.md"
+        }
+      ],
+      "estimated_minutes": 30,
+      "difficulty": "入门"
     },
     {
       "id": "dependent-calls",
@@ -350,9 +585,9 @@
       "level": "必修",
       "status": "available",
       "prerequisites": [
-        "tool-selection"
+        "tool-results"
       ],
-      "summary": "读取本次真实时间，把上一步的 hour 和 minute 作为下一步加法参数，区分依赖与独立任务。",
+      "summary": "读取本次真实时间，把上一步的 hour 和 minute 作为下一步加法参数；再对照同一轮提出的两个独立调用。",
       "objectives": [
         "识别工具之间的数据依赖",
         "解释消息历史如何携带观察结果",
@@ -364,7 +599,8 @@
         "messages 中的工具结果",
         "下一轮参数构造",
         "顺序执行与数据传递",
-        "有来源的答案与偶然猜对"
+        "有来源的答案与偶然猜对",
+        "同一轮提出多个调用"
       ],
       "experiments": [
         {
@@ -391,7 +627,9 @@
           "source": "book",
           "locator": "chapter1/context/grounding.py"
         }
-      ]
+      ],
+      "estimated_minutes": 30,
+      "difficulty": "入门"
     },
     {
       "id": "fail-safely",
@@ -443,7 +681,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 30,
+      "difficulty": "入门"
     },
     {
       "id": "task-contract",
@@ -501,7 +741,9 @@
           "source": "microsoft",
           "locator": "STUDY_GUIDE.md"
         }
-      ]
+      ],
+      "estimated_minutes": 40,
+      "difficulty": "入门"
     },
     {
       "id": "structured-output",
@@ -553,7 +795,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 40,
+      "difficulty": "入门"
     },
     {
       "id": "prompt-experiments",
@@ -607,7 +851,9 @@
           "source": "microsoft",
           "locator": "04-tool-use/README.md"
         }
-      ]
+      ],
+      "estimated_minutes": 40,
+      "difficulty": "入门"
     },
     {
       "id": "messages-context",
@@ -660,7 +906,9 @@
           "source": "book",
           "locator": "chapter1/context/agent.py"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "application-state",
@@ -709,12 +957,14 @@
           "source": "book",
           "locator": "chapter1/context/agent.py"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "context-budget",
       "aliases": [],
-      "title": "上下文预算与压缩",
+      "title": "上下文预算与截取窗口",
       "category_id": "C",
       "module_id": "C2",
       "level": "必修",
@@ -723,38 +973,35 @@
         "messages-context",
         "application-state"
       ],
-      "summary": "比较完整历史、窗口截取和摘要，在有限上下文中保留目标、证据和未完成步骤。",
+      "summary": "比较完整历史与截取窗口，看清预算量的是什么、截取会丢掉什么，以及截断时为什么必须成组处理工具调用与工具结果。",
       "objectives": [
-        "解释上下文组成及预算取舍",
-        "实施保持协议完整的压缩策略",
-        "用相同问题检查压缩后信息损失"
+        "解释上下文窗口与上下文预算",
+        "实施保持协议完整的截取窗口",
+        "说明拆开工具配对会发生什么"
       ],
       "topics": [
         "上下文窗口与输出预算",
-        "服务商 usage 与本地估算",
-        "窗口截取和摘要",
-        "工具调用整体保留",
-        "目标、约束、来源与待办",
-        "压缩前后事实回归",
-        "清理旧工具结果与模型摘要",
-        "探针问题",
-        "拆开工具配对时服务商的真实回应"
+        "服务商用量与本地字符数",
+        "截取窗口与成组移除",
+        "旁支历史让请求变长",
+        "按条数截断拆开工具配对",
+        "服务商的真实回应"
       ],
       "experiments": [
         {
-          "title": "长会话压缩对照",
+          "title": "完整历史与截取窗口",
           "steps": [
-            "构造包含目标、工具证据、冲突事实和待办的长会话，记录完整上下文基线。",
-            "分别应用窗口截取与摘要，标出丢弃和保留内容，保持消息协议合法。",
-            "用相同问题验证事实、引用和待办，并显示实测、估算或未知用量。"
+            "预测截取窗口会保留哪些消息、丢掉哪些来源。",
+            "运行完整与截取两种布局，比较字符数、来源和回答。",
+            "运行拆开配对练习，记录本地协议检查与服务商的回应。"
           ],
-          "deliverable": "三种上下文策略的请求、信息保留检查与用量对照。"
+          "deliverable": "两种布局的请求对照与拆开配对记录。"
         }
       ],
       "acceptance": [
-        "压缩后目标、关键约束、证据来源和未完成步骤均接受检查。",
-        "工具调用与工具结果成组处理，没有悬空配对。",
-        "用量明确区分服务商实测、本地估算和未知；遗漏信息不被模型猜测补成事实。"
+        "能指出截取窗口丢掉了哪条来源。",
+        "工具调用与工具结果成组移除，没有悬空配对。",
+        "服务商拒绝时如实记录状态码，不重试、不改写。"
       ],
       "references": [
         {
@@ -765,12 +1012,63 @@
           "source": "microsoft",
           "locator": "STUDY_GUIDE.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
+    },
+    {
+      "id": "context-compaction",
+      "aliases": [],
+      "title": "上下文压缩与探针问题",
+      "category_id": "C",
+      "module_id": "C2",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "context-budget"
+      ],
+      "summary": "比较规则压缩、清理旧工具结果和模型摘要三种压缩方式，用只有早先工具结果才能回答的探针问题检查信息是否还在。",
+      "objectives": [
+        "区分规则压缩、清理旧工具结果与模型摘要",
+        "设计探针问题检查压缩后的信息损失",
+        "说明每种压缩的成本与风险"
+      ],
+      "topics": [
+        "规则压缩：目标、约束、来源、事实、待办",
+        "清理旧工具结果",
+        "模型摘要多一次请求",
+        "探针问题",
+        "压缩前后的字符数与用量"
+      ],
+      "experiments": [
+        {
+          "title": "三种压缩，同一个探针问题",
+          "steps": [
+            "预测三种压缩后探针问题还答不答得出。",
+            "运行压缩对照练习，查看每种压缩后的上下文与回答。",
+            "比较原话是否还在上下文里，以及回答是否给出来源。"
+          ],
+          "deliverable": "三种压缩的上下文、探针回答与损失记录。"
+        }
+      ],
+      "acceptance": [
+        "每种压缩后的上下文都通过协议检查。",
+        "探针结论来自本地字符串检查与真实回答，分开记录。",
+        "模型摘要的额外请求计入模型调用数。"
+      ],
+      "references": [
+        {
+          "source": "book",
+          "locator": "chapter2/context-compression/compression_strategies.py"
+        }
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "persistent-memory",
       "aliases": [],
-      "title": "持久记忆与会话恢复",
+      "title": "持久记忆：保存、重开与召回",
       "category_id": "C",
       "module_id": "C3",
       "level": "必修",
@@ -779,37 +1077,35 @@
         "application-state",
         "context-budget"
       ],
-      "summary": "用可控存储保存有来源的记忆与学习进度，管理跨会话检索、冲突、过期和删除。",
+      "summary": "把明确给出的信息写进 SQLite，关闭连接后重新读回，按命名空间召回并放进下一次模型请求。",
       "objectives": [
-        "区分短期上下文、长期记忆与学习进度",
-        "实现用户隔离的保存和恢复",
-        "验证记忆更新、失效与遗忘"
+        "区分上下文、应用状态与持久记忆",
+        "用重开连接证明记忆真的跨运行保存",
+        "把召回的记忆作为数据放进请求"
       ],
       "topics": [
-        "工作记忆、短期和长期记忆",
-        "存储位置与用户隔离",
-        "来源、时间和版本",
-        "读取时机与相关性",
-        "冲突、更新与过期",
-        "删除与恢复验证",
-        "persistent 与 current_task 范围",
-        "召回内容只当数据"
+        "外部存储而不是模型参数",
+        "只保存明确给出的值与来源",
+        "关闭连接后重新读取",
+        "命名空间分区",
+        "召回并放进请求",
+        "只读恢复上一次的记忆"
       ],
       "experiments": [
         {
-          "title": "重启后恢复学习目标",
+          "title": "保存、重开连接与召回",
           "steps": [
-            "用成熟本地存储保存明确同意记住的学习目标与进度，并记录来源和用户标识。",
-            "刷新或重启后仅检索相关记忆，再用第二个用户检查隔离。",
-            "更新一条冲突记忆、删除一条过期内容，重启后再次核对。"
+            "写入一条学习偏好，关闭连接后用新连接读回。",
+            "只读恢复上次保存的记忆，确认没有写入。",
+            "把召回的记忆放进一次真实模型请求，看回答是否用上它。"
           ],
-          "deliverable": "记忆结构、恢复记录与隔离/更新/删除检查结果。"
+          "deliverable": "保存与重开记录、召回后的真实请求。"
         }
       ],
       "acceptance": [
-        "能说明数据存放位置、读写时机和重启后恢复的范围。",
-        "第二个用户无法读到首个用户的记忆，删除内容不会再次恢复。",
-        "持久化被解释为外部存储和检索，不当作模型参数训练。"
+        "重开连接后读回的值与写入一致。",
+        "只读恢复不产生写入。",
+        "召回内容以数据块进入请求，回答依据可在请求里找到。"
       ],
       "references": [
         {
@@ -820,7 +1116,63 @@
           "source": "book",
           "locator": "book/chapter3.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
+    },
+    {
+      "id": "memory-lifecycle",
+      "aliases": [],
+      "title": "记忆的更新、过期与召回范围",
+      "category_id": "C",
+      "module_id": "C3",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "persistent-memory"
+      ],
+      "summary": "用版本号拒绝过时写入，让记录过期并删除，再按范围过滤召回：上一任务的草稿不能混进本任务，召回的“指令”只当数据。",
+      "objectives": [
+        "用乐观并发控制拒绝过时写入",
+        "区分过期与删除",
+        "按范围过滤召回，并把召回内容当数据处理"
+      ],
+      "topics": [
+        "版本号与过时写入",
+        "过期是读取规则，删除是存储操作",
+        "persistent 与 current_task",
+        "任务结束清理",
+        "召回内容放进数据块",
+        "疑似指令的标记"
+      ],
+      "experiments": [
+        {
+          "title": "版本冲突、过期删除与范围过滤",
+          "steps": [
+            "用过时版本写入，确认被拒且不覆盖现值。",
+            "让记录过期再删除，重开连接核对。",
+            "按范围召回，检查上一任务的草稿和疑似指令如何处理。"
+          ],
+          "deliverable": "冲突、遗忘与范围过滤的记录。"
+        }
+      ],
+      "acceptance": [
+        "过时写入被拒绝，现值不变。",
+        "删除后重开连接读不回。",
+        "上一任务的草稿不进入本任务的召回结果。"
+      ],
+      "references": [
+        {
+          "source": "microsoft",
+          "locator": "13-agent-memory/README.md"
+        },
+        {
+          "source": "book",
+          "locator": "book/chapter3.md"
+        }
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "prompt-caching",
@@ -868,7 +1220,9 @@
           "source": "book",
           "locator": "book/chapter2.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "skills-disclosure",
@@ -919,7 +1273,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "text-actions",
@@ -971,7 +1327,9 @@
           "source": "book",
           "locator": "book/chapter2.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "todo-planning",
@@ -1023,7 +1381,9 @@
           "source": "book",
           "locator": "book/chapter2.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "plan-and-replan",
@@ -1070,7 +1430,9 @@
           "source": "microsoft",
           "locator": "07-planning-design/README.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "reflection-revision",
@@ -1117,7 +1479,9 @@
           "source": "microsoft",
           "locator": "09-metacognition/README.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "workflow-patterns",
@@ -1164,7 +1528,9 @@
           "source": "book",
           "locator": "book/chapter1.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "orchestrator-evaluator",
@@ -1211,7 +1577,9 @@
           "source": "book",
           "locator": "book/chapter1.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "document-loading",
@@ -1264,12 +1632,14 @@
           "source": "book",
           "locator": "book/chapter3.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
-      "id": "hybrid-retrieval",
+      "id": "keyword-retrieval",
       "aliases": [],
-      "title": "关键词、向量与混合检索",
+      "title": "关键词检索与 BM25",
       "category_id": "D",
       "module_id": "D1",
       "level": "必修",
@@ -1277,19 +1647,116 @@
       "prerequisites": [
         "document-loading"
       ],
-      "summary": "在同一资料和查询集上比较关键词、语义与混合检索，分别观察命中、排序、过滤与存储更新。",
+      "summary": "在本地资料上用关键词与 BM25 检索，看清命中、排序与漏检，为后面的向量检索留一条可比较的基线。",
+      "objectives": [
+        "解释词频与逆文档频率",
+        "实现 BM25 检索并读懂得分",
+        "用查询集记录命中与漏检"
+      ],
+      "topics": [
+        "分词与停用词",
+        "BM25 得分",
+        "top-k 与排序",
+        "同义词导致的漏检",
+        "检索基线"
+      ],
+      "experiments": [
+        {
+          "title": "同一查询集上的关键词检索",
+          "steps": [
+            "为一组查询标出应命中的资料块。",
+            "运行 BM25 检索，记录 top-k 与得分。",
+            "找出因换了说法而漏检的查询。"
+          ],
+          "deliverable": "查询集、命中表与漏检样例。"
+        }
+      ],
+      "acceptance": [
+        "每条命中都能对应到资料块与得分。",
+        "漏检样例给出原因。",
+        "查询集与资料版本被记录，后续可复跑。"
+      ],
+      "references": [
+        {
+          "source": "huggingface",
+          "locator": "units/en/unit2/llama-index/components.mdx"
+        }
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
+    },
+    {
+      "id": "embedding-retrieval",
+      "aliases": [],
+      "title": "Embedding 与向量检索",
+      "category_id": "D",
+      "module_id": "D1",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "keyword-retrieval"
+      ],
+      "summary": "把资料块转成 Embedding，用余弦相似度检索，和关键词基线在同一查询集上比较命中与漏检。",
+      "objectives": [
+        "解释 Embedding 与语义相似度",
+        "建立并持久化向量索引",
+        "与关键词检索做同一查询集对照"
+      ],
+      "topics": [
+        "Embedding 是一组数字",
+        "余弦相似度",
+        "向量索引与持久化",
+        "元数据过滤",
+        "与 BM25 的对照"
+      ],
+      "experiments": [
+        {
+          "title": "向量检索与关键词基线对照",
+          "steps": [
+            "为资料块生成 Embedding 并保存索引。",
+            "在同一查询集上运行向量检索。",
+            "并列比较两种检索的命中与漏检。"
+          ],
+          "deliverable": "两种检索的命中对照表。"
+        }
+      ],
+      "acceptance": [
+        "Embedding 的模型与维度被记录。",
+        "两种检索使用同一查询集。",
+        "索引更新后旧结果不会被误用。"
+      ],
+      "references": [
+        {
+          "source": "microsoft",
+          "locator": "05-agentic-rag/README.md"
+        }
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
+    },
+    {
+      "id": "hybrid-retrieval",
+      "aliases": [],
+      "title": "混合检索与重排",
+      "category_id": "D",
+      "module_id": "D1",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "embedding-retrieval"
+      ],
+      "summary": "把关键词与向量检索的结果合并、重排，在同一查询集上比较三种检索，并处理索引更新与删除。",
       "objectives": [
         "建立可检查的关键词与向量检索",
         "用固定查询比较各策略召回和排序",
         "维护索引、元数据过滤和知识更新"
       ],
       "topics": [
-        "关键词与 BM25 基线",
-        "Embedding 与语义相似度",
-        "向量索引与持久化",
+        "结果合并（RRF）",
+        "重排",
         "元数据过滤与 top-k",
-        "混合检索与重排",
-        "索引版本、更新和删除"
+        "索引版本、更新和删除",
+        "三种检索的同一查询集对照"
       ],
       "experiments": [
         {
@@ -1320,7 +1787,9 @@
           "source": "book",
           "locator": "book/chapter3.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "rag-citations",
@@ -1377,7 +1846,9 @@
           "source": "book",
           "locator": "book/chapter3.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "agentic-rag",
@@ -1434,7 +1905,9 @@
           "source": "book",
           "locator": "book/chapter3.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "langchain-vs-native",
@@ -1487,7 +1960,9 @@
           "source": "book",
           "locator": "book/chapter1.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "langchain-tools",
@@ -1544,7 +2019,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "langgraph-state",
@@ -1601,22 +2078,73 @@
           "source": "book",
           "locator": "book/chapter1.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
-      "id": "async-concurrency",
+      "id": "streaming-cancel",
       "aliases": [],
-      "title": "异步、并发与取消",
+      "title": "流式输出与取消",
       "category_id": "E",
       "module_id": "E2",
-      "level": "进阶",
+      "level": "必修",
       "status": "planned",
       "prerequisites": [
         "dependent-calls",
         "application-state",
         "langgraph-state"
       ],
-      "summary": "先判断数据依赖再并行独立任务，区分取消请求、客户端断开和后端实际结束。",
+      "summary": "逐块接收模型输出，区分用户点停止、客户端断开和后端真正结束，记录取消发生时已经收到了什么。",
+      "objectives": [
+        "读懂流式响应的分块",
+        "实现可取消的流式请求",
+        "区分取消请求、断连与运行终态"
+      ],
+      "topics": [
+        "流式分块与首字延迟",
+        "拼接完整回答",
+        "取消请求",
+        "客户端断开与后端运行",
+        "部分结果的记录"
+      ],
+      "experiments": [
+        {
+          "title": "流式输出中途取消",
+          "steps": [
+            "运行一次完整的流式输出，记录首字延迟与分块。",
+            "在输出中途取消，记录已收到的部分。",
+            "断开客户端后确认后端的终态。"
+          ],
+          "deliverable": "完整、取消、断连三条运行记录。"
+        }
+      ],
+      "acceptance": [
+        "首字延迟来自真实计时。",
+        "取消后不再记录新的分块。",
+        "运行终态与前端显示一致。"
+      ],
+      "references": [
+        {
+          "source": "book",
+          "locator": "book/chapter2.md"
+        }
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
+    },
+    {
+      "id": "async-concurrency",
+      "aliases": [],
+      "title": "并行、超时与并发上限",
+      "category_id": "E",
+      "module_id": "E2",
+      "level": "进阶",
+      "status": "planned",
+      "prerequisites": [
+        "streaming-cancel"
+      ],
+      "summary": "先判断数据依赖再并行独立任务，设置并发上限与超时，记录部分结果。",
       "objectives": [
         "确定哪些工具调用可并发",
         "处理超时、部分失败与取消传播",
@@ -1627,8 +2155,7 @@
         "独立性和数据依赖",
         "并发上限与资源预算",
         "超时及部分结果",
-        "取消请求与执行终态",
-        "前端断流和后端运行"
+        "取消请求与执行终态"
       ],
       "experiments": [
         {
@@ -1651,7 +2178,9 @@
           "source": "book",
           "locator": "book/chapter6.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "hooks-approval",
@@ -1702,7 +2231,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "human-in-the-loop",
@@ -1727,7 +2258,7 @@
         "暂停和人工输入",
         "状态检查与修改",
         "进程重启和恢复位置",
-        "副作用与幂等标识",
+        "副作用前的确认（幂等细节见{{lesson:reliable-tools}}）",
         "恢复权限及错误路径"
       ],
       "experiments": [
@@ -1759,7 +2290,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "bash-coding-agent",
@@ -1806,7 +2339,9 @@
           "source": "book",
           "locator": "book/chapter5.md"
         }
-      ]
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
     },
     {
       "id": "file-edit-evidence",
@@ -1853,7 +2388,9 @@
           "source": "book",
           "locator": "book/chapter5.md"
         }
-      ]
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
     },
     {
       "id": "evaluation-sets",
@@ -1909,7 +2446,9 @@
           "source": "huggingface",
           "locator": "units/en/unit4/hands-on.mdx"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "observability-cost",
@@ -1966,7 +2505,9 @@
           "source": "book",
           "locator": "chapter7/agent-cost-analysis/tracer.py"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "reliable-tools",
@@ -2024,7 +2565,9 @@
           "source": "microsoft",
           "locator": "04-tool-use/README.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "prompt-injection",
@@ -2078,7 +2621,9 @@
           "source": "book",
           "locator": "book/chapter4.md"
         }
-      ]
+      ],
+      "estimated_minutes": 50,
+      "difficulty": "进阶"
     },
     {
       "id": "mcp-basics",
@@ -2132,7 +2677,9 @@
           "source": "book",
           "locator": "chapter4/DOCKER_DEPLOYMENT.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "mcp-lifecycle",
@@ -2189,7 +2736,9 @@
           "source": "book",
           "locator": "chapter4/DOCKER_DEPLOYMENT.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "a2a-delegation",
@@ -2236,7 +2785,9 @@
           "source": "microsoft",
           "locator": "11-agentic-protocols/README.md"
         }
-      ]
+      ],
+      "estimated_minutes": 45,
+      "difficulty": "进阶"
     },
     {
       "id": "multi-agent-patterns",
@@ -2294,7 +2845,9 @@
           "source": "microsoft",
           "locator": "STUDY_GUIDE.md"
         }
-      ]
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
     },
     {
       "id": "delegation-budget",
@@ -2344,12 +2897,14 @@
           "source": "book",
           "locator": "book/chapter10.md"
         }
-      ]
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
     },
     {
       "id": "long-running-tasks",
       "aliases": [],
-      "title": "长时任务：后台、定时与目标循环",
+      "title": "后台与定时任务",
       "category_id": "H",
       "module_id": "H2",
       "level": "必修",
@@ -2357,7 +2912,7 @@
       "prerequisites": [
         "delegation-budget"
       ],
-      "summary": "把耗时任务放到后台，在之后的轮次中注入结果，并用目标评估决定继续、完成或放弃。",
+      "summary": "把耗时任务放到后台，在之后的轮次中注入结果，并用定时触发重复执行。",
       "objectives": [
         "管理后台任务的起止与退出码",
         "在合适的轮次注入后台结果",
@@ -2365,10 +2920,10 @@
       ],
       "topics": [
         "后台任务",
-        "定时触发",
         "结果注入时机",
-        "目标评估",
-        "预算与放弃条件"
+        "定时触发",
+        "后台任务的取消与终态",
+        "注入结果的来源标注"
       ],
       "experiments": [
         {
@@ -2391,12 +2946,63 @@
           "source": "book",
           "locator": "book/chapter6.md"
         }
-      ]
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
+    },
+    {
+      "id": "goal-loops",
+      "aliases": [],
+      "title": "目标循环与放弃条件",
+      "category_id": "H",
+      "module_id": "H2",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "long-running-tasks"
+      ],
+      "summary": "用独立的目标评估决定继续、完成或放弃，给循环设预算与放弃条件，并记录每一轮的评估依据。",
+      "objectives": [
+        "实现独立于执行者的目标评估",
+        "设置预算与放弃条件",
+        "记录每轮继续或停止的依据"
+      ],
+      "topics": [
+        "目标评估",
+        "继续、完成与放弃",
+        "预算与超时",
+        "放弃条件",
+        "评估记录"
+      ],
+      "experiments": [
+        {
+          "title": "有上限的目标循环",
+          "steps": [
+            "定义可检验的目标与放弃条件。",
+            "运行目标循环，记录每轮评估。",
+            "构造无法完成的目标，确认按条件放弃。"
+          ],
+          "deliverable": "目标循环的逐轮评估记录。"
+        }
+      ],
+      "acceptance": [
+        "每轮继续或停止都有评估依据。",
+        "达到预算时停止并如实报告。",
+        "执行者的“已完成”不替代评估结论。"
+      ],
+      "references": [
+        {
+          "source": "book",
+          "locator": "book/chapter2.md"
+        }
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
     },
     {
       "id": "local-delivery",
       "aliases": [],
-      "title": "本地交付、部署与恢复",
+      "title": "本地交付：启动、配置与凭据",
       "category_id": "H",
       "module_id": "H3",
       "level": "必修",
@@ -2407,7 +3013,7 @@
         "reliable-tools",
         "mcp-basics"
       ],
-      "summary": "把开发中的学习工具整理成可启动、可配置、可观测和可恢复的本地应用，验证实际服务可用性。",
+      "summary": "把学习工具整理成可启动、可配置、可观测的本地应用，验证实际服务可用。",
       "objectives": [
         "分离配置、凭据和运行数据",
         "建立真实模型及工具可用性检查",
@@ -2417,9 +3023,7 @@
         "运行环境与依赖锁定",
         "服务商配置和凭据管理",
         "启动、停止及服务探测",
-        "数据备份和会话恢复",
-        "错误日志与敏感数据处理",
-        "版本升级和回退"
+        "错误日志与敏感数据处理"
       ],
       "experiments": [
         {
@@ -2450,7 +3054,58 @@
           "source": "microsoft",
           "locator": "STUDY_GUIDE.md"
         }
-      ]
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
+    },
+    {
+      "id": "backup-upgrade",
+      "aliases": [],
+      "title": "备份、恢复与升级回退",
+      "category_id": "H",
+      "module_id": "H3",
+      "level": "必修",
+      "status": "planned",
+      "prerequisites": [
+        "local-delivery"
+      ],
+      "summary": "备份运行记录与记忆数据，验证恢复后可用；升级失败时回退到上一版本。",
+      "objectives": [
+        "制定备份范围与频率",
+        "验证恢复后的数据可用",
+        "演练升级失败后的回退"
+      ],
+      "topics": [
+        "备份范围",
+        "恢复验证",
+        "数据迁移",
+        "升级与回退",
+        "回退后的数据一致性"
+      ],
+      "experiments": [
+        {
+          "title": "备份、恢复与回退演练",
+          "steps": [
+            "备份运行存储与记忆库。",
+            "在新目录恢复并运行验收。",
+            "模拟升级失败并回退。"
+          ],
+          "deliverable": "备份清单、恢复验收与回退记录。"
+        }
+      ],
+      "acceptance": [
+        "恢复后运行记录可读、记忆可召回。",
+        "回退后数据与回退前一致。",
+        "备份文件不含密钥。"
+      ],
+      "references": [
+        {
+          "source": "book",
+          "locator": "book/chapter2.md"
+        }
+      ],
+      "estimated_minutes": 60,
+      "difficulty": "挑战"
     },
     {
       "id": "capstone-study-assistant",
@@ -2514,7 +3169,9 @@
           "source": "book",
           "locator": "book/chapter7.md"
         }
-      ]
+      ],
+      "estimated_minutes": 180,
+      "difficulty": "挑战"
     }
   ],
   "sources": [
