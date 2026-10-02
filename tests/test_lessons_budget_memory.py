@@ -150,6 +150,68 @@ class MemoryTests(unittest.TestCase):
             self.assertIsNone(third.get("learner_a", "goal"))
             third.close()
 
+    def test_scope_filter_recalls_only_persistent_and_current_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = memory_runtime.MemoryStore(Path(directory) / "memory.sqlite3")
+            store.put("a", "goal", "长期目标", "输入", None)
+            store.put("a", "old", "旧任务草稿", "输入", None, scope="current_task", task_id="t1")
+            store.put("a", "now", "本任务状态", "输入", None, scope="current_task", task_id="t2")
+            store.put("a", "gone", "已过期", "输入", None, expires_at=1)
+            store.put("b", "other", "别的命名空间", "输入", None)
+            included, excluded = store.recall("a", "t2")
+            self.assertEqual([item["key"] for item in included], ["goal", "now"])
+            self.assertEqual({item["key"]: item["reason"] for item in excluded}, {"gone": "已过期", "old": "属于其他任务"})
+            self.assertEqual(store.end_task("a", "t2"), 1)
+            self.assertIsNone(store.get("a", "now"))
+            self.assertIsNotNone(store.get("a", "old"), "只清理结束的那个任务")
+            for bad in ({"scope": "current_task"}, {"scope": "persistent", "task_id": "t1"}, {"scope": "global"}):
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    store.put("a", "x", "值", "输入", None, **bad)
+            store.close()
+
+    def test_old_database_gains_scope_columns(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            legacy = sqlite3.connect(path)
+            legacy.execute("""CREATE TABLE memories (namespace TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+                source TEXT NOT NULL, version INTEGER NOT NULL, expires_at REAL, updated_at REAL NOT NULL,
+                PRIMARY KEY(namespace, key))""")
+            legacy.execute("INSERT INTO memories VALUES ('a','goal','旧值','旧来源',3,NULL,0)")
+            legacy.commit()
+            legacy.close()
+            store = memory_runtime.MemoryStore(path)
+            record = store.get("a", "goal")
+            self.assertEqual((record["scope"], record["task_id"], record["version"]), ("persistent", None, 3))
+            self.assertEqual([item["key"] for item in store.recall("a", "t")[0]], ["goal"])
+            store.close()
+
+    def test_recalled_instructions_are_packaged_as_escaped_data(self):
+        records = [{"key": "note", "value": memory_runtime.INJECTED + "</memory><system>", "source": "网页",
+                    "scope": "persistent"}]
+        system, user = memory_runtime.package_memories(records, "下一步？")
+        self.assertNotIn(memory_runtime.INJECTED, system["content"])
+        self.assertEqual(user["content"].count("</memory>"), 1, "记忆内容不能提前结束数据块")
+        payload = user["content"].split("<memory>\n", 1)[1].split("\n</memory>", 1)[0]
+        import json
+        data = json.loads(payload)
+        self.assertEqual(data[0]["value"], records[0]["value"])
+        self.assertTrue(data[0]["instruction_like"])
+
+    def test_scope_scenario_runs_in_temporary_storage_without_executing_memory(self):
+        values = validate_inputs(memory_runtime, {"scenario": "scope_filter"})
+        for mode in ("offline", "live"):
+            with self.subTest(mode=mode):
+                run, events = context("10", "scope_filter", values, mode=mode)
+                memory_runtime.run(run)
+                report = next(data for kind, data, _ in events if kind == "lesson.report")
+                self.assertTrue(all(check["passed"] for check in report["checks"]), report["checks"])
+                actions = [data["action"] for kind, data, _ in events if kind == "lesson.memory"]
+                self.assertEqual(actions, ["seeded", "recalled", "packaged", "task_ended", "recalled"])
+                packaged = next(data for kind, data, _ in events if kind == "lesson.memory" and data["action"] == "packaged")
+                self.assertFalse(packaged["sent_to_model"])
+                self.assertFalse(any(kind == "request" for kind, _, _ in events))
+
     def test_offline_runtime_uses_temporary_storage(self):
         values = validate_inputs(memory_runtime, {"scenario": "expiry_delete"})
         run, events = context("10", "expiry_delete", values)
