@@ -114,7 +114,7 @@
 
 1. **新增 0 单元“模型调用基础”**，放在“原生基础”最前面的模块 A0，共 3 课：一次模型请求、多轮对话靠程序重发历史、采样与不确定性。全部用真实运行，每课新概念不超过 4 个。
 2. **拆分超载课**：
-   - 第 1 课 → `tool-selection`（工具定义与调用提议，只看提议、不执行）+ `tool-results`（执行工具与回传结果）；“同一轮多个调用”移到 `dependent-calls`。
+   - 第 1 课 → ★`tool-proposals`（工具定义与调用提议，只看提议、不执行）+ `tool-selection`（执行工具与回传结果；slug 不变，现有实现与测试都依赖它）；“同一轮多个调用”移到 `dependent-calls`。
    - 第 9 课 → `context-budget`（预算、截取窗口、拆开配对）+ `context-compaction`（规则压缩、清理旧结果、模型摘要与探针）。
    - 第 10 课 → `persistent-memory`（保存、重开、命名空间与召回）+ `memory-lifecycle`（版本冲突、过期删除、召回范围、召回内容只当数据）。
    - 规划课中的捆绑主题一并拆开（见 8.5）。
@@ -160,7 +160,7 @@
 | C3 持久记忆 | `persistent-memory` · ★`memory-lifecycle` |
 | C4 缓存与技能 | `prompt-caching`（实现）· `skills-disclosure`（实现） |
 
-“原生基础”调整后：A0 模型调用基础（★`chat-request` · ★`multi-turn-history` · ★`sampling-variance`）→ A1 工具调用（`tool-selection` · ★`tool-results` · `dependent-calls`）→ A2 错误与执行边界（`fail-safely`）。
+“原生基础”调整后：A0 模型调用基础（★`chat-request` · ★`multi-turn-history` · ★`sampling-variance`）→ A1 工具调用（★`tool-proposals` · `tool-selection` · `dependent-calls`）→ A2 错误与执行边界（`fail-safely`）。
 
 规划课拆分：
 
@@ -190,3 +190,8 @@ catalog 每课增加：`estimated_minutes`（预计时长）、`difficulty`（�
 | 3a | 批注锚点与校验；第 5 课错位批注重新对准；`folds` 字段；批注密度门槛与只减不增的基线（30 块） | `d994598` | 后端全部测试、vitest、tsc |
 | 3b | 删除全部数字别名，别名只接受旧 slug；测试与 e2e 改用 slug | `2c14178` | 后端全部测试 |
 | 3c | `{{lesson:<slug>}}` 课程引用，禁止写死课号；principles 改正；第 5 课可信事实改用 slug；`scripts/realign_notes.py` | `1df57a3` | 后端全部测试、vitest、i18n |
+| 4a | 原生循环只剩四步（`run_agent(complete=, execute=)`），事件、计时、停止检查移到 `RunContext.complete` 与新增的 `execute_proposal`；`execution.py` 文档改中文；源码标角色，“本课新增”只比较课程代码 | `6a33f8c` | 后端全部测试；真实运行工具课一次（2 次请求、1 次工具结果，completed） |
+| 4b | 读码页默认只显示标注范围，范围外与 folds 收起可展开；默认打开有批注的文件；平台、测试夹具标签 | `47e2005` | vitest、读码与工作台 Playwright 18 项 |
+| 5a | 课程表骨架：A0 三课、`tool-proposals`、`context-compaction`、`memory-lifecycle`、规划课拆分（检索三课、流式与取消、目标循环、备份与回退），每课预计时长与难度 | `d97934c`、`c115ca9` | 后端全部测试 |
+| 5b | 节奏与读码规范写进 `adding-lessons.md`；`scripts/run_live.py` | `d49eae3`、`f3e4b9a` | — |
+| 5c | 课程表细纲：难度、预计时长、是否调用模型、小节、本课术语（`server/outline.py`），课程列表与路线图显示；规划课 29 课补计划小节；路线图最小缩放 0.1 | `b0b624e`、`2c9da76` | 后端全部测试、vitest、Playwright 全量 56 项 |
