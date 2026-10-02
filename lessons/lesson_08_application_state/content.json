@@ -509,15 +509,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "assistant 文本自称完成"
+                  "text": "assistant 文本自称完成",
+                  "feedback": "assistant 的文字只是输出，不是验收证明；状态转换检查的是证据和结果产物。"
                 },
                 {
                   "id": "b",
-                  "text": "程序已取得来源证据，并经过合法转换"
+                  "text": "程序已取得来源证据，并经过合法转换",
+                  "feedback": "对。只有取得来源证据并生成实际 result 之后，状态转换才允许进入 completed。"
                 },
                 {
                   "id": "c",
-                  "text": "消息数超过三条"
+                  "text": "消息数超过三条",
+                  "feedback": "消息条数与任务是否完成无关；本课的状态更新也不会改变消息列表。"
                 }
               ],
               "correct": "b",
@@ -529,15 +532,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "ready → completed"
+                  "text": "ready → completed",
+                  "feedback": "跳过了 running：执行必须先开始；而且资料不存在时，不可能凭证据完成任务。"
                 },
                 {
                   "id": "b",
-                  "text": "ready → running → waiting → failed"
+                  "text": "ready → running → waiting → failed",
+                  "feedback": "对。先开始执行，缺资料时进入 waiting，确认本次无法继续后进入 failed，并记录原因。"
                 },
                 {
                   "id": "c",
-                  "text": "failed → running → completed"
+                  "text": "failed → running → completed",
+                  "feedback": "failed 是终态，之后不允许再转回 running。"
                 }
               ],
               "correct": "b",
@@ -549,15 +555,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "自动追加 role=tool"
+                  "text": "自动追加 role=tool",
+                  "feedback": "状态更新不会伪装成 tool 消息；本课报告专门检查了“消息与状态分开”。"
                 },
                 {
                   "id": "b",
-                  "text": "仍是单条用户目标，除非程序显式改写"
+                  "text": "仍是单条用户目标，除非程序显式改写",
+                  "feedback": "对。应用状态和模型消息是两个容器；除非程序显式改写 messages，里面仍只有最初的用户目标。"
                 },
                 {
                   "id": "c",
-                  "text": "自动清空"
+                  "text": "自动清空",
+                  "feedback": "状态变化不会清空消息；两者之间没有自动同步。"
                 }
               ],
               "correct": "b",
@@ -569,19 +578,52 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "有 evidence 就必须成功"
+                  "text": "有 evidence 就必须成功",
+                  "feedback": "evidence 只是过程中的事实，结论还没有生成，目标并未完成。"
                 },
                 {
                   "id": "b",
-                  "text": "保留 evidence，并以预算原因失败"
+                  "text": "保留 evidence，并以预算原因失败",
+                  "feedback": "对。保留已取得的证据，以预算耗尽作为终止原因记为 failed，事实与原因都可追溯。"
                 },
                 {
                   "id": "c",
-                  "text": "删除 evidence 后假装完成"
+                  "text": "删除 evidence 后假装完成",
+                  "feedback": "删除证据会丢掉真实发生的事实，再假装完成就是伪造结果。"
                 }
               ],
               "correct": "b",
               "explanation": "证据存在不等于目标已完成；预算终止应保留已有事实与原因。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "找出应用状态里已经记录了来源证据（evidence 不为空）的一步。",
+          "target": {
+            "event": "lesson.state",
+            "path": "data.state.evidence[0]"
+          },
+          "explanation": "这是一条 lesson.state 事件：state.evidence 里有来源 source 和摘录 excerpt。证据写进的是应用状态，messages 并没有因此增加；在“资料缺失”练习里 evidence 始终为空，状态最终进入 failed。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我能顺着 lesson.state 事件说出这次运行的状态转换顺序。"
+            },
+            {
+              "id": "item-2",
+              "text": "我看到状态里的 evidence 更新了，而消息数没有随之改变。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能解释终态为什么必须写明 terminal_reason。"
             }
           ]
         }

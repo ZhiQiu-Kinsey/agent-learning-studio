@@ -19,5 +19,6 @@ Motion is decided once by `src/motion/` (`MotionProvider`): the OS preference an
 | learning-experience.css | Interactive lesson hero, concept cards, walkthrough and reading layout |
 | curriculum-experience.css | Curriculum hero, domain navigation and animated overview |
 | onboarding.css | Four prerequisite chapters, multi-level navigation and self-checks |
+| self-check.css | Lesson 自检 (confidence, option feedback, trace hunt, checkpoints) and 回顾; imported by those scenes |
 
 Tailwind and shadcn foundations remain in `../ui-foundation.css`.

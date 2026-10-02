@@ -684,15 +684,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "可以，两者单位相同"
+                  "text": "可以，两者单位相同",
+                  "feedback": "字符和 token 是不同单位，换算比例随语言、内容和分词器变化，不能直接当作 token。"
                 },
                 {
                   "id": "b",
-                  "text": "不可以，token 要看供应商用量或准确 tokenizer"
+                  "text": "不可以，token 要看供应商用量或准确 tokenizer",
+                  "feedback": "对。字符数是本地可复现的大小指标；token 要看服务商返回的 usage 或对应模型的分词器。"
                 },
                 {
                   "id": "c",
-                  "text": "只要除以四就是精确 token"
+                  "text": "只要除以四就是精确 token",
+                  "feedback": "“除以四”只是英文文本的粗略经验，对中文和 JSON 都不准，更不是精确值。"
                 }
               ],
               "correct": "b",
@@ -704,15 +707,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "只留 tool 回执"
+                  "text": "只留 tool 回执",
+                  "feedback": "只留 tool 回执会变成孤立消息，前面没有对应的 assistant 调用，协议非法。"
                 },
                 {
                   "id": "b",
-                  "text": "调用与回执一起移除"
+                  "text": "调用与回执一起移除",
+                  "feedback": "对。调用与回执要么成组保留，要么成组移除；本课三种布局都通过了这项协议检查。"
                 },
                 {
                   "id": "c",
-                  "text": "只留 assistant 调用"
+                  "text": "只留 assistant 调用",
+                  "feedback": "只留 assistant 调用，后面缺少匹配的回执，同样是不合法的工具历史。"
                 }
               ],
               "correct": "b",
@@ -724,15 +730,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "旁支讨论的每个寒暄"
+                  "text": "旁支讨论的每个寒暄",
+                  "feedback": "旁支寒暄与当前问题无关，正是压缩时可以舍弃的部分。"
                 },
                 {
                   "id": "b",
-                  "text": "目标、约束、事实、来源与待办"
+                  "text": "目标、约束、事实、来源与待办",
+                  "feedback": "对。下一步决策需要目标、约束、事实及其来源和待办；本课的压缩记录保留的就是这些字段。"
                 },
                 {
                   "id": "c",
-                  "text": "只有最终问题"
+                  "text": "只有最终问题",
+                  "feedback": "只留问题会丢掉证据和来源，模型只能回答缺少来源，和窗口裁剪的结果一样。"
                 }
               ],
               "correct": "b",
@@ -744,19 +753,52 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "prompt_tokens=0"
+                  "text": "prompt_tokens=0",
+                  "feedback": "写成 0 会把“没有数据”伪装成“用量为零”，后续统计都会出错。"
                 },
                 {
                   "id": "b",
-                  "text": "未知，并保留本地字符数为另一指标"
+                  "text": "未知，并保留本地字符数为另一指标",
+                  "feedback": "对。没有实测值就标为未知，本地字符数作为另一种指标单独保留并注明。"
                 },
                 {
                   "id": "c",
-                  "text": "从回答长度推断精确账单"
+                  "text": "从回答长度推断精确账单",
+                  "feedback": "回答长度推不出提示词的 token，更推不出精确账单。"
                 }
               ],
               "correct": "b",
               "explanation": "没有实测值就不能记成零，估算也必须单独标识。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "找出仍然保留着工具调用与回执配对（带 tool_call_id 的 tool 消息）的那次请求。",
+          "target": {
+            "event": "request",
+            "path": "data.body.messages[3].tool_call_id"
+          },
+          "explanation": "这是完整布局的那次请求：assistant 的 tool_calls 后面紧跟着带相同 tool_call_id 的 tool 回执。窗口布局把这对消息一起裁掉，只剩最后的旁支讨论；压缩布局把来源和事实改写成一条文字记录。三种布局都保持协议合法。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我比较了完整、窗口、压缩三次请求的消息条数，以及各自是否保留来源。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能说明字符数与供应商 usage 里的 token 为什么不能互换。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能解释工具调用与回执为什么要成组保留或成组移除。"
             }
           ]
         }

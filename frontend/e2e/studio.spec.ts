@@ -284,18 +284,37 @@ test("lesson self-check explains mistakes and can be reset without calling the m
     exact: true,
   });
   const feedback = page.getByTestId("quiz-feedback");
+  const questions = lessonView(lesson.learning).quiz;
+  const groupOf = (prompt: string) =>
+    page.getByRole("group", { name: prompt, exact: true });
+  // 每题两组单选：作答前的把握，以及题目选项（radiogroup 名称就是题干）。
+  const confidenceOf = (prompt: string) =>
+    groupOf(prompt).getByRole("radiogroup", {
+      name: t("quiz:confidence.region"),
+      exact: true,
+    });
+  const optionsOf = (prompt: string) =>
+    groupOf(prompt).getByRole("radiogroup", { name: prompt, exact: true });
   await page.goto("/");
   await page.getByTestId("scene-tab-check").click();
   await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
   await expect(submit).toBeDisabled();
-  for (const [index, question] of lessonView(lesson.learning).quiz.entries()) {
+  const levels = ["low", "medium", "high"] as const;
+  for (const [index, question] of questions.entries()) {
     const option = question.options.find((option: any) =>
       index === 0
         ? option.id !== question.correct
         : option.id === question.correct,
     );
-    await page
-      .getByRole("group", { name: question.prompt, exact: true })
+    // 先评把握，选项才开放作答。
+    await expect(optionsOf(question.prompt).getByRole("radio").first()).toBeDisabled();
+    await confidenceOf(question.prompt)
+      .getByRole("radio", {
+        name: t(`quiz:confidence.${levels[index % 3]}`),
+        exact: true,
+      })
+      .click();
+    await optionsOf(question.prompt)
       .getByRole("radio", { name: option.text, exact: true })
       .click();
     await expect(
@@ -303,9 +322,41 @@ test("lesson self-check explains mistakes and can be reset without calling the m
     ).toBeChecked();
   }
   await submit.click();
-  await expect(feedback).toHaveCount(lessonView(lesson.learning).quiz.length);
-  for (const [index, question] of lessonView(lesson.learning).quiz.entries()) {
+  await expect(feedback).toHaveCount(questions.length);
+  for (const [index, question] of questions.entries()) {
+    const chosen =
+      index === 0
+        ? question.options.find((option) => option.id !== question.correct)!
+            .id
+        : question.correct;
     await expect(feedback.nth(index)).toContainText(question.explanation);
+    await expect(feedback.nth(index)).toContainText(
+      t("quiz:confidence.recorded", {
+        level: t(`quiz:confidence.${levels[index % 3]}`),
+      }),
+    );
+    // 选项级反馈：对的和错的选项都给出解释，并标明与学习者选择的关系。
+    const items = feedback.nth(index).getByTestId("quiz-option-feedback");
+    await expect(items).toHaveCount(question.options.length);
+    for (const [optionIndex, option] of question.options.entries()) {
+      const verdict =
+        option.id === question.correct
+          ? option.id === chosen
+            ? "correct-chosen"
+            : "correct-missed"
+          : option.id === chosen
+            ? "wrong-chosen"
+            : "wrong-other";
+      await expect(items.nth(optionIndex)).toHaveAttribute(
+        "data-verdict",
+        verdict,
+      );
+      await expect(items.nth(optionIndex)).toContainText(
+        t(`quiz:verdict.${verdict}`),
+      );
+      expect(option.feedback).toBeTruthy();
+      await expect(items.nth(optionIndex)).toContainText(option.feedback!);
+    }
   }
   await page
     .getByRole("button", { name: t("quiz:reset"), exact: true })
@@ -313,14 +364,26 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
   await expect(feedback).toHaveCount(0);
   await expect(submit).toBeDisabled();
-  const firstQuestion = lessonView(lesson.learning).quiz[0];
-  const firstOption = page
-    .getByRole("group", { name: firstQuestion.prompt, exact: true })
-    .getByRole("radio", { name: firstQuestion.options[0].text, exact: true });
+  const firstQuestion = questions[0];
+  const firstOption = optionsOf(firstQuestion.prompt).getByRole("radio", {
+    name: firstQuestion.options[0].text,
+    exact: true,
+  });
+  await expect(firstOption).toBeDisabled();
+  const firstConfidence = confidenceOf(firstQuestion.prompt).getByRole(
+    "radio",
+    { name: t("quiz:confidence.low"), exact: true },
+  );
+  await firstConfidence.focus();
+  await page.keyboard.press("Space");
+  await expect(firstConfidence).toBeChecked();
   await firstOption.focus();
   await page.keyboard.press("Space");
   await expect(firstOption).toBeChecked();
-  await expect(page.getByRole("radio", { checked: true })).toHaveCount(1);
+  await expect(
+    optionsOf(firstQuestion.prompt).getByRole("radio", { checked: true }),
+  ).toHaveCount(1);
+  await expect(page.getByRole("radio", { checked: true })).toHaveCount(2);
   expect(runs).toBe(0);
 });
 

@@ -136,3 +136,7 @@ def count_events(rule: Any, events: Iterable[Mapping[str, Any]]) -> int:
     real = [event for event in events if not event.get("provenance") or event.get("provenance") == "real_run"]
     return sum(1 for event in real
                if event.get("type") == rule["event"] and (not rule.get("name") or tool_name_of(event) == rule["name"]))
+
+
+# 自检场景的测试与内容校验使用的名称。
+matches = selector_matches

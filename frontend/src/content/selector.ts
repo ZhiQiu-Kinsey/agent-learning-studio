@@ -27,7 +27,8 @@ export function resolvePath(value: unknown, path: string): unknown {
   return current;
 }
 
-function toolNameOf(event: Trace): string | undefined {
+/** Tool name as the `name` condition sees it: call payload first, then result. */
+export function toolNameOf(event: Trace): string | undefined {
   const fn = event.data.function as { name?: unknown } | undefined;
   if (fn && typeof fn.name === "string") return fn.name;
   return typeof event.data.name === "string" ? event.data.name : undefined;
