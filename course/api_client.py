@@ -4,6 +4,15 @@ import json
 import urllib.error
 import urllib.request
 
+
+class ProviderHTTPError(RuntimeError):
+    """服务商返回了 HTTP 错误；保留状态码，课程可以如实记录而不必解析文案。"""
+
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 def call_bailian(messages, tools, api_key, timeout_seconds=60):
     """发送完整请求体；打印请求参数，但不打印认证请求头。"""
     from local_config import API_URL, MODEL
@@ -39,11 +48,12 @@ def send_bailian(request_body, api_key, timeout_seconds=60):
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")[:2000]
-        raise RuntimeError(
+        raise ProviderHTTPError(
             "百炼返回 HTTP {}。请求没有自动重发，请先检查配置和余额；"
             "确认原因后再手动重试，避免重复计费。\n{}".format(
                 error.code, detail
-            )
+            ),
+            error.code,
         ) from None
     except urllib.error.URLError as error:
         raise RuntimeError(

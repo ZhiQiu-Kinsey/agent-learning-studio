@@ -13,12 +13,12 @@ from lessons.lesson_09_context_budget import runtime as budget_runtime
 from lessons.lesson_10_persistent_memory import runtime as memory_runtime
 
 
-def context(lesson_id, exercise_id, values, completion=None, mode="offline"):
+def context(lesson_id, exercise_id, values, completion=None, mode="offline", budget=3):
     events = []
     run = RunContext(lesson_id=lesson_id, exercise_id=exercise_id, question="", mode=mode,
                      model="test-model", representation="offline", inputs=values, api_key="",
                      completion=completion, emit_event=lambda kind, data, number: events.append((kind, data, number)),
-                     max_model_calls=3)
+                     max_model_calls=budget)
     return run, events
 
 
@@ -46,6 +46,78 @@ class BudgetTests(unittest.TestCase):
         variants = budget_runtime.build_variants("lesson-07", 2, 600, result, "同一条自定义追问？")
         self.assertTrue(budget_runtime._visible(variants["保留证据压缩"], "本次真实回执里的特殊事实。"))
         self.assertTrue(all(messages[-1]["content"] == "同一条自定义追问？" for messages in variants.values()))
+
+    def test_compaction_probe_separates_three_strategies(self):
+        values = validate_inputs(budget_runtime, {"experiment": "compaction"})
+        run, events = context("9", "compaction", values, budget_fixtures.create_completion("compaction", values), budget=4)
+        budget_runtime.run(run)
+        self.assertEqual([data["function"]["name"] for kind, data, _ in events if kind == "tool_call"],
+                         ["lookup_lesson", "lookup_lesson"])
+        requests = [data["body"]["messages"] for kind, data, _ in events if kind == "request"]
+        self.assertEqual(len(requests), 4)
+        self.assertEqual(requests[0][-1]["content"], budget_runtime.SUMMARY_INSTRUCTION)
+        full, cleared, summarized = requests[1:]
+        for messages in requests:
+            budget_runtime.validate_tool_history(messages)
+        self.assertTrue(budget_runtime._visible(full, budget_runtime.PROBE_PHRASE))
+        self.assertFalse(budget_runtime._visible(cleared, budget_runtime.PROBE_PHRASE))
+        self.assertEqual(len(cleared), len(full), "清理只替换内容，不删除消息")
+        self.assertIn(budget_runtime.FACTS["lesson-08"], str(cleared), "最近一次结果保留")
+        self.assertLess(len(summarized), len(full))
+        self.assertTrue(all(messages[-1]["content"] == budget_runtime.PROBE for messages in requests[1:]))
+        report = next(data for kind, data, _ in events if kind == "lesson.report")
+        self.assertEqual([check["passed"] for check in report["checks"]], [True, False, True])
+
+    def test_clearing_keeps_pairs_and_latest_result(self):
+        results = {key: {"ok": True, "result": budget_runtime.lookup_lesson(key)} for key in budget_runtime.FACTS}
+        older, recent = budget_runtime.build_history(2, results)
+        messages = budget_runtime.clear_old_tool_results(older + recent)
+        budget_runtime.validate_tool_history(messages)
+        tools = [message for message in messages if message["role"] == "tool"]
+        self.assertIn("cleared", tools[0]["content"])
+        self.assertIn(budget_runtime.FACTS["lesson-08"], tools[1]["content"])
+        self.assertTrue(budget_runtime.probe_hit("lesson-07 说：历史由应用程序重发。"))
+        self.assertFalse(budget_runtime.probe_hit("lesson-08：应用 state 记录目标"))
+
+    def test_broken_pair_is_sent_as_is_and_rejection_is_labelled(self):
+        values = validate_inputs(budget_runtime, {"experiment": "broken_pair", "noise_repeats": 4})
+        run, events = context("9", "broken-pair", values, budget_fixtures.create_completion("broken-pair", values))
+        budget_runtime.run(run)
+        requests = [data["body"]["messages"] for kind, data, _ in events if kind == "request"]
+        self.assertEqual([message["role"] for message in requests[0]], ["system", "tool", "user"])
+        self.assertEqual([message["role"] for message in requests[1]], ["system", "assistant", "tool", "user"])
+        errors = [(data, number) for kind, data, number in events if kind == "lesson.provider_error"]
+        self.assertEqual(len(errors), 1)
+        error, number = errors[0]
+        self.assertEqual((error["status"], error["source"], number), (400, "offline_fixture", 1))
+        self.assertEqual([kind for kind, _, _ in events].count("response"), 1)
+        report = next(data for kind, data, _ in events if kind == "lesson.report")
+        self.assertEqual([check["passed"] for check in report["checks"]], [False, True])
+        self.assertIn("离线夹具模拟", report["table"]["rows"][0][3])
+        self.assertEqual(report["table"]["rows"][1][3], "已接受")
+
+    def test_live_rejection_keeps_provider_status_and_source(self):
+        from course.api_client import ProviderHTTPError
+
+        def provider(body, key):
+            if body["messages"][1]["role"] == "tool":
+                raise ProviderHTTPError("HTTP 400 messages with role 'tool' must follow tool_calls", 400)
+            return {"choices": [{"message": {"content": "ok"}}]}
+        values = validate_inputs(budget_runtime, {"experiment": "broken_pair"})
+        run, events = context("9", "broken-pair", values, provider, mode="live")
+        budget_runtime.run(run)
+        error = next(data for kind, data, _ in events if kind == "lesson.provider_error")
+        self.assertEqual((error["status"], error["source"], error["error_type"]), (400, "provider", "ProviderHTTPError"))
+
+    def test_pair_aware_tail_never_starts_with_tool(self):
+        values = {"ok": True, "result": budget_runtime.lookup_lesson("lesson-07")}
+        history = [{"role": "system", "content": "s"}, *budget_runtime._pair("x", "lesson-07", values),
+                   {"role": "user", "content": "q"}]
+        for keep in range(1, 4):
+            with self.subTest(keep=keep):
+                budget_runtime.validate_tool_history(budget_runtime.pair_aware_tail(history, keep))
+        with self.assertRaises(ValueError):
+            budget_runtime.validate_tool_history(budget_runtime.naive_tail(history, 2))
 
     def test_input_validation(self):
         for invalid in ({"noise_repeats": 100}, {"char_budget": 20}, {"source_key": "../secret"}):
