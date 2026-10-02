@@ -11,6 +11,7 @@ import { ContextFilm } from "../../stage/ContextFilm";
 import { Timeline } from "../../stage/Timeline";
 import { ToolCards } from "../../stage/ToolCards";
 import { deriveStage } from "../../stage/derive";
+import { Lenses } from "../../stage/Lenses";
 import RubberSegment from "../react-bits/RubberSegment";
 import { LessonExtension } from "../../lesson-extensions/LessonExtension";
 import {
@@ -544,6 +545,7 @@ export function Laboratory({
                   />
                 </div>
               )}
+              <Lenses visible={s.visible} film={stage.film} />
               <div className="trace-split">
                 <div className="trace-list-pane" data-testid="lab-trace-list">
                   <div className="subpane-label">
