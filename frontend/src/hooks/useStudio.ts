@@ -38,6 +38,8 @@ export function useStudio() {
   });
   const [replayGap, setReplayGap] = useState<Gap | null>(null);
   const mounted = useRef(false);
+  // A lesson picked before the catalog arrives is opened once it does.
+  const pendingLesson = useRef("");
   const runController = useRef<AbortController | null>(null);
   // 当前运行的服务端 ID；断线续读、停止与页面关闭时的取消都作用于它。
   const activeRun = useRef<string | null>(null);
@@ -67,8 +69,17 @@ export function useStudio() {
         if (abort.signal.aborted) return;
         setLessons(catalog.lessons);
         setRoadmap(catalog.roadmap);
+        const requested = resolveLessonId(
+          pendingLesson.current,
+          catalog.lessons,
+        );
+        pendingLesson.current = "";
         setLessonId(
-          catalog.lessons.find((lesson) => lesson.available)?.id || "",
+          catalog.lessons.find(
+            (lesson) => lesson.available && lesson.id === requested,
+          )?.id ||
+            catalog.lessons.find((lesson) => lesson.available)?.id ||
+            "",
         );
       })
       .catch((reason) => {
@@ -141,6 +152,10 @@ export function useStudio() {
   }, [playing, running, events, replayOptions]);
 
   function selectLesson(requested: string) {
+    if (!lessons.length) {
+      pendingLesson.current = requested;
+      return;
+    }
     // Legacy numeric ids still work; state always holds the canonical slug.
     const id = resolveLessonId(requested, lessons);
     if (
