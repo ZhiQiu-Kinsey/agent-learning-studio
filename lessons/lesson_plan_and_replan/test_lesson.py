@@ -1,4 +1,4 @@
-"""第 15 课行为测试：确定性模型数据，工具（含固定失败的主数据源）在 Python 中真实执行。"""
+"""先规划后执行课行为测试：确定性模型数据，工具（含固定失败的主数据源）在 Python 中真实执行。"""
 import json
 import unittest
 
@@ -39,7 +39,7 @@ class ToolAndParserTests(unittest.TestCase):
     def test_primary_source_always_fails_and_backup_works(self):
         with self.assertRaises(ValueError):
             runtime.fetch_quiz_scores("lin", "primary")
-        self.assertEqual(runtime.fetch_quiz_scores("lin", "backup")["scores"]["8"], 67)
+        self.assertEqual(runtime.fetch_quiz_scores("lin", "backup")["scores"]["application-state"], 67)
         with self.assertRaises(ValueError):
             runtime.fetch_progress("someone")
 

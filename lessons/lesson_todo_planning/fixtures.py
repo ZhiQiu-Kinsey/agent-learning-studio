@@ -1,12 +1,13 @@
-"""第 14 课离线测试模型：按固定脚本提出调用，只服务自动化测试，不代表任何真实模型的行为。
+"""TODO 规划课的离线测试模型：按固定脚本提出调用，只服务自动化测试，不代表任何真实模型的行为。
 
-无 TODO 的脚本故意漏掉第 9 课却声称完成，用来测试验收器不采信模型的说法。
+无 TODO 的脚本故意漏掉 context-budget 一课却声称完成，用来测试验收器不采信模型的说法。
 """
 import json
 
-PLAN = [{"id": "l7", "content": "查第 7 课要点", "status": "in_progress"},
-        {"id": "l8", "content": "查第 8 课要点", "status": "pending"},
-        {"id": "l9", "content": "查第 9 课要点", "status": "pending"},
+MC, AS, CB = "messages-context", "application-state", "context-budget"
+PLAN = [{"id": "ctx", "content": "查 messages-context 要点", "status": "in_progress"},
+        {"id": "state", "content": "查 application-state 要点", "status": "pending"},
+        {"id": "budget", "content": "查 context-budget 要点", "status": "pending"},
         {"id": "card", "content": "保存复习卡", "status": "pending"}]
 
 
@@ -15,14 +16,14 @@ def _plan(**statuses):
 
 
 SCRIPTS = {
-    "no_todo": [("lookup_note", {"lesson": "7"}), ("lookup_note", {"lesson": "8"}), ("save_card", ["7", "8"]),
+    "no_todo": [("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}), ("save_card", [MC, AS]),
                 "复习卡已经做好了。"],
-    "todo": [("todo_write", {"todos": PLAN}), ("lookup_note", {"lesson": "7"}), ("lookup_note", {"lesson": "8"}),
-             ("lookup_note", {"lesson": "9"}), ("save_card", ["7", "8", "9"]), "三条要点都存进复习卡了。"],
-    "todo_reminder": [("todo_write", {"todos": PLAN}), ("lookup_note", {"lesson": "7"}), ("lookup_note", {"lesson": "8"}),
-                      ("todo_write", {"todos": _plan(l7="done", l8="done", l9="in_progress")}),
-                      ("lookup_note", {"lesson": "9"}), ("save_card", ["7", "8", "9"]),
-                      ("todo_write", {"todos": _plan(l7="done", l8="done", l9="done", card="done")}),
+    "todo": [("todo_write", {"todos": PLAN}), ("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}),
+             ("lookup_note", {"lesson": CB}), ("save_card", [MC, AS, CB]), "三条要点都存进复习卡了。"],
+    "todo_reminder": [("todo_write", {"todos": PLAN}), ("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}),
+                      ("todo_write", {"todos": _plan(ctx="done", state="done", budget="in_progress")}),
+                      ("lookup_note", {"lesson": CB}), ("save_card", [MC, AS, CB]),
+                      ("todo_write", {"todos": _plan(ctx="done", state="done", budget="done", card="done")}),
                       "三条要点都存进复习卡了，清单也已全部完成。"],
 }
 

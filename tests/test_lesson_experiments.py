@@ -21,6 +21,8 @@ from server.run_store import RunStore
 from server.selectors import count_events, select_events
 
 STAGE_ROLES = {"user", "runtime", "model", "tool", "memory"}
+# “先跑一次”：predict 放在第一道微测之前。2026-10-03 起所有课都已改好，这个过渡清单保持为空，不再往里加。
+PREDICT_AT_END: set[str] = set()
 
 
 def stage_roles(events):
@@ -121,12 +123,12 @@ class LessonExperimentTests(unittest.TestCase):
                 blocks = model.scenes.understand.blocks
                 predicts = [block for block in blocks if isinstance(block, Predict)]
                 self.assertEqual(len(predicts), 1)
+                if lesson_id in PREDICT_AT_END:
+                    self.assertIs(blocks[-1], predicts[0], "已改到第一道微测之前，请从 PREDICT_AT_END 删除")
+                else:
+                    first_quiz = next(index for index, item in enumerate(blocks) if isinstance(item, MicroQuiz))
+                    self.assertLess(blocks.index(predicts[0]), first_quiz, "predict 放在第一道微测之前（先跑一次）")
                 block = predicts[0]
-                # 节奏规范（2026-10-03 起）：predict 放在第一道微测之前（先跑一次）；尚未改写的旧课仍在末尾。
-                position = next(index for index, item in enumerate(blocks) if item is block)
-                first_quiz = next((index for index, item in enumerate(blocks) if isinstance(item, MicroQuiz)), None)
-                self.assertTrue(block is blocks[-1] or (first_quiz is not None and position < first_quiz),
-                                "predict 放在第一道微测之前（旧课可在理解场景末尾）")
                 experiment = next(item for item in model.scenes.lab.experiments if item.id == block.experiment)
                 self.assertEqual(experiment.predict, block.id)
                 labels = [experiment.title] + [arm.label for arm in experiment.arms]

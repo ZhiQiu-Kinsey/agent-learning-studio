@@ -14,7 +14,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "REASONING / LESSON 15",
+          "eyebrow": "REASONING / PLAN & REPLAN",
           "headline": "先把计划写下来，",
           "highlight": "出错时才知道改哪一步。",
           "takeaway": "先规划后执行把“想”和“做”分开：模型先写出计划，程序照着执行。某一步失败时，带着真实错误回去修订计划，并把原因和差异记下来。"
@@ -70,6 +70,17 @@
             "成绩有两个数据源：primary 是主数据源，backup 是备份，数据相同。本课让 primary 固定失败，返回“成绩主数据源暂时不可用”。这是本课源码里写死的受控故障，不是网络问题，也不是模型的错；每次运行都一样，三种策略面对的是同一个故障。",
             "规划器第一次多半会选 primary。接下来看三种策略怎么应对：静态计划照原样执行到底；失败后重新规划把错误交回规划器；ReAct 基线由模型自己看到错误后决定下一步。"
           ]
+        },
+        {
+          "id": "predict-revisions",
+          "type": "predict",
+          "prompt": "运行“失败后重新规划”之前先猜：这次运行会出现几个 fetch_quiz_scores 的 tool_result（成功和失败都算）？想一想修订后的计划会不会再试一次主数据源。",
+          "experiment": "three-strategies",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_result",
+            "name": "fetch_quiz_scores"
+          }
         },
         {
           "id": "mq-fixture",
@@ -267,17 +278,6 @@
               "evidence": "lesson.report"
             }
           ]
-        },
-        {
-          "id": "predict-revisions",
-          "type": "predict",
-          "prompt": "运行“失败后重新规划”之前先猜：这次运行会出现几个失败的 tool_result？想一想修订后的计划会不会再试一次主数据源。",
-          "experiment": "three-strategies",
-          "rule": {
-            "kind": "count_events",
-            "event": "tool_result",
-            "name": "fetch_quiz_scores"
-          }
         }
       ]
     },
@@ -292,26 +292,119 @@
           "id": "code-tools-plan",
           "type": "annotated-source",
           "path": "lessons/lesson_plan_and_replan/runtime.py",
-          "start": 32,
-          "end": 94,
+          "start": 34,
+          "end": 74,
           "notes": [
             {
-              "id": "n35",
-              "line": 35,
+              "id": "n34",
+              "line": 34,
+              "anchor": "def fetch_quiz_scores(learner: str",
+              "text": "成绩工具有两个数据源，规划器要在计划里写明用哪一个。"
+            },
+            {
+              "id": "n38",
+              "line": 38,
               "anchor": "if source == \"primary\":",
               "text": "主数据源在本课固定失败；这是写死的受控故障，每次运行都一样。"
             },
             {
-              "id": "n67",
-              "line": 67,
+              "id": "n39",
+              "line": 39,
+              "anchor": "raise ValueError(\"成绩主数据源暂时不可用",
+              "text": "错误信息写明可以改用 backup。修订计划时，规划器读到的就是这句话。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "anchor": "PLANNER_SYSTEM = \"\"\"",
+              "text": "规划器只写计划、不执行工具；输出固定为带 reason 和 steps 的 JSON。"
+            },
+            {
+              "id": "n53",
+              "line": 53,
+              "anchor": "修订计划时，只列出还需要执行的步骤",
+              "text": "修订时只列还要执行的步骤，已经执行过的不会重做。"
+            },
+            {
+              "id": "n58",
+              "line": 58,
               "anchor": "start = content.find(\"{\")",
               "text": "允许 JSON 前后有说明文字或代码围栏，这是解析器唯一的宽容之处。"
             },
             {
-              "id": "n78",
-              "line": 78,
+              "id": "n67",
+              "line": 67,
+              "anchor": "if not isinstance(item, dict) or not isinstance(item.get(\"id\")",
+              "text": "步骤 id 必须唯一：修订差异和计划透镜都靠 id 对应步骤。"
+            },
+            {
+              "id": "n69",
+              "line": 69,
               "anchor": "if item.get(\"tool\") not in AVAILABLE_TOOLS:",
               "text": "计划里的工具必须在白名单里；执行前就能拦下不存在的工具。"
+            }
+          ]
+        },
+        {
+          "id": "code-planner",
+          "type": "annotated-source",
+          "path": "lessons/lesson_plan_and_replan/runtime.py",
+          "start": 118,
+          "end": 160,
+          "notes": [
+            {
+              "id": "n118",
+              "line": 118,
+              "anchor": "class Planner:",
+              "text": "规划器和执行器分开：模型只负责写计划，调用工具的是程序。"
+            },
+            {
+              "id": "n123",
+              "line": 123,
+              "anchor": "self.messages = [{\"role\": \"system\", \"content\": PLANNER_SYSTEM}",
+              "text": "规划器有自己的消息历史，每一版计划和每次失败都留在里面。"
+            },
+            {
+              "id": "n129",
+              "line": 129,
+              "anchor": "content = _text(self.context.complete(",
+              "text": "规划器的请求不带 tools：它只输出计划文本，不会直接提出调用。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "self.context.emit(\"lesson.plan_error\"",
+              "text": "计划不合格式就记录原文和错误，然后停止，不替规划器补全。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "anchor": "def revise(self, steps: list[dict], failed: dict, error)",
+              "text": "修订是一条新的 user 消息：当前步骤状态，加上失败步骤的错误。"
+            },
+            {
+              "id": "n141",
+              "line": 141,
+              "anchor": "+ f\"\\n步骤 {failed['id']} 失败：{error}",
+              "text": "交回规划器的是工具返回的原始错误，不是程序的转述。"
+            },
+            {
+              "id": "n145",
+              "line": 145,
+              "anchor": "class Executor:",
+              "text": "执行器不做任何决定：不重试、不换参数，失败就把结果原样交回。"
+            },
+            {
+              "id": "n155",
+              "line": 155,
+              "anchor": "result = self.context.call_tool(step[\"tool\"]",
+              "text": "调用由程序发起，事件标为 course_program；调用 id 里带着步骤 id。"
+            },
+            {
+              "id": "n158",
+              "line": 158,
+              "anchor": "if result.get(\"ok\"):",
+              "text": "只保存成功的结果，写周报时只能用真实拿到的数据。"
             }
           ]
         },
@@ -319,49 +412,67 @@
           "id": "code-replan",
           "type": "annotated-source",
           "path": "lessons/lesson_plan_and_replan/runtime.py",
-          "start": 136,
-          "end": 193,
+          "start": 163,
+          "end": 198,
           "notes": [
             {
-              "id": "n149",
-              "line": 149,
-              "anchor": "context.emit(\"lesson.plan_error\", {\"error\": str(",
-              "text": "计划不合格式就记录原文和错误，然后停止，不替规划器补全。"
-            },
-            {
-              "id": "n166",
-              "line": 166,
-              "anchor": "step[\"status\"] = \"done\" if result.get(\"ok\") else",
-              "text": "步骤状态只由真实工具结果决定。"
+              "id": "n167",
+              "line": 167,
+              "anchor": "plan = planner.ask()",
+              "text": "先规划：拿到一份校验过的计划才开始执行。"
             },
             {
               "id": "n169",
               "line": 169,
-              "anchor": "if result.get(\"ok\") or not revise or revisions >",
-              "text": "成功、静态计划或已达修订上限时，直接执行下一步。"
+              "anchor": "return \"\", _outcome(executor, planner.rounds, 0, 0)",
+              "text": "计划不合格式就到此为止，一个工具也不执行。"
             },
             {
-              "id": "n173",
-              "line": 173,
-              "anchor": "messages.append({\"role\": \"user\", \"content\": \"执行情",
-              "text": "交回规划器的是步骤状态和失败步骤的真实错误。"
+              "id": "n171",
+              "line": 171,
+              "anchor": "_publish(context, version, steps, planner.rounds, reason=plan[\"reason\"], event=\"created\")",
+              "text": "第 1 版计划以 created 发布，计划透镜从这里开始显示。"
+            },
+            {
+              "id": "n174",
+              "line": 174,
+              "anchor": "while index < len(steps):",
+              "text": "用 while 而不是 for：修订会替换后面的步骤，列表长度可能变化。"
             },
             {
               "id": "n179",
               "line": 179,
-              "anchor": "kept = steps[:index]",
-              "text": "已经执行过的步骤原样保留，只替换还没执行的部分。"
+              "anchor": "step[\"status\"] = \"done\" if result.get(\"ok\") else",
+              "text": "步骤状态只由真实工具结果决定。"
             },
             {
-              "id": "n184",
-              "line": 184,
-              "anchor": "diff = {\"removed\": old_pending, \"added\": [s[\"id\"",
+              "id": "n183",
+              "line": 183,
+              "anchor": "if result.get(\"ok\") or not revise or revisions >",
+              "text": "成功、静态计划或已达修订上限时，直接执行下一步。"
+            },
+            {
+              "id": "n187",
+              "line": 187,
+              "anchor": "revised = planner.revise(steps, step, result.get(\"error\"))",
+              "text": "交回规划器的是步骤状态和失败步骤的真实错误。"
+            },
+            {
+              "id": "n192",
+              "line": 192,
+              "anchor": "steps, version = steps[:index] + new_steps, version + 1",
+              "text": "已经执行过的步骤原样保留，只替换还没执行的部分，版本号加一。"
+            },
+            {
+              "id": "n193",
+              "line": 193,
+              "anchor": "diff = {\"removed\": old_pending",
               "text": "差异记录删了哪些未执行步骤、加了哪些、因哪一步失败。"
             },
             {
-              "id": "n189",
-              "line": 189,
-              "anchor": "writer = context.complete({\"messages\": [{\"role\":",
+              "id": "n197",
+              "line": 197,
+              "anchor": "report = write_report(context, executor.results",
               "text": "最后一次请求只拿成功的工具结果写周报。"
             }
           ]

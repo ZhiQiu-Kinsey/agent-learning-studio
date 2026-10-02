@@ -19,20 +19,24 @@ class Inputs(LessonInputs):
 
 
 INPUT_MODEL = Inputs
+# 三课的要点，键是课程 slug：显示课号会随课程表插入新课而变化，slug 不会。
 NOTES = {
-    "7": "模型只看到本次请求里的消息，历史要由应用程序重发。",
-    "8": "应用状态记录目标和证据，消息列表不会自动更新它。",
-    "9": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。",
+    "messages-context": "模型只看到本次请求里的消息，历史要由应用程序重发。",
+    "application-state": "应用状态记录目标和证据，消息列表不会自动更新它。",
+    "context-budget": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。",
 }
-TASK = "为第 7、8、9 课各出一道四选一的选择题，题目要考到该课要点。"
+EVALUATED = "context-budget"  # 评估者-优化者只为这一课出题
+TASK = ("为 messages-context（消息与上下文）、application-state（应用状态与运行生命周期）、"
+        "context-budget（上下文预算与截取窗口）三课各出一道四选一的选择题，题目要考到该课要点。")
 QUESTION_FORMAT = ('只输出一个 JSON 对象：{"question": "题干", "options": ["A", "B", "C", "D"], '
                    '"answer": 正确选项的下标 0-3, "explanation": "为什么这个选项对"}')
-SINGLE_SYSTEM = ('你是出题老师，一次写完全部题目。只输出一个 JSON 数组，按第 7、8、9 课的顺序，每个元素是'
+SINGLE_SYSTEM = ('你是出题老师，一次写完全部题目。只输出一个 JSON 数组，按 messages-context、application-state、'
+                 'context-budget 的顺序，每个元素是'
                  '{"question": "题干", "options": ["A", "B", "C", "D"], "answer": 正确选项的下标 0-3, '
                  '"explanation": "为什么这个选项对"}')
 ORCHESTRATOR_SYSTEM = ('你是编排者，只负责拆分任务，不写题目。只输出 JSON：'
-                       '{"subtasks": [{"id": "w1", "lesson": "7", "instruction": "交给工人的一句话指令"}]}。'
-                       "最多 4 个子任务，lesson 只能是 7、8、9。")
+                       '{"subtasks": [{"id": "w1", "lesson": "messages-context", "instruction": "交给工人的一句话指令"}]}。'
+                       "最多 4 个子任务，lesson 只能是 messages-context、application-state、context-budget。")
 WORKER_SYSTEM = "你是出题老师，只完成交给你的一道题。" + QUESTION_FORMAT
 EVALUATOR_SYSTEM = ('你是评审。按量规检查一道选择题：题干考的是给定要点；四个选项都合理但只有一个正确；'
                     '解释说明了为什么正确。只输出 JSON：{"verdict": "pass" 或 "revise", "feedback": ["具体问题"]}。')
@@ -60,6 +64,7 @@ def check_question(value) -> list[str]:
         problems.append("options 必须是 4 个非空字符串")
     elif len(set(options)) != 4:
         problems.append("四个选项不能重复")
+    # bool 是 int 的子类，所以用 type(...) is int：answer 写成 true 也算格式错误。
     if type(value.get("answer")) is not int or not 0 <= value["answer"] <= 3:
         problems.append("answer 必须是 0 到 3 的整数")
     if not isinstance(value.get("explanation"), str) or not value["explanation"].strip():
@@ -67,8 +72,16 @@ def check_question(value) -> list[str]:
     return problems
 
 
+def _parse_question(output: str) -> tuple[object, list[str]]:
+    try:
+        question = extract_json(output)
+    except ValueError:
+        question = None
+    return question, check_question(question) if question is not None else ["没有 JSON"]
+
+
 class Ledger:
-    """记录每次模型调用的角色和服务商报告的 total_tokens；没有报告就记 None，不估算。"""
+    """调用账本：记录每次模型调用的角色和服务商报告的 total_tokens；没有报告就记 None，不估算。"""
 
     def __init__(self, context: RunContext):
         self.context = context
@@ -96,6 +109,7 @@ class Ledger:
 
 
 def run_single(context: RunContext, ledger: Ledger) -> tuple[dict, list]:
+    """基线：一次请求写完三道题，再逐题做同样的格式检查。"""
     content = ledger.call("单次调用", SINGLE_SYSTEM, TASK + "\n要点：" + json.dumps(NOTES, ensure_ascii=False), 1)
     try:
         value = extract_json(content)
@@ -106,40 +120,54 @@ def run_single(context: RunContext, ledger: Ledger) -> tuple[dict, list]:
     for index, lesson in enumerate(NOTES):
         item = questions[index] if index < len(questions) else None
         results[lesson] = {"question": item, "problems": check_question(item) if item is not None else ["没有这道题"]}
-    return results, [[f"第 {k} 课", "；".join(v["problems"]) or "格式通过"] for k, v in results.items()]
+    return results, [[lesson, "；".join(result["problems"]) or "格式通过"] for lesson, result in results.items()]
+
+
+def valid_subtasks(plan) -> list[dict] | None:
+    """编排者的子任务列表先过程序校验：数量、id 不重复、lesson 在三课之内、有指令；不合格返回 None。"""
+    subtasks = plan.get("subtasks") if isinstance(plan, dict) else None
+    valid = (isinstance(subtasks, list) and 0 < len(subtasks) <= MAX_WORKERS
+             and all(isinstance(s, dict) and s.get("lesson") in NOTES and isinstance(s.get("id"), str)
+                     and isinstance(s.get("instruction"), str) for s in subtasks)
+             and len({s["id"] for s in subtasks}) == len(subtasks))
+    return subtasks if valid else None
 
 
 def run_orchestrator(context: RunContext, ledger: Ledger) -> tuple[dict, list]:
+    """编排者-工人：一次请求拆任务，再按子任务数并行派出工人，共 1 + N 次调用。"""
+    # 1. 编排：编排者只拆任务，不写题目。
     content = ledger.call("编排者", ORCHESTRATOR_SYSTEM, TASK, 1)
     try:
-        plan = extract_json(content)
-        subtasks = plan.get("subtasks") if isinstance(plan, dict) else None
-        valid = (isinstance(subtasks, list) and 0 < len(subtasks) <= MAX_WORKERS
-                 and all(isinstance(s, dict) and s.get("lesson") in NOTES and isinstance(s.get("id"), str)
-                         and isinstance(s.get("instruction"), str) for s in subtasks)
-                 and len({s["id"] for s in subtasks}) == len(subtasks))
+        subtasks = valid_subtasks(extract_json(content))
     except ValueError:
-        valid, subtasks = False, None
-    if not valid:
+        subtasks = None
+    # 2. 校验：子任务列表不合格式就不派工人，原文记下来。
+    if subtasks is None:
         context.emit("lesson.plan_error", {"error": "编排者的子任务列表不合格式", "raw": content}, 1)
         return {}, [["编排者", "子任务列表不合格式，没有派出工人"]]
-    steps = [{"id": s["id"], "content": f"第 {s['lesson']} 课：{s['instruction']}", "status": "in_progress"} for s in subtasks]
+    steps = [{"id": s["id"], "content": f"{s['lesson']}：{s['instruction']}", "status": "in_progress"} for s in subtasks]
     context.emit("lesson.plan", {"version": 1, "event": "created", "reason": "编排者拆出的子任务", "diff": {}, "steps": steps}, 1)
 
     def work(subtask: dict) -> tuple[dict, str]:
-        context.check_cancelled()
+        # 工人只拿到自己的指令和那一课的要点，看不到整个任务，也看不到别的子任务。
         user = f"{subtask['instruction']}\n要点：{NOTES[subtask['lesson']]}"
         return subtask, ledger.call("工人", WORKER_SYSTEM, user, 2, branch=subtask["id"])
 
-    results, rows = {}, []
+    # 3. 派工：工人并行执行，请求带 branch，共用同一个调用预算。
     with ThreadPoolExecutor(max_workers=len(subtasks)) as pool:
         outputs = list(pool.map(work, subtasks))
+    # 4. 汇总：每道题过一遍格式检查，计划里的每一项标成 done 或 failed。
+    results, rows = _collect(context, outputs, steps)
+    context.emit("lesson.plan", {"version": 1, "event": "progress", "reason": "", "diff": {}, "steps": steps}, 2)
+    return results, rows
+
+
+def _collect(context: RunContext, outputs: list[tuple[dict, str]], steps: list[dict]) -> tuple[dict, list]:
+    """逐个检查工人交回的题目，发布 lesson.worker，并把对应的计划项标成 done 或 failed。"""
+    results, rows = {}, []
     for subtask, output in outputs:
-        try:
-            question = extract_json(output)
-        except ValueError:
-            question = None
-        problems = check_question(question) if question is not None else ["没有 JSON"]
+        question, problems = _parse_question(output)
+        # 同一课派了两个工人时，只采用第一道题。
         results.setdefault(subtask["lesson"], {"question": question, "problems": problems})
         context.emit("lesson.worker", {"id": subtask["id"], "lesson": subtask["lesson"], "problems": problems,
                                        "output": output}, 2)
@@ -147,41 +175,46 @@ def run_orchestrator(context: RunContext, ledger: Ledger) -> tuple[dict, list]:
             if step["id"] == subtask["id"]:
                 step["status"] = "done" if not problems else "failed"
         rows.append([subtask["id"], "；".join(problems) or "格式通过"])
-    context.emit("lesson.plan", {"version": 1, "event": "progress", "reason": "", "diff": {}, "steps": steps}, 2)
     return results, rows
 
 
+def review(ledger: Ledger, lesson: str, output: str) -> tuple[str, list[str]]:
+    """请评估者按量规评一道题；结论只接受 pass 或 revise，其他输出记为不合格式。"""
+    content = ledger.call("评估者", EVALUATOR_SYSTEM, f"要点：{NOTES[lesson]}\n题目：{output}", len(ledger.rows) + 1)
+    try:
+        parsed = extract_json(content)
+    except ValueError:
+        return "invalid", []
+    if not isinstance(parsed, dict):
+        return "invalid", []
+    verdict = parsed.get("verdict") if parsed.get("verdict") in ("pass", "revise") else "invalid"
+    feedback = [str(item) for item in parsed.get("feedback", [])] if isinstance(parsed.get("feedback"), list) else []
+    return verdict, feedback
+
+
 def run_evaluator(context: RunContext, ledger: Ledger, max_iters: int) -> tuple[dict, list, str]:
-    lesson, rows, feedback, previous = "9", [], [], None
-    stop_reason = "达到迭代上限"
-    question = None
+    """评估者-优化者：生成者写题，评估者按量规评审，带着意见修订，最多 max_iters 轮。"""
+    lesson, rows, feedback, previous = EVALUATED, [], [], None
+    stop_reason, question = "达到迭代上限", None
     for iteration in range(1, max_iters + 1):
-        context.check_cancelled()
-        user = f"为第 {lesson} 课出一道选择题。要点：{NOTES[lesson]}"
+        # 1. 生成：第一轮只给要点，之后附上上一版和评审意见。
+        user = f"为 {lesson} 这一课出一道选择题。要点：{NOTES[lesson]}"
         if previous is not None:
             user += f"\n上一版：{previous}\n评审意见：" + json.dumps(feedback, ensure_ascii=False) + "\n请修订。"
         output = ledger.call("生成者", WORKER_SYSTEM, user, len(ledger.rows) + 1)
-        try:
-            question = extract_json(output)
-        except ValueError:
-            question = None
-        problems = check_question(question) if question is not None else ["没有 JSON"]
+        question, problems = _parse_question(output)
         context.emit("lesson.draft", {"version": iteration - 1, "question": question, "previous": previous,
                                       "format_problems": problems}, len(ledger.rows))
+        # 2. 评审：格式不对直接退回格式问题，省下一次评估者请求；格式对了才请评估者按量规评。
         if problems:
             verdict, feedback, source = "revise", problems, "format-check"
         else:
-            review = ledger.call("评估者", EVALUATOR_SYSTEM, f"要点：{NOTES[lesson]}\n题目：{output}", len(ledger.rows) + 1)
-            try:
-                parsed = extract_json(review)
-                verdict = parsed.get("verdict") if isinstance(parsed, dict) and parsed.get("verdict") in ("pass", "revise") else "invalid"
-                feedback = [str(item) for item in parsed.get("feedback", [])] if isinstance(parsed, dict) and isinstance(parsed.get("feedback"), list) else []
-            except ValueError:
-                verdict, feedback = "invalid", []
+            verdict, feedback = review(ledger, lesson, output)
             source = "evaluator"
         context.emit("lesson.review", {"iteration": iteration, "source": source, "verdict": verdict, "issues": feedback},
                      len(ledger.rows))
         rows.append([iteration, source, verdict, "；".join(feedback) or "—"])
+        # 3. 停止：评审通过、评审输出不合格式，或者循环自然走到 max_iters。
         if verdict == "pass":
             stop_reason = "评审通过"
             break
@@ -189,7 +222,8 @@ def run_evaluator(context: RunContext, ledger: Ledger, max_iters: int) -> tuple[
             stop_reason = "评审输出不合格式"
             break
         previous = output
-    return {lesson: {"question": question, "problems": check_question(question) if question is not None else ["没有 JSON"]}}, rows, stop_reason
+    final = {"question": question, "problems": check_question(question) if question is not None else ["没有 JSON"]}
+    return {lesson: final}, rows, stop_reason
 
 
 def run(context: RunContext) -> str:
@@ -206,10 +240,16 @@ def run(context: RunContext) -> str:
     else:
         results, rows, stop_reason = run_evaluator(context, ledger, values.max_iters)
         columns = ["轮", "评审来源", "结论", "意见"]
-    expected = ["9"] if values.pattern == "evaluator" else list(NOTES)
+    expected = [EVALUATED] if values.pattern == "evaluator" else list(NOTES)
     ok = [lesson for lesson in expected if lesson in results and not results[lesson]["problems"]]
+    return _report(context, values.pattern, ledger, rows, columns, expected, ok, stop_reason)
+
+
+def _report(context: RunContext, pattern: str, ledger: Ledger, rows: list, columns: list[str], expected: list[str],
+            ok: list[str], stop_reason: str | None) -> str:
+    """发布实验报告（lesson.report）与调用账本（lesson.cost），并返回最终回答。"""
     context.emit("lesson.report", {
-        "title": {"single": "单次调用", "orchestrator": "编排者-工人", "evaluator": "评估者-优化者"}[values.pattern],
+        "title": {"single": "单次调用", "orchestrator": "编排者-工人", "evaluator": "评估者-优化者"}[pattern],
         "summary": "格式由程序检查；题目质量只有评估者模式请了模型评审。用量只累加服务商报告的 total_tokens。",
         "checks": [{"label": "每道题都通过格式检查", "passed": len(ok) == len(expected),
                     "detail": f"{len(ok)}/{len(expected)} 道通过"}],

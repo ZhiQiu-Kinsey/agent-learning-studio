@@ -14,7 +14,7 @@
 
 每组只跑一次，不能据此判断自评是否普遍可靠。`fixtures.py` 只服务自动化测试，其中的草稿、自评和用量都是脚本写的。
 
-“自我评估与纠正”的讲法参考 [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners)（MIT）第 09 课，任务、测试、评审格式与停止条件由本项目编写。
+“自我评估与纠正”的讲法参考 [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners)（MIT）的 09-metacognition 一章，任务、测试、评审格式与停止条件由本项目编写。
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_reflection_revision.test_lesson -v

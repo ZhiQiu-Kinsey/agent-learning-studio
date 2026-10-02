@@ -1,4 +1,4 @@
-"""第 18 课行为测试：确定性模型数据；格式检查、并行工人与评估循环在 Python 中真实执行。"""
+"""编排与评估课行为测试：确定性模型数据；格式检查、并行工人与评估循环在 Python 中真实执行。"""
 import json
 import unittest
 
@@ -59,7 +59,7 @@ class PatternTests(unittest.TestCase):
         answer, events = run_case("orchestrator", {"pattern": "orchestrator"})
         requests = of(events, "request")
         self.assertEqual(len(requests), 4, "1 次编排 + 3 个工人")
-        self.assertEqual({r.get("branch") for r in requests[1:]}, {"w7", "w8", "w9"})
+        self.assertEqual({r.get("branch") for r in requests[1:]}, {"w1", "w2", "w3"})
         self.assertEqual(metric(events, "累计 total_tokens"), 80 + 3 * 120)
         self.assertEqual(metric(events, "各角色调用"), "编排者 1、工人 3")
         plans = of(events, "lesson.plan")

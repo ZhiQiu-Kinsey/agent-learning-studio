@@ -1,10 +1,10 @@
-"""第 3 课正常与恶意模型响应样本，验证运行器的失败边界。"""
+"""错误处理与安全边界一课的正常与恶意模型响应样本，验证运行器的失败边界。"""
 from server.offline import CompletionScript, result_answer, tool_call
 
 
 def create_completion(exercise_id, inputs=None):
     if exercise_id not in ("divide", "zero", "unknown", "malformed"):
-        raise ValueError("第 3 课没有此测试样本。")
+        raise ValueError("错误处理与安全边界一课没有此测试样本。")
 
     def decide(results):
         if results:

@@ -13,7 +13,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "REASONING / LESSON 13",
+          "eyebrow": "REASONING / TEXT ACTIONS",
           "headline": "动作写在文本里，",
           "highlight": "就得有人负责停下和解析。",
           "takeaway": "文本协议靠 stop 和解析器把模型写的字变成动作；原生工具调用把这一步交给服务商。去掉 stop，模型可能连工具结果都替你编好。"
@@ -60,6 +60,16 @@
             "{{lesson:tool-selection}}里，模型通过 tool_calls 字段提出工具调用，平台执行后把工具结果放进 tool 消息。早期的 Agent 没有这个字段：模型的每一步都写在普通文本里，由程序自己读懂，这就是文本动作协议。它常用来实现 ReAct（Reasoning + Acting）模式：模型交替写出推理和动作，程序执行动作后交回观察结果，模型再决定下一步。",
             "ReAct 最常见的文本格式是：Thought 写思考，Action 写工具名，Action Input 写 JSON 参数；能回答时改写 Final Answer，后面跟给用户的回答。原生工具调用也能实现 ReAct，只是把动作放进结构化字段。学文本格式有两个用处：不少框架和开源项目还在用它，比如给不支持原生工具调用的本地模型用；它也把“模型提出动作、程序执行动作”这层分工摆在了明面上。"
           ]
+        },
+        {
+          "id": "predict-fabricated",
+          "type": "predict",
+          "prompt": "运行“去掉 stop：s-1042”之前先猜：模型会不会在 Action Input 后面接着替程序写出 Observation？这次运行会出现几个 lesson.fabricated_observation 事件（每段自写的 Observation 记一个）？",
+          "experiment": "stop-vs-no-stop",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.fabricated_observation"
+          }
         },
         {
           "id": "mq-who-executes",
@@ -272,16 +282,6 @@
               "evidence": "下一次 request 的 messages"
             }
           ]
-        },
-        {
-          "id": "predict-fabricated",
-          "type": "predict",
-          "prompt": "运行“去掉 stop：s-1042”之前先猜：这次运行会出现几个 lesson.fabricated_observation 事件？",
-          "experiment": "stop-vs-no-stop",
-          "rule": {
-            "kind": "count_events",
-            "event": "lesson.fabricated_observation"
-          }
         }
       ]
     },
@@ -296,24 +296,48 @@
           "id": "code-parse",
           "type": "annotated-source",
           "path": "lessons/lesson_text_actions/runtime.py",
-          "start": 63,
-          "end": 89,
+          "start": 62,
+          "end": 91,
           "notes": [
+            {
+              "id": "n62",
+              "line": 62,
+              "anchor": "def parse_step(content: str) -> dict:",
+              "text": "解析器把模型写的一段文字变成三种结果之一：动作、最终回答、解析失败。"
+            },
             {
               "id": "n68",
               "line": 68,
-              "anchor": "kept, marker, rest = content.partition(\"Observat",
+              "anchor": "kept, marker, rest = content.partition(\"Observation",
               "text": "先在 Observation: 处切开：前面是模型该写的部分，后面是它不该写的部分。"
             },
             {
-              "id": "n80",
-              "line": 80,
+              "id": "n74",
+              "line": 74,
+              "anchor": "naive_final = found.group(1).strip() if found",
+              "text": "模型自写结果之后的结论单独记下，只用来和真实结果对比，不会被采信。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "anchor": "action = ACTION.search(kept)",
+              "text": "只在切下的前半段里找动作，自写的 Observation 里出现的 Action 不算。"
+            },
+            {
+              "id": "n82",
+              "line": 82,
               "anchor": "arguments, _ = json.JSONDecoder().raw_decode(act",
               "text": "raw_decode 只读开头的一个 JSON 值，是解析器唯一的宽容之处。"
             },
             {
-              "id": "n89",
-              "line": 89,
+              "id": "n85",
+              "line": 85,
+              "anchor": "if not isinstance(arguments, dict):",
+              "text": "参数必须是 JSON 对象；写成字符串或数组都算解析失败，不替模型改写。"
+            },
+            {
+              "id": "n91",
+              "line": 91,
               "anchor": "return {**step, \"kind\": \"invalid\", \"error\": \"既没有",
               "text": "既没有动作也没有 Final Answer，就判为解析失败，不从句子里猜。"
             }
@@ -323,48 +347,54 @@
           "id": "code-text-loop",
           "type": "annotated-source",
           "path": "lessons/lesson_text_actions/runtime.py",
-          "start": 97,
-          "end": 134,
+          "start": 99,
+          "end": 139,
           "notes": [
             {
-              "id": "n105",
-              "line": 105,
+              "id": "n104",
+              "line": 104,
+              "anchor": "for step_number in range(1, max_steps + 1):",
+              "text": "步数上限就是模型调用预算，文本协议每一步都要一次请求。"
+            },
+            {
+              "id": "n108",
+              "line": 108,
               "anchor": "body[\"stop\"] = STOP",
               "text": "只有带 stop 的那组发送 stop 参数，这是两组文本实验唯一的差别。"
             },
             {
-              "id": "n110",
-              "line": 110,
+              "id": "n113",
+              "line": 113,
               "anchor": "context.emit(\"lesson.parse\", {",
               "text": "每次输出都发布 lesson.parse，原文、解析结果和 finish_reason 一起记录。"
             },
             {
-              "id": "n116",
-              "line": 116,
+              "id": "n120",
+              "line": 120,
               "anchor": "if step[\"kind\"] == \"invalid\":",
               "text": "解析失败立即停止，不重试也不修复。"
             },
             {
-              "id": "n122",
-              "line": 122,
+              "id": "n127",
+              "line": 127,
               "anchor": "result = context.call_tool(step[\"action\"], step[",
               "text": "工具由程序按解析结果执行，事件标记为运行器发起。"
             },
             {
-              "id": "n126",
-              "line": 126,
+              "id": "n131",
+              "line": 131,
               "anchor": "context.emit(\"lesson.fabricated_observation\", {",
               "text": "模型自写的 Observation 与真实结果并列记录，方便对比。"
             },
             {
-              "id": "n131",
-              "line": 131,
+              "id": "n136",
+              "line": 136,
               "anchor": "messages += [{\"role\": \"assistant\", \"content\": st",
               "text": "放回上下文的只有 Observation 之前的文本和真实结果。"
             },
             {
-              "id": "n134",
-              "line": 134,
+              "id": "n139",
+              "line": 139,
               "anchor": "leaked = any(text in str(message.get(\"content\"))",
               "text": "最后用实际发出的消息核对：自写的 Observation 一段都没有混进去。"
             }
@@ -374,20 +404,50 @@
           "id": "code-native",
           "type": "annotated-source",
           "path": "lessons/lesson_text_actions/runtime.py",
-          "start": 155,
-          "end": 185,
+          "start": 146,
+          "end": 166,
           "notes": [
             {
-              "id": "n160",
-              "line": 160,
-              "anchor": "response = context.complete({\"messages\": message",
-              "text": "原生组把工具定义放进 tools，不再要求模型遵守文本格式。"
+              "id": "n146",
+              "line": 146,
+              "anchor": "def run_native(context: RunContext",
+              "text": "同一个问题换成原生工具调用：服务商在 tool_calls 字段里结构化返回动作。"
             },
             {
-              "id": "n172",
-              "line": 172,
-              "anchor": "context.emit(\"tool_call\", call, step_number)",
-              "text": "调用按模型给的 id 原样记录，tool 消息用同一个 id 配对。"
+              "id": "n152",
+              "line": 152,
+              "anchor": "response = context.complete({\"messages\": message",
+              "text": "原生组把工具定义放进 tools，不再要求模型遵守文本格式，也不需要 stop。"
+            },
+            {
+              "id": "n155",
+              "line": 155,
+              "anchor": "calls = message.get(\"tool_calls\") or []",
+              "text": "动作在 tool_calls 字段里，程序不用正则解析任何文字。"
+            },
+            {
+              "id": "n158",
+              "line": 158,
+              "anchor": "if not calls:",
+              "text": "没有调用提议就结束，content 是最终回答；文本协议里这一步要靠找 Final Answer。"
+            },
+            {
+              "id": "n162",
+              "line": 162,
+              "anchor": "messages.append({\"role\": \"assistant\", \"content\": message.get(\"content\"), \"tool_calls\": calls})",
+              "text": "带调用提议的 assistant 消息先放回历史，后面的 tool 消息才有可配对的调用 id。"
+            },
+            {
+              "id": "n164",
+              "line": 164,
+              "anchor": "result = context.execute_proposal(call, AVAILABLE_TOOLS)",
+              "text": "execute_proposal 按模型给的 id 记录调用与结果，和平台原生循环 run_agent 的执行方式相同。"
+            },
+            {
+              "id": "n165",
+              "line": 165,
+              "anchor": "messages.append({\"role\": \"tool\", \"tool_call_id\"",
+              "text": "工具结果用 role 为 tool 的消息回传，不再伪装成用户说的 Observation。"
             }
           ]
         },

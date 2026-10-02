@@ -1,4 +1,4 @@
-"""第 13 课行为测试：确定性模型数据，工具在 Python 中真实执行。"""
+"""文本动作课行为测试：确定性模型数据，工具在 Python 中真实执行。"""
 import json
 import unittest
 
