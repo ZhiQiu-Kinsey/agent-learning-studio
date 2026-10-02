@@ -1,13 +1,10 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { animate, useInView } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { animate, motion, useInView } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, BookOpen, Compass } from "lucide-react";
-import { MotionIntent, useReducedMotion } from "../../motion";
+import { ArrowRight } from "lucide-react";
+import { revealProps, useMotionBudget, useReducedMotion } from "../../motion";
 import { Backdrop } from "../backdrops/Backdrop";
-import BlurText from "../react-bits/BlurText";
 import ShinyText from "../react-bits/ShinyText";
-import Magnet from "../react-bits/Magnet";
-import RotatingText from "../react-bits/RotatingText";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import type { Lesson } from "../../types";
 import { useResolvedTheme } from "../../hooks/useTheme";
@@ -48,14 +45,40 @@ function StatValue({ value }: { value: number }) {
   }, [inView, reduced, value]);
   return <span ref={ref}>{value}</span>;
 }
-/** The one luminous button of the band; its light comes from CSS, not a border effect. */
-function PrimaryAction({ children }: { children: ReactNode }) {
-  return <Magnet className="home-cta-magnet">{children}</Magnet>;
+
+/** The illustrated trace: two rounds of one loop (example values, not a run). */
+const TRACE: {
+  round?: number;
+  who?: "request" | "model" | "python";
+  code?: string;
+  value?: string;
+  note?: "toModel" | "toNextRound";
+}[] = [
+  { round: 1 },
+  { who: "request", code: "messages + tools", note: "toModel" },
+  { who: "model", code: "tool_calls: ", value: "add_numbers(19, 23)" },
+  { who: "python", code: "tool_result: ", value: "42" },
+  { round: 2 },
+  { who: "request", code: "role=tool", note: "toNextRound" },
+  { who: "model", code: "answer: 19 + 23 = ", value: "42" },
+];
+const TRACE_ROWS = TRACE.filter((item) => item.who).length;
+
+/** One beat drives the loop phrase and the trace; it only runs on screen at full motion. */
+function useBeat(active: boolean) {
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setBeat((value) => value + 1), 1400);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return beat;
 }
 
 /**
- * The observatory band (ink in dark, lavender paper in light): living backdrop, entrance title, the loop in three
- * rotating phrases, the ways in, and catalogue/device numbers that are all real.
+ * The observatory band: living backdrop, a two-line title with an accent,
+ * the loop as three phrases that light up in turn, the ways in as an arrow
+ * link plus two quiet links, an illustrated trace card, and real numbers.
  */
 export function HomeHero({
   last,
@@ -74,108 +97,170 @@ export function HomeHero({
 }) {
   const { t } = useTranslation("home");
   const light = useResolvedTheme() === "light";
-  const onboarding = (primary: boolean) => (
-    <button
-      type="button"
-      className={
-        primary ? "home-cta home-cta-primary" : "home-cta home-cta-glass"
-      }
-      data-testid="home-start-onboarding"
-      onClick={onStartOnboarding}
-    >
-      <Compass size={17} aria-hidden="true" />
-      {t("startOnboarding")}
-      {primary && <ArrowRight size={16} aria-hidden="true" />}
-    </button>
-  );
+  const { ref, active, reduced } = useMotionBudget<HTMLDivElement>();
+  const beat = useBeat(active);
+  // Static motion shows the whole loop at once rather than a frozen frame.
+  const still = reduced;
+  const phrase = beat % 3;
+  const traceStep = beat % (TRACE_ROWS + 1);
+  const phrases = [t("hero.loop1"), t("hero.loop2"), t("hero.loop3")];
 
+  const primary = last
+    ? {
+        testId: "home-continue",
+        label: t("continue", {
+          number: formatLessonNumber(last.number),
+          title: last.shortTitle,
+        }),
+        onClick: () => onOpenLesson(last.id),
+      }
+    : {
+        testId: "home-start-onboarding",
+        label: t("startOnboarding"),
+        onClick: onStartOnboarding,
+      };
+  const secondary = last
+    ? {
+        testId: "home-start-onboarding",
+        label: t("startOnboarding"),
+        onClick: onStartOnboarding,
+      }
+    : first && {
+        testId: "home-first-lesson",
+        label: t("firstLesson"),
+        onClick: () => onOpenLesson(first.id),
+      };
+
+  let row = -1;
   return (
     <section className="home-hero" aria-labelledby="home-hero-title">
       <Backdrop name="lightfall" className="home-hero-backdrop" />
       <div className="home-hero-veil" aria-hidden="true" />
       <div className="home-hero-grid" aria-hidden="true" />
-      <div className="home-hero-body">
-        <p className="home-kicker">
-          <span className="home-kicker-dot" aria-hidden="true" />
-          <ShinyText
-            text={t("kicker")}
-            color={light ? "#4a3bb8" : "#cfc7ff"}
-            shineColor={light ? "#b98aff" : "#ffffff"}
-            speed={3}
-            delay={1.5}
-          />
-        </p>
-        <div id="home-hero-title" className="home-title">
-          <MotionIntent
-            name="heading.split"
-            text={t("title")}
-            tag="h1"
-            textAlign="left"
-            splitType="chars"
-            delay={45}
-            duration={0.9}
-            ease="expo.out"
-            from={{ opacity: 0, y: 48, rotateX: -70, filter: "blur(10px)" }}
-            to={{ opacity: 1, y: 0, rotateX: 0, filter: "blur(0px)" }}
-            rootMargin="0px"
-          />
-        </div>
-        <p className="home-loop">
-          <span className="home-loop-label">{t("hero.loopLabel")}</span>
-          <RotatingText
-            className="home-loop-phrase"
-            texts={[t("hero.loop1"), t("hero.loop2"), t("hero.loop3")]}
-            separator=" → "
-          />
-        </p>
-        <p className="home-lead">
-          <BlurText text={t("lead")} delay={10} />
-        </p>
-        <div className="home-actions">
-          {last ? (
-            <PrimaryAction>
-              <button
-                type="button"
-                className="home-cta home-cta-primary"
-                data-testid="home-continue"
-                onClick={() => onOpenLesson(last.id)}
-              >
-                <BookOpen size={17} aria-hidden="true" />
-                {t("continue", {
-                  number: formatLessonNumber(last.number),
-                  title: last.shortTitle,
-                })}
-                <ArrowRight size={16} aria-hidden="true" />
-              </button>
-            </PrimaryAction>
-          ) : (
-            <PrimaryAction>{onboarding(true)}</PrimaryAction>
-          )}
-          {last
-            ? onboarding(false)
-            : first && (
+      <div className="home-hero-main" ref={ref}>
+        <div className="home-hero-body">
+          <p className="home-kicker">
+            <span className="home-kicker-dot" aria-hidden="true" />
+            <ShinyText
+              text={t("kicker")}
+              color={light ? "#4a3bb8" : "#cfc7ff"}
+              shineColor={light ? "#b98aff" : "#ffffff"}
+              speed={3}
+              delay={1.5}
+            />
+          </p>
+          <motion.h1
+            id="home-hero-title"
+            className="home-title"
+            {...revealProps(
+              reduced,
+              { opacity: 0, y: 28, filter: "blur(10px)" },
+              { opacity: 1, y: 0, filter: "blur(0px)" },
+              { duration: 0.9, ease: [0.16, 1, 0.3, 1] },
+            )}
+          >
+            {t("hero.titleLead")}
+            <br />
+            <span className="home-title-accent">{t("hero.titleAccent")}</span>
+            {t("hero.titleTail")}
+          </motion.h1>
+          <p className="home-loop">
+            <span className="home-loop-label">{t("hero.loopLabel")}</span>
+            {phrases.map((text, index) => (
+              <span key={index} className="home-loop-step-wrap">
+                {index > 0 && (
+                  <span className="home-loop-arrow" aria-hidden="true">
+                    →
+                  </span>
+                )}
+                <span
+                  className="home-loop-step"
+                  data-lit={still || index === phrase ? "" : undefined}
+                >
+                  {text}
+                </span>
+              </span>
+            ))}
+          </p>
+          <div className="home-actions">
+            <button
+              type="button"
+              className="home-go"
+              data-testid={primary.testId}
+              onClick={primary.onClick}
+            >
+              <span className="home-go-ring" aria-hidden="true">
+                <ArrowRight size={20} />
+              </span>
+              <span className="home-go-text">{primary.label}</span>
+            </button>
+            <span className="home-entry-links">
+              {secondary && (
                 <button
                   type="button"
-                  className="home-cta home-cta-glass"
-                  data-testid="home-first-lesson"
-                  onClick={() => onOpenLesson(first.id)}
+                  className="home-entry-minor"
+                  data-testid={secondary.testId}
+                  onClick={secondary.onClick}
                 >
-                  <BookOpen size={17} aria-hidden="true" />
-                  {t("firstLesson")}
+                  {secondary.label}
                 </button>
               )}
-          {/* Tertiary: a text link, so the three ways in read as one clear
-              primary, one glass secondary and a quiet link. */}
-          <button
-            type="button"
-            className="home-cta home-cta-link"
-            data-testid="home-map"
-            onClick={onOpenMap}
-          >
-            <span>{t("map")}</span>
-            <ArrowRight size={15} aria-hidden="true" />
-          </button>
+              <button
+                type="button"
+                className="home-cta home-cta-link"
+                data-testid="home-map"
+                onClick={onOpenMap}
+              >
+                <span>{t("map")}</span>
+                <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            </span>
+          </div>
         </div>
+        <figure
+          className="home-trace"
+          role="img"
+          aria-label={t("hero.trace.label")}
+        >
+          <header aria-hidden="true">
+            <span className="home-trace-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+            <span className="home-trace-title">agent-loop.trace</span>
+            <span className="home-trace-tag">{t("stage.badge")}</span>
+          </header>
+          <ol aria-hidden="true">
+            {TRACE.map((item, index) => {
+              if (item.round)
+                return (
+                  <li key={index} className="home-trace-round">
+                    {t("hero.trace.round", { number: item.round })}
+                  </li>
+                );
+              row += 1;
+              const state =
+                still || row < traceStep
+                  ? "done"
+                  : row === traceStep
+                    ? "now"
+                    : undefined;
+              return (
+                <li key={index} className="home-trace-row" data-state={state}>
+                  <span className="home-trace-who" data-who={item.who}>
+                    {item.who}
+                  </span>
+                  <span className="home-trace-what">
+                    {item.code}
+                    {item.value && <b>{item.value}</b>}
+                    {item.note && <em> {t(`hero.trace.${item.note}`)}</em>}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </figure>
       </div>
       {stats && (
         <div className="home-stats-wrap">
