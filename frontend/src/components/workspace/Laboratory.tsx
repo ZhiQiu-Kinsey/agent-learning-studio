@@ -4,6 +4,7 @@ import { useReducedMotion } from "../../motion";
 import BorderGlow from "../react-bits/BorderGlow";
 import CountUp from "../react-bits/CountUp";
 import ClickSpark from "../react-bits/ClickSpark";
+import StarBorder from "../react-bits/StarBorder";
 import TextType from "../react-bits/TextType";
 import StatusMark from "../react-bits/StatusMark";
 import { AgentStage } from "../../stage/AgentStage";
@@ -270,22 +271,28 @@ export function Laboratory({
                     停止运行
                   </Button>
                 ) : (
-                  <Button
-                    data-testid="lab-run-button"
-                    onClick={() => {
-                      setTab("trace");
-                      void s.run();
-                    }}
-                    disabled={
-                      !s.detail ||
-                      !ready ||
-                      (!s.question.trim() &&
-                        !s.detail.capabilities?.supports_inputs)
-                    }
+                  <StarBorder
+                    className="lab-run-star"
+                    color="#c4b5ff"
+                    speed="4s"
                   >
-                    <Play size={15} />
-                    运行练习
-                  </Button>
+                    <Button
+                      data-testid="lab-run-button"
+                      onClick={() => {
+                        setTab("trace");
+                        void s.run();
+                      }}
+                      disabled={
+                        !s.detail ||
+                        !ready ||
+                        (!s.question.trim() &&
+                          !s.detail.capabilities?.supports_inputs)
+                      }
+                    >
+                      <Play size={15} />
+                      运行练习
+                    </Button>
+                  </StarBorder>
                 )}
                 <small>
                   {s.requiresModel ? "使用真实模型" : "运行本课程序"}

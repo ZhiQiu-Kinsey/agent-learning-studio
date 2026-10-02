@@ -13,21 +13,35 @@ import { useTranslation } from "react-i18next";
 import type { Walkthrough } from "../../content/types.gen";
 import { Code } from "../Code";
 
+const ease = [0.16, 1, 0.3, 1] as const;
+
+/**
+ * Teaching walkthrough (illustration, never a run record). Stepper-style: the
+ * progress rail fills as the learner moves; nothing advances by itself.
+ */
 export function AgentFlow({ flow }: { flow: Walkthrough }) {
   const { t } = useTranslation();
+  const { t: tw } = useTranslation("blocks", { keyPrefix: "walkthrough" });
   const [selected, setSelected] = useState(0);
+  const [direction, setDirection] = useState(1);
   const reduced = useReducedMotion();
   const step = flow.steps[selected];
   if (!step) return null;
+  const select = (index: number) => {
+    setDirection(index >= selected ? 1 : -1);
+    setSelected(index);
+  };
+  const progress =
+    flow.steps.length > 1 ? selected / (flow.steps.length - 1) : 1;
   return (
     <section
       className="agent-flow"
       id="lesson-flow"
-      aria-label="Agent 调用过程教学示意"
+      aria-label={tw("region")}
       data-testid="agent-flow"
     >
       <div className="learn-section-kicker">
-        <span>01 / EXPLORE THE LOOP</span>
+        <span>{tw("kicker")}</span>
         <span
           className="lesson-example-tag"
           data-testid="agent-flow-provenance"
@@ -40,43 +54,78 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
         <h2>{flow.title}</h2>
         {flow.description && <p>{flow.description}</p>}
       </div>
-      <div className="agent-flow-steps" aria-label="选择调用过程步骤">
-        {flow.steps.map((item, index) => (
-          <button
-            key={item.id}
-            className={`agent-flow-step ${index === selected ? "is-selected" : ""} ${index < selected ? "is-visited" : ""}`}
-            data-testid="agent-flow-step"
-            onClick={() => setSelected(index)}
-            aria-pressed={index === selected}
-            aria-controls="agent-flow-detail"
-          >
-            <span className="agent-step-number">
-              {index < selected ? <CheckCheck size={14} /> : `0${index + 1}`}
-            </span>
-            <span>
-              <strong>{item.label}</strong>
-              <small>{item.actor}</small>
-            </span>
-            {index < flow.steps.length - 1 && (
-              <ArrowRight
-                className="agent-step-connector"
-                size={14}
-                aria-hidden="true"
-              />
-            )}
-          </button>
-        ))}
+      <div className="agent-flow-stepper">
+        <div className="agent-flow-steps" aria-label={tw("steps")}>
+          {flow.steps.map((item, index) => (
+            <button
+              key={item.id}
+              className={`agent-flow-step ${index === selected ? "is-selected" : ""} ${index < selected ? "is-visited" : ""}`}
+              data-testid="agent-flow-step"
+              onClick={() => select(index)}
+              aria-pressed={index === selected}
+              aria-controls="agent-flow-detail"
+            >
+              <motion.span
+                className="agent-step-number"
+                animate={
+                  reduced ? undefined : { scale: index === selected ? 1.12 : 1 }
+                }
+                transition={{ type: "spring", bounce: 0.5, duration: 0.45 }}
+              >
+                {index < selected ? <CheckCheck size={14} /> : `0${index + 1}`}
+              </motion.span>
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.actor}</small>
+              </span>
+              {index < flow.steps.length - 1 && (
+                <ArrowRight
+                  className="agent-step-connector"
+                  size={14}
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+        <div
+          className="agent-flow-rail"
+          role="progressbar"
+          aria-label={tw("progress")}
+          aria-valuemin={1}
+          aria-valuemax={flow.steps.length}
+          aria-valuenow={selected + 1}
+        >
+          <motion.span
+            className="agent-flow-rail-fill"
+            initial={false}
+            animate={{ scaleX: progress }}
+            transition={
+              reduced
+                ? { duration: 0 }
+                : { type: "spring", bounce: 0.2, duration: 0.6 }
+            }
+          />
+        </div>
       </div>
-      <AnimatePresence mode="wait" initial={false}>
+      <AnimatePresence mode="wait" initial={false} custom={direction}>
         <motion.div
           key={selected}
           id="agent-flow-detail"
           className="agent-flow-detail"
           aria-live="polite"
-          initial={reduced ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={reduced ? undefined : { opacity: 0, y: -5 }}
-          transition={{ duration: 0.16 }}
+          initial={
+            reduced
+              ? false
+              : { opacity: 0, x: 24 * direction, filter: "blur(6px)" }
+          }
+          animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+          exit={
+            reduced
+              ? undefined
+              : { opacity: 0, x: -16 * direction, filter: "blur(4px)" }
+          }
+          transition={{ duration: 0.28, ease }}
         >
           <div
             className="agent-flow-explanation"
@@ -90,9 +139,11 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
             <p>{step.body}</p>
             {step.evidence && (
               <div className="agent-flow-evidence">
-                <EyeIcon />
+                <span className="agent-evidence-icon">
+                  <CheckCheck size={17} />
+                </span>
                 <div>
-                  <strong>你要核对的证据</strong>
+                  <strong>{tw("evidence")}</strong>
                   <p>{step.evidence}</p>
                 </div>
               </div>
@@ -103,9 +154,9 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
               <div className="agent-code-toolbar">
                 <span>
                   <Code2 size={13} />
-                  {step.language === "python" ? "Python" : "消息结构"}
+                  {step.language === "python" ? tw("python") : tw("messages")}
                 </span>
-                <span>示意片段 · 非运行记录</span>
+                <span>{tw("snippet")}</span>
               </div>
               <Code content={step.code} language={step.language} />
             </div>
@@ -113,36 +164,28 @@ export function AgentFlow({ flow }: { flow: Walkthrough }) {
         </motion.div>
       </AnimatePresence>
       <div className="agent-flow-footer">
-        <p>点击上方步骤，沿着数据流读懂一次调用。</p>
+        <p>{tw("hint")}</p>
         <div>
           <span>
             {String(selected + 1).padStart(2, "0")}
             <i> / {String(flow.steps.length).padStart(2, "0")}</i>
           </span>
           <button
-            aria-label="上一个示意步骤"
+            aria-label={tw("prev")}
             disabled={selected === 0}
-            onClick={() => setSelected(selected - 1)}
+            onClick={() => select(selected - 1)}
           >
             <ArrowLeft size={15} />
           </button>
           <button
-            aria-label="下一个示意步骤"
+            aria-label={tw("next")}
             disabled={selected === flow.steps.length - 1}
-            onClick={() => setSelected(selected + 1)}
+            onClick={() => select(selected + 1)}
           >
             <ArrowRight size={15} />
           </button>
         </div>
       </div>
     </section>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <span className="agent-evidence-icon">
-      <CheckCheck size={17} />
-    </span>
   );
 }

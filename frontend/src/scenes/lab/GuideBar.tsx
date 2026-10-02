@@ -79,7 +79,9 @@ export function GuideBar({
     >
       <div className="guide-bubble" aria-live="polite">
         {frame.narration && (
-          <p data-testid="guide-narration">{frame.narration}</p>
+          <p key={frame.step} data-testid="guide-narration">
+            {frame.narration}
+          </p>
         )}
         {evidence &&
           (evidence.found ? (

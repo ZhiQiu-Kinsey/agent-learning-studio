@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { Check, Circle, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -12,6 +12,7 @@ import { confidenceLevels, type Confidence } from "../progress/model";
 import type { QuizQuestion } from "../types";
 import { Button } from "./ui/button";
 import JellyRadio from "./react-bits/JellyRadio";
+import SparkBurst from "./react-bits/SparkBurst";
 
 const verdictIcon: Record<OptionVerdict, typeof Check> = {
   "correct-chosen": Check,
@@ -80,8 +81,13 @@ export function Quiz({
           <fieldset
             className="quiz-question"
             data-testid="quiz-question"
+            data-answered={!!answers[question.id] || undefined}
+            data-result={
+              checked ? (isCorrect ? "correct" : "incorrect") : undefined
+            }
             key={question.id}
             disabled={checked}
+            style={{ "--i": index } as CSSProperties}
           >
             <legend>
               <span aria-hidden="true">
@@ -174,6 +180,7 @@ export function Quiz({
                 data-testid="quiz-feedback"
               >
                 <strong>
+                  {isCorrect && <SparkBurst />}
                   {isCorrect ? <Check size={15} /> : <X size={15} />}
                   {isCorrect ? t("correct") : t("incorrect")}
                 </strong>

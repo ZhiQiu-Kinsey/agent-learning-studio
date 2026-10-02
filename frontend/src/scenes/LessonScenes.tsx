@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
-import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
@@ -8,19 +7,13 @@ import {
   ListChecks,
   NotebookPen,
 } from "lucide-react";
-import { MotionIntent, useReducedMotion } from "../motion";
+import { useReducedMotion } from "../motion";
 import { formatLessonNumber } from "../lib/lessonIds";
-import { Backdrop } from "../components/backdrops/Backdrop";
-import { backdropFor } from "../components/backdrops/presets";
-import { useLessonCategory } from "../hooks/useCurriculum";
+import { useCurriculum } from "../hooks/useCurriculum";
 import { track } from "../progress";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../components/ui/tabs";
+import { Tabs, TabsContent } from "../components/ui/tabs";
 import type { StudioState } from "../hooks/useStudio";
+import { LessonMasthead } from "./LessonMasthead";
 import { sceneIds, type SceneId, type SceneProps } from "./types";
 import "../styles/scenes.css";
 
@@ -73,7 +66,13 @@ export function LessonScenes({
   );
   const detail = studio.detail;
   const lessonId = detail?.id;
-  const category = useLessonCategory(lessonId);
+  const curriculum = useCurriculum();
+  const category = curriculum?.lessons.find(
+    (lesson) => lesson.id === lessonId,
+  )?.category_id;
+  const categoryTitle = curriculum?.categories.find(
+    (item) => item.id === category,
+  )?.title;
 
   const goTo = (next: SceneId) => {
     setScene(next);
@@ -132,79 +131,18 @@ export function LessonScenes({
       onValueChange={(value) => goTo(value as SceneId)}
       className="workspace-modes lesson-scenes"
     >
-      <div className="lesson-masthead" data-testid="lesson-masthead">
-        {visible && (
-          <Backdrop name={backdropFor(category)} className="masthead-backdrop" />
-        )}
-        <div className="lesson-heading">
-          <span className="lesson-badge" data-testid="lesson-badge">
-            {number}
-          </span>
-          <div>
-            <p className="masthead-kicker">{t("kicker", { number })}</p>
-            <MotionIntent
-              name="heading.split"
-              key={`${detail.id}-${title}`}
-              text={title}
-              tag="h1"
-              textAlign="left"
-              splitType="chars"
-              delay={45}
-              duration={0.55}
-              from={{ opacity: 0, y: 14, rotateX: -25 }}
-              to={{ opacity: 1, y: 0, rotateX: 0 }}
-              rootMargin="0px"
-            />
-            {capabilities.length > 0 && (
-              <ul
-                className="lesson-capabilities"
-                aria-label={t("capabilities.region")}
-              >
-                {capabilities.map((capability) => (
-                  <li key={capability} data-capability={capability}>
-                    {t(`capabilities.${capability}`)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-        <TabsList
-          className="mode-navigation scene-navigation"
-          aria-label={t("scenes.region")}
-          data-testid="scene-tabs"
-        >
-          {sceneIds.map((id) => {
-            const Icon = icons[id];
-            return (
-              <TabsTrigger
-                key={id}
-                value={id}
-                data-testid={`scene-tab-${id}`}
-                title={t(`sceneHint.${id}`)}
-              >
-                {scene === id && (
-                  <motion.span
-                    aria-hidden="true"
-                    className="mode-active-pill"
-                    layoutId="lesson-scene"
-                    transition={{
-                      type: "spring",
-                      bounce: 0.15,
-                      duration: reduced ? 0 : 0.4,
-                    }}
-                  />
-                )}
-                <Icon size={16} aria-hidden="true" />
-                {t(`scenes.${id}`)}
-                {id === "lab" && studio.running && (
-                  <i className="live-indicator" />
-                )}
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      </div>
+      <LessonMasthead
+        lessonId={detail.id}
+        number={number}
+        title={title}
+        capabilities={capabilities}
+        category={category}
+        categoryTitle={categoryTitle}
+        scene={scene}
+        icons={icons}
+        running={studio.running}
+        visible={visible}
+      />
       {sceneIds.map((id) => {
         const Scene = scenes[id];
         return (
@@ -213,7 +151,7 @@ export function LessonScenes({
             value={id}
             forceMount
             hidden={scene !== id}
-            className="mode-panel scene-panel motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
+            className="mode-panel scene-panel"
           >
             {opened.has(id) && (
               <Suspense

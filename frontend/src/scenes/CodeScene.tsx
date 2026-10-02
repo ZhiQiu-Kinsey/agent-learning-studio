@@ -14,6 +14,8 @@ import "prismjs/components/prism-python";
 import "prismjs/components/prism-json";
 import { FlaskConical } from "lucide-react";
 import { Code } from "../components/Code";
+import FadeContent from "../components/react-bits/FadeContent";
+import GlareHover from "../components/react-bits/GlareSheen";
 import { blocksOfType, sceneBlocks } from "../content/view";
 import { useReducedMotion } from "../motion";
 import { requestScene } from "./LessonScenes";
@@ -162,8 +164,11 @@ function WhatsNew({
       </p>
       {items.length ? (
         <ul>
-          {items.map((item) => (
-            <li key={`${item.path}:${item.name}:${item.start}`}>
+          {items.map((item, index) => (
+            <li
+              key={`${item.path}:${item.name}:${item.start}`}
+              style={{ "--i": index } as CSSProperties}
+            >
               <button
                 type="button"
                 data-testid="code-whats-new-item"
@@ -440,6 +445,7 @@ export function CodeScene({ studio }: SceneProps) {
                   style={
                     {
                       "--note-top": `${layout.tops[index] ?? 0}px`,
+                      "--i": index,
                     } as CSSProperties
                   }
                 >
@@ -517,31 +523,35 @@ export function CodeScene({ studio }: SceneProps) {
         <section className="code-decisions" data-testid="code-decisions">
           <span className="reading-eyebrow">{t("decisions.eyebrow")}</span>
           <h2>{t("decisions.title")}</h2>
-          {decisions.map((decision) => (
-            <article
+          {decisions.map((decision, index) => (
+            <FadeContent
               key={decision.id}
-              className="code-decision"
-              data-testid="code-decision"
+              className="code-decision-reveal"
+              delay={index * 0.08}
             >
-              <h3>{decision.title}</h3>
-              <div className="code-decision-chosen">
-                <h4>{t("decisions.chosen")}</h4>
-                <p>{decision.chosen}</p>
-              </div>
-              {decision.alternatives.length > 0 && (
-                <div className="code-decision-alternatives">
-                  <h4>{t("decisions.alternatives")}</h4>
-                  <ul>
-                    {decision.alternatives.map((alternative) => (
-                      <li key={alternative.id}>
-                        <strong>{alternative.title}</strong>
-                        <p>{alternative.why_not}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </article>
+              <GlareHover glareColor="185 138 255" glareOpacity={0.18}>
+                <article className="code-decision" data-testid="code-decision">
+                  <h3>{decision.title}</h3>
+                  <div className="code-decision-chosen">
+                    <h4>{t("decisions.chosen")}</h4>
+                    <p>{decision.chosen}</p>
+                  </div>
+                  {decision.alternatives.length > 0 && (
+                    <div className="code-decision-alternatives">
+                      <h4>{t("decisions.alternatives")}</h4>
+                      <ul>
+                        {decision.alternatives.map((alternative) => (
+                          <li key={alternative.id}>
+                            <strong>{alternative.title}</strong>
+                            <p>{alternative.why_not}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </article>
+              </GlareHover>
+            </FadeContent>
           ))}
         </section>
       )}
