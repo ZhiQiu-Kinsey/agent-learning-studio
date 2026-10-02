@@ -3,6 +3,9 @@
   "schema_version": 2,
   "lesson": "context-budget",
   "source_language": "zh-CN",
+  "capabilities": [
+    "context"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -46,7 +49,7 @@
           "type": "prose",
           "title": "预算量的是哪一种长度",
           "paragraphs": [
-            "模型上下文有容量限制，但本课的 char_budget 是本地序列化 JSON 的字符上限，用于直观看到压缩后的大小；它不是模型 tokenizer 的准确 token 数，也不等于服务商账单。响应若提供 usage，报告单独列出返回值；没有返回时写“未知”，不把它记成零。"
+            "模型的上下文窗口（Context Window）有容量限制，需要为每次请求分配上下文预算（Context Budget）；但本课的 char_budget 是本地序列化 JSON 的字符上限，用于直观看到压缩后的大小；它不是模型 tokenizer 的准确 token 数，也不等于服务商账单。响应若提供用量（Usage）字段 usage，报告单独列出返回值；没有返回时写“未知”，不把它记成零。"
           ]
         },
         {
@@ -54,8 +57,35 @@
           "type": "prose",
           "title": "保留完整历史的代价",
           "paragraphs": [
-            "本课先通过真实本地 lookup_lesson 工具取得事实与 source。三组历史均由课程程序组装为受控上下文；其中 assistant 工具调用消息和旁支回复不是前轮模型真实生成。工具回执来自实际 Python 查询，展示合法协议配对。完整请求包含目标、工具对、旁支讨论和共同追问。增加 noise_repeats 后，完整请求的字符数增长。"
+            "本课先通过真实本地 lookup_lesson 工具取得事实与 source。三组历史均由课程程序组装为受控上下文；其中 assistant 的工具调用（Tool Calling）消息和旁支回复不是前轮模型真实生成。工具回执来自实际 Python 查询，展示合法协议配对。完整请求包含目标、工具对、旁支讨论和共同追问。增加 noise_repeats 后，完整请求的字符数增长。"
           ]
+        },
+        {
+          "id": "mq-char-budget",
+          "type": "micro-quiz",
+          "question": {
+            "id": "char-budget-unit",
+            "prompt": "本课的 char_budget=600 限制的是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "本地序列化后 JSON 的字符数，不是 Token 数",
+                "feedback": "对。它只是直观的长度指标。"
+              },
+              {
+                "id": "b",
+                "text": "模型上下文窗口的 Token 上限",
+                "feedback": "不对。Token 由模型的分词器决定，字符数只能粗略估计。"
+              },
+              {
+                "id": "c",
+                "text": "服务商账单的费用上限",
+                "feedback": "不对。费用按服务商报告的用量计算。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "预算的单位要说清楚：本地字符数、Token 和费用是三种不同的量。"
+          }
         },
         {
           "id": "section-3",
@@ -70,8 +100,35 @@
           "type": "prose",
           "title": "规则压缩保留关键证据",
           "paragraphs": [
-            "压缩版本从本次本地读取结果生成一条结构化任务记录：目标、约束、来源、事实和待办。它是程序明确选择信息的规则摘要，不声称由模型自动理解全文。构造完成后先核对字符预算；若关键证据装不下，抛出错误而不悄悄删掉来源。"
+            "压缩版本是一种上下文压缩（Context Compression）：从本次本地读取结果生成一条结构化任务记录：目标、约束、来源、事实和待办。它是程序明确选择信息的规则摘要，不声称由模型自动理解全文。构造完成后先核对字符预算；若关键证据装不下，抛出错误而不悄悄删掉来源。"
           ]
+        },
+        {
+          "id": "mq-window-loss",
+          "type": "micro-quiz",
+          "question": {
+            "id": "window-loss",
+            "prompt": "窗口布局把早先的工具调用和回执成组移除。结果是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "消息协议仍然合法，但来源和事实可能不再可见",
+                "feedback": "对。成组移除保住了协议，丢掉的是证据。"
+              },
+              {
+                "id": "b",
+                "text": "请求会因为孤立的 tool 消息被拒绝",
+                "feedback": "不对。正因为成组移除，才不会留下孤立的回执。"
+              },
+              {
+                "id": "c",
+                "text": "信息没有损失，只是变短了",
+                "feedback": "不对。被移除的正是来源和事实。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "压缩要同时守住协议合法和关键证据，二者缺一不可。"
+          }
         },
         {
           "id": "section-5",
@@ -138,53 +195,366 @@
               "evidence": "response / lesson.report"
             }
           ]
+        },
+        {
+          "id": "predict-tool-calls",
+          "type": "predict",
+          "prompt": "在实验中运行“资料 lesson-07，旁支重复 8 次”之前先猜：这次运行会出现几个 tool_call 事件？想一想，消息里那条 assistant 工具调用是不是一次真实执行。",
+          "experiment": "three-layouts",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "把长度与证据损失放在同一张表",
+          "id": "three-layouts",
+          "title": "同一问题，三种可见上下文",
+          "hypothesis": "截取窗口会成组移除早先的工具调用与回执，因而丢掉来源和事实；规则压缩只保留目标、来源、事实和待办，比完整历史短得多，却仍保留回答所需的依据。",
+          "predict": "predict-tool-calls",
           "arms": [
             {
               "id": "compare",
               "exercise": "compare",
-              "label": "完整、窗口与压缩"
-            },
-            {
-              "id": "more-noise",
-              "exercise": "more_noise",
-              "label": "增加旁支历史"
+              "label": "资料 lesson-07，旁支重复 8 次"
             },
             {
               "id": "alternate",
               "exercise": "alternate",
-              "label": "换一个资料来源"
+              "label": "换成资料 lesson-08，其余不变"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "找出本地 tool_call 与 tool_result 的相同 id，确认资料读取真实发生。"
+              "id": "lookup-result",
+              "text": "本地 lookup_lesson 的实际返回：source 与 fact。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result",
+                "name": "lookup_lesson"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "逐一展开三条 request：完整历史含工具对；窗口没有工具对；压缩保留来源和事实。"
+              "id": "construction-note",
+              "text": "构造说明：三组消息由课程程序组装，旁支回复与 assistant 工具调用不是模型生成的。",
+              "selector": {
+                "event": "lesson.context_variant",
+                "path": "data.detail"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "将 noise_repeats 从 8 调到 20，比较三种 JSON 字符数，注意压缩记录未随噪声增长。"
+              "id": "full-receipt",
+              "text": "完整布局的 messages[3]：工具回执还在，带着 tool_call_id。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[3]"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "查看每条 response 是否返回 usage；没有值时报告应写未知。"
+              "id": "window-messages",
+              "text": "窗口布局的 messages：只剩 system、最近两条旁支和追问，工具调用与回执成组移除。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages"
+              }
             },
             {
-              "id": "observe-5",
-              "text": "把 char_budget 调小到不足以保留摘要，确认程序拒绝而不是静默裁剪。"
+              "id": "window-answer",
+              "text": "窗口布局的回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "compressed-record",
+              "text": "压缩布局的任务记录：目标、约束、来源、证据和待办写在一条消息里。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.messages[1].content"
+              }
+            },
+            {
+              "id": "usage-field",
+              "text": "响应中的 usage：只有服务商实际返回时才有。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.usage"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "三种布局回答同一个问题。先看证据从哪里来。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "lookup-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "lookup-result"
+            },
+            {
+              "action": "narrate",
+              "text": "资料来自一次真实的本地 Python 读取：source 和 fact 都在这里。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "construction-note"
+            },
+            {
+              "action": "highlight",
+              "observe": "construction-note"
+            },
+            {
+              "action": "narrate",
+              "text": "注意：三组消息都是程序组装的受控样本，其中的 assistant 工具调用和旁支回复不是模型生成的。"
+            },
+            {
+              "action": "seek",
+              "observe": "full-receipt"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-receipt"
+            },
+            {
+              "action": "narrate",
+              "text": "完整布局保留了工具调用和回执，来源与事实都可见，代价是长度。"
+            },
+            {
+              "action": "seek",
+              "observe": "window-messages"
+            },
+            {
+              "action": "highlight",
+              "observe": "window-messages"
+            },
+            {
+              "action": "narrate",
+              "text": "窗口布局只留最近几条。调用和回执成组移除，协议仍然合法，但来源和事实不见了。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "window-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "window-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "读窗口布局的回答：没有来源时，模型是否说明了缺少依据？"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "compressed-record"
+            },
+            {
+              "action": "highlight",
+              "observe": "compressed-record"
+            },
+            {
+              "action": "narrate",
+              "text": "压缩布局把目标、来源、事实和待办写成一条记录。它由程序从实际的 lookup_lesson 返回值生成，不是模型摘要。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "usage-field"
+            },
+            {
+              "action": "highlight",
+              "observe": "usage-field"
+            },
+            {
+              "action": "narrate",
+              "text": "最后看 usage：这是服务商在响应里报告的用量。没有返回时报告写“未知”，不拿字符数冒充。离线测试模式下的 usage 是脚本粗略生成的。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次三种布局实际发出的 messages 各包含哪些信息，以及各自得到的回答。",
+              "压缩记录是否保留来源和事实、是否低于字符预算，由程序从实际请求计算。"
+            ],
+            "does_not_prove": [
+              "字符数不是 Token 数，也不等于账单；只有响应返回的 usage 才是服务商报告的用量。",
+              "单次对照中答案的差异也可能来自模型的不确定性，不能证明压缩在一般情况下更好。",
+              "离线测试模式下的回答和 usage 由测试脚本生成，不是服务商数据。"
+            ]
+          }
+        },
+        {
+          "id": "noise-growth",
+          "title": "增加旁支历史：谁变长了",
+          "hypothesis": "只把 noise_repeats 从 8 调到 20 时，完整布局的长度随之增长，窗口与压缩布局的长度基本不变。",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "compare",
+              "label": "旁支重复 8 次"
+            },
+            {
+              "id": "more-noise",
+              "exercise": "more_noise",
+              "label": "旁支重复 20 次，其余不变"
+            }
+          ],
+          "observe": [
+            {
+              "id": "noise-setting",
+              "text": "本次运行的输入：旁支历史重复次数。",
+              "selector": {
+                "event": "run_start",
+                "path": "data.inputs.noise_repeats"
+              }
+            },
+            {
+              "id": "full-messages",
+              "text": "完整布局的 messages：条数随旁支次数增长。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "full-chars",
+              "text": "报告中完整布局的 JSON 字符数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows[0][1]"
+              }
+            },
+            {
+              "id": "window-chars",
+              "text": "报告中窗口布局的 JSON 字符数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows[1][1]"
+              }
+            },
+            {
+              "id": "compressed-chars",
+              "text": "报告中压缩布局的 JSON 字符数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows[2][1]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组只差一个输入：旁支历史重复次数。先确认这一点。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "noise-setting"
+            },
+            {
+              "action": "highlight",
+              "observe": "noise-setting"
+            },
+            {
+              "action": "narrate",
+              "text": "这是你这次运行的 noise_repeats。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "full-messages"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-messages"
+            },
+            {
+              "action": "narrate",
+              "text": "完整布局把每一条旁支都带上，消息条数随之增加。"
+            },
+            {
+              "action": "seek",
+              "observe": "full-chars"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-chars"
+            },
+            {
+              "action": "narrate",
+              "text": "记下完整布局的字符数，再和另一组比较。"
+            },
+            {
+              "action": "seek",
+              "observe": "window-chars"
+            },
+            {
+              "action": "highlight",
+              "observe": "window-chars"
+            },
+            {
+              "action": "narrate",
+              "text": "窗口布局只保留最近两条旁支，长度几乎不受影响。"
+            },
+            {
+              "action": "seek",
+              "observe": "compressed-chars"
+            },
+            {
+              "action": "highlight",
+              "observe": "compressed-chars"
+            },
+            {
+              "action": "narrate",
+              "text": "压缩记录不随旁支增长。字符数只是本地长度指标，不是 Token 数。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "两组运行中完整布局的消息条数和字符数是否随旁支次数增长，压缩布局的字符数是否保持不变。"
+            ],
+            "does_not_prove": [
+              "不能证明更长的上下文一定让回答变差，这里只比较了长度。",
+              "字符数的增长不能直接换算成 Token 数或费用。"
+            ]
+          }
         }
       ],
       "inputs": [

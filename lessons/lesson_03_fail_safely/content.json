@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "fail-safely",
   "source_language": "zh-CN",
+  "capabilities": [
+    "tools",
+    "trust"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -46,7 +50,7 @@
           "type": "prose",
           "title": "Schema 说明接口，Python 负责守住边界",
           "paragraphs": [
-            "除法工具说明 a、b 应为数字，b 不能为 0。这能帮助模型生成合适的调用，但工具说明不是执行权限，也不能保证模型永远给对参数。Python 函数仍检查数字类型、有限范围和非零除数，运行器只查找 AVAILABLE_TOOLS 中明确登记的名称。\n这课没有让模型返回的任意代码直接执行。未知名称、损坏的 JSON、参数不匹配或除零，会在分派或工具检查中被拒绝。判断安全边界是否成立，要看实际执行路径，不能只看 Prompt 写了什么。"
+            "除法工具说明 a、b 应为数字，b 不能为 0。这能帮助模型生成合适的调用，但工具说明不是执行权限，也不能保证模型永远给对参数。Python 函数仍检查数字类型、有限范围和非零除数，运行器只查找 AVAILABLE_TOOLS 中明确登记的名称，这份登记表就是白名单（Allowlist）。\n这课没有让模型返回的任意代码直接执行。未知名称、损坏的 JSON、参数不匹配或除零，会在分派或工具检查中被拒绝。判断安全边界是否成立，要看实际执行路径，不能只看 Prompt 写了什么。"
           ]
         },
         {
@@ -58,12 +62,66 @@
           ]
         },
         {
+          "id": "mq-result-event",
+          "type": "micro-quiz",
+          "question": {
+            "id": "result-event-meaning",
+            "prompt": "运行记录里出现了一条 tool_result 事件。仅凭这一点能确定什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "有一条结果回传了，成败还要看其中的 ok",
+                "feedback": "对。tool_result 只说明有结果，失败同样会产生这条事件。"
+              },
+              {
+                "id": "b",
+                "text": "除法一定成功了",
+                "feedback": "不对。除零时同样会产生 tool_result，只是 ok=false。"
+              },
+              {
+                "id": "c",
+                "text": "模型已经根据结果给出了正确回答",
+                "feedback": "不对。回答在下一轮请求之后才产生，是否正确还要另外核对。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "事件出现与操作成功是两件事，要展开内容看 ok。"
+          }
+        },
+        {
           "id": "section-3",
           "type": "prose",
           "title": "循环结束与计算成功分开判断",
           "paragraphs": [
-            "工具失败后，模型可以给出说明错误的最终回答，整个请求因此正常结束。界面的 done=completed 表示运行循环结束；除法是否成功，仍取决于工具结果中的 ok。对错误进行了正确处理，也可能是这道边界练习的合格表现。\n重复发送同一除零参数不会让数学规则改变。Prompt 要求修正输入，运行器还用有限轮数避免持续调用。未知工具和损坏参数可以通过内部程序测试验证拒绝路径；这些人为构造的输入不能冒充真实模型曾经提出的调用。"
+            "工具失败后，模型可以给出说明错误的最终回答，整个请求因此正常结束。界面的 done=completed 表示运行循环结束；除法是否成功，仍取决于工具结果（Tool Result）中的 ok。对错误进行了正确处理，也可能是这道边界练习的合格表现。\n原样重试（Retry）同一个除零参数，不会让数学规则改变。Prompt 要求修正输入，运行器还用有限轮数作为停止条件（Stop Condition），避免持续调用。未知工具和损坏参数可以通过内部程序测试验证拒绝路径；这些人为构造的输入不能冒充真实模型曾经提出的调用。"
           ]
+        },
+        {
+          "id": "mq-done-vs-ok",
+          "type": "micro-quiz",
+          "question": {
+            "id": "done-versus-ok",
+            "prompt": "运行显示 done=completed，而唯一的工具结果是 ok=false。哪种理解正确？",
+            "options": [
+              {
+                "id": "a",
+                "text": "循环正常结束；除法失败了，如实说明错误也可能是合格表现",
+                "feedback": "对。两个状态回答的是不同问题。"
+              },
+              {
+                "id": "b",
+                "text": "两者矛盾，运行记录一定出错了",
+                "feedback": "不矛盾。工具失败后模型给出说明，循环照样正常结束。"
+              },
+              {
+                "id": "c",
+                "text": "completed 说明除法最终成功了",
+                "feedback": "不对。completed 不会覆盖工具结果里的 ok。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "done 描述运行循环，ok 描述这一次工具执行。"
+          }
         },
         {
           "id": "walkthrough",
@@ -111,50 +169,321 @@
               "evidence": "检查最终回答是否如实处理错误，且没有编造商、擅自改数或重复同一失败请求。"
             }
           ]
+        },
+        {
+          "id": "predict-divide-attempts",
+          "type": "predict",
+          "prompt": "在实验中运行“只改除数：12 除以 0”之前先猜：这次运行会出现几个 divide_numbers 的 tool_result 事件？",
+          "experiment": "zero-divisor",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_result",
+            "name": "divide_numbers"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "失败也应该成为可理解的结果",
+          "id": "zero-divisor",
+          "title": "只改除数：失败也要配对回传",
+          "hypothesis": "只把除数从 3 改成 0 时，Python 工具会拒绝计算并返回 ok=false；运行器仍把这条失败结果配对回传给模型，运行也能正常结束。",
+          "predict": "predict-divide-attempts",
           "arms": [
             {
               "id": "divide",
               "exercise": "divide",
-              "label": "正常除法"
+              "label": "对照：12 除以 3"
             },
             {
               "id": "zero",
               "exercise": "zero",
-              "label": "除数为零"
-            },
-            {
-              "id": "unknown",
-              "exercise": "unknown",
-              "label": "未知工具（离线注入）"
-            },
-            {
-              "id": "malformed",
-              "exercise": "malformed",
-              "label": "损坏参数（离线注入）"
+              "label": "只改除数：12 除以 0"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "先运行正常除法，对照 tool_result 中的 ok=true、result.quotient 和最终回答；再运行除数为零，找出 ok=false 与具体 error。"
+              "id": "arguments",
+              "text": "tool_call 的 arguments：两组只有 b 不同。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.function.arguments",
+                "name": "divide_numbers"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "展开失败后的下一轮 request：确认 role=tool 的错误已经回传，并用 tool_call_id 找到原调用；检查模型有没有把错误伪装成商或重复同一请求。"
+              "id": "ok-flag",
+              "text": "tool_result 的 ok：对照组应为 true，除零组应为 false。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.ok",
+                "name": "divide_numbers"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "把真实问题从“12 除以 0”改为“12 除以 3”，对照两次 tool_result；区分 done 的运行状态、工具 ok 和最终解释是否正确。"
+              "id": "quotient",
+              "text": "成功时的 quotient：只在 ok=true 的结果里出现。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.quotient"
+              }
+            },
+            {
+              "id": "error-detail",
+              "text": "失败时的 error：Python 校验给出的具体原因。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error"
+              }
+            },
+            {
+              "id": "error-returned",
+              "text": "第二轮 request 的 role=tool 消息：结果（包括失败原因）原样交给模型。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3].content"
+              }
+            },
+            {
+              "id": "run-status",
+              "text": "done 的 status：运行循环是否正常结束，这与工具是否成功是两回事。",
+              "selector": {
+                "event": "done",
+                "path": "data.status"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这组实验只改了一个变量：除数。先确认这一点。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "arguments"
+            },
+            {
+              "action": "highlight",
+              "observe": "arguments"
+            },
+            {
+              "action": "narrate",
+              "text": "看 arguments 里的 b：对照组是 3，除零组是 0，其余相同。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "ok-flag"
+            },
+            {
+              "action": "highlight",
+              "observe": "ok-flag"
+            },
+            {
+              "action": "narrate",
+              "text": "tool_result 出现只说明有结果回传，成败要看 ok。"
+            },
+            {
+              "action": "seek",
+              "observe": "quotient"
+            },
+            {
+              "action": "highlight",
+              "observe": "quotient"
+            },
+            {
+              "action": "narrate",
+              "text": "ok=true 时才有 quotient。如果你运行的是除零组，这里会提示本次运行没有这条证据。"
+            },
+            {
+              "action": "seek",
+              "observe": "error-detail"
+            },
+            {
+              "action": "highlight",
+              "observe": "error-detail"
+            },
+            {
+              "action": "narrate",
+              "text": "ok=false 时，error 写明了原因。它来自 Python 的输入校验，不是模型编的。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "error-returned"
+            },
+            {
+              "action": "highlight",
+              "observe": "error-returned"
+            },
+            {
+              "action": "narrate",
+              "text": "失败结果同样以 role=tool 消息配对回传，模型下一轮才能如实说明错误。"
+            },
+            {
+              "action": "seek",
+              "observe": "run-status"
+            },
+            {
+              "action": "highlight",
+              "observe": "run-status"
+            },
+            {
+              "action": "narrate",
+              "text": "done 显示的是运行循环的状态。循环正常结束，不等于除法成功。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行中除零输入是否被 Python 校验拒绝，失败结果是否以 ok=false 配对回传并进入下一轮请求。",
+              "done 的 completed 只说明循环结束；工具成败要看 tool_result 的 ok。"
+            ],
+            "does_not_prove": [
+              "不能证明模型面对所有错误都会如实说明，最终回答的措辞需要你自己阅读核对。",
+              "只检验了除数为零这一种非法输入，不能证明工具对所有非法输入都已覆盖。"
+            ]
+          }
+        },
+        {
+          "id": "injected-faults",
+          "title": "离线注入：未登记的工具与损坏的参数",
+          "hypothesis": "模型响应里出现未登记的工具名或无法解析的参数时，运行器在调用任何函数之前就拒绝，并把 error_type 与 error 作为失败结果配对回传。",
+          "arms": [
+            {
+              "id": "unknown",
+              "exercise": "unknown",
+              "label": "离线注入：调用未登记的 unregistered_tool"
+            },
+            {
+              "id": "malformed",
+              "exercise": "malformed",
+              "label": "离线注入：divide_numbers 的参数不是合法 JSON"
+            }
+          ],
+          "observe": [
+            {
+              "id": "unknown-name",
+              "text": "注入的工具名 unregistered_tool：它不在 AVAILABLE_TOOLS 里。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.function.name",
+                "name": "unregistered_tool"
+              }
+            },
+            {
+              "id": "broken-arguments",
+              "text": "注入的 arguments：一段无法解析的 JSON 文本。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.function.arguments",
+                "name": "divide_numbers"
+              }
+            },
+            {
+              "id": "error-type",
+              "text": "失败结果的 error_type：未登记名称为 ValueError，损坏参数为 JSONDecodeError。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "rejection-returned",
+              "text": "第二轮 request 的 role=tool 消息：拒绝原因同样配对回传。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3].content"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这两组是离线故障注入：模型响应由测试脚本故意构造，用来检验运行器的拒绝路径。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "unknown-name"
+            },
+            {
+              "action": "highlight",
+              "observe": "unknown-name"
+            },
+            {
+              "action": "narrate",
+              "text": "如果你运行的是未登记工具组，这里是被注入的名称。运行器只在白名单里查找函数，找不到就不执行。"
+            },
+            {
+              "action": "seek",
+              "observe": "broken-arguments"
+            },
+            {
+              "action": "highlight",
+              "observe": "broken-arguments"
+            },
+            {
+              "action": "narrate",
+              "text": "如果你运行的是损坏参数组，这里是无法解析的参数文本。解析失败时同样不会调用除法函数。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "error-type"
+            },
+            {
+              "action": "highlight",
+              "observe": "error-type"
+            },
+            {
+              "action": "narrate",
+              "text": "两种拒绝都被包装成 ok=false 的结果，error_type 说明了失败类别。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "rejection-returned"
+            },
+            {
+              "action": "highlight",
+              "observe": "rejection-returned"
+            },
+            {
+              "action": "narrate",
+              "text": "拒绝原因仍然通过 tool_call_id 配对回传，下一轮模型能读到它。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "白名单与参数解析在调用函数之前生效：本次注入的调用以 ok=false 结束，并保持与原调用 id 的配对。"
+            ],
+            "does_not_prove": [
+              "这些调用由离线脚本注入，不能当作真实模型曾经提出过的调用。",
+              "只覆盖了未登记名称与损坏 JSON 两种情况，不能证明所有异常输入都会被挡住。"
+            ]
+          }
         }
       ]
     },

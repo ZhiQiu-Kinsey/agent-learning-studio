@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "task-contract",
   "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "trust"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -29,7 +33,7 @@
               "id": "02-check",
               "label": "02 / CHECK",
               "title": "任务卡是验收规则，不是漂亮描述",
-              "description": "任务卡是验收规则，不是漂亮描述：goal 写目标，input_scope 限定数据，output 描述产物，evidence 指向实际工具结果，failure 规定不满足时的返回，stop 限制循环。",
+              "description": "任务卡是验收规则，不是漂亮描述：goal 写目标，input_scope 限定数据，output 描述产物，evidence 指向实际工具结果（Tool Result），failure 规定不满足时的返回，stop 限制循环。",
               "token": "validation · evidence"
             },
             {
@@ -54,8 +58,35 @@
           "type": "prose",
           "title": "任务卡是验收规则，不是漂亮描述",
           "paragraphs": [
-            "goal 写目标，input_scope 限定数据，output 描述产物，evidence 指向实际工具结果，failure 规定不满足时的返回，stop 限制循环。这些字段一起约束运行。改写任务卡会改变验收对象；单纯把回答说得更自信，不会改变检查结果。"
+            "任务卡把验收标准（Acceptance Criteria）提前写成字段：goal 写目标，input_scope 限定数据，output 描述产物，evidence 指向实际工具结果，failure 规定不满足时的返回，stop 限制循环。这些字段一起约束运行。改写任务卡会改变验收对象；单纯把回答说得更自信，不会改变检查结果。"
           ]
+        },
+        {
+          "id": "mq-card-evidence",
+          "type": "micro-quiz",
+          "question": {
+            "id": "evidence-field",
+            "prompt": "任务卡的 evidence 写着“计算工具成功返回且结果等于 42”。这个字段起什么作用？",
+            "options": [
+              {
+                "id": "a",
+                "text": "事先固定要检查的证据，让验收不依赖回答的措辞",
+                "feedback": "对。规则先于运行确定，结论才可复核。"
+              },
+              {
+                "id": "b",
+                "text": "提示模型把回答写得更自信",
+                "feedback": "不对。措辞再自信也不会改变检查结果。"
+              },
+              {
+                "id": "c",
+                "text": "代替计算工具，直接给出 42",
+                "feedback": "不对。它只规定要什么证据，证据仍须由工具实际产生。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "验收标准写在任务卡里，检查器据此比对实际结果。"
+          }
         },
         {
           "id": "section-3",
@@ -72,6 +103,33 @@
           "paragraphs": [
             "三个预设使用同一检查代码。normal 执行 19+23；missing_evidence 跳过计算，模拟证据缺失；wrong_result 用 19+22 构造错误结果。后两项是明确的教学故障注入，不是模型真实失误。固定输入让你能看清验收器如何处理边界。"
           ]
+        },
+        {
+          "id": "mq-fault-injection",
+          "type": "micro-quiz",
+          "question": {
+            "id": "wrong-result-meaning",
+            "prompt": "wrong_result 预设用 19 + 22 得到 41。这说明了什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "这是教学故障注入，用来展示同一验收规则如何处理错误结果",
+                "feedback": "对。输入被程序故意改动，规则没有变。"
+              },
+              {
+                "id": "b",
+                "text": "模型把加法算错了",
+                "feedback": "不对。这一课不调用模型，错误由预设注入。"
+              },
+              {
+                "id": "c",
+                "text": "Python 的加法不可靠",
+                "feedback": "不对。Python 正确算出了 19 + 22，只是它不满足任务卡。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "固定输入能让你看清验收器如何处理边界情况。"
+          }
         },
         {
           "id": "section-5",
@@ -138,49 +196,198 @@
               "evidence": "回答是结论，不是原始证据"
             }
           ]
+        },
+        {
+          "id": "predict-missing-evidence",
+          "type": "predict",
+          "prompt": "在实验中运行“故障注入：跳过计算，没有工具证据”之前先猜：这次运行会出现几个 tool_result 事件？",
+          "experiment": "acceptance",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_result"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "把任务写成能独立检查的契约",
+          "id": "acceptance",
+          "title": "同一张任务卡，三种证据",
+          "hypothesis": "验收结论只由任务卡规定的证据决定：缺少工具证据或结果不等于 42 时，即使流程正常结束、用户声称“已完成”，也不能通过验收。",
+          "predict": "predict-missing-evidence",
           "arms": [
             {
               "id": "normal",
               "exercise": "normal",
-              "label": "正常案例：计算与验收"
+              "label": "正常：计算 19 + 23，有工具证据"
             },
             {
               "id": "missing-evidence",
               "exercise": "missing-evidence",
-              "label": "边界案例：缺少执行证据"
+              "label": "故障注入：跳过计算，没有工具证据"
             },
             {
               "id": "wrong-result",
               "exercise": "wrong-result",
-              "label": "失败案例：结果错误"
+              "label": "故障注入：计算 19 + 22，结果为 41"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "对照 lesson.task_card 的 evidence、failure、stop 与 lesson.report 的检查项，确认规则在运行前已固定。"
+              "id": "card-evidence",
+              "text": "任务卡的 evidence：执行前就写明要什么证据。",
+              "selector": {
+                "event": "lesson.task_card",
+                "path": "data.evidence"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "在 normal 与 wrong-result 中找 tool_result 的 result，并解释为何只有 42 通过。"
+              "id": "card-failure",
+              "text": "任务卡的 failure：证据缺失或数值不符时必须标为未通过。",
+              "selector": {
+                "event": "lesson.task_card",
+                "path": "data.failure"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "在 missing-evidence 中检查没有 tool_result，却仍有“执行过程已结束”；说明两种终态的差别。"
+              "id": "tool-evidence",
+              "text": "add_numbers 的实际返回值：正常组为 42，结果错误组为 41；缺少证据组没有这条事件。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result",
+                "name": "add_numbers"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "修改问题栏写一条备注，在报告指标中找到它；工具输入和验收规则仍按预设执行。"
+              "id": "ended-check",
+              "text": "报告第一项“执行过程已结束”：三组都为真。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[0]"
+              }
+            },
+            {
+              "id": "value-check",
+              "text": "报告第三项“计算值满足任务卡”：期望值与实际值并列。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[2]"
+              }
+            },
+            {
+              "id": "claim-verdict",
+              "text": "用户声称与验收结论并列：声称不会改变结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows[0]"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这一课不调用模型，整个流程由本地 Python 执行。先看运行开始时发布的任务卡。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "card-evidence"
+            },
+            {
+              "action": "highlight",
+              "observe": "card-evidence"
+            },
+            {
+              "action": "narrate",
+              "text": "验收标准在执行前就固定了：要有成功的计算结果，并且等于 42。"
+            },
+            {
+              "action": "seek",
+              "observe": "card-failure"
+            },
+            {
+              "action": "highlight",
+              "observe": "card-failure"
+            },
+            {
+              "action": "narrate",
+              "text": "失败规则也写在前面：缺证据或数值不符，都要明确标为未通过。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "tool-evidence"
+            },
+            {
+              "action": "highlight",
+              "observe": "tool-evidence"
+            },
+            {
+              "action": "narrate",
+              "text": "这是本次唯一的工具证据。如果你运行的是缺少证据组，这里会提示本次运行没有这条证据，这正是该组要展示的情况。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "ended-check"
+            },
+            {
+              "action": "highlight",
+              "observe": "ended-check"
+            },
+            {
+              "action": "narrate",
+              "text": "第一项检查在三组都为真：流程走到了验收阶段，但这不代表任务成功。"
+            },
+            {
+              "action": "seek",
+              "observe": "value-check"
+            },
+            {
+              "action": "highlight",
+              "observe": "value-check"
+            },
+            {
+              "action": "narrate",
+              "text": "第三项检查把期望和实际并列，结论由它们推出。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "claim-verdict"
+            },
+            {
+              "action": "highlight",
+              "observe": "claim-verdict"
+            },
+            {
+              "action": "narrate",
+              "text": "用户声称“已完成”，验收结论却来自上面的检查，声称不会改变结论。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行的验收结论可以逐项追溯到任务卡的规则和 tool_result 中的实际值。",
+              "“执行过程已结束”在三组都为真，验收结论却不同：运行结束不等于任务通过。"
+            ],
+            "does_not_prove": [
+              "缺少证据和结果错误是课程程序注入的故障，不是模型的真实失误。",
+              "只核对 19 + 23 的任务卡不能证明开放任务也能这样验收；真实任务还需要更多案例和外部事实。"
+            ]
+          }
         }
       ],
       "inputs": [

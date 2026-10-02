@@ -167,9 +167,11 @@ class ApiTests(unittest.TestCase):
                 for section in prose:
                     self.assertTrue(section["title"].strip())
                     self.assertTrue(all(paragraph.strip() for paragraph in section["paragraphs"]))
-                experiment = learning["scenes"]["lab"]["experiments"][0]
-                self.assertGreaterEqual(len(experiment["observe"]), 1)
-                self.assertEqual({arm["exercise"] for arm in experiment["arms"]},
+                experiments = learning["scenes"]["lab"]["experiments"]
+                for experiment in experiments:
+                    self.assertGreaterEqual(len(experiment["observe"]), 1)
+                # 实验可以拆分得更有针对性，但每个练习都要出现在某个实验组里。
+                self.assertEqual({arm["exercise"] for experiment in experiments for arm in experiment["arms"]},
                                  {exercise["id"] for exercise in detail["exercises"]})
                 questions = learning["scenes"]["check"]["blocks"][0]["questions"]
                 self.assertGreaterEqual(len(questions), 2)

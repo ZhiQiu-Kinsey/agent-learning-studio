@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "messages-context",
   "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "context"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -46,7 +50,7 @@
           "type": "prose",
           "title": "模型看到的是本次请求",
           "paragraphs": [
-            "先写入事实，再进行追问。第二次调用能否使用先前事实，取决于程序是否把那轮消息重新放入 messages。RunContext.complete 会记录实际发送的 body；展开 request 才能确认可见上下文。上一轮出现在网页回放，不代表它自动进入下一轮模型请求。"
+            "先写入事实，再进行追问。第二次调用能否使用先前事实，取决于程序是否把那轮消息重新放入 messages，也就是本次请求携带的消息历史（Message History）。RunContext.complete 会记录实际发送的 body；展开 request 才能确认可见上下文。上一轮出现在网页回放，不代表它自动进入下一轮模型请求。"
           ]
         },
         {
@@ -58,11 +62,38 @@
           ]
         },
         {
+          "id": "mq-history-resent",
+          "type": "micro-quiz",
+          "question": {
+            "id": "history-resent",
+            "prompt": "第二次请求能用上第一次发出的事实，靠的是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "程序把第一次的 user 与 assistant 消息重新放进了本次 messages",
+                "feedback": "对。历史需要程序重发，模型才看得到。"
+              },
+              {
+                "id": "b",
+                "text": "模型在第一次请求后记住了事实",
+                "feedback": "不对。模型没有跨请求的隐藏记忆。"
+              },
+              {
+                "id": "c",
+                "text": "网页回放里显示过第一次对话",
+                "feedback": "不对。页面显示不等于发给了模型。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "模型能用的上下文，只有本次请求携带的消息。"
+          }
+        },
+        {
           "id": "section-3",
           "type": "prose",
           "title": "工具消息有配对规则",
           "paragraphs": [
-            "工具调用先由 assistant 消息中的 tool_calls 提出，每个 id 后面必须有相应 role=tool 且 tool_call_id 相同的结果。孤立的 tool 回执或未补齐结果的调用可能被 API 拒绝。此课通过 validate_tool_history 做本地协议检查；真实对照没有工具调用，因此不虚构一条模型工具调用记录。"
+            "工具调用（Tool Calling）先由 assistant 消息中的 tool_calls 提出，每个 id 后面必须有相应 role=tool 且 tool_call_id 相同的结果。孤立的 tool 回执或未补齐结果的调用可能被 API 拒绝。此课用验证器（Validator）validate_tool_history 做本地协议检查；真实对照没有工具调用，因此不虚构一条模型工具调用记录。"
           ]
         },
         {
@@ -72,6 +103,33 @@
           "paragraphs": [
             "默认练习先向模型发送事实并取得真实回复，再用完整历史追问；第三次只保留 system 与相同追问。两条追问均是合法消息序列，变化的是可见事实。先检查请求是否被供应商接受，再比较证据是否出现在 messages，最后看答案是否正确；三者不能混为同一指标。"
           ]
+        },
+        {
+          "id": "mq-ablation-order",
+          "type": "micro-quiz",
+          "question": {
+            "id": "ablation-order",
+            "prompt": "消融追问的回答是“无法从当前消息确定”。应该先核对什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "这次请求是否被正常接受，messages 里是否确实没有事实",
+                "feedback": "对。先确认协议与可见性，再评价回答。"
+              },
+              {
+                "id": "b",
+                "text": "模型是不是出了故障",
+                "feedback": "先别下结论。请求里没有事实时，这样回答正符合 system 的要求。"
+              },
+              {
+                "id": "c",
+                "text": "换一个更大的模型重跑",
+                "feedback": "这样会引入新的变量，无法解释这次对照。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "协议、可见性、回答三者要分开判断。"
+          }
         },
         {
           "id": "section-5",
@@ -138,49 +196,211 @@
               "evidence": "lesson.report"
             }
           ]
+        },
+        {
+          "id": "predict-request-count",
+          "type": "predict",
+          "prompt": "在实验中运行“事实 QH-731：完整历史与移除事实各追问一次”之前先猜：这次运行一共会发出几次模型请求（request 事件）？",
+          "experiment": "history-ablation",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "把每次真实发送的消息摊开来看",
+          "id": "history-ablation",
+          "title": "同一追问：带历史与不带历史",
+          "hypothesis": "同一追问、同一模型下，只有把先前事实所在的消息重新放进 messages，模型才有依据回答；移除这些消息后，模型无法从当前请求得知该事实。",
+          "predict": "predict-request-count",
           "arms": [
             {
               "id": "compare",
               "exercise": "compare",
-              "label": "完整历史与事实消融"
+              "label": "事实 QH-731：完整历史与移除事实各追问一次"
             },
             {
               "id": "alternate",
               "exercise": "alternate",
-              "label": "换一条事实再比较"
+              "label": "换一条事实 BLUE-204，同样对照"
             },
             {
               "id": "full",
               "exercise": "full",
-              "label": "仅查看完整历史"
+              "label": "只发完整历史追问，不做消融"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "打开第一轮 request，找到包含事实的 user 消息；再看对应的真实 response。"
+              "id": "fact-sent",
+              "text": "第一轮 request 的 user 消息：事实只在这里发出过一次。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[1].content"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "打开完整历史追问的 request，逐条数 system、user、assistant、user。"
+              "id": "full-history",
+              "text": "第二轮完整历史：system、带事实的 user、上一轮 assistant 回复、追问，共四条。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "打开消融追问的 request，确认事实和上一轮 assistant 回复都没有被发送。"
+              "id": "full-answer",
+              "text": "完整历史追问的回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.content"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "对照两次 response 和 lesson.report：先判 API 是否返回，再判断证据可见性与回答。"
+              "id": "ablated-history",
+              "text": "第三轮消融历史：只剩 system 与同一追问。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "ablated-answer",
+              "text": "消融追问的回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 3,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "visibility-table",
+              "text": "报告表格：消息数、是否包含事实与回答并列。“是否包含”由程序逐条检查请求内容得出。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "模型只能看到本次请求里的消息。沿着几次请求看事实在哪里。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "fact-sent"
+            },
+            {
+              "action": "highlight",
+              "observe": "fact-sent"
+            },
+            {
+              "action": "narrate",
+              "text": "事实在第一轮以 user 消息发出，模型这一轮只是确认收到。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "full-history"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-history"
+            },
+            {
+              "action": "narrate",
+              "text": "第二轮是程序重新组装的完整历史：把第一轮的 user 和 assistant 消息又发了一遍，最后接上追问。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "full-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "读这次回答：事实就在本次请求里，模型有依据作答。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "ablated-history"
+            },
+            {
+              "action": "highlight",
+              "observe": "ablated-history"
+            },
+            {
+              "action": "narrate",
+              "text": "第三轮只保留 system 和同一追问，事实所在的消息没有发送。若你运行的是“只发完整历史”，这里会提示本次运行没有这条证据。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "ablated-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "ablated-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "读消融追问的回答：请求里没有事实时，模型能否回答？"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "visibility-table"
+            },
+            {
+              "action": "highlight",
+              "observe": "visibility-table"
+            },
+            {
+              "action": "narrate",
+              "text": "报告先列可见性，再列回答。判断顺序是：请求是否被接受、事实是否可见、回答是否正确。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次哪一次请求的 messages 包含事实、哪一次不包含，以及两次追问各自得到的回答。",
+              "两次追问都是合法的消息序列，差别只在事实是否可见。"
+            ],
+            "does_not_prove": [
+              "回答差异不能证明模型有或没有“内部记忆”，只说明两次请求的可见内容不同。",
+              "若消融追问仍然答对，也不能说模型读到了已删除的消息，可能只是猜中。",
+              "离线测试模式下的回答由脚本根据请求内容生成。"
+            ]
+          }
         }
       ],
       "inputs": [

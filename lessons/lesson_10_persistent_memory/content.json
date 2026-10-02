@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "persistent-memory",
   "source_language": "zh-CN",
+  "capabilities": [
+    "memory",
+    "trust"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -44,9 +48,9 @@
         {
           "id": "section-1",
           "type": "prose",
-          "title": "持久记忆存在哪里",
+          "title": "持久记忆（Persistent Memory）存在哪里",
           "paragraphs": [
-            "本课使用标准库 SQLite。live 运行写入项目固定位置 .runtime/lesson10-memory.sqlite3，同一 namespace/key 的后续 live 运行能取回；offline 运行写入自动清理的临时库，不会污染现场数据。存储是数据库行为，不是模型参数训练，也不会因为页面显示一条对话而自动发生。"
+            "记忆（Memory）是程序为模型保存、之后再提供的信息，模型本身不会因为一次对话就记住内容。本课使用标准库 SQLite。live 运行写入项目固定位置 .runtime/lesson10-memory.sqlite3，同一 namespace/key 的后续 live 运行能取回；offline 运行写入自动清理的临时库，不会污染现场数据。存储是数据库行为，不是模型参数训练，也不会因为页面显示一条对话而自动发生。"
           ]
         },
         {
@@ -56,6 +60,33 @@
           "paragraphs": [
             "练习的 value 与 source 来自本次输入；程序显式调用 put，保存 namespace、key、value、source、version、updated_at 与可选 expires_at。它没有从模型文本里抽取用户偏好，也不扫描其他会话。保存后关闭第一条数据库连接，再新建连接按相同 namespace/key 检索，恢复结果才算真实跨连接读取。"
           ]
+        },
+        {
+          "id": "mq-reopen-proves",
+          "type": "micro-quiz",
+          "question": {
+            "id": "reopen-proves",
+            "prompt": "关闭第一条数据库连接、再用新连接读回记录，这一步要证明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "记录确实写进了 SQLite，而不是只留在进程内的变量里",
+                "feedback": "对。重开连接排除了内存缓存的可能。"
+              },
+              {
+                "id": "b",
+                "text": "模型参数学会了这条记忆",
+                "feedback": "不对。本课不调用模型，也没有训练。"
+              },
+              {
+                "id": "c",
+                "text": "其他 namespace 也能读到这条记录",
+                "feedback": "不对。按另一个 namespace 查询同一个 key 应该为空。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "持久记忆是外部存储，重开连接读回才算跨连接恢复。"
+          }
         },
         {
           "id": "section-3",
@@ -72,6 +103,33 @@
           "paragraphs": [
             "同一范围和键的写入带 expected_version。版本不符时抛出冲突错误，不覆盖现值；使用当前版本更新后，version 加一，并保存新的来源。冲突预设先故意提交过时版本，验证拒绝，再做合法更新。如此能区分“资料变了”和“某条旧消息还留在上下文里”。"
           ]
+        },
+        {
+          "id": "mq-stale-version",
+          "type": "micro-quiz",
+          "question": {
+            "id": "stale-version",
+            "prompt": "以 expected_version=1 写入，但当前版本已经是 2。会发生什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "抛出版本冲突，现值不被覆盖",
+                "feedback": "对。乐观版本检查在写入前执行。"
+              },
+              {
+                "id": "b",
+                "text": "覆盖为新值，版本变为 3",
+                "feedback": "不对。版本不符时不会写入。"
+              },
+              {
+                "id": "c",
+                "text": "静默忽略这次写入",
+                "feedback": "不对。程序会明确报错，而不是悄悄丢弃。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "版本号让过时的资料无法覆盖新资料。"
+          }
         },
         {
           "id": "section-5",
@@ -146,58 +204,328 @@
               "evidence": "lesson.memory / lesson.report"
             }
           ]
+        },
+        {
+          "id": "predict-memory-events",
+          "type": "predict",
+          "prompt": "在实验中运行“先写入，再让记录过期，最后删除并重开核对”之前先猜：这次运行会出现几条 lesson.memory 事件？",
+          "experiment": "version-and-forget",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.memory"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "真正重开连接，核对能保存也能遗忘",
+          "id": "reopen-and-recall",
+          "title": "写入、重开连接、只读恢复",
+          "hypothesis": "写入 SQLite 的记忆在关闭连接后仍能用新连接按 namespace/key 读回；只读恢复不写入任何数据，读到什么取决于存储里已有的记录。",
           "arms": [
             {
               "id": "reopen",
               "exercise": "reopen",
-              "label": "保存与重开连接"
+              "label": "写入学习目标，关闭连接后用新连接读回"
             },
             {
               "id": "recall-only",
               "exercise": "recall_only",
-              "label": "只读恢复上次记忆"
-            },
-            {
-              "id": "conflict",
-              "exercise": "conflict",
-              "label": "冲突与版本更新"
-            },
-            {
-              "id": "expiry-delete",
-              "exercise": "expiry_delete",
-              "label": "过期与删除"
+              "label": "不写入，只读取同一 namespace/key"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "查看 saved 事件的 namespace/key、source、version 和存储方式。"
+              "id": "memory-action",
+              "text": "lesson.memory 的 action：写入组为 saved，只读组为 recall_only。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.action"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "先运行保存，再切换只读恢复预设，核对上次的值、来源和版本；offline 使用临时预置样本。"
+              "id": "record-source",
+              "text": "记录中保存的 source：来源说明随值一起存下。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.record.source"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "切换 conflict 预设，核对过时版本确实被拒绝，之后合法版本递增。"
+              "id": "record-version",
+              "text": "记录的 version：每次合法写入递增。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.record.version"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "切换 expiry_delete，分别核对过期不可见和 SQL 删除后重开仍为空。"
+              "id": "storage",
+              "text": "存储方式：离线测试用一次性临时库，真实运行写入固定本地库。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.storage"
+              }
             },
             {
-              "id": "observe-5",
-              "text": "比较 live 与 offline：live 固定本地路径，offline 临时库运行后清理。"
+              "id": "report-checks",
+              "text": "报告检查项：写入组核对重开后恢复和范围隔离，只读组核对读取阶段未写入。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            },
+            {
+              "id": "final-row",
+              "text": "写入组报告的“最终”一行：最后一次重开连接读到的值。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows[1]"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这一课不调用模型。记忆就是数据库里的一行记录，下面逐步核对。"
+            },
+            {
+              "action": "spotlight",
+              "target": "memory"
+            },
+            {
+              "action": "seek",
+              "observe": "memory-action"
+            },
+            {
+              "action": "highlight",
+              "observe": "memory-action"
+            },
+            {
+              "action": "narrate",
+              "text": "先看这次做了什么操作：saved 是写入，recall_only 是只读。"
+            },
+            {
+              "action": "seek",
+              "observe": "record-source"
+            },
+            {
+              "action": "highlight",
+              "observe": "record-source"
+            },
+            {
+              "action": "narrate",
+              "text": "来源说明和值一起保存。它证明来源被记录了，不证明来源本身可靠。"
+            },
+            {
+              "action": "seek",
+              "observe": "record-version"
+            },
+            {
+              "action": "highlight",
+              "observe": "record-version"
+            },
+            {
+              "action": "narrate",
+              "text": "版本号用于后面的冲突检查。"
+            },
+            {
+              "action": "seek",
+              "observe": "storage"
+            },
+            {
+              "action": "highlight",
+              "observe": "storage"
+            },
+            {
+              "action": "narrate",
+              "text": "离线测试写入临时库，运行结束即清理，不会污染真实运行的数据。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "report-checks"
+            },
+            {
+              "action": "highlight",
+              "observe": "report-checks"
+            },
+            {
+              "action": "narrate",
+              "text": "写入组的关键检查是“重开连接后恢复”：第一条连接已经关闭，读回的值来自 SQLite，而不是进程里的变量。"
+            },
+            {
+              "action": "seek",
+              "observe": "final-row"
+            },
+            {
+              "action": "highlight",
+              "observe": "final-row"
+            },
+            {
+              "action": "narrate",
+              "text": "写入组的最后一行是再次打开连接读到的结果。只读组的报告没有这一行。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "写入组中，第一条 SQLite 连接关闭后，新连接按 namespace/key 读回了同一条记录及其来源。",
+              "只读组在读取阶段只执行查询，没有写入。"
+            ],
+            "does_not_prove": [
+              "source 字段只证明来源说明被记录下来，不证明来源本身真实可靠。",
+              "namespace 是教学分区，不是身份认证；不能证明其他调用方无法读取。",
+              "离线测试中只读组读到的是运行前在临时库预置的受控记录，不是你上一次运行留下的数据。"
+            ]
+          }
+        },
+        {
+          "id": "version-and-forget",
+          "title": "版本冲突与遗忘",
+          "hypothesis": "带过时版本号的写入会被拒绝且不覆盖现值；过期记录在读取时不可见，显式删除后重开连接也读不回。",
+          "predict": "predict-memory-events",
+          "arms": [
+            {
+              "id": "conflict",
+              "exercise": "conflict",
+              "label": "先写入，再用过时版本更新，最后用当前版本更新"
+            },
+            {
+              "id": "expiry-delete",
+              "exercise": "expiry_delete",
+              "label": "先写入，再让记录过期，最后删除并重开核对"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stale-rejected",
+              "text": "冲突组的 stale_rejected：过时版本的写入被拒绝；同一事件中的 record 是用当前版本更新后的结果。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.stale_rejected"
+              }
+            },
+            {
+              "id": "expired-hidden",
+              "text": "过期组的 hidden：记录过期后读取为空，此时它仍在库中。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.hidden"
+              }
+            },
+            {
+              "id": "deleted-absent",
+              "text": "删除后的 absent：执行 DELETE 后再次读取为空。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.absent"
+              }
+            },
+            {
+              "id": "lifecycle-check",
+              "text": "报告第三项检查：冲突组为“过时版本被拒绝”，过期删除组为“过期记录不可检索”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[2]"
+              }
+            },
+            {
+              "id": "final-retrievable",
+              "text": "报告指标“最终可检索”：冲突组为“是”，过期删除组为“否”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[1]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这组实验检验记忆的更新与遗忘，两组各走一条生命周期。"
+            },
+            {
+              "action": "spotlight",
+              "target": "memory"
+            },
+            {
+              "action": "seek",
+              "observe": "stale-rejected"
+            },
+            {
+              "action": "highlight",
+              "observe": "stale-rejected"
+            },
+            {
+              "action": "narrate",
+              "text": "如果你运行的是冲突组：过时版本的写入被拒绝，现值没有被覆盖；随后用当前版本更新，版本加一。"
+            },
+            {
+              "action": "seek",
+              "observe": "expired-hidden"
+            },
+            {
+              "action": "highlight",
+              "observe": "expired-hidden"
+            },
+            {
+              "action": "narrate",
+              "text": "如果你运行的是过期删除组：过期只影响读取，记录这时仍在数据库里。"
+            },
+            {
+              "action": "seek",
+              "observe": "deleted-absent"
+            },
+            {
+              "action": "highlight",
+              "observe": "deleted-absent"
+            },
+            {
+              "action": "narrate",
+              "text": "显式删除后再读取为空。过期是读取策略，删除是存储操作，证据要分开看。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "lifecycle-check"
+            },
+            {
+              "action": "highlight",
+              "observe": "lifecycle-check"
+            },
+            {
+              "action": "narrate",
+              "text": "报告把每一步的检查结果列出来，每项都来自真实的数据库操作。"
+            },
+            {
+              "action": "seek",
+              "observe": "final-retrievable"
+            },
+            {
+              "action": "highlight",
+              "observe": "final-retrievable"
+            },
+            {
+              "action": "narrate",
+              "text": "最后再打开一次连接核对：冲突组能读回更新后的值，过期删除组什么也读不到。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "冲突组中，过时版本的写入被拒绝，合法更新后版本递增。",
+              "过期删除组中，过期记录读取为空，删除并重开连接后仍为空。"
+            ],
+            "does_not_prove": [
+              "乐观版本检查只防止同一个库里的陈旧覆盖，不能证明多进程、多机器场景下的一致性。",
+              "“过期不可见”本身不能证明数据已被删除；删除要看 deleted 事件和重开后的核对。"
+            ]
+          }
         }
       ],
       "inputs": [

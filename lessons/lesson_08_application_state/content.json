@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "application-state",
   "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "trust"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -46,7 +50,7 @@
           "type": "prose",
           "title": "消息和状态各管什么",
           "paragraphs": [
-            "messages 是发给模型的对话资料，应用 state 是程序用于协调任务的结构化记录。本课只在 messages 中保存用户目标；读取资料、更新进度与写入终态都发生在 TaskState，不能因为界面显示了若干消息就推断任务完成。此课不调用模型，避免把程序状态机伪装成模型行为。"
+            "messages 是发给模型的对话资料，应用状态（Application State）是程序用于协调任务的结构化记录，代码里简称 state。本课只在 messages 中保存用户目标；读取资料、更新进度与写入终态都发生在 TaskState，不能因为界面显示了若干消息就推断任务完成。此课不调用模型，避免把程序状态机伪装成模型行为。"
           ]
         },
         {
@@ -56,6 +60,33 @@
           "paragraphs": [
             "TaskState 保存本次 run_id、goal、status、evidence、steps、used_steps、result 和 terminal_reason。goal 来自通过校验的输入；evidence 只从本地 SOURCES 中读取并附上 source 键。读取、核对、生成课内要点三个步骤每次都在执行前消耗预算。每次 lesson.state 是状态快照，能看到值怎样随实际步骤改变。"
           ]
+        },
+        {
+          "id": "mq-messages-not-progress",
+          "type": "micro-quiz",
+          "question": {
+            "id": "messages-not-progress",
+            "prompt": "界面上已经显示了几条消息。能否据此判断任务完成了？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不能；完成与否要看应用状态里的 status、证据和产物",
+                "feedback": "对。消息是给模型的资料，进度由状态记录。"
+              },
+              {
+                "id": "b",
+                "text": "能，消息越多说明进展越多",
+                "feedback": "不对。消息数量和任务进度没有对应关系。"
+              },
+              {
+                "id": "c",
+                "text": "能，只要最后一条消息来自 assistant",
+                "feedback": "不对。本课根本不调用模型，完成与否由程序判定。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "消息和状态分开管理，进度只认程序写入的状态。"
+          }
         },
         {
           "id": "section-3",
@@ -70,8 +101,35 @@
           "type": "prose",
           "title": "等待、失败和预算结束",
           "paragraphs": [
-            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed；预算预设的 step_budget=2，只能执行读取和核对，第三步生成产物前真实耗尽。它们和 completed 都是明确终态，但原因与验收结果不同。可在事件序列中核对 used_steps 和预算，确认失败时证据仍保留。"
+            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed；预算预设的 step_budget=2，只能执行读取和核对，第三步生成产物前真实耗尽。它们和 completed 都是明确终态，但原因与验收结果不同。可在事件序列中核对 used_steps 和预算，确认失败时证据仍保留。报告中的检查项由独立于消息的验证器（Validator）逐项计算。"
           ]
+        },
+        {
+          "id": "mq-budget-terminal",
+          "type": "micro-quiz",
+          "question": {
+            "id": "budget-terminal",
+            "prompt": "预算预设只有 2 步，已经读取并核对了资料。最终状态是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "failed，原因是生成要点前预算耗尽，已取得的证据仍保留",
+                "feedback": "对。没有产物就不能标为完成。"
+              },
+              {
+                "id": "b",
+                "text": "completed，因为已经有证据",
+                "feedback": "不对。completed 还要求有实际产物。"
+              },
+              {
+                "id": "c",
+                "text": "waiting，等待补充预算",
+                "feedback": "不对。预算耗尽会直接写入失败终态。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "完成要求证据与产物同时存在，任一缺失都不能标为 completed。"
+          }
         },
         {
           "id": "section-5",
@@ -138,53 +196,169 @@
               "evidence": "lesson.report"
             }
           ]
+        },
+        {
+          "id": "predict-model-requests",
+          "type": "predict",
+          "prompt": "在实验“三种终态，各有原因”中运行任意一组之前先猜：这一课的一次运行会发出几次模型请求（request 事件）？",
+          "experiment": "terminal-states",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "用程序维护任务事实与可验证终态",
+          "id": "terminal-states",
+          "title": "三种终态，各有原因",
+          "hypothesis": "终态由程序按转换规则写入：只有拿到证据并生成产物才能进入 completed；资料缺失或步骤预算耗尽时转为 failed 并写明原因，已取得的证据不会被抹掉。",
+          "predict": "predict-model-requests",
           "arms": [
             {
               "id": "success",
               "exercise": "success",
-              "label": "有证据地完成"
+              "label": "资料存在，步骤预算 3"
             },
             {
               "id": "missing",
               "exercise": "missing",
-              "label": "资料缺失"
+              "label": "资料不存在，其余不变"
             },
             {
               "id": "budget",
               "exercise": "budget",
-              "label": "预算耗尽"
+              "label": "资料存在，步骤预算只有 2"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "查看第一条 lesson.state：状态为 ready，run_id 与 goal 从本次输入生成。"
+              "id": "first-snapshot",
+              "text": "第一份状态快照：status 为 ready，run_id 为本次新生成，used_steps 为 0。",
+              "selector": {
+                "event": "lesson.state",
+                "path": "data.state.status"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "沿事件顺序核对 running 后哪一步真的读取到 source；消息数是否变化？"
+              "id": "evidence-recorded",
+              "text": "证据写进状态的那一刻：source 与 excerpt 来自本地 SOURCES。资料缺失组没有这一条。",
+              "selector": {
+                "event": "lesson.state",
+                "path": "data.state.evidence[0]"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "切换资料缺失预设，寻找 waiting 与 failed 的两个独立快照及终态原因。"
+              "id": "third-step",
+              "text": "第三步“生成课内资料要点”：只有预算足够时才会走到。",
+              "selector": {
+                "event": "lesson.state",
+                "path": "data.state.steps[2]"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "切换预算预设，检查已有证据仍在，但 status 没有被标为 completed。"
+              "id": "terminal-reason",
+              "text": "报告中“终态有原因”的 detail：就是本次的 terminal_reason。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[0].detail"
+              }
             },
             {
-              "id": "observe-5",
-              "text": "尝试把非法状态转换写在测试里，检查程序抛出 ValueError，而非默默更新。"
+              "id": "status-metrics",
+              "text": "报告指标：状态、证据数、消息数、步骤预算与已执行步骤并列。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这一课不调用模型。状态的每一次变化都由程序写入，并发布为一份快照。"
+            },
+            {
+              "action": "spotlight",
+              "target": "memory"
+            },
+            {
+              "action": "seek",
+              "observe": "first-snapshot"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-snapshot"
+            },
+            {
+              "action": "narrate",
+              "text": "运行开始时状态为 ready。每次运行都有新的 run_id，不共享全局任务状态。"
+            },
+            {
+              "action": "seek",
+              "observe": "evidence-recorded"
+            },
+            {
+              "action": "highlight",
+              "observe": "evidence-recorded"
+            },
+            {
+              "action": "narrate",
+              "text": "核对资料来源后，证据才写进状态。如果你运行的是资料缺失组，这里会提示本次运行没有这条证据。"
+            },
+            {
+              "action": "seek",
+              "observe": "third-step"
+            },
+            {
+              "action": "highlight",
+              "observe": "third-step"
+            },
+            {
+              "action": "narrate",
+              "text": "第三步要消耗第三份预算。预算只有 2 的那组走不到这里，只能以失败收尾。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "terminal-reason"
+            },
+            {
+              "action": "highlight",
+              "observe": "terminal-reason"
+            },
+            {
+              "action": "narrate",
+              "text": "终态必须带原因。completed 与 failed 都是明确的终态，只是原因不同。"
+            },
+            {
+              "action": "seek",
+              "observe": "status-metrics"
+            },
+            {
+              "action": "highlight",
+              "observe": "status-metrics"
+            },
+            {
+              "action": "narrate",
+              "text": "对照指标：消息数一直是 1。状态更新没有写进消息列表，也没有伪装成模型回复。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行的每次状态变化都有快照，终态和原因由程序写入，可以追溯到快照里的证据和已执行步骤。",
+              "消息数保持为 1：状态更新没有混进消息列表。"
+            ],
+            "does_not_prove": [
+              "completed 只表示课内资料归纳流程完成，不证明你输入的任意目标已经实现。",
+              "三个场景是固定预设，不能证明取消等其他转换也正确；非法转换要在单元测试里单独验证。"
+            ]
+          }
         }
       ],
       "inputs": [

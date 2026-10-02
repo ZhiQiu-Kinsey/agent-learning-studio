@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "prompt-experiments",
   "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -22,7 +26,7 @@
               "id": "01-goal",
               "label": "01 / GOAL",
               "title": "先写清楚比较什么",
-              "description": "固定任务、模型和采样配置；工具预设只改 function.description，其他预设只改 system 规则。",
+              "description": "固定任务、模型和采样配置；工具预设只改工具描述（Tool Description），其他预设只改 system 提示词（Prompt）中的规则。",
               "token": "task · contract"
             },
             {
@@ -58,6 +62,33 @@
           ]
         },
         {
+          "id": "mq-proposal-only",
+          "type": "micro-quiz",
+          "question": {
+            "id": "proposal-not-executed",
+            "prompt": "tool-description 预设里，改写版响应提出了 add_numbers(19, 23)。平台接下来会做什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "只记录这次提议并做结构初筛，不执行工具",
+                "feedback": "对。本实验观察的是提议，可调用范围仍由 Python 登记表决定。"
+              },
+              {
+                "id": "b",
+                "text": "执行 add_numbers，把 42 回传给模型",
+                "feedback": "不对。这一课的运行器不执行提议，也没有 tool_result 回传。"
+              },
+              {
+                "id": "c",
+                "text": "把提议直接当作答案告诉用户",
+                "feedback": "不对。提议只进入报告供比较。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "提出调用和执行调用是两件事，这里只比较前者。"
+          }
+        },
+        {
           "id": "section-3",
           "type": "prose",
           "title": "流程规则要可观察",
@@ -72,6 +103,33 @@
           "paragraphs": [
             "missing-input 预设没有给两个加数。改写版要求索取缺失输入。初筛只查是否像在询问数字、且文本中没有数字；“需要计算1+1=2”会被拦下，但仍不能证明所有含糊请求都处理正确。"
           ]
+        },
+        {
+          "id": "mq-keyword-hit",
+          "type": "micro-quiz",
+          "question": {
+            "id": "keyword-hit",
+            "prompt": "flow-rule 的改写版回答里出现了 42，初筛命中。可以得出什么结论？",
+            "options": [
+              {
+                "id": "a",
+                "text": "这一次关键词命中，还需要阅读原文并重复实验",
+                "feedback": "对。命中只是线索。"
+              },
+              {
+                "id": "b",
+                "text": "改写后的提示词普遍更好",
+                "feedback": "不对。一次配对不能推断普遍优劣。"
+              },
+              {
+                "id": "c",
+                "text": "模型内部按规定的步骤推理了",
+                "feedback": "不对。输出文本无法反推模型的内部过程。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "初筛是快速过滤，结论要靠原文复核和多次重复。"
+          }
         },
         {
           "id": "section-5",
@@ -138,49 +196,361 @@
               "evidence": "最终回答只是提示；两次响应和报告才是本次证据"
             }
           ]
+        },
+        {
+          "id": "predict-executed-tools",
+          "type": "predict",
+          "prompt": "在实验“只改工具描述”运行之前先猜：这次运行会出现几个 tool_call 事件，也就是平台实际执行工具几次？",
+          "experiment": "tool-description",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "同题同模型的提示与工具描述配对实验",
+          "id": "tool-description",
+          "title": "只改工具描述",
+          "hypothesis": "保持 system、用户任务、模型和 temperature 不变，只把 function.description 从“计算工具。”改成写明职责和参数含义的描述，模型更可能提出名称和参数都正确的 add_numbers 调用。",
+          "predict": "predict-executed-tools",
           "arms": [
             {
               "id": "tool-description",
               "exercise": "tool-description",
-              "label": "工具描述：模糊与明确"
-            },
-            {
-              "id": "flow-rule",
-              "exercise": "flow-rule",
-              "label": "流程规则：答案与核对"
-            },
-            {
-              "id": "missing-input",
-              "exercise": "missing-input",
-              "label": "失败边界：缺少加数"
+              "label": "同一任务各请求一次：基线描述“计算工具。”与改写描述"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "比较两个 request 的 model、temperature 与 user 内容；工具预设还要确认只有 function.description 不同，其他预设确认只有 system 不同。"
+              "id": "baseline-description",
+              "text": "基线请求的 function.description。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools[0].function.description"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "对照两个 response 原文和 report 初筛；检查“不是42而是43”或含数字的缺参回答为何不能算命中，并手动核读命中项。"
+              "id": "variant-description",
+              "text": "改写请求的 function.description：这是两次请求唯一的差别。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.tools[0].function.description"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "重跑同一预设并记录差异；不要把一次通过率写成普遍结论。"
+              "id": "same-settings",
+              "text": "改写请求的 temperature：与基线相同，都是 0。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.temperature"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "修改问题栏备注并在报告中找到它；预设任务和两次模型请求保持固定。"
+              "id": "baseline-reply",
+              "text": "基线响应：模型直接作答，还是提出了调用？",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message"
+              }
+            },
+            {
+              "id": "variant-proposal",
+              "text": "改写响应中的调用提议：工具名和参数。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.tool_calls[0].function"
+              }
+            },
+            {
+              "id": "screening",
+              "text": "报告的两项初筛：只核对调用名称和参数，不是语义验收。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "配对实验先确认“只改了一处”。对照两次请求。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "baseline-description"
+            },
+            {
+              "action": "highlight",
+              "observe": "baseline-description"
+            },
+            {
+              "action": "narrate",
+              "text": "基线描述只有“计算工具。”几个字。"
+            },
+            {
+              "action": "seek",
+              "observe": "variant-description"
+            },
+            {
+              "action": "highlight",
+              "observe": "variant-description"
+            },
+            {
+              "action": "narrate",
+              "text": "改写描述写明了职责、参数含义和缺参时不要调用。system、用户任务与模型都没变。"
+            },
+            {
+              "action": "seek",
+              "observe": "same-settings"
+            },
+            {
+              "action": "highlight",
+              "observe": "same-settings"
+            },
+            {
+              "action": "narrate",
+              "text": "采样温度相同。temperature=0 能减少波动，但不保证完全可复现。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "baseline-reply"
+            },
+            {
+              "action": "highlight",
+              "observe": "baseline-reply"
+            },
+            {
+              "action": "narrate",
+              "text": "看基线这次的响应：模型是直接给出文字，还是提出了调用？"
+            },
+            {
+              "action": "seek",
+              "observe": "variant-proposal"
+            },
+            {
+              "action": "highlight",
+              "observe": "variant-proposal"
+            },
+            {
+              "action": "narrate",
+              "text": "改写版如果提出了调用，这里是工具名和参数。注意：这只是提议，本实验不执行它。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "screening"
+            },
+            {
+              "action": "highlight",
+              "observe": "screening"
+            },
+            {
+              "action": "narrate",
+              "text": "初筛只比较名称和参数。命中不是语义验收，未命中也要回看原文。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这一对请求只有 function.description 不同；本次两版各自得到了什么响应、初筛结果如何。",
+              "改写版即使提出了调用，平台也没有执行它：本次运行没有 tool_call 事件。"
+            ],
+            "does_not_prove": [
+              "一次配对不能证明改写版普遍更好；temperature=0 也不保证可复现，需要重复多次。",
+              "初筛命中只说明名称和参数匹配，不能证明模型理解了这个工具。",
+              "离线测试模式下的两次响应来自确定性脚本。"
+            ]
+          }
+        },
+        {
+          "id": "system-rule",
+          "title": "只改 system 规则",
+          "hypothesis": "用户任务不变、只改 system 中的规则时，回答的形式会随规则变化；但关键词或形式初筛只能提示命中与否，不能证明回答语义正确。",
+          "arms": [
+            {
+              "id": "flow-rule",
+              "exercise": "flow-rule",
+              "label": "流程规则：基线“请给出答案。”对照写明识别、计算、核对的步骤"
+            },
+            {
+              "id": "missing-input",
+              "exercise": "missing-input",
+              "label": "缺参规则：用户没给数字，基线“请处理用户请求。”对照要求只询问缺少的数字"
+            }
+          ],
+          "observe": [
+            {
+              "id": "baseline-system",
+              "text": "基线请求的 system 内容。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "variant-system",
+              "text": "改写请求的 system 内容：本组唯一的改动。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "same-task",
+              "text": "改写请求的用户任务：与基线逐字相同。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[1].content"
+              }
+            },
+            {
+              "id": "baseline-answer",
+              "text": "基线回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "variant-answer",
+              "text": "改写回答原文。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "screening-detail",
+              "text": "改写版初筛的说明：命中时也写明“仍需人工复核”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[1].detail"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这组实验只改 system 里的规则。先确认改动范围。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "baseline-system"
+            },
+            {
+              "action": "highlight",
+              "observe": "baseline-system"
+            },
+            {
+              "action": "narrate",
+              "text": "基线规则很短。"
+            },
+            {
+              "action": "seek",
+              "observe": "variant-system"
+            },
+            {
+              "action": "highlight",
+              "observe": "variant-system"
+            },
+            {
+              "action": "narrate",
+              "text": "改写规则写得更具体，这是两次请求唯一的差别。"
+            },
+            {
+              "action": "seek",
+              "observe": "same-task"
+            },
+            {
+              "action": "highlight",
+              "observe": "same-task"
+            },
+            {
+              "action": "narrate",
+              "text": "用户任务逐字相同，比较才有意义。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "baseline-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "baseline-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "先读基线回答的原文。"
+            },
+            {
+              "action": "seek",
+              "observe": "variant-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "variant-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "再读改写回答的原文：差别是否正是规则要求的那一点？"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "screening-detail"
+            },
+            {
+              "action": "highlight",
+              "observe": "screening-detail"
+            },
+            {
+              "action": "narrate",
+              "text": "初筛的说明写得很清楚：命中只是线索，仍需人工复核。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这一对请求只有 system 规则不同；本次两版回答的原文和初筛结果。"
+            ],
+            "does_not_prove": [
+              "关键词命中不能证明整句算术或语义正确，也不能反推模型内部是否按步骤推理。",
+              "单次配对不能推断哪个提示词普遍更好，需要固定更多案例并重复运行。",
+              "离线测试模式下的回答由确定性脚本给出。"
+            ]
+          }
         }
       ],
       "inputs": [
