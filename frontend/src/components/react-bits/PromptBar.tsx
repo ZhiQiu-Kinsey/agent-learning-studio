@@ -15,9 +15,10 @@ import React, {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
-import { animate, useMotionValue, useMotionValueEvent } from "motion/react";
-import { useReducedMotion } from "../../motion";
 import "./PromptBar.css";
+import { SendGlyph } from "./PromptBar/SendGlyph";
+import { LINE, parseSlash } from "./PromptBar/utils";
+import { CommandMenu } from "./PromptBar/CommandMenu";
 
 export interface PromptBarCommand {
   key: string;
@@ -58,69 +59,6 @@ export interface PromptBarProps {
   sendTestId?: string;
   stopTestId?: string;
   className?: string;
-}
-
-const ARROW_UP = [
-  12, 4.5, 18.5, 11, 14.25, 11, 14.25, 19.5, 9.75, 19.5, 9.75, 11, 5.5, 11,
-];
-const SQUARE = [12, 6, 18, 6, 18, 12, 18, 18, 6, 18, 6, 12, 6, 6];
-const EASE_IN_OUT: [number, number, number, number] = [0.77, 0, 0.175, 1];
-const LINE = 26;
-
-const mix = (a: number, b: number, t: number) => a + (b - a) * t;
-const pathAt = (a: number[], b: number[], t: number) => {
-  let d = "";
-  for (let i = 0; i < a.length; i += 2)
-    d += `${i ? "L" : "M"}${mix(a[i], b[i], t).toFixed(2)} ${mix(a[i + 1], b[i + 1], t).toFixed(2)}`;
-  return `${d}Z`;
-};
-
-/** `/query` at the end of the draft, after the start or whitespace. */
-const parseSlash = (draft: string) => {
-  const match = /(^|\s)\/(\S*)$/.exec(draft);
-  return match ? match[2].toLowerCase() : null;
-};
-
-function SendGlyph({ busy }: { busy: boolean }) {
-  const reduce = useReducedMotion();
-  const svgRef = useRef<SVGSVGElement>(null);
-  const pathRef = useRef<SVGPathElement>(null);
-  const dir = useRef(busy ? 1 : -1);
-  const t = useMotionValue(busy ? 1 : 0);
-  useEffect(() => {
-    const target = busy ? 1 : 0;
-    dir.current = busy ? 1 : -1;
-    if (t.get() === target) return undefined;
-    const controls = animate(
-      t,
-      target,
-      reduce ? { duration: 0 } : { duration: 0.24, ease: EASE_IN_OUT },
-    );
-    return () => controls.stop();
-  }, [busy, reduce, t]);
-  useMotionValueEvent(t, "change", (v) => {
-    pathRef.current?.setAttribute("d", pathAt(ARROW_UP, SQUARE, v));
-    const goo = reduce ? 0 : Math.sin(v * Math.PI);
-    const sx = 1 - 0.12 * goo;
-    if (svgRef.current)
-      svgRef.current.style.transform = goo
-        ? `rotate(${dir.current * 8 * goo}deg) scale(${sx}, ${1 / sx})`
-        : "";
-  });
-  return (
-    <svg
-      ref={svgRef}
-      className="prompt-bar__glyph"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="currentColor"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinejoin="round"
-    >
-      <path ref={pathRef} d={pathAt(ARROW_UP, SQUARE, t.get())} />
-    </svg>
-  );
 }
 
 const PromptBar: React.FC<PromptBarProps> = ({
@@ -268,45 +206,16 @@ const PromptBar: React.FC<PromptBarProps> = ({
       data-disabled={disabled ? "" : undefined}
     >
       {open ? (
-        <div
-          className="prompt-bar__menu"
-          role="listbox"
-          id={listId}
-          aria-label={labels.commands}
-        >
-          <span ref={glowRef} className="prompt-bar__glow" aria-hidden="true" />
-          {list.map((row, index) => (
-            <button
-              key={row.key}
-              id={`${listId}-${index}`}
-              ref={(el) => {
-                rowRefs.current[index] = el;
-              }}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              aria-selected={index === cursor}
-              data-current={row.active ? "" : undefined}
-              className="prompt-bar__option"
-              onMouseDown={(event) => event.preventDefault()}
-              onPointerEnter={() => setActive(index)}
-              onClick={() => pick(row.key)}
-            >
-              <span className="prompt-bar__slash" aria-hidden="true">
-                /
-              </span>
-              <span className="prompt-bar__option-name">{row.name}</span>
-              {row.description ? (
-                <span className="prompt-bar__option-desc">
-                  {row.description}
-                </span>
-              ) : null}
-            </button>
-          ))}
-          {list.length === 0 ? (
-            <div className="prompt-bar__empty">{labels.noMatch}</div>
-          ) : null}
-        </div>
+        <CommandMenu
+          listId={listId}
+          labels={labels}
+          glowRef={glowRef}
+          list={list}
+          rowRefs={rowRefs}
+          cursor={cursor}
+          setActive={setActive}
+          pick={pick}
+        />
       ) : null}
       <div
         className="prompt-bar__box"

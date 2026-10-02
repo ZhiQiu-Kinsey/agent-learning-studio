@@ -2,22 +2,22 @@
 // Change: reduced motion follows the app-wide motion level instead of the OS query alone.
 "use client";
 
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-import {
-  animate,
-  motion,
-  useMotionValue,
-  useTransform,
-  type MotionValue,
-} from "motion/react";
+import React, { useState, type CSSProperties, type ReactNode } from "react";
+import { motion } from "motion/react";
 import { useReducedMotion } from "../../motion";
+import {
+  type Drag,
+  FLICK,
+  DEADZONE,
+  SLOP,
+  SIZES,
+  clamp,
+  rubber,
+  project,
+  velocityOf,
+  nearestSlot,
+} from "./RubberSegment/physics";
+import { useRubberThumb } from "./RubberSegment/useRubberThumb";
 
 export type RubberSegmentSize = "sm" | "md" | "lg";
 export type RubberSegmentItem =
@@ -45,66 +45,6 @@ export interface RubberSegmentProps {
   className?: string;
   "aria-label"?: string;
 }
-
-type Slot = { l: number; r: number };
-type Sample = [number, number];
-type Drag = {
-  id: number;
-  x0: number;
-  slot: number;
-  onThumb: boolean;
-  live: boolean;
-  offset: number;
-  w: number;
-  hist: Sample[];
-};
-
-const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
-const SPRING_UI = { type: "spring" as const, duration: 0.3, bounce: 0 };
-const SPRING_MOMENTUM = { type: "spring" as const, duration: 0.4, bounce: 0.2 };
-const SPRING_RELAX = { type: "spring" as const, duration: 0.16, bounce: 0 };
-const DILATE = 0.19;
-const HANDOFF = 0.15;
-const FLICK = 110;
-const MAX_VELOCITY = 2000;
-const DEADZONE = 4;
-const SLOP = 10;
-const RUBBER = 0.55;
-const SIZES: Record<
-  RubberSegmentSize,
-  { height: number; font: number; pad: number; min: number }
-> = {
-  sm: { height: 28, font: 12, pad: 10, min: 36 },
-  md: { height: 36, font: 13, pad: 14, min: 44 },
-  lg: { height: 44, font: 14, pad: 18, min: 48 },
-};
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
-const rubber = (over: number, dim: number) =>
-  (over * dim * RUBBER) / (dim + RUBBER * Math.abs(over));
-const project = (v: number, glide: number) => {
-  const d = 1 - 0.1 * Math.pow(0.05, glide / 100);
-  return ((v / 1000) * d) / (1 - d);
-};
-const velocityOf = (hist: Sample[], now: number) => {
-  const recent = hist.filter(([t]) => now - t <= 100);
-  if (recent.length < 2) return 0;
-  const [t0, x0] = recent[0];
-  const [t1, x1] = recent[recent.length - 1];
-  return t1 - t0 >= 8 ? ((x1 - x0) / (t1 - t0)) * 1000 : 0;
-};
-const nearestSlot = (slots: Slot[], x: number) => {
-  let best = 0;
-  for (let i = 1; i < slots.length; i++) {
-    if (
-      Math.abs((slots[i].l + slots[i].r) / 2 - x) <
-      Math.abs((slots[best].l + slots[best].r) / 2 - x)
-    )
-      best = i;
-  }
-  return best;
-};
 
 const RubberSegment: React.FC<RubberSegmentProps> = ({
   items,
@@ -141,142 +81,41 @@ const RubberSegment: React.FC<RubberSegmentProps> = ({
   );
   const reduce = useReducedMotion();
 
-  const trackRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const slots = useRef<Slot[]>([]);
-  const box = useRef<DOMRect | null>(null);
-  const committed = useRef(index);
-  const handoff = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const drag = useRef<Drag | null>(null);
-  const gen = useRef(0);
-
-  const edgeL = useMotionValue(0);
-  const edgeR = useMotionValue(0);
-  const innerW = useMotionValue(0);
-  const thumbRadius = Math.max(0, radius - inset);
-  const clipPath = useTransform(
-    () =>
-      `inset(0 ${Math.max(0, innerW.get() - edgeR.get())}px 0 ${Math.max(0, edgeL.get())}px round ${thumbRadius}px)`,
-  );
-
-  const t = (seconds: number) => seconds / speed;
-
-  const jumpTo = (i: number) => {
-    const s = slots.current[i];
-    if (!s) return;
-    clearTimeout(handoff.current);
-    gen.current += 1;
-    edgeL.jump(s.l);
-    edgeR.jump(s.r);
-  };
-
-  const measure = () => {
-    const track = trackRef.current;
-    if (!track) return;
-    const rect = track.getBoundingClientRect();
-    box.current = rect;
-    slots.current = list.map((_, i) => {
-      const el = itemRefs.current[i];
-      if (!el) return { l: 0, r: 0 };
-      const r = el.getBoundingClientRect();
-      return { l: r.left - rect.left - inset, r: r.right - rect.left - inset };
-    });
-    innerW.set(rect.width - inset * 2);
-    jumpTo(committed.current);
-  };
-
-  const listKey = list.map((item) => item.value).join("|");
-  useLayoutEffect(() => {
-    measure();
-    const observer = new ResizeObserver(measure);
-    if (trackRef.current) observer.observe(trackRef.current);
-    if (typeof document !== "undefined" && document.fonts)
-      document.fonts.ready.then(measure);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listKey, size, inset, equalSlots]);
-
-  useEffect(() => {
-    if (!drag.current && committed.current !== index) {
-      committed.current = index;
-      jumpTo(index);
-    }
+  const {
+    trackRef,
+    itemRefs,
+    slots,
+    box,
+    committed,
+    handoff,
+    drag,
+    gen,
+    edgeL,
+    edgeR,
+    innerW,
+    thumbRadius,
+    clipPath,
+    jumpTo,
+    land,
+    travel,
+  } = useRubberThumb({
+    list,
+    index,
+    size,
+    radius,
+    inset,
+    equalSlots,
+    stretch,
+    squash,
+    speed,
+    reduce,
   });
-
-  useEffect(
-    () => () => {
-      clearTimeout(handoff.current);
-      edgeL.stop();
-      edgeR.stop();
-    },
-    [edgeL, edgeR],
-  );
 
   const commit = (i: number) => {
     committed.current = i;
     if (i === index) return;
     if (value === undefined) setInner(list[i].value);
     onChange?.(list[i].value, i);
-  };
-
-  const land = (
-    to: number,
-    v: number | null,
-    flick: boolean,
-    withSquash: boolean,
-  ) => {
-    const b = slots.current[to];
-    if (!b) return;
-    const g = ++gen.current;
-    const dir =
-      Math.sign((b.l + b.r) / 2 - (edgeL.get() + edgeR.get()) / 2) || 1;
-    const [lead, leadTo, trail, trailTo] =
-      dir > 0 ? [edgeR, b.r, edgeL, b.l] : [edgeL, b.l, edgeR, b.r];
-    const velocityFor = (mv: MotionValue<number>) =>
-      clamp(v === null ? mv.getVelocity() : v, -MAX_VELOCITY, MAX_VELOCITY);
-    animate(lead, leadTo, {
-      ...(flick ? SPRING_MOMENTUM : SPRING_UI),
-      duration: t(flick ? 0.4 : 0.3),
-      velocity: velocityFor(lead),
-    });
-    const trailVelocity = velocityFor(trail);
-    if (!withSquash || squash <= 0) {
-      animate(trail, trailTo, {
-        ...SPRING_UI,
-        duration: t(0.3),
-        velocity: trailVelocity,
-      });
-      return;
-    }
-    animate(trail, trailTo + dir * squash, {
-      ...SPRING_UI,
-      duration: t(0.3),
-      velocity: trailVelocity,
-    }).then(() => {
-      if (gen.current === g)
-        animate(trail, trailTo, { ...SPRING_RELAX, duration: t(0.16) });
-    });
-  };
-
-  const travel = (from: number, to: number) => {
-    const a = slots.current[from];
-    const b = slots.current[to];
-    if (!a || !b) return;
-    clearTimeout(handoff.current);
-    gen.current += 1;
-    if (reduce) {
-      edgeL.jump(b.l);
-      edgeR.jump(b.r);
-      return;
-    }
-    const u = stretch / 100;
-    const tween = { duration: t(DILATE), ease: EASE_OUT };
-    animate(edgeL, b.l + (Math.min(a.l, b.l) - b.l) * u, tween);
-    animate(edgeR, b.r + (Math.max(a.r, b.r) - b.r) * u, tween);
-    handoff.current = setTimeout(
-      () => land(to, null, false, true),
-      t(HANDOFF) * 1000,
-    );
   };
 
   const localX = (e: { clientX: number }) =>

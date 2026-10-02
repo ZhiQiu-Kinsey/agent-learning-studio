@@ -8,14 +8,12 @@ import React, {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { animate, type AnimationPlaybackControls } from "motion/react";
 import { useReducedMotion } from "../../motion";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  ArrowDown01Icon,
-  SparklesIcon,
-  Tick02Icon,
-} from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, SparklesIcon } from "@hugeicons/core-free-icons";
+import { EMPTY_STEPS, fmt, spoken, STYLE } from "./ThoughtLine/utils";
+import { useBreath } from "./ThoughtLine/useBreath";
+import { TraceSteps } from "./ThoughtLine/TraceSteps";
 export type ThoughtLineGlyph = "sparkle" | "dot" | "none" | ReactNode;
 
 export interface ThoughtLineProps {
@@ -43,25 +41,6 @@ export interface ThoughtLineProps {
   className?: string;
   style?: CSSProperties;
 }
-
-const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
-const EASE_IN_OUT: [number, number, number, number] = [0.77, 0, 0.175, 1];
-const GLYPH_DONE = 0.55;
-const EMPTY_STEPS: string[] = [];
-
-const fmt = (ds: number) =>
-  ds < 600
-    ? `${(ds / 10).toFixed(1)}s`
-    : `${Math.floor(ds / 600)}m ${((ds % 600) / 10).toFixed(1)}s`;
-const spoken = (ds: number) =>
-  ds < 600
-    ? `${(ds / 10).toFixed(1)} seconds`
-    : `${Math.floor(ds / 600)} minutes ${((ds % 600) / 10).toFixed(1)} seconds`;
-
-const STYLE = `
-@keyframes thought-line-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-@keyframes thought-line-shimmer { to { background-position: -125% 0; } }
-`;
 
 const ThoughtLine: React.FC<ThoughtLineProps> = ({
   label = "Thinking…",
@@ -119,71 +98,17 @@ const ThoughtLine: React.FC<ThoughtLineProps> = ({
     else if (collapseOnSettle) setOpen(false);
   }, [isWorking, collapseOnSettle]);
 
-  useEffect(() => {
-    const glyphEl = glyphRef.current;
-    const breathEl = breathRef.current;
-    if (!breathEl) return undefined;
-    const s = settleDuration / 1000;
-    const loop = (el: HTMLElement, delay: number) =>
-      animate(
-        el,
-        { opacity: [trough, 1, trough] },
-        { duration: period, ease: EASE_IN_OUT, repeat: Infinity, delay },
-      );
-    let cancelled = false;
-    const running: AnimationPlaybackControls[] = [];
-    if (isWorking) {
-      if (depth > 0) {
-        if (sheen)
-          running.push(
-            animate(
-              breathEl,
-              { opacity: 1 },
-              { duration: 0.2, ease: EASE_OUT },
-            ),
-          );
-        if (glyphEl) {
-          const lead = animate(
-            glyphEl,
-            { opacity: trough },
-            { duration: 0.2, ease: EASE_OUT },
-          );
-          running.push(lead);
-          lead.then(() => {
-            if (cancelled) return;
-            running.push(loop(glyphEl, 0));
-            if (!sheen) running.push(loop(breathEl, 0.14));
-          });
-        } else if (!sheen) {
-          running.push(loop(breathEl, 0.14));
-        }
-      } else {
-        if (glyphEl)
-          running.push(
-            animate(glyphEl, { opacity: 1 }, { duration: 0.2, ease: EASE_OUT }),
-          );
-        running.push(
-          animate(breathEl, { opacity: 1 }, { duration: 0.2, ease: EASE_OUT }),
-        );
-      }
-    } else {
-      if (glyphEl)
-        running.push(
-          animate(
-            glyphEl,
-            { opacity: GLYPH_DONE },
-            { duration: s, ease: EASE_OUT },
-          ),
-        );
-      running.push(
-        animate(breathEl, { opacity: 1 }, { duration: s, ease: EASE_OUT }),
-      );
-    }
-    return () => {
-      cancelled = true;
-      running.forEach((a) => a.stop());
-    };
-  }, [isWorking, period, depth, trough, settleDuration, glyph, sheen]);
+  useBreath({
+    glyphRef,
+    breathRef,
+    isWorking,
+    period,
+    depth,
+    trough,
+    settleDuration,
+    glyph,
+    sheen,
+  });
 
   const paint = (ds: number) => {
     dsRef.current = ds;
@@ -345,44 +270,7 @@ const ThoughtLine: React.FC<ThoughtLineProps> = ({
         </div>
       )}
       {hasTrace ? (
-        <div
-          className="thought-line__trace grid w-0 min-w-full [grid-template-rows:0fr] [transition:grid-template-rows_var(--tl-settle)_cubic-bezier(0.23,1,0.32,1)] data-[open]:[grid-template-rows:1fr]"
-          data-open={open ? "" : undefined}
-          aria-hidden={!open}
-        >
-          <div className="thought-line__fold min-h-0 overflow-x-visible overflow-y-clip">
-            <div className="thought-line__steps flex w-max flex-col gap-[0.45em] pt-[0.6em] pb-[0.2em] pl-[1.6em] text-[0.875em] font-normal whitespace-nowrap">
-              {steps.map((text, i) => {
-                const done = !isWorking || i < steps.length - 1;
-                return (
-                  <div
-                    key={`${i}-${text}`}
-                    className="thought-line__step group/step flex translate-y-0 items-center gap-[0.5em] opacity-100 [transition:opacity_200ms_cubic-bezier(0.23,1,0.32,1),transform_200ms_cubic-bezier(0.23,1,0.32,1)] starting:-translate-y-1 starting:opacity-0 motion-reduce:[transform:none]! motion-reduce:[transition:opacity_200ms_ease]"
-                    data-done={done ? "" : undefined}
-                  >
-                    <span
-                      className="thought-line__mark inline-grid h-[1em] w-[1em] flex-none place-items-center opacity-55"
-                      aria-hidden="true"
-                    >
-                      {done ? (
-                        <HugeiconsIcon
-                          icon={Tick02Icon}
-                          size="1em"
-                          strokeWidth={2.5}
-                        />
-                      ) : (
-                        <i className="thought-line__pulse block h-[0.4em] w-[0.4em] rounded-full bg-current [animation:thought-line-pulse_1.6s_cubic-bezier(0.77,0,0.175,1)_infinite] motion-reduce:[animation-duration:2.4s]" />
-                      )}
-                    </span>
-                    <span className="thought-line__step-text [transition:opacity_var(--tl-settle)_ease] group-data-[done]/step:opacity-55">
-                      {text}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <TraceSteps steps={steps} isWorking={isWorking} open={open} />
       ) : null}
     </div>
   );
