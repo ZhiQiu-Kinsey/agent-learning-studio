@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type ComponentType } from "react";
 import { AnimatePresence, motion, useScroll, useTransform } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../motion";
+import { useResolvedTheme } from "../hooks/useTheme";
 import { Backdrop } from "../components/backdrops/Backdrop";
 import { backdropFor } from "../components/backdrops/presets";
 import ShinyText from "../components/react-bits/ShinyText";
@@ -49,6 +50,7 @@ function BandTitle({ text }: { text: string }) {
   const reduced = useReducedMotion();
   const [stroke, setStroke] = useState(true);
   const overflow = useCallback(() => setStroke(false), []);
+  const dark = useResolvedTheme() === "dark";
   if (reduced) return <h1 className="band-title">{text}</h1>;
   return (
     <h1 className="band-title" data-effect={stroke ? "stroke" : "rise"}>
@@ -57,8 +59,9 @@ function BandTitle({ text }: { text: string }) {
         <StrokeText
           text={text}
           className="band-title-stroke"
-          strokeColor="#c8b5ff"
+          strokeColor={dark ? "#c8b5ff" : "#6d5dfc"}
           fillColor="currentColor"
+          fadeStroke
           onOverflow={overflow}
         />
       ) : (
@@ -71,7 +74,7 @@ function BandTitle({ text }: { text: string }) {
 /**
  * Lesson hero band: living backdrop for the lesson's domain, glowing lesson
  * badge, entrance title, glass capability chips and the floating scene dock.
- * Always dark; scroll parallax only at full motion.
+ * Follows the theme (band tokens); scroll parallax only at full motion.
  */
 export function LessonMasthead({
   lessonId,
@@ -101,6 +104,7 @@ export function LessonMasthead({
 }) {
   const { t } = useTranslation("lesson");
   const reduced = useReducedMotion();
+  const dark = useResolvedTheme() === "dark";
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
     target: ref,
@@ -159,8 +163,8 @@ export function LessonMasthead({
             <p className="masthead-kicker">
               <ShinyText
                 text={t("kicker", { number })}
-                color="#b7b0e8"
-                shineColor="#ffffff"
+                color={dark ? "#b7b0e8" : "#4b4668"}
+                shineColor={dark ? "#ffffff" : "#6d5dfc"}
                 speed={2.6}
                 delay={2.4}
                 className="band-kicker-text"

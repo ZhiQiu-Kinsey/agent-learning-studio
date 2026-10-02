@@ -5,6 +5,7 @@
 // when the line is wider than the parent and the caller should fall back.
 // Decorative: the SVG is aria-hidden; the caller keeps the real text for
 // assistive tech. Static motion is handled by the caller (render plain text).
+// Change: optional `fadeStroke` retires the outline once the fill is in.
 import {
   useEffect,
   useId,
@@ -31,9 +32,12 @@ export default function StrokeText({
   fillDelay = 0.1,
   stagger = 0.045,
   className = "",
+  fadeStroke = false,
   onOverflow,
 }: {
   text: string;
+  /** Fade the outline out after the fill has wiped in. */
+  fadeStroke?: boolean;
   strokeColor?: string;
   fillColor?: string;
   strokeWidth?: number;
@@ -115,20 +119,26 @@ export default function StrokeText({
       },
       0,
     );
-    if (wipe)
+    if (wipe) {
+      const wipeAt = drawDuration * 0.55 + fillDelay;
+      const wipeFor = Math.max(0.45, drawDuration * 0.55);
       timeline.to(
         wipe,
-        {
-          attr: { width: box.width },
-          duration: Math.max(0.45, drawDuration * 0.55),
-          ease: "power2.inOut",
-        },
-        drawDuration * 0.55 + fillDelay,
+        { attr: { width: box.width }, duration: wipeFor, ease: "power2.inOut" },
+        wipeAt,
       );
+      // Once filled, the outline retires so only the clean glyphs remain.
+      if (fadeStroke && strokeRef.current)
+        timeline.to(
+          strokeRef.current,
+          { opacity: 0, duration: 0.5, ease: "power1.out" },
+          wipeAt + wipeFor,
+        );
+    }
     return () => {
       timeline.kill();
     };
-  }, [box, fontSize, drawDuration, fillDelay, stagger]);
+  }, [box, fontSize, drawDuration, fillDelay, stagger, fadeStroke]);
 
   const fontStyle = fontSize ? { fontSize: `${fontSize}px` } : undefined;
   const dash = Math.max((fontSize ?? 40) * 7, 200);

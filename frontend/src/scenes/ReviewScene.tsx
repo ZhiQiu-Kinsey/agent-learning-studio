@@ -92,16 +92,6 @@ export function ReviewScene({ studio }: SceneProps) {
         <p>{t("help")}</p>
       </header>
 
-      <LearningBadge
-        number={formatLessonNumber(detail.number)}
-        title={
-          lessons.find((lesson) => lesson.id === detail.id)?.title ??
-          detail.title
-        }
-        record={record}
-        quizAttempts={numbers.quizAttempts}
-      />
-
       {hasActivity ? (
         <dl className="review-stats" aria-label={t("stats.region")}>
           <Stat
@@ -138,6 +128,17 @@ export function ReviewScene({ studio }: SceneProps) {
           {t("empty")}
         </p>
       )}
+
+      {/* After the counters, so the real numbers are the first thing in view. */}
+      <LearningBadge
+        number={formatLessonNumber(detail.number)}
+        title={
+          lessons.find((lesson) => lesson.id === detail.id)?.title ??
+          detail.title
+        }
+        record={record}
+        quizAttempts={numbers.quizAttempts}
+      />
 
       <div className="review-grid">
         <section className="review-card" data-testid="review-scenes">
