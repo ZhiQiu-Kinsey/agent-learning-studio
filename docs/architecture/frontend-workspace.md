@@ -27,8 +27,8 @@
 | 目录 | 职责 |
 | --- | --- |
 | `src/stage/` | `deriveStage`（纯函数：拓扑、span、信号、胶片）、`replay.ts`（回放时钟，带版本令牌）、`AgentStage`、`ContextFilm`、`Timeline`、`ToolCards`、`Lenses`（标准教学事件族的通用视图） |
-| `src/content/` | 生成的 v2 类型 `types.gen.ts`、`view.ts`、选择器引擎 `selector.ts`、导览 `guide.ts`、预测 `predict.ts`、块渲染 `blocks/`、术语与代码关键字标注 `glossary/`（数据来自 `/api/glossary`） |
-| `src/motion/` | `MotionProvider`（合并系统减少动画、WebGL 与页面可见性）、`useMotionBudget`（离屏暂停，WebGL 同屏最多三个）、`revealProps`（滚动揭示）、`EffectBoundary`（装饰效果出错时退回静态）、`MotionIntent` 意图注册表、动效令牌 |
+| `src/content/` | 生成的 v2 类型 `types.gen.ts`、`view.ts`、选择器引擎 `selector.ts`、导览 `guide.ts`、预测 `predict.ts`、块渲染 `blocks/`、术语与代码名标注 `glossary/`（术语来自 `/api/glossary`；代码名来自课程详情的 `code_names`，说明来自内容的 `code_notes`；规则见 [术语与代码名](terminology.md)） |
+| `src/motion/` | `MotionProvider`（合并系统减少动画、WebGL 与页面可见性）、`useMotionBudget`（离屏暂停，WebGL 同屏最多三个，见 `webglSlots`）、`revealProps`（滚动揭示）、`EffectBoundary`（装饰效果出错时退回静态）、`MotionIntent` 意图注册表、动效令牌 |
 | `src/i18n/` | i18next、语言注册表、按命名空间组织的 `locales/zh-CN/*.json`、错误码翻译 |
 | `src/progress/` | 本机学习进度（localStorage，有独立版本线与迁移阶梯），只记录真实动作 |
 | `src/components/react-bits/` | 改编自 React Bits 的组件（文件首行注明来源与许可）。较长的组件把着色器、常量和纯逻辑放在同名目录（例如 `ElectricLogo/shaders.ts`），组件文件路径与导出保持不变，便于对照上游更新 |
@@ -55,8 +55,19 @@
 
 - **动效级别**：`<html data-motion="full|static">` 由首屏脚本和 `MotionProvider` 写入，只跟随系统的“减少动画”设置，没有页面内开关。
 - **CSS 写法**：统一使用 `:root:not([data-motion="full"])`，Tailwind 的 `motion-reduce:` 和 `motion-safe:` 已跟随这个属性。
-- **重效果**：通过 `MotionIntent` 或 `useMotionBudget` 接入，做到按需加载、离屏暂停、WebGL 同屏最多一个，并且都有静态降级。
+- **重效果**：通过 `MotionIntent` 或 `useMotionBudget` 接入，做到按需加载、离屏暂停、WebGL 同屏最多三个，并且都有静态降级。
 - **装饰与数据分开**：英雄带动态背景、入场与滚动揭示、悬停反馈、点击火花都只装饰静态界面；运行数据不加装饰性特效，每个真实事件只发一次信号，运行中的流光边框只在真实运行时出现。滚动揭示统一用 `revealProps`，系统中途开启减少动画时尚未滚到的内容也会立即完整显示。
+
+## 术语与代码名
+
+课程页由 `LessonVocabulary` 包住全部场景，提供当前课程、本课代码名和代码说明。
+
+- 术语只在每页第一次出现处加下划线（`GlossaryScope` 决定归属），`data-tier` 区分三档：
+  - `new`：本课引入，实线渐变；
+  - `review`：前面课程引入，点线；
+  - `background`：背景知识，虚线。
+- 本课源码里的名字（含消息角色、事件名、运行终态）显示为代码样式；有 `code_notes` 的带点线，悬停或聚焦显示说明卡。
+- 匹配顺序：代码样式片段 → 术语 → 代码名。术语表的 `not_in` 词组整体跳过，避免中文子串误命中。
 
 ## 文案与多语言
 

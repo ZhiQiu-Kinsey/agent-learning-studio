@@ -1,6 +1,6 @@
 /**
  * First-come slot pool. Holders keep a slot until they release it; waiters are
- * promoted in request order. Used to keep at most one WebGL effect alive.
+ * promoted in request order. Used to cap how many WebGL effects stay alive (see webglSlots).
  */
 export function createSlotPool(capacity: number) {
   const holders: symbol[] = [];

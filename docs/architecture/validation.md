@@ -1,6 +1,6 @@
 # 开发验证
 
-后端测试检查以下内容：课程目录、清单、内容 v2 schema、迁移与译文层、示意契约、实验选择器命中、输入校验、执行预算、取消、模型适配、事件信封、运行存储、录制和 SQLite 记忆。前端单元测试（vitest）覆盖舞台推导、回放时钟、选择器、导览、预测、进度迁移与快捷键。浏览器测试检查首页、导学、课程地图、五个场景、运行与回放、命令面板、主题、减少动画、响应式布局、无障碍（axe-core）和可信扩展回退。
+后端测试检查以下内容：课程目录、清单、内容 v2 schema、迁移与译文层、示意契约、实验选择器命中、课程用词（术语、中英并列、裸英文词、代码说明）、输入校验、执行预算、取消、模型适配、事件信封、运行存储、录制和 SQLite 记忆。前端单元测试（vitest）覆盖舞台推导、回放时钟、选择器、导览、预测、进度迁移与快捷键。浏览器测试检查首页、导学、课程地图、五个场景、运行与回放、命令面板、主题、减少动画、响应式布局、无障碍（axe-core）和可信扩展回退。
 
 ## 后端与课程数据
 
@@ -11,9 +11,10 @@
 .\.venv\Scripts\python.exe scripts/validate_lessons.py
 .\.venv\Scripts\python.exe scripts/export_curriculum.py --check
 .\.venv\Scripts\python.exe scripts/migrate_content.py --check
+.\.venv\Scripts\python.exe scripts/term_report.py           # 逐课用词问题；加 --lesson <slug> --full 看明细
 ```
 
-清单校验包括 planned 草稿，但不会解锁课程。新增课程既需要结构校验，也需要实际行为与教学验收。
+清单校验包括 planned 草稿，但不会解锁课程。用词检查只针对可运行课程；中文术语有没有收录要靠作者通读，见 [术语与代码名](terminology.md)。新增课程既需要结构校验，也需要实际行为与教学验收。
 
 ## 前端与浏览器
 

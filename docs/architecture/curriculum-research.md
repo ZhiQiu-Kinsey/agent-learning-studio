@@ -22,7 +22,7 @@
 | 非商业许可 | anthropics/courses、NirDiamant 两个仓库、Datawhale 其他仓库 |
 | 无许可证 | HF context-course、AgentGuide、ghuntley 工作坊 |
 
-参考仓库位于 `H:\Learn\References\`，不参与平台运行。
+参考仓库是作者本机的只读副本（固定版本见 [课程来源](reference-study.md)），不参与平台运行。
 
 ## 2. 结论摘要
 

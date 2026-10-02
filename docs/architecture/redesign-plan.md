@@ -1,6 +1,6 @@
 # 平台重构方案：可视化学习体验升级
 
-确认日期：2026-10-01。本文是重构的执行依据；课程扩充、平台约束与决策细节见 [课程调研与决策记录](curriculum-research.md)（第 6 节平台约束、第 9 节决策）。两者冲突时以 curriculum-research.md 第 9 节和本文第 1 节为准。
+确认日期：2026-10-01。**本方案的五个阶段已于 2026-10-02 完成，本文保留为设计记录；当前结构以 [前端结构](frontend-workspace.md) 与 [平台架构](platform.md) 为准。** 本文曾是重构的执行依据；课程扩充、平台约束与决策细节见 [课程调研与决策记录](curriculum-research.md)（第 6 节平台约束、第 9 节决策）。两者冲突时以 curriculum-research.md 第 9 节和本文第 1 节为准。
 
 ## 1. 已确认的决定
 
@@ -124,7 +124,7 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 
 ## 7. 可借鉴的 OpenMAIC 代码（MIT，复制时保留版权声明并登记第三方声明）
 
-路径相对 `H:\Learn\References\OpenMAIC`：
+路径相对 [OpenMAIC](https://github.com/THU-MAIC/OpenMAIC) 仓库根目录：
 
 - 效果描述与适配：`lib/choreography/descriptors/{types,spotlight,laser}.ts`、`components/slide-renderer/Editor/motion-descriptor-adapter.ts`、`SpotlightOverlay.tsx`（测量与遮罩核心）。
 - 回放导航：`lib/playback/action-navigation.ts`、`action-resume.ts`（按 `(index, id, type)` 校验续播位置）。
@@ -178,10 +178,6 @@ React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 searc
 
 后续工作（不在本轮重构范围内）：按优先级逐课实现新增的规划课程（先实现 P1：11–16，见 curriculum-research.md 第 9 节决策 1；2026-10 的执行情况见 [curriculum-plan-2026-10.md](curriculum-plan-2026-10.md)），并在真实模型上录制随课运行（`scripts/export_recording.py`）；需要英文等其他语言时，新增 `frontend/src/i18n/locales/<语言>/` 与各课 `content.<语言>.json` 译文层即可。
 
-## 9. 现状速查（重建上下文用）
+## 9. 现状
 
-- 后端：`server/app.py`（SSE `/api/run`、执行互斥、脱敏）、`server/catalog.py`（课程发现与 `_content` 手写校验）、`course/execution.py`（`RunContext`）、`course/runner.py`（原生循环）。事件类型：`run_start/request/response/tool_call/tool_result/answer/error/done` + `lesson.*`。
-- 前端：`App.tsx`（壳与导航）、`hooks/useStudio.ts`（课程、运行、回放状态）、`components/workspace/{LearningWorkspace,Laboratory,ExecutionFlow,ModelSettings}.tsx`、`components/learning/*`、`Onboarding.tsx`、`Curriculum.tsx`、`lesson-extensions/`；样式在 `styles/`。已有约 25 个 React Bits 组件在 `components/react-bits/`。
-- 测试：Python 92 个（`python -m unittest discover -s tests`）；Playwright 5 个 spec，大量依赖中文文案和 CSS 类名（`.event-detail pre`、“运行练习”等）。
-- 用户自己在 8765 端口运行着服务，不要停止它。
-- Git：本地仓库，基线 `f84e316`；`core.autocrlf=false`。
+当前代码结构、命令与约束见仓库根目录的 `AGENTS.md`，前端结构见 [前端结构](frontend-workspace.md)。

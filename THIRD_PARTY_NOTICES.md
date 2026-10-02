@@ -11,7 +11,7 @@
 
 ## OpenMAIC
 
-- 来源：本地参考副本 `H:\Learn\References\OpenMAIC`（THU-MAIC）
+- 来源：https://github.com/THU-MAIC/OpenMAIC （THU-MAIC，参考提交 `8f7d51e`）
 - 范围：
   - `frontend/scripts/check-i18n-keys.mjs`：改编自 `scripts/check-i18n-keys.mjs`
   - `frontend/scripts/cjk-scan.mjs`：思路来自 `tests/workbench/workbench-i18n.test.ts`

@@ -57,13 +57,15 @@
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | `id` | 是 | kebab-case，全表唯一；将来内容块用 `term_id` 引用 |
-| `zh` | 是 | 中文写法；已直接使用英文的词（Agent、Token、JSON Schema）与 `en` 相同 |
+| `zh` | 是 | 中文写法；已直接使用英文的词（Agent、Token、JSON Schema）与 `en` 相同。名字要具体，不用常见单字词或动词 |
 | `en` | 是 | 英文原词 |
+| `kind` | 否 | `concept`（课程概念，默认）或 `background`（背景词，如分词器、消融，不设 `first_lesson`） |
 | `definition` | 是 | 简短中文释义，不超过 160 字符 |
-| `aliases` | 否 | 正文中的其他写法，如 `RAG`、`验收`；中文名与别名在全表唯一 |
-| `first_lesson` | 否 | 该术语首次作为知识点出现的课程 slug，必须是已登记课程且不能写别名；只在导学出现（如运行层）或对应课程尚未登记（如提示缓存、沙箱）时省略 |
+| `aliases` | 否 | 正文中的其他写法，如 `RAG`、`验收器`；中文名与别名在全表唯一 |
+| `not_in` | 否 | 含有术语名、但意思不同的更长词组，如“评估”的 `评估者`；正文里这些词组整体不标注 |
+| `first_lesson` | 否 | 最早用到该概念的可运行课 slug，不能写别名；课程尚未登记（如提示缓存、沙箱）时省略 |
 
-界面统一显示为“中文（English）”，`zh` 与 `en` 相同时只显示一次；接口返回的每条术语附带计算出的 `display` 与 `first_lesson_number`。测试会检查 `first_lesson` 指向的课程目录条目或教学内容中确实出现该术语，避免登记课程中并不存在的知识点。
+悬浮卡的标题显示为“中文（English）”，`zh` 与 `en` 相同时只显示一次；接口返回的每条术语附带计算出的 `display` 与 `first_lesson_number`。测试会检查 `first_lesson` 指向的课程目录条目或教学内容中确实出现该术语，避免登记课程中并不存在的知识点。收录标准、四类词（课程概念、背景词、代码名、普通词）的写法与统一用词表见 [术语与代码名](terminology.md)。
 
 **多语言预留（本阶段未实现合并）：** 术语映射字段 `id`、`zh`、`en`、`first_lesson` 只在源文件中维护，译文层不得改动；可译文本字段是 `definition` 与 `aliases`（`server/glossary.py` 的 `TRANSLATABLE_FIELDS`）。将来的 `curriculum/glossary.{locale}.json` 以术语 `id` 为键，只提供这些字段及该语言的显示名 `term`，按 id 覆盖源文件；缺失的条目回退到 zh-CN 源文本。英文界面只显示 `en`，不附中文。
 
@@ -131,7 +133,7 @@
   `walkthrough` 是作者写的分步讲解，界面一律标注“教学示意 · 非运行记录”。
 - **参数标签**：自定义运行器的 `INPUT_MODEL` 会导出 JSON Schema，前端据此生成参数控件。控件的标签、帮助和选项文字写在 `lab.inputs`，测试保证它与模型字段一一对应。枚举请用 `Literal`，不要用正则 `pattern`。
 - **读码块**：`annotated-source` 的路径必须在本课 sources 中，行号必须真实存在。“本课新增”由后端从源码 AST 计算，不要手写。
-- **术语**：外来术语首次出现时写作“中文（English）”，以 `curriculum/glossary.json` 为准。
+- **术语与代码名**：课程概念只在引入课（`first_lesson`）第一次出现时写“中文（English）”，其他课只写中文；背景词不写英文并列。正文写到的源码名字自动显示为代码样式，需要解释的在 `content.json` 顶层 `code_notes` 写说明。完整规则与统一用词表见 [术语与代码名](terminology.md)；写完运行 `scripts/term_report.py --lesson <slug> --full`，`validate_lessons` 会拒绝有用词问题的可运行课程。
 
 **版本与迁移**：旧版本内容会在加载时走 `server/content_migrations.py` 的迁移阶梯。写回磁盘并规范格式用 `scripts/migrate_content.py`，加 `--check` 只检查。修改 schema 后，运行 `scripts/export_content_schema.py`，再在 frontend 目录运行 `npm run content:types`；测试会检查三者同步。
 
