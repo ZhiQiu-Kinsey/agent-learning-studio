@@ -6,8 +6,8 @@ import { createSlotPool } from "./slotPool";
 /** css: transforms/opacity; canvas: 2D loops; webgl: GPU contexts (one at a time). */
 export type MotionCost = "css" | "canvas" | "webgl";
 
-// Two live contexts: a page hero plus one inline effect (e.g. a card or orb).
-export const webglSlots = createSlotPool(2);
+// Three live contexts: a page hero plus up to two inline effects (orb, button, badge).
+export const webglSlots = createSlotPool(3);
 
 /**
  * Per-effect budget. `granted` means the effect may exist at all (level, WebGL

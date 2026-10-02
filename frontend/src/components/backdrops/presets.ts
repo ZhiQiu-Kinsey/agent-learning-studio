@@ -232,6 +232,37 @@ export const backdropPresets = {
     },
     fallback: glow(brand.lilac, brand.violet),
   },
+  molten: {
+    tint: "#ff9473",
+    load: () => import("../react-bits/MoltenMetal"),
+    props: {
+      color1: brand.violet,
+      color2: brand.coral,
+      color3: "#ffe0c8",
+      speed: 0.35,
+      glow: 0.9,
+      brightness: 0.85,
+      grain: true,
+      grainIntensity: 0.04,
+      mouseInteraction: true,
+      backgroundColor: brand.ink,
+      lightMode: false,
+    },
+    fallback: glow(brand.coral, brand.violet),
+  },
+  sideRays: {
+    tint: "#b98aff",
+    load: () => import("../react-bits/SideRays"),
+    props: {
+      rayColor1: brand.lilac,
+      rayColor2: brand.teal,
+      speed: 0.8,
+      intensity: 1.1,
+      spread: 0.9,
+      opacity: 0.95,
+    },
+    fallback: glow(brand.lilac, brand.teal),
+  },
 } satisfies Record<string, Preset>;
 
 export type BackdropName = keyof typeof backdropPresets;
@@ -240,10 +271,10 @@ export type BackdropName = keyof typeof backdropPresets;
 export const categoryBackdrop: Record<string, BackdropName> = {
   A: "aurora", // 原生基础: one glowing loop running through
   B: "blinds", // 任务与接口: crisp contract slats
-  C: "grainient", // 上下文与状态: flowing memory
+  C: "sideRays", // 上下文与状态: light entering the window from the side
   R: "rays", // 推理与控制: light rays of attention
   D: "galaxy", // 知识与检索: a field of documents
-  E: "ripple", // 框架与编排: an orchestrated grid
+  E: "molten", // 框架与编排: parts fused into one runtime
   K: "terminal", // 编码 Agent: a terminal
   F: "radar", // 质量与可靠性: monitoring sweep
   G: "web", // 协议与工具: connections
