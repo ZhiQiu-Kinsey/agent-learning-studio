@@ -183,6 +183,76 @@ function BudgetLens({ film, budget }: { film: FilmRound[]; budget: number }) {
   );
 }
 
+type PlanItem = { id: string; content: string; status: string };
+
+/** Accepts lesson.todo (model-written todos) and lesson.plan (versioned steps). */
+const planItems = (data: Record): PlanItem[] => {
+  const raw = Array.isArray(data.todos)
+    ? data.todos
+    : Array.isArray(data.steps)
+      ? data.steps
+      : [];
+  return raw
+    .map(asRecord)
+    .filter((item) => typeof item.id === "string")
+    .map((item) => ({
+      id: String(item.id),
+      content: String(item.content ?? item.title ?? ""),
+      status: String(item.status ?? "pending"),
+    }));
+};
+
+function PlanLens({ events, injected }: { events: Trace[]; injected: number }) {
+  const { t } = useTranslation("stage", { keyPrefix: "lens.plan" });
+  const latest = events[events.length - 1];
+  const items = planItems(latest.data);
+  const changed = new Set(
+    (Array.isArray(asRecord(latest.data.diff).changed)
+      ? (asRecord(latest.data.diff).changed as unknown[])
+      : []
+    ).map((item) => String(asRecord(item).id)),
+  );
+  const reason =
+    typeof latest.data.reason === "string" ? latest.data.reason : null;
+  return (
+    <section
+      className="lens lens-plan"
+      data-testid="lens-plan"
+      aria-label={t("title")}
+    >
+      <h3>{t("title")}</h3>
+      <p className="lens-note">
+        {t("version", {
+          version: String(latest.data.version ?? events.length),
+          count: events.length,
+        })}
+      </p>
+      {reason && <p className="lens-note">{t("reason", { reason })}</p>}
+      <ol>
+        {items.map((item) => (
+          <li
+            key={item.id}
+            data-status={item.status}
+            data-changed={changed.has(item.id) || undefined}
+          >
+            <small className="lens-plan-status">
+              {t(`status.${item.status}` as "status.pending", {
+                defaultValue: item.status,
+              })}
+            </small>
+            <span>{item.content}</span>
+          </li>
+        ))}
+      </ol>
+      {injected > 0 && (
+        <p className="lens-note" data-injected>
+          {t("injected", { count: injected })}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function Lenses({
   visible,
   film,
@@ -194,6 +264,12 @@ export function Lenses({
     (event) => event.type === "lesson.task_card",
   );
   const memory = visible.filter((event) => event.type === "lesson.memory");
+  const plan = visible.filter(
+    (event) => event.type === "lesson.todo" || event.type === "lesson.plan",
+  );
+  const injected = visible.filter(
+    (event) => event.type === "lesson.harness_injected",
+  ).length;
   const hasVariants = visible.some(
     (event) => event.type === "lesson.context_variant",
   );
@@ -205,6 +281,9 @@ export function Lenses({
   const lenses = [
     taskCard && <TaskCardLens key="task" event={taskCard} />,
     memory.length > 0 && <MemoryLens key="memory" events={memory} />,
+    plan.length > 0 && (
+      <PlanLens key="plan" events={plan} injected={injected} />
+    ),
     hasVariants && budget !== null && film.length > 0 && (
       <BudgetLens key="budget" film={film} budget={budget} />
     ),

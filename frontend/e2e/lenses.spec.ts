@@ -77,3 +77,28 @@ test("memory lens shows scope filtering and flags recalled instructions without 
   await expect(lens.locator("[data-flagged]")).toHaveCount(1);
   await expect(lens.locator("li[data-action='packaged']")).toBeVisible();
 });
+
+test("plan lens follows todo snapshots and marks harness reminders", async ({
+  page,
+  request,
+}) => {
+  const detail = await (await request.get("/api/lessons/todo-planning")).json();
+  const reminder = detail.exercises.find(
+    (item: { id: string }) => item.id === "todo-reminder",
+  );
+  await page.goto("/");
+  await openLessonById(page, request, "todo-planning");
+  await page.getByTestId("scene-tab-lab").click();
+  await expect(page.getByTestId("lens-plan")).toHaveCount(0);
+  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
+  await page.getByRole("option", { name: reminder.title, exact: true }).click();
+  await page.getByTestId("lab-run-button").click();
+  await expect(
+    page.locator("[data-testid='agent-stage'][data-status='completed']"),
+  ).toBeVisible();
+  const lens = page.getByTestId("lens-plan");
+  await expect(lens.locator("li[data-status='done']")).toHaveCount(4);
+  await expect(lens.locator("[data-injected]")).toBeVisible();
+  await page.getByTestId("lab-replay-rewind").click();
+  await expect(page.getByTestId("lens-plan")).toHaveCount(0);
+});
