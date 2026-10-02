@@ -4,8 +4,6 @@ import {
   type ComponentType,
   type LazyExoticComponent,
 } from "react";
-import type { AuroraProps } from "../components/react-bits/Aurora";
-import type { DotGridProps } from "../components/react-bits/DotGrid";
 import type { SplitTextProps } from "../components/react-bits/SplitText";
 import { useMotion } from "./context";
 import type { MotionLevel } from "./level";
@@ -23,29 +21,14 @@ interface IntentEntry<P> {
   load: () => Promise<{ default: ComponentType<P> }>;
   Fallback: ComponentType<P>;
 }
-const Nothing = () => null;
 
 interface IntentPropsMap {
-  "ambient.aurora": AuroraProps;
-  "ambient.dot-grid": DotGridProps;
   "heading.split": SplitTextProps;
 }
 export type IntentName = keyof IntentPropsMap;
 type IntentProps<N extends IntentName> = IntentPropsMap[N];
 
 export const intents: { [N in IntentName]: IntentEntry<IntentProps<N>> } = {
-  "ambient.aurora": {
-    cost: "webgl",
-    levels: ["full"],
-    load: () => import("../components/react-bits/Aurora"),
-    Fallback: Nothing,
-  },
-  "ambient.dot-grid": {
-    cost: "canvas",
-    levels: ["full"],
-    load: () => import("../components/react-bits/DotGrid"),
-    Fallback: Nothing,
-  },
   "heading.split": {
     cost: "css",
     levels: ["full"],
