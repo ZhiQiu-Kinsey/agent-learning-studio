@@ -199,7 +199,7 @@ def run_compaction(context: RunContext, values: Inputs) -> str:
     older, recent = build_history(values.noise_repeats, results)
     system = {"role": "system", "content": SYSTEM}
     probe = {"role": "user", "content": PROBE}
-    context.emit("lesson.context_variant", {"kind": "construction", "detail": "历史由课程程序组装：两次 lookup_lesson 的回执来自本次真实执行，assistant 调用消息与旁支回复不是模型生成的。摘要由当前模型生成。", "question": PROBE})
+    context.emit("lesson.compaction", {"kind": "construction", "detail": "历史由课程程序组装：两次 lookup_lesson 的回执来自本次真实执行，assistant 调用消息与旁支回复不是模型生成的。摘要由当前模型生成。", "question": PROBE})
     # 摘要压缩：先让模型把较早部分写成摘要，再用摘要替换它。摘要本身也花一次请求。
     summary_body = {"messages": [{"role": "system", "content": SUMMARY_SYSTEM}, *older,
                                  {"role": "user", "content": SUMMARY_INSTRUCTION}], "temperature": 0}
@@ -215,7 +215,7 @@ def run_compaction(context: RunContext, values: Inputs) -> str:
     for index, (name, messages) in enumerate(layouts.items(), 2):
         context.check_cancelled()
         validate_tool_history(messages)
-        context.emit("lesson.context_variant", {"kind": "layout", "name": name, "chars": _chars(messages),
+        context.emit("lesson.compaction", {"kind": "layout", "name": name, "chars": _chars(messages),
                                                 "fact_visible": _visible(messages, PROBE_PHRASE)}, index)
         response = context.complete({"messages": messages, "temperature": 0}, round_number=index)
         answer = _text(response)
