@@ -1,0 +1,757 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "orchestrator-evaluator",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "model",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "REASONING / LESSON 18",
+          "headline": "多叫几次模型之前，",
+          "highlight": "先算清多出来的调用换来了什么。",
+          "takeaway": "编排者-工人让一个模型拆任务、几个模型并行干活；评估者-优化者让一个模型写、另一个评。两种模式都比单次调用贵，评估循环还必须有上限。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-orchestrate",
+              "label": "01 / ORCHESTRATE",
+              "title": "运行时才决定子任务",
+              "description": "编排者读任务后输出子任务列表，程序按列表派出工人。子任务不是事先写死的。",
+              "token": "subtasks[]"
+            },
+            {
+              "id": "02-workers",
+              "label": "02 / WORKERS",
+              "title": "工人并行",
+              "description": "每个工人只拿到自己的那条指令和对应资料，请求带 branch 并行发出。",
+              "token": "branch"
+            },
+            {
+              "id": "03-evaluate",
+              "label": "03 / EVALUATE",
+              "title": "写一版，评一版",
+              "description": "生成者出题，评估者按量规给出 pass 或 revise 和具体意见，生成者据此再改一版。",
+              "token": "verdict · feedback"
+            },
+            {
+              "id": "04-cost",
+              "label": "04 / COST",
+              "title": "调用账本",
+              "description": "每次调用记下角色和服务商报告的 total_tokens，和单次调用的基线放在一起比。",
+              "token": "N + 1"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "从固定流程到动态拆分",
+          "paragraphs": [
+            "上一课的三种工作流，步骤都是事先写好的。编排者-工人（Orchestrator-Workers）换了一种做法：让一个模型（编排者）先读任务，决定拆成几个子任务、每个子任务写什么指令；程序再按这份列表派出工人，每个工人做一件事。子任务在运行时才确定，适合事先说不清要拆成几块的任务。",
+            "本课的任务是为第 7、8、9 课各出一道四选一的选择题。基线是单次调用：一次请求写完三道题。编排模式下，编排者输出子任务列表，记成一条 lesson.plan，每个子任务就是计划里的一项；三个工人并行出题，做完一项标一项。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "工人的输入要小",
+          "paragraphs": [
+            "每个工人只拿到编排者给它的那一句指令，加上对应那一课的要点，看不到其他工人在做什么。输入越小，工人越不容易被无关信息带偏，也越容易并行。代价是工人之间无法互相参考，比如三道题的干扰项可能写得很像。",
+            "编排者的输出先经过程序校验：子任务不超过 4 个，id 不重复，lesson 只能是 7、8、9。校验不通过就不派工人，记一条 lesson.plan_error。工人写回的题目再过一遍格式检查：四个不重复的选项、answer 是 0 到 3 的整数、有题干和解释。"
+          ]
+        },
+        {
+          "id": "mq-n-plus-one",
+          "type": "micro-quiz",
+          "question": {
+            "id": "orchestrator-cost",
+            "prompt": "编排者拆出 3 个子任务，每个工人请求一次。这次运行一共调用了几次模型？",
+            "options": [
+              {
+                "id": "a",
+                "text": "4 次：编排者 1 次，工人 3 次",
+                "feedback": "对。这就是常说的 N+1。"
+              },
+              {
+                "id": "b",
+                "text": "3 次，编排者不算",
+                "feedback": "不对。拆任务本身也是一次模型请求。"
+              },
+              {
+                "id": "c",
+                "text": "1 次，工人是并行的",
+                "feedback": "不对。并行省的是时间，请求次数一次不少。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "并行能缩短等待，但不会减少调用次数和用量（Usage）。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "一个写，一个评，有上限地轮流",
+          "paragraphs": [
+            "评估者-优化者（Evaluator-Optimizer）是另一种两角色模式：生成者写一版，评估者按量规检查，给出 pass 或 revise 和具体意见，生成者带着意见修订（Revise），直到通过。参考示例里的循环没有上限，评估者一直不满意，它就一直跑。本课的循环必须设 max_iters（1 到 3），停下时写明原因：评估通过、达到上限、或评估输出不合格式。",
+            "评估之前还有一道程序检查：题目格式不对（比如选项不足四个），就直接把格式问题当作意见退回，不必花一次评估者请求。能由程序确定的，就不交给模型判断。"
+          ]
+        },
+        {
+          "id": "mq-eval-gate",
+          "type": "micro-quiz",
+          "question": {
+            "id": "format-before-judge",
+            "prompt": "生成者写出的题只有 3 个选项。本课的循环下一步做什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "程序直接把“选项不足”作为意见退回，不请求评估者",
+                "feedback": "对。程序能确定的问题，不必花一次模型请求。"
+              },
+              {
+                "id": "b",
+                "text": "交给评估者，让它指出选项不足",
+                "feedback": "不对。这能做到，但白白多花一次调用。"
+              },
+              {
+                "id": "c",
+                "text": "判为通过，因为题干没问题",
+                "feedback": "不对。格式不对就不能通过。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "确定性的检查放在模型评审之前。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "调用账本：多花的钱换来了什么",
+          "paragraphs": [
+            "运行器为每次调用记一行账：角色（单次调用、编排者、工人、生成者、评估者）、轮次、branch，以及服务商在响应里报告的 total_tokens。某次响应没有报告用量（Usage），就记为未报告，不估算。报告里给出调用次数、各角色次数和累计 total_tokens，完整账本记在 lesson.cost 事件里。",
+            "拿三种运行比一比：单次调用最省；编排模式至少多一次编排请求；评估循环每轮最多两次请求。多出来的调用有没有换来更好的题，格式检查只能回答一部分，题目质量还要你自己读。"
+          ]
+        },
+        {
+          "id": "compare-modes",
+          "type": "compare",
+          "title": "三种运行",
+          "columns": [
+            "模式",
+            "模型请求",
+            "谁决定拆分或停止",
+            "主要风险"
+          ],
+          "rows": [
+            [
+              "单次调用",
+              "1 次",
+              "无",
+              "一次写太多，某道题格式出错"
+            ],
+            [
+              "编排者-工人",
+              "1 + 子任务数",
+              "编排者决定拆成几块",
+              "拆分不合理；工人之间互相看不到"
+            ],
+            [
+              "评估者-优化者",
+              "每轮 1 到 2 次",
+              "评估者的结论与 max_iters",
+              "评估者永远不满意；没有上限就停不下"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次编排",
+          "description": "按步骤说明编排模式的一次运行，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "拆分",
+              "actor": "编排者",
+              "title": "输出子任务列表",
+              "body": "程序校验后记成一版计划。",
+              "code": "plan = extract_json(ledger.call(\"编排者\", ORCHESTRATOR_SYSTEM, TASK, 1))",
+              "language": "python",
+              "evidence": "lesson.plan（event=created）"
+            },
+            {
+              "id": "step-2",
+              "label": "派工",
+              "actor": "程序",
+              "title": "并行派出工人",
+              "body": "每个工人的请求带自己的 branch。",
+              "code": "pool.map(work, subtasks)",
+              "language": "python",
+              "evidence": "request.data.branch"
+            },
+            {
+              "id": "step-3",
+              "label": "检查",
+              "actor": "程序",
+              "title": "检查每道题的格式",
+              "body": "四个不重复的选项、合法的 answer、题干和解释。",
+              "code": "problems = check_question(question)",
+              "language": "python",
+              "evidence": "lesson.worker"
+            },
+            {
+              "id": "step-4",
+              "label": "记账",
+              "actor": "程序",
+              "title": "汇总调用与用量",
+              "body": "只累加服务商报告的 total_tokens。",
+              "code": "ledger.total()",
+              "language": "python",
+              "evidence": "lesson.cost"
+            }
+          ]
+        },
+        {
+          "id": "predict-calls",
+          "type": "predict",
+          "prompt": "运行“编排者-工人”之前先猜：这次运行会出现几个 request 事件？",
+          "experiment": "orchestrator-vs-single",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "workflow-patterns"
+        },
+        {
+          "id": "code-ledger",
+          "type": "annotated-source",
+          "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
+          "start": 51,
+          "end": 96,
+          "notes": [
+            {
+              "id": "n51",
+              "line": 51,
+              "text": "格式检查由程序完成，题目内容的好坏留给评估者或人来判断。"
+            },
+            {
+              "id": "n83",
+              "line": 83,
+              "text": "只记服务商报告的 total_tokens，没有就记 None。"
+            },
+            {
+              "id": "n90",
+              "line": 90,
+              "text": "累计时把未报告的次数写出来，不拿估算补。"
+            }
+          ]
+        },
+        {
+          "id": "code-orchestrator",
+          "type": "annotated-source",
+          "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
+          "start": 112,
+          "end": 151,
+          "notes": [
+            {
+              "id": "n120",
+              "line": 120,
+              "text": "编排者的子任务列表先校验：数量、id、课号。"
+            },
+            {
+              "id": "n124",
+              "line": 124,
+              "text": "校验不通过就不派工人，原文记下来。"
+            },
+            {
+              "id": "n132",
+              "line": 132,
+              "text": "工人只拿到自己的指令和那一课的要点，请求带 branch。"
+            },
+            {
+              "id": "n135",
+              "line": 135,
+              "text": "工人并行执行，共用同一个调用预算。"
+            }
+          ]
+        },
+        {
+          "id": "code-evaluator",
+          "type": "annotated-source",
+          "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
+          "start": 154,
+          "end": 192,
+          "notes": [
+            {
+              "id": "n158",
+              "line": 158,
+              "text": "循环次数由 max_iters 决定，没有无限循环。"
+            },
+            {
+              "id": "n171",
+              "line": 171,
+              "text": "格式不对时直接退回格式问题，不请求评估者。"
+            },
+            {
+              "id": "n174",
+              "line": 174,
+              "text": "格式对了才请评估者按量规评审。"
+            },
+            {
+              "id": "n185",
+              "line": 185,
+              "text": "评估通过就停，停止原因写进报告。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "并行工人，有界评估，账本单列",
+          "chosen": "编排者的子任务先校验再派工，工人并行且只拿最小输入；评估循环前置格式检查并设 max_iters；每次调用记账，只用服务商报告的用量。",
+          "alternatives": [
+            {
+              "id": "serial-workers",
+              "title": "工人一个接一个执行",
+              "why_not": "参考示例就是串行的，子任务互不依赖时白白多等。"
+            },
+            {
+              "id": "unbounded-eval",
+              "title": "评估循环直到评估者满意为止",
+              "why_not": "评估者可能永远给出 revise，循环停不下来。"
+            },
+            {
+              "id": "estimate-cost",
+              "title": "按字数估算每次调用的用量",
+              "why_not": "估算不是服务商的计量；没有报告就如实写未报告。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "orchestrator-vs-single",
+          "title": "编排者-工人与单次调用",
+          "hypothesis": "编排模式比单次调用至少多一次请求，用量也更多；工人并行执行，每道题单独检查。",
+          "predict": "predict-calls",
+          "arms": [
+            {
+              "id": "single",
+              "exercise": "single",
+              "label": "单次调用（基线）"
+            },
+            {
+              "id": "orchestrator",
+              "exercise": "orchestrator",
+              "label": "编排者-工人"
+            }
+          ],
+          "observe": [
+            {
+              "id": "subtasks",
+              "text": "编排者拆出的子任务，记成计划里的各项。",
+              "selector": {
+                "event": "lesson.plan",
+                "path": "data.steps"
+              }
+            },
+            {
+              "id": "worker-branch",
+              "text": "工人请求带的 branch。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.branch"
+              }
+            },
+            {
+              "id": "worker-result",
+              "text": "一个工人的格式检查结果。",
+              "selector": {
+                "event": "lesson.worker",
+                "path": "data.problems"
+              }
+            },
+            {
+              "id": "calls",
+              "text": "模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[0]"
+              }
+            },
+            {
+              "id": "tokens",
+              "text": "累计 total_tokens。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[1]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组完成同一个任务：为三课各出一道题。先看编排者怎么拆。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "subtasks"
+            },
+            {
+              "action": "highlight",
+              "observe": "subtasks"
+            },
+            {
+              "action": "narrate",
+              "text": "编排者的子任务成了计划里的三项。单次调用组没有这一步。"
+            },
+            {
+              "action": "seek",
+              "observe": "worker-branch"
+            },
+            {
+              "action": "highlight",
+              "observe": "worker-branch"
+            },
+            {
+              "action": "narrate",
+              "text": "工人的请求带着 branch 并行发出，响应按它配对。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "worker-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "worker-result"
+            },
+            {
+              "action": "narrate",
+              "text": "每道题回来都过一遍格式检查。"
+            },
+            {
+              "action": "seek",
+              "observe": "calls"
+            },
+            {
+              "action": "highlight",
+              "observe": "calls"
+            },
+            {
+              "action": "narrate",
+              "text": "比较调用次数：单次调用 1 次，编排模式是 1 + 子任务数。"
+            },
+            {
+              "action": "seek",
+              "observe": "tokens"
+            },
+            {
+              "action": "highlight",
+              "observe": "tokens"
+            },
+            {
+              "action": "narrate",
+              "text": "用量只取服务商报告的数字。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次编排者拆了几个子任务、每个工人的请求和结果，以及两组的调用次数与已报告的用量。"
+            ],
+            "does_not_prove": [
+              "格式检查通过不代表题出得好；质量要靠评估或人工阅读。",
+              "一次对比不能说明编排模式在其他任务上值得多花这些调用。",
+              "离线测试模式下的子任务、题目和用量由固定脚本给出。"
+            ]
+          }
+        },
+        {
+          "id": "evaluator-loop",
+          "title": "评估循环与上限",
+          "hypothesis": "评估者要求修订时，生成者带着意见改一版；循环在评估通过或达到 max_iters 时停止，停止原因写进报告。",
+          "arms": [
+            {
+              "id": "three",
+              "exercise": "evaluator",
+              "label": "评估者-优化者，最多 3 轮"
+            },
+            {
+              "id": "one",
+              "exercise": "evaluator-once",
+              "label": "评估者-优化者，只允许 1 轮"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-review",
+              "text": "第一轮评审：来源、结论、意见。",
+              "selector": {
+                "event": "lesson.review",
+                "path": "data"
+              }
+            },
+            {
+              "id": "revision",
+              "text": "修订后的题目和它的上一版。",
+              "selector": {
+                "event": "lesson.draft",
+                "path": "data.previous"
+              }
+            },
+            {
+              "id": "stop",
+              "text": "停止原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[3]"
+              }
+            },
+            {
+              "id": "ledger",
+              "text": "完整的调用账本。",
+              "selector": {
+                "event": "lesson.cost",
+                "path": "data.calls"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "评估循环里有两个角色：生成者和评估者。先看第一轮评审。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "first-review"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-review"
+            },
+            {
+              "action": "narrate",
+              "text": "source 说明意见来自评估者还是格式检查。"
+            },
+            {
+              "action": "seek",
+              "observe": "revision"
+            },
+            {
+              "action": "highlight",
+              "observe": "revision"
+            },
+            {
+              "action": "narrate",
+              "text": "生成者带着意见改了一版，previous 是被替换的那一版。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "stop"
+            },
+            {
+              "action": "highlight",
+              "observe": "stop"
+            },
+            {
+              "action": "narrate",
+              "text": "循环为什么停：评估通过，还是到了上限。"
+            },
+            {
+              "action": "seek",
+              "observe": "ledger"
+            },
+            {
+              "action": "highlight",
+              "observe": "ledger"
+            },
+            {
+              "action": "narrate",
+              "text": "账本里每一行是一次调用，角色和用量都在。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次循环跑了几轮、每轮意见来自哪里、为什么停下，都有事件可查。"
+            ],
+            "does_not_prove": [
+              "评估者说通过，只代表它按量规没挑出问题，题目仍可能有错。",
+              "离线测试模式下评估者第一次固定要求修订，这是脚本写的。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "pattern",
+          "label": "模式",
+          "options": [
+            {
+              "value": "single",
+              "label": "单次调用"
+            },
+            {
+              "value": "orchestrator",
+              "label": "编排者-工人"
+            },
+            {
+              "value": "evaluator",
+              "label": "评估者-优化者"
+            }
+          ]
+        },
+        {
+          "name": "max_iters",
+          "label": "评估循环上限",
+          "help": "只在评估者-优化者模式下生效，1 到 3 轮。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "编排者-工人和上一课的并行有什么不同？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "子任务由编排者在运行时决定，不是事先写死的",
+                  "feedback": "对。这是编排者存在的意义。"
+                },
+                {
+                  "id": "b",
+                  "text": "编排者-工人不能并行",
+                  "feedback": "不对。本课的工人就是并行执行的。"
+                },
+                {
+                  "id": "c",
+                  "text": "编排者-工人不需要模型",
+                  "feedback": "不对。编排者和工人都要调用模型。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "动态拆分是这种模式的特点，也是它多一次调用的原因。"
+            },
+            {
+              "id": "q2",
+              "prompt": "为什么评估者-优化者必须设 max_iters？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "评估者可能一直要求修订，循环会停不下来",
+                  "feedback": "对。每个循环都需要停止条件。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务商限制了调用次数",
+                  "feedback": "不对。上限是程序自己的设计。"
+                },
+                {
+                  "id": "c",
+                  "text": "第一轮的结果总是最好的",
+                  "feedback": "不对。上限和结果好坏无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "有界是循环的基本要求。"
+            },
+            {
+              "id": "q3",
+              "prompt": "工人并行执行，对用量有什么影响？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "没有影响，调用次数和用量一样多",
+                  "feedback": "对。并行省的是等待时间。"
+                },
+                {
+                  "id": "b",
+                  "text": "用量减少，因为同时发出",
+                  "feedback": "不对。每个请求照常计量。"
+                },
+                {
+                  "id": "c",
+                  "text": "用量翻倍",
+                  "feedback": "不对。请求次数没有变化。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "时间和成本是两件事，要分开看。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“编排者-工人”，找出编排者拆出子任务的那一步。",
+          "target": {
+            "event": "lesson.plan",
+            "path": "data.steps"
+          },
+          "explanation": "这条 lesson.plan 是编排者输出校验通过后记下的计划，每一项对应一个工人。后面带 branch 的请求就是按这份计划派出去的。如果编排者的输出没通过校验，你会看到 lesson.plan_error，而不是计划。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我比较了单次调用和编排模式的调用次数与累计用量。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在评估循环里找到了停止原因，并能说出它是哪一种。"
+            },
+            {
+              "id": "item-3",
+              "text": "我读了至少一道生成的题，自己判断了它出得好不好。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

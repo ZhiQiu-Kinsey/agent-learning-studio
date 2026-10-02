@@ -63,3 +63,4 @@
 | 15 `plan-and-replan` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `07-planning-design/README.md`（按固定 commit 的 raw URL 读取） | 任务分解、用结构化输出表示计划、子任务结果影响后续步骤时迭代规划。本课改为单 Agent 的规划器 / 执行器分工，加入固定故障、修订上限和版本差异 |
 | 16 `reflection-revision` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `09-metacognition/README.md`（按固定 commit 的 raw URL 读取） | 自我评估与纠正、外部反馈的作用。本课把“外部反馈”落实为真实执行的测试用例，并加上迭代上限与停止原因 |
 | 17 `workflow-patterns` | claude-cookbooks 2026-10 稀疏克隆 `d7265d6`（MIT） | `patterns/agents/basic_workflows.ipynb` | 提示链、并行、路由三种工作流的划分。原示例路由遇到未知标签会出错、没有步骤间检查；本课加入检查门、兜底记录、标注对照与服务端计时 |
+| 18 `orchestrator-evaluator` | claude-cookbooks `d7265d6`（MIT） | `patterns/agents/orchestrator_workers.ipynb`、`patterns/agents/evaluator_optimizer.ipynb` | 两种模式的角色划分。原示例工人串行、评估循环无上限、用 XML 解析；本课改为并行工人（按 branch 配对）、max_iters、前置格式检查与调用账本 |
