@@ -331,6 +331,12 @@ test("palette, toolbar button and shortcut help fit narrow screens", async ({
   await expect.poll(fits).toBe(true);
   await page.keyboard.press("Escape");
   await expect(palette(page)).toHaveCount(0);
+  // Without a keyboard, the course menu offers the palette instead.
+  await page.getByTestId("app-open-course-menu").click();
+  await page.getByRole("dialog").getByTestId("app-rail-command").click();
+  await expect(palette(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toHaveCount(0);
 
   await page.getByTestId("scene-tab-lab").click();
   await expect(page.getByTestId("scene-lab")).toBeVisible();

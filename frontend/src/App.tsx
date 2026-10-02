@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   BookOpen,
   House,
+  Search,
   ChevronRight,
   Layers3,
   Menu,
@@ -18,7 +19,11 @@ import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { MotionSwitch } from "./components/MotionSwitch";
 import { CourseNavigation } from "./components/CourseNavigation";
-import { CommandButton, CommandMenu } from "./components/command/CommandMenu";
+import {
+  CommandButton,
+  CommandMenu,
+  openCommandPalette,
+} from "./components/command/CommandMenu";
 import { Button } from "./components/ui/button";
 import {
   Sheet,
@@ -55,7 +60,7 @@ const loadingPanel = (
 
 export default function App() {
   const reducedMotion = useReducedMotion();
-  const { t } = useTranslation("home");
+  const { t } = useTranslation(["home", "command"]);
   const studio = useStudio();
   const [catalog, setCatalog] = useState(false);
   // First visit lands on the home page; returning learners go straight to their lesson.
@@ -120,6 +125,19 @@ export default function App() {
       >
         <House size={17} />
         {t("nav")}
+      </Button>
+      {/* Narrow screens hide the toolbar search button; keep the palette reachable. */}
+      <Button
+        variant="ghost"
+        className="rail-catalog rail-command"
+        data-testid="app-rail-command"
+        onClick={() => {
+          setMenu(false);
+          openCommandPalette();
+        }}
+      >
+        <Search size={17} />
+        {t("command:open")}
       </Button>
       <Button
         variant="ghost"
