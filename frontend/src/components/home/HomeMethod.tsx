@@ -9,7 +9,7 @@ import {
   Radio,
   type LucideIcon,
 } from "lucide-react";
-import { useReducedMotion } from "../../motion";
+import { revealProps, useReducedMotion } from "../../motion";
 import GlareHover from "../react-bits/GlareHover";
 
 const steps: { key: "concept" | "code" | "evidence" | "experiment" | "check"; icon: LucideIcon; color: string }[] = [
@@ -38,22 +38,24 @@ export function HomeMethod() {
         <motion.span
           className="home-method-line"
           aria-hidden="true"
-          initial={reduced ? false : { scaleX: 0 }}
-          whileInView={reduced ? undefined : { scaleX: 1 }}
+          {...revealProps(reduced, { scaleX: 0 }, { scaleX: 1 }, {
+            duration: 1.4,
+            ease: [0.16, 1, 0.3, 1],
+          })}
           viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
         />
         <ol className="home-method-steps">
           {steps.map(({ key, icon: Icon, color }, index) => (
             <motion.li
               key={key}
               style={{ "--step": color } as CSSProperties}
-              initial={reduced ? false : { opacity: 0, y: 30, filter: "blur(8px)" }}
-              whileInView={
-                reduced ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }
-              }
+              {...revealProps(
+                reduced,
+                { opacity: 0, y: 30, filter: "blur(8px)" },
+                { opacity: 1, y: 0, filter: "blur(0px)" },
+                { duration: 0.7, delay: 0.15 + index * 0.12, ease: [0.16, 1, 0.3, 1] },
+              )}
               viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.7, delay: 0.15 + index * 0.12, ease: [0.16, 1, 0.3, 1] }}
             >
               <GlareHover className="home-method-card" glareOpacity={0.22}>
                 <span className="home-method-index" aria-hidden="true">

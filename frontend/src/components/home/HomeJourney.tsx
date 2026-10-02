@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
 import { ArrowUpRight, Compass } from "lucide-react";
-import { useReducedMotion } from "../../motion";
+import { revealProps, useReducedMotion } from "../../motion";
 import { onboardingProgressId, useProgress } from "../../progress";
 import SpotlightCard from "../react-bits/SpotlightCard";
 import type { CurriculumData } from "../../types";
@@ -22,15 +22,13 @@ function Reveal({
   return (
     <motion.li
       {...rest}
-      initial={reduced ? false : { opacity: 0, y: 36, scale: 0.96 }}
-      whileInView={reduced ? undefined : { opacity: 1, y: 0, scale: 1 }}
+      {...revealProps(
+        reduced,
+        { opacity: 0, y: 36, scale: 0.96 },
+        { opacity: 1, y: 0, scale: 1 },
+        { type: "spring", damping: 22, stiffness: 160, delay: (index % 4) * 0.07 },
+      )}
       viewport={{ once: true, amount: 0.15 }}
-      transition={{
-        type: "spring",
-        damping: 22,
-        stiffness: 160,
-        delay: (index % 4) * 0.07,
-      }}
     >
       {children}
     </motion.li>

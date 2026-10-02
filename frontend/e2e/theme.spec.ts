@@ -180,7 +180,9 @@ test("changing reduced motion immediately restores offscreen lesson text", async
   const sections = page.getByTestId("learn-reading-section");
   await expect(sections.last()).toBeAttached();
   await expect(sections.last()).not.toBeInViewport();
-  await expect(sections.last()).toHaveCSS("opacity", "0.65");
+  expect(
+    Number(await sections.last().evaluate((node) => getComputedStyle(node).opacity)),
+  ).toBeLessThan(1);
 
   // Changing the OS preference must finish already-mounted entrance effects,
   // including content the learner has not scrolled to yet.

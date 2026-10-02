@@ -3,7 +3,7 @@ import Markdown from "react-markdown";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Braces, Cpu, Eye, Network, Quote } from "lucide-react";
-import { useReducedMotion } from "../../motion";
+import { revealProps, useReducedMotion } from "../../motion";
 import type { Detail, Trace } from "../../types";
 import SpotlightCard from "../../components/react-bits/SpotlightCard";
 import ScrollReveal from "../../components/react-bits/ScrollReveal";
@@ -121,14 +121,13 @@ export function UnderstandBlocks({
             className="reading-section"
             data-testid="learn-reading-section"
             key={block.id}
-            initial={
-              reduced ? false : { opacity: 0.35, y: 22, filter: "blur(6px)" }
-            }
-            whileInView={
-              reduced ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }
-            }
+            {...revealProps(
+              reduced,
+              { opacity: 0.35, y: 22, filter: "blur(6px)" },
+              { opacity: 1, y: 0, filter: "blur(0px)" },
+              { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+            )}
             viewport={{ once: true, amount: 0.08 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className="reading-section-heading">
               <span aria-hidden="true">{String(section).padStart(2, "0")}</span>

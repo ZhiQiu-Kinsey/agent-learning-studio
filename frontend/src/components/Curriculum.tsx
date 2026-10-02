@@ -43,7 +43,7 @@ import SquishSwitch from "./react-bits/SquishSwitch";
 import BlurText from "./react-bits/BlurText";
 import StarBorder from "./react-bits/StarBorder";
 import { Backdrop } from "./backdrops/Backdrop";
-import { useReducedMotion } from "../motion";
+import { revealProps, useReducedMotion } from "../motion";
 import { DomainBento } from "./curriculum/DomainBento";
 import { RoadmapSection } from "./curriculum/RoadmapSection";
 import { ProgressMarks } from "./curriculum/ProgressMarks";
@@ -522,10 +522,13 @@ function LessonList({
             key={category.id}
             className="curriculum-category-reveal"
             style={{ "--domain-rgb": accent } as CSSProperties}
-            initial={reduced ? false : { opacity: 0, y: 28 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            {...revealProps(
+              reduced,
+              { opacity: 0, y: 28 },
+              { opacity: 1, y: 0 },
+              { duration: 0.6, ease: easeOut },
+            )}
             viewport={{ once: true, amount: 0.04 }}
-            transition={{ duration: 0.6, ease: easeOut }}
           >
             <SpotlightCard
               className="panel curriculum-category"
@@ -576,17 +579,21 @@ function LessonList({
                           <motion.div
                             key={id}
                             className="curriculum-lesson-row"
-                            initial={
-                              reduced
-                                ? false
-                                : { opacity: 0, x: -14, filter: "blur(6px)" }
-                            }
-                            whileInView={{
-                              opacity: 1,
-                              x: 0,
-                              filter: "blur(0px)",
-                              transitionEnd: { filter: "none" },
-                            }}
+                            {...revealProps(
+                              reduced,
+                              { opacity: 0, x: -14, filter: "blur(6px)" },
+                              {
+                                opacity: 1,
+                                x: 0,
+                                filter: "blur(0px)",
+                                transitionEnd: { filter: "none" },
+                              },
+                              {
+                                duration: 0.45,
+                                delay: Math.min(row, 8) * 0.045,
+                                ease: easeOut,
+                              },
+                            )}
                             viewport={{ once: true, amount: 0.2 }}
                             exit={
                               reduced
@@ -597,11 +604,6 @@ function LessonList({
                                     transition: { duration: 0.14 },
                                   }
                             }
-                            transition={{
-                              duration: 0.45,
-                              delay: Math.min(row, 8) * 0.045,
-                              ease: easeOut,
-                            }}
                           >
                             <LessonPlan
                               lesson={curriculum.lessons.find(

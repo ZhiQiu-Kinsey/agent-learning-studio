@@ -20,10 +20,16 @@ await shot("home-full", true);
 await page.getByTestId("home-start-onboarding").click();
 await page.getByTestId("onboarding-chapter").waitFor();
 await shot("onboarding");
-await page.getByTestId("app-curriculum-button").click();
+// Narrow screens keep the rail in a drawer.
+const rail = async (testId) => {
+  const button = page.getByTestId(testId).locator("visible=true").first();
+  if (!(await button.count())) await page.getByTestId("app-open-course-menu").click();
+  await page.getByTestId(testId).locator("visible=true").first().click();
+};
+await rail("app-curriculum-button");
 await page.getByTestId("curriculum-map").waitFor();
 await shot("curriculum");
-await page.getByTestId("app-home-button").click();
+await rail("app-home-button");
 await page.getByTestId("home-first-lesson").click();
 for (const scene of ["understand", "code", "lab", "check", "review"]) {
   await page.getByTestId(`scene-tab-${scene}`).click();

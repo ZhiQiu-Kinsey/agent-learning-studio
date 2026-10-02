@@ -27,7 +27,7 @@ export const backdropPresets = {
   threads: {
     tint: "#a99bff",
     load: () => import("../react-bits/Threads"),
-    props: { color: [0.66, 0.6, 1], amplitude: 1.6, distance: 0.3, enableMouseInteraction: true },
+    props: { color: [0.78, 0.72, 1], amplitude: 2.1, distance: 0.45, enableMouseInteraction: true },
     fallback: glow(brand.violet, brand.teal),
   },
   blinds: {
@@ -238,7 +238,7 @@ export type BackdropName = keyof typeof backdropPresets;
 
 /** Each curriculum domain has its own atmosphere on lesson and map hero bands. */
 export const categoryBackdrop: Record<string, BackdropName> = {
-  A: "threads", // 原生基础: the loop's woven threads
+  A: "aurora", // 原生基础: one glowing loop running through
   B: "blinds", // 任务与接口: crisp contract slats
   C: "grainient", // 上下文与状态: flowing memory
   R: "rays", // 推理与控制: light rays of attention
@@ -247,7 +247,7 @@ export const categoryBackdrop: Record<string, BackdropName> = {
   K: "terminal", // 编码 Agent: a terminal
   F: "radar", // 质量与可靠性: monitoring sweep
   G: "web", // 协议与工具: connections
-  H: "aurora", // 综合实践: everything together
+  H: "threads", // 综合实践: every thread woven together
 };
 export const backdropFor = (categoryId?: string): BackdropName =>
   (categoryId && categoryBackdrop[categoryId]) || "threads";

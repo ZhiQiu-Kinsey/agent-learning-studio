@@ -3,7 +3,7 @@
 // once when scrolled into view. Static motion renders the final state directly.
 import { motion, type HTMLMotionProps } from "motion/react";
 import type { ReactNode } from "react";
-import { useReducedMotion } from "../../motion";
+import { revealProps, useReducedMotion } from "../../motion";
 
 type Tag = "div" | "section" | "li" | "article" | "aside";
 const tags = {
@@ -38,20 +38,13 @@ export default function FadeContent({
   return (
     <Component
       {...props}
-      initial={
-        reduced
-          ? false
-          : {
-              opacity: 0,
-              y: distance,
-              filter: blur ? "blur(10px)" : "blur(0px)",
-            }
-      }
-      whileInView={
-        reduced ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }
-      }
+      {...revealProps(
+        reduced,
+        { opacity: 0, y: distance, filter: blur ? "blur(10px)" : "blur(0px)" },
+        { opacity: 1, y: 0, filter: "blur(0px)" },
+        { duration, delay, ease: [0.16, 1, 0.3, 1] },
+      )}
       viewport={{ once: true, amount }}
-      transition={{ duration, delay, ease: [0.16, 1, 0.3, 1] }}
     >
       {children}
     </Component>

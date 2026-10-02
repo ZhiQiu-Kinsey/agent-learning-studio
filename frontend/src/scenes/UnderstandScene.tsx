@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
-import { useReducedMotion } from "../motion";
+import { revealProps, useReducedMotion } from "../motion";
 import { LessonHero } from "../components/learning/LessonHero";
 import { UnderstandBlocks } from "../content/blocks/UnderstandBlocks";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
@@ -48,22 +48,17 @@ export function UnderstandScene({ studio, active, goTo }: SceneProps) {
               {detail.objectives.map((objective, index) => (
                 <motion.li
                   key={`${detail.id}-${index}`}
-                  initial={
-                    reduced
-                      ? false
-                      : { opacity: 0, x: 18, scale: 0.96, filter: "blur(6px)" }
-                  }
-                  whileInView={
-                    reduced
-                      ? undefined
-                      : { opacity: 1, x: 0, scale: 1, filter: "blur(0px)" }
-                  }
+                  {...revealProps(
+                    reduced,
+                    { opacity: 0, x: 18, scale: 0.96, filter: "blur(6px)" },
+                    { opacity: 1, x: 0, scale: 1, filter: "blur(0px)" },
+                    {
+                      delay: 0.15 + index * 0.09,
+                      duration: 0.5,
+                      ease: [0.16, 1, 0.3, 1],
+                    },
+                  )}
                   viewport={{ once: true, amount: 0.6 }}
-                  transition={{
-                    delay: 0.15 + index * 0.09,
-                    duration: 0.5,
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
                 >
                   {objective}
                 </motion.li>

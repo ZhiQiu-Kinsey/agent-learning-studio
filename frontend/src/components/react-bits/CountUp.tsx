@@ -1,7 +1,12 @@
+// Adapted from https://reactbits.dev/r/CountUp-TS-TW.json (MIT + Commons Clause).
+// The upstream spring has a long tail (numbers sit a few short of the real value
+// for seconds); this version tweens with an ease-out and always lands exactly on
+// `to`. Static motion shows the final value at once.
 'use client';
 
-import { useInView, useMotionValue, useSpring } from 'motion/react';
+import { animate, useInView } from 'motion/react';
 import { useCallback, useEffect, useRef } from 'react';
+import { useReducedMotion } from '../../motion';
 
 interface CountUpProps {
   to: number;
@@ -29,89 +34,63 @@ export default function CountUp({
   onEnd
 }: CountUpProps) {
   const ref = useRef<HTMLSpanElement>(null);
-  const motionValue = useMotionValue(direction === 'down' ? to : from);
-
-  const damping = 20 + 40 * (1 / duration);
-  const stiffness = 100 * (1 / duration);
-
-  const springValue = useSpring(motionValue, {
-    damping,
-    stiffness
-  });
-
+  const reduced = useReducedMotion();
   const isInView = useInView(ref, { once: true, margin: '0px' });
+  const start = direction === 'down' ? to : from;
+  const target = direction === 'down' ? from : to;
+  // Last value written, so a changed target continues from where it is.
+  const shown = useRef<number | null>(null);
 
-  const getDecimalPlaces = (num: number): number => {
-    const str = num.toString();
-    if (str.includes('.')) {
-      const decimals = str.split('.')[1];
-      if (parseInt(decimals) !== 0) {
-        return decimals.length;
-      }
-    }
-    return 0;
+  const decimals = (num: number) => {
+    const [, fraction = ''] = num.toString().split('.');
+    return parseInt(fraction || '0') !== 0 ? fraction.length : 0;
   };
-
-  const maxDecimals = Math.max(getDecimalPlaces(from), getDecimalPlaces(to));
+  const maxDecimals = Math.max(decimals(from), decimals(to));
 
   const formatValue = useCallback(
     (latest: number) => {
-      const hasDecimals = maxDecimals > 0;
-
-      const options: Intl.NumberFormatOptions = {
+      const formatted = Intl.NumberFormat('en-US', {
         useGrouping: !!separator,
-        minimumFractionDigits: hasDecimals ? maxDecimals : 0,
-        maximumFractionDigits: hasDecimals ? maxDecimals : 0
-      };
-
-      const formattedNumber = Intl.NumberFormat('en-US', options).format(latest);
-
-      return separator ? formattedNumber.replace(/,/g, separator) : formattedNumber;
+        minimumFractionDigits: maxDecimals,
+        maximumFractionDigits: maxDecimals
+      }).format(latest);
+      return separator ? formatted.replace(/,/g, separator) : formatted;
     },
     [maxDecimals, separator]
   );
 
+  const write = useCallback(
+    (value: number) => {
+      shown.current = value;
+      if (ref.current) ref.current.textContent = formatValue(value);
+    },
+    [formatValue]
+  );
+
   useEffect(() => {
-    if (ref.current) {
-      ref.current.textContent = formatValue(direction === 'down' ? to : from);
+    if (shown.current === null) write(reduced ? target : start);
+  }, [reduced, start, target, write]);
+
+  useEffect(() => {
+    if (!isInView || !startWhen) return;
+    if (reduced) {
+      write(target);
+      return;
     }
-  }, [from, to, direction, formatValue]);
-
-  useEffect(() => {
-    if (isInView && startWhen) {
-      if (typeof onStart === 'function') {
-        onStart();
-      }
-
-      const timeoutId = setTimeout(() => {
-        motionValue.set(direction === 'down' ? from : to);
-      }, delay * 1000);
-
-      const durationTimeoutId = setTimeout(
-        () => {
-          if (typeof onEnd === 'function') {
-            onEnd();
-          }
-        },
-        delay * 1000 + duration * 1000
-      );
-
-      return () => {
-        clearTimeout(timeoutId);
-        clearTimeout(durationTimeoutId);
-      };
-    }
-  }, [isInView, startWhen, motionValue, direction, from, to, delay, onStart, onEnd, duration]);
-
-  useEffect(() => {
-    const unsubscribe = springValue.on('change', (latest: number) => {
-      if (ref.current) {
-        ref.current.textContent = formatValue(latest);
+    onStart?.();
+    const controls = animate(shown.current ?? start, target, {
+      duration,
+      delay,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: write,
+      onComplete: () => {
+        write(target);
+        onEnd?.();
       }
     });
-
-    return () => unsubscribe();
-  }, [springValue, formatValue]);
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInView, startWhen, reduced, target, duration, delay]);
 
   return <span className={className} ref={ref} />;
 }

@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { useMotionBudget, useReducedMotion } from "../motion";
+import { revealProps, useMotionBudget, useReducedMotion } from "../motion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -116,15 +116,13 @@ function Reveal({
     <Tag
       className={className}
       {...rest}
-      initial={reduced ? false : { opacity: 0, y: 22, filter: "blur(6px)" }}
-      whileInView={{
-        opacity: 1,
-        y: 0,
-        filter: "blur(0px)",
-        transitionEnd: { filter: "none" },
-      }}
+      {...revealProps(
+        reduced,
+        { opacity: 0, y: 22, filter: "blur(6px)" },
+        { opacity: 1, y: 0, filter: "blur(0px)", transitionEnd: { filter: "none" } },
+        { duration: 0.6, delay, ease: easeOut },
+      )}
       viewport={{ once: true, amount: 0.12 }}
-      transition={{ duration: 0.6, delay, ease: easeOut }}
     >
       {children}
     </Tag>
