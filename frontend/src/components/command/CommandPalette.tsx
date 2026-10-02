@@ -10,14 +10,12 @@ import {
   Monitor,
   Search,
   Settings2,
-  Sparkles,
 } from "lucide-react";
 import { jsonFetch } from "../../api";
 import type { Onboarding } from "../../content/types.gen";
 import type { StudioState } from "../../hooks/useStudio";
 import type { CurriculumData, Lesson } from "../../types";
 import { formatLessonNumber } from "../../lib/lessonIds";
-import { useMotion, motionSettings } from "../../motion";
 import { requestScene } from "../../scenes/LessonScenes";
 import { sceneIds } from "../../scenes/types";
 import {
@@ -65,7 +63,6 @@ export function CommandPalette({
   const { t } = useTranslation("command");
   const { t: tLesson } = useTranslation("lesson");
   const { t: tCommon } = useTranslation();
-  const motion = useMotion();
   const [search, setSearch] = useState("");
   const [chapters, setChapters] = useState<string[]>([]);
   const [planned, setPlanned] = useState<PaletteLesson[]>([]);
@@ -255,26 +252,6 @@ export function CommandPalette({
                     testId={`command-theme-${value}`}
                     icon={<Monitor size={15} />}
                     current={theme === value ? t("current") : undefined}
-                  >
-                    {label}
-                  </Item>
-                );
-              })}
-              {motionSettings.map((value) => {
-                const label = t("motion", {
-                  value: tCommon(`motion.${value}`),
-                });
-                return (
-                  <Item
-                    key={`motion-${value}`}
-                    value={`motion ${value}`}
-                    keywords={[label, tCommon("motion.label")]}
-                    onSelect={run(() => motion.setSetting(value))}
-                    testId={`command-motion-${value}`}
-                    icon={<Sparkles size={15} />}
-                    current={
-                      motion.setting === value ? t("current") : undefined
-                    }
                   >
                     {label}
                   </Item>

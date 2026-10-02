@@ -17,7 +17,6 @@ import {
 import { useStudio } from "./hooks/useStudio";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
-import { MotionSwitch } from "./components/MotionSwitch";
 import { CourseNavigation } from "./components/CourseNavigation";
 import {
   CommandButton,
@@ -262,7 +261,6 @@ export default function App() {
           </div>
           <div className="app-preferences">
             <CommandButton />
-            <MotionSwitch />
             <ThemeSwitch />
             <Button
               ref={settingsRef}

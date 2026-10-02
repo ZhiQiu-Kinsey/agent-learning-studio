@@ -1,13 +1,10 @@
 import { createContext, useContext } from "react";
-import type { MotionLevel, MotionSetting } from "./level";
+import type { MotionLevel } from "./level";
 
 export interface MotionState {
-  /** What the learner chose. */
-  setting: MotionSetting;
-  setSetting: (setting: MotionSetting) => void;
-  /** Effective level after merging the OS preference. */
+  /** Effective level: static when the OS asks for reduced motion. */
   level: MotionLevel;
-  /** True for reduced and static: skip ambient, looping and entrance effects. */
+  /** True when nothing should move: skip ambient, looping and entrance effects. */
   reduced: boolean;
   webgl: boolean;
   pageVisible: boolean;
@@ -21,5 +18,4 @@ export function useMotion(): MotionState {
   return state;
 }
 
-/** Drop-in replacement for the old OS-only hook. */
 export const useReducedMotion = () => useMotion().reduced;

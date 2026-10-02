@@ -14,14 +14,17 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8765",
+        target: process.env.AGENT_LAB_API ?? "http://127.0.0.1:8765",
         changeOrigin: true,
         configure(proxy) {
           proxy.on("proxyReq", (outgoing, incoming) => {
             // Translate only same-origin development requests. Foreign origins remain
             // untouched and are rejected by the backend's existing request guard.
             if (incoming.headers.origin === `http://${incoming.headers.host}`) {
-              outgoing.setHeader("origin", "http://127.0.0.1:8765");
+              outgoing.setHeader(
+                "origin",
+                process.env.AGENT_LAB_API ?? "http://127.0.0.1:8765",
+              );
             }
           });
         },

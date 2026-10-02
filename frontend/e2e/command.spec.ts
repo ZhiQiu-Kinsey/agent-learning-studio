@@ -165,7 +165,7 @@ test("planned lessons are listed with a badge but cannot be entered", async ({
   expect(runs).toBe(0);
 });
 
-test("theme and motion commands apply immediately", async ({ page }) => {
+test("theme commands apply immediately", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("lesson-masthead")).toBeVisible();
   await page.keyboard.press("Control+K");
@@ -177,9 +177,6 @@ test("theme and motion commands apply immediately", async ({ page }) => {
   expect(
     await page.evaluate(() => localStorage.getItem("agent-lab-theme")),
   ).toBe("light");
-  await page.keyboard.press("Control+K");
-  await palette(page).getByTestId("command-motion-static").click();
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "static");
   await page.keyboard.press("Control+K");
   await palette(page).getByTestId("command-settings").click();
   await expect(palette(page)).toHaveCount(0);

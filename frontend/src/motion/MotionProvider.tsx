@@ -1,6 +1,4 @@
 import {
-  useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -9,12 +7,7 @@ import {
 } from "react";
 import { MotionConfig } from "motion/react";
 import { MotionContext, type MotionState } from "./context";
-import {
-  motionStorageKey,
-  parseMotionSetting,
-  resolveMotionLevel,
-  type MotionSetting,
-} from "./level";
+import { resolveMotionLevel } from "./level";
 
 const reduceQuery = "(prefers-reduced-motion: reduce)";
 const subscribeReduce = (onChange: () => void) => {
@@ -45,19 +38,8 @@ function detectWebgl() {
   return webglSupport;
 }
 
-function readSetting(): MotionSetting {
-  try {
-    return parseMotionSetting(localStorage.getItem(motionStorageKey));
-  } catch {
-    return parseMotionSetting(
-      document.documentElement.dataset.motionPreference,
-    );
-  }
-}
-
-/** Single source for every motion decision: OS preference, learner setting, WebGL and page visibility. */
+/** Single source for every motion decision: OS preference, WebGL and page visibility. */
 export function MotionProvider({ children }: { children: ReactNode }) {
-  const [setting, setSettingState] = useState(readSetting);
   const systemReduced = useSyncExternalStore(
     subscribeReduce,
     getReduce,
@@ -69,43 +51,16 @@ export function MotionProvider({ children }: { children: ReactNode }) {
     () => false,
   );
   const [webgl] = useState(detectWebgl);
-  const level = resolveMotionLevel(setting, systemReduced);
+  const level = resolveMotionLevel(systemReduced);
 
   // Before paint so CSS gates never lag behind React state.
   useLayoutEffect(() => {
-    const root = document.documentElement;
-    root.dataset.motion = level;
-    root.dataset.motionPreference = setting;
-  }, [level, setting]);
-
-  useEffect(() => {
-    const sync = (event: StorageEvent) => {
-      if (event.key === motionStorageKey || event.key === null)
-        setSettingState(parseMotionSetting(event.newValue));
-    };
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
-  }, []);
-
-  const setSetting = useCallback((next: MotionSetting) => {
-    setSettingState(next);
-    try {
-      localStorage.setItem(motionStorageKey, next);
-    } catch {
-      /* Keep the session choice. */
-    }
-  }, []);
+    document.documentElement.dataset.motion = level;
+  }, [level]);
 
   const value = useMemo<MotionState>(
-    () => ({
-      setting,
-      setSetting,
-      level,
-      reduced: level !== "full",
-      webgl,
-      pageVisible,
-    }),
-    [setting, setSetting, level, webgl, pageVisible],
+    () => ({ level, reduced: level !== "full", webgl, pageVisible }),
+    [level, webgl, pageVisible],
   );
 
   return (

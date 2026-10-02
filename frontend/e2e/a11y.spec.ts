@@ -20,7 +20,6 @@ for (const theme of ["light", "dark"] as const) {
     test.setTimeout(120_000);
     await page.addInitScript((value) => {
       localStorage.setItem("agent-lab-theme", value);
-      localStorage.setItem("agent-lab-motion", "static");
     }, theme);
     await page.route("**/api/status", async (route) => {
       const response = await route.fetch();
@@ -33,6 +32,7 @@ for (const theme of ["light", "dark"] as const) {
         },
       });
     });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await runOffline(page);
     await page.goto("/");
     await expect(page.getByTestId("home-page")).toBeVisible();

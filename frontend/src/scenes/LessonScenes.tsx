@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { MotionIntent, useReducedMotion } from "../motion";
 import { formatLessonNumber } from "../lib/lessonIds";
+import { Backdrop } from "../components/backdrops/Backdrop";
+import { backdropFor } from "../components/backdrops/presets";
+import { useLessonCategory } from "../hooks/useCurriculum";
 import { track } from "../progress";
 import {
   Tabs,
@@ -70,6 +73,7 @@ export function LessonScenes({
   );
   const detail = studio.detail;
   const lessonId = detail?.id;
+  const category = useLessonCategory(lessonId);
 
   const goTo = (next: SceneId) => {
     setScene(next);
@@ -129,17 +133,9 @@ export function LessonScenes({
       className="workspace-modes lesson-scenes"
     >
       <div className="lesson-masthead" data-testid="lesson-masthead">
-        <div className="masthead-aurora" aria-hidden="true">
-          {visible && (
-            <MotionIntent
-              name="ambient.aurora"
-              colorStops={["#6d5dfc", "#49dec6", "#b98aff"]}
-              amplitude={0.65}
-              blend={0.65}
-              speed={0.55}
-            />
-          )}
-        </div>
+        {visible && (
+          <Backdrop name={backdropFor(category)} className="masthead-backdrop" />
+        )}
         <div className="lesson-heading">
           <span className="lesson-badge" data-testid="lesson-badge">
             {number}
