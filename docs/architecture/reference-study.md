@@ -60,3 +60,4 @@
 | --- | --- | --- | --- |
 | 13 `text-actions` | Hugging Face Agents Course `b3946b1`（Apache-2.0） | `units/en/unit1/actions.mdx`、`units/en/unit1/dummy-agent-library.mdx` | stop-and-parse 的讲法；“不加 stop 时模型自己写出 Observation”这一现象。本课改为本地成绩表、严格解析和编造内容的并列记录 |
 | 14 `todo-planning` | learn-claude-code 2026-10 浅克隆 `ce8f9f1`（MIT） | `s05_todo_write/README.zh.md`、`s05_todo_write/code.py` | todo_write 整体替换清单、同一时间一项进行中、连续几轮未更新就由运行层提醒。本课把提醒改为 OpenAI 兼容格式下 tool 消息之后的单独 user 消息，并加上独立验收器 |
+| 15 `plan-and-replan` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `07-planning-design/README.md`（按固定 commit 的 raw URL 读取） | 任务分解、用结构化输出表示计划、子任务结果影响后续步骤时迭代规划。本课改为单 Agent 的规划器 / 执行器分工，加入固定故障、修订上限和版本差异 |

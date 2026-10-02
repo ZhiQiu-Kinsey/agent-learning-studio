@@ -1,0 +1,718 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "plan-and-replan",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "REASONING / LESSON 15",
+          "headline": "先把计划写下来，",
+          "highlight": "出错时才知道改哪一步。",
+          "takeaway": "先规划后执行把“想”和“做”分开：规划器写计划，执行器照做。计划失败时，带着真实错误回去修订，并把原因和差异记下来。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-plan",
+              "label": "01 / PLAN",
+              "title": "计划是一份数据",
+              "description": "规划器输出 JSON：每一步写明工具、参数和目的。程序先校验，再按顺序执行。",
+              "token": "steps[]"
+            },
+            {
+              "id": "02-static",
+              "label": "02 / STATIC",
+              "title": "静态计划",
+              "description": "计划写好就不再改。某一步失败，后面照常执行，缺的数据就一直缺着。",
+              "token": "version 1"
+            },
+            {
+              "id": "03-replan",
+              "label": "03 / REPLAN",
+              "title": "失败后修订",
+              "description": "把失败步骤和真实错误交回规划器，只替换还没执行的步骤，记下原因和差异。",
+              "token": "reason · diff"
+            },
+            {
+              "id": "04-react",
+              "label": "04 / REACT",
+              "title": "ReAct 基线",
+              "description": "不先写计划，模型每一步看到结果再决定下一步。",
+              "token": "tool_calls"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "为什么要先写计划",
+          "paragraphs": [
+            "前两课里，模型每一步都边看边决定：看到工具结果（Tool Result），再提出下一个调用。这种方式叫 ReAct，灵活，但整个任务的思路散落在一轮轮输出里，事后很难说清它原本打算做什么。先规划后执行（Plan-and-Execute）把这件事拆成两个角色：规划器先写出完整计划，执行器按计划逐步调用工具。",
+            "计划写下来有两个好处。一是可以在执行前检查：工具在不在登记表里、参数是不是 JSON 对象。二是出错时有对照：哪一步失败了、失败后计划改成了什么，都能对着版本号看。本课的任务是给学习者 lin 写一份学习周报，需要查学习进度和每课练习得分。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "一个必定失败的步骤",
+          "paragraphs": [
+            "成绩有两个数据源：primary 是主数据源，backup 是备份，数据相同。本课让 primary 固定失败，返回“成绩主数据源暂时不可用”。这是课程程序写死的教学夹具，不是网络问题，也不是模型的错；每次运行都一样，三种策略面对的是同一个故障。",
+            "规划器第一次多半会选 primary。接下来看三种策略怎么应对：静态计划照原样执行到底；重新规划把错误交回规划器；ReAct 基线由模型自己看到错误后决定下一步。"
+          ]
+        },
+        {
+          "id": "mq-fixture",
+          "type": "micro-quiz",
+          "question": {
+            "id": "fixture-failure",
+            "prompt": "fetch_quiz_scores(source=\"primary\") 在本课每次都失败。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "这是课程写死的故障，用来让三种策略面对同一个失败",
+                "feedback": "对。故障固定，比较才公平。"
+              },
+              {
+                "id": "b",
+                "text": "主数据源的服务器真的宕机了",
+                "feedback": "不对。这个工具不访问网络，失败是代码里写定的。"
+              },
+              {
+                "id": "c",
+                "text": "模型调用工具的方式错了",
+                "feedback": "不对。参数完全合法，失败来自工具本身。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "受控的故障让不同策略在同一条件下比较。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "静态计划：照做到底",
+          "paragraphs": [
+            "静态计划只请求一次规划器。执行器按顺序调用每一步，失败的步骤标为 failed，然后继续下一步。全部步骤走完，再请求一次周报写手，把成功拿到的数据交给它。primary 失败后没有人去试 backup，周报里就没有成绩。",
+            "运行器每次步骤状态变化都发布 lesson.plan 事件，里面是这一版计划的完整步骤和状态。静态计划自始至终只有第 1 版。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "重新规划：带着错误回去",
+          "paragraphs": [
+            "重新规划组在某一步失败时暂停执行，把两样东西交回规划器：目前每一步的状态，以及失败步骤的真实错误信息。规划器只需要写出还要执行的步骤，并在 reason 里说明为什么这样改。",
+            "运行器把已完成和已失败的步骤原样保留，用规划器的新步骤替换尚未执行的部分，版本号加一，发布一条 event 为 revised 的 lesson.plan，带上修订原因（reason）和差异（diff：删掉了哪些未执行步骤、新增了哪些、因哪一步失败而修订）。修订次数有上限，本课是 2 次，避免规划器反复提出同一个失败的方案。"
+          ]
+        },
+        {
+          "id": "mq-replan",
+          "type": "micro-quiz",
+          "question": {
+            "id": "replan-input",
+            "prompt": "重新规划时，交给规划器的失败信息从哪里来？",
+            "options": [
+              {
+                "id": "a",
+                "text": "失败步骤的 tool_result 里的真实错误",
+                "feedback": "对。修订要有依据，依据就是真实执行结果。"
+              },
+              {
+                "id": "b",
+                "text": "规划器自己推测哪一步可能失败",
+                "feedback": "不对。推测不能代替真实结果。"
+              },
+              {
+                "id": "c",
+                "text": "执行器随便挑一种替代方案",
+                "feedback": "不对。执行器只照计划执行，不做规划。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "修订原因要能对上一条真实的失败记录。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "三种策略用同一个验收器",
+          "paragraphs": [
+            "无论哪种策略，最后都交给同一个 verify：学习进度和练习成绩都要来自成功的工具结果，周报里要写出真实的分数（这一项是关键词初筛）。计划写得多漂亮、修订了几次，都不影响判定。",
+            "报告还记录了代价：模型调用数、工具调用（Tool Calling）数、计划版本数和修订次数。重新规划多花了一次规划器请求；ReAct 基线没有计划可看，但同样可能绕过故障。哪种更好，要看任务是否需要事先审查计划，以及失败有多常见。"
+          ]
+        },
+        {
+          "id": "mq-verify",
+          "type": "micro-quiz",
+          "question": {
+            "id": "plan-quality",
+            "prompt": "静态计划写得很完整，每一步都有目的说明，但周报里没有成绩。验收结论是？",
+            "options": [
+              {
+                "id": "a",
+                "text": "未通过：成绩没有来自成功的工具结果",
+                "feedback": "对。验收看产物和证据，不看计划。"
+              },
+              {
+                "id": "b",
+                "text": "通过：计划本身没有问题",
+                "feedback": "不对。计划只是打算，不是结果。"
+              },
+              {
+                "id": "c",
+                "text": "无法判断：要看规划器的理由",
+                "feedback": "不对。验收器不需要理由，只需要证据。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "计划和完成是两件事。"
+          }
+        },
+        {
+          "id": "compare-strategies",
+          "type": "compare",
+          "title": "三种策略",
+          "columns": [
+            "策略",
+            "模型请求",
+            "遇到失败时",
+            "留下的证据"
+          ],
+          "rows": [
+            [
+              "静态计划",
+              "规划器 1 次 + 周报 1 次",
+              "标为 failed，继续执行后面的步骤",
+              "只有第 1 版计划"
+            ],
+            [
+              "重新规划",
+              "规划器 1 + 修订次数 + 周报 1 次",
+              "把真实错误交回规划器，替换未执行的步骤",
+              "多个版本，带修订原因和差异"
+            ],
+            [
+              "ReAct 基线",
+              "每一步 1 次",
+              "模型看到错误后自己决定",
+              "没有计划，只有逐轮的调用记录"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "重新规划的一次修订",
+          "description": "按步骤说明重新规划组遇到失败时运行器做的事，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "规划",
+              "actor": "规划器",
+              "title": "写出第 1 版计划",
+              "body": "输出 JSON，程序校验工具名和参数。",
+              "code": "plan = parse_plan(planner_output)",
+              "language": "python",
+              "evidence": "lesson.plan（event=created）"
+            },
+            {
+              "id": "step-2",
+              "label": "执行",
+              "actor": "执行器",
+              "title": "逐步调用工具",
+              "body": "每一步的状态随真实结果变为 done 或 failed。",
+              "code": "step[\"status\"] = \"done\" if result[\"ok\"] else \"failed\"",
+              "language": "python",
+              "evidence": "tool_result 与 lesson.plan"
+            },
+            {
+              "id": "step-3",
+              "label": "反馈",
+              "actor": "运行器",
+              "title": "把错误交回规划器",
+              "body": "附上目前的步骤状态和失败步骤的错误信息。",
+              "code": "messages.append({\"role\": \"user\", \"content\": \"步骤 s2 失败：...\"})",
+              "language": "python",
+              "evidence": "第 2 次 request"
+            },
+            {
+              "id": "step-4",
+              "label": "修订",
+              "actor": "规划器",
+              "title": "只写还要执行的步骤",
+              "body": "保留已执行的步骤，替换未执行的部分，版本加一。",
+              "code": "steps = kept + new_steps",
+              "language": "python",
+              "evidence": "lesson.plan（event=revised）的 reason 与 diff"
+            },
+            {
+              "id": "step-5",
+              "label": "验收",
+              "actor": "验收器",
+              "title": "按同一标准判定",
+              "body": "只看真实工具结果和周报里的分数。",
+              "code": "checks = verify(results, report)",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "predict-revisions",
+          "type": "predict",
+          "prompt": "运行“失败后重新规划”之前先猜：这次运行会出现几个失败的 tool_result？想一想修订后的计划会不会再试一次主数据源。",
+          "experiment": "three-strategies",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_result",
+            "name": "fetch_quiz_scores"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "todo-planning"
+        },
+        {
+          "id": "code-tools-plan",
+          "type": "annotated-source",
+          "path": "lessons/lesson_plan_and_replan/runtime.py",
+          "start": 32,
+          "end": 94,
+          "notes": [
+            {
+              "id": "n35",
+              "line": 35,
+              "text": "主数据源在本课固定失败；这是写死的教学夹具，每次运行都一样。"
+            },
+            {
+              "id": "n67",
+              "line": 67,
+              "text": "允许 JSON 前后有说明文字或代码围栏，这是解析器唯一的宽容之处。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "text": "计划里的工具必须在登记表里；执行前就能拦下不存在的工具。"
+            }
+          ]
+        },
+        {
+          "id": "code-replan",
+          "type": "annotated-source",
+          "path": "lessons/lesson_plan_and_replan/runtime.py",
+          "start": 136,
+          "end": 193,
+          "notes": [
+            {
+              "id": "n149",
+              "line": 149,
+              "text": "计划不合格式就记录原文和错误，然后停止，不替规划器补全。"
+            },
+            {
+              "id": "n166",
+              "line": 166,
+              "text": "步骤状态只由真实工具结果决定。"
+            },
+            {
+              "id": "n169",
+              "line": 169,
+              "text": "成功、静态计划或已达修订上限时，直接执行下一步。"
+            },
+            {
+              "id": "n173",
+              "line": 173,
+              "text": "交回规划器的是步骤状态和失败步骤的真实错误。"
+            },
+            {
+              "id": "n179",
+              "line": 179,
+              "text": "已经执行过的步骤原样保留，只替换还没执行的部分。"
+            },
+            {
+              "id": "n184",
+              "line": 184,
+              "text": "差异记录删了哪些未执行步骤、加了哪些、因哪一步失败。"
+            },
+            {
+              "id": "n189",
+              "line": 189,
+              "text": "最后一次请求只拿成功的工具结果写周报。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "计划是校验过的数据，修订只依据真实失败",
+          "chosen": "规划器输出 JSON 计划，执行前校验工具与参数；执行器只照计划调用工具，不做决定；失败时把真实错误交回规划器，只替换未执行的步骤，修订次数有上限。",
+          "alternatives": [
+            {
+              "id": "executor-improvises",
+              "title": "让执行器在失败时自己换参数重试",
+              "why_not": "执行器一旦开始做决定，计划就不再是计划，修订也没有记录可查。"
+            },
+            {
+              "id": "replan-everything",
+              "title": "失败后让规划器重写整份计划",
+              "why_not": "已经成功的步骤可能被重复执行；有副作用的工具（比如发消息）重复执行会出问题。"
+            },
+            {
+              "id": "unbounded-replan",
+              "title": "失败就一直修订，直到成功",
+              "why_not": "规划器可能反复提出同一个失败的方案；没有上限就没有停止条件。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "three-strategies",
+          "title": "同一个故障，三种策略",
+          "hypothesis": "主数据源固定失败时，静态计划拿不到成绩；重新规划依据真实错误修订计划后可能改用备份；ReAct 基线由模型自行应对。三种策略由同一个验收器判定。",
+          "predict": "predict-revisions",
+          "arms": [
+            {
+              "id": "static",
+              "exercise": "static",
+              "label": "静态计划"
+            },
+            {
+              "id": "replan",
+              "exercise": "replan",
+              "label": "失败后重新规划"
+            },
+            {
+              "id": "react",
+              "exercise": "react",
+              "label": "ReAct 基线"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-plan",
+              "text": "第 1 版计划：每一步的工具和参数。",
+              "selector": {
+                "event": "lesson.plan",
+                "path": "data.steps"
+              }
+            },
+            {
+              "id": "failure",
+              "text": "主数据源返回的真实错误。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error",
+                "name": "fetch_quiz_scores"
+              }
+            },
+            {
+              "id": "replan-request",
+              "text": "交回规划器的执行情况和错误信息。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "revision-reason",
+              "text": "修订原因。",
+              "selector": {
+                "event": "lesson.plan",
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "revision-diff",
+              "text": "修订的差异：删了什么、加了什么、因哪一步失败。",
+              "selector": {
+                "event": "lesson.plan",
+                "path": "data.diff.failed_step"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "验收器的三项检查。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            },
+            {
+              "id": "cost",
+              "text": "这一组的模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[1]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "三组面对同一个故障：成绩主数据源固定失败。先看规划器写的计划。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "first-plan"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-plan"
+            },
+            {
+              "action": "narrate",
+              "text": "计划是一份 JSON：每一步写明工具和参数。程序执行前先校验。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "failure"
+            },
+            {
+              "action": "highlight",
+              "observe": "failure"
+            },
+            {
+              "action": "narrate",
+              "text": "这是主数据源的真实错误。它是课程写死的夹具，每次都一样。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "replan-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "replan-request"
+            },
+            {
+              "action": "narrate",
+              "text": "重新规划组把步骤状态和这条错误交回规划器。静态组没有这一步。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "revision-reason"
+            },
+            {
+              "action": "highlight",
+              "observe": "revision-reason"
+            },
+            {
+              "action": "narrate",
+              "text": "规划器写下修订原因。"
+            },
+            {
+              "action": "seek",
+              "observe": "revision-diff"
+            },
+            {
+              "action": "highlight",
+              "observe": "revision-diff"
+            },
+            {
+              "action": "narrate",
+              "text": "差异记录了因哪一步失败而修订。已执行的步骤原样保留。"
+            },
+            {
+              "action": "seek",
+              "observe": "verdict"
+            },
+            {
+              "action": "highlight",
+              "observe": "verdict"
+            },
+            {
+              "action": "narrate",
+              "text": "三组都由同一个验收器判定：数据必须来自成功的工具结果。"
+            },
+            {
+              "action": "seek",
+              "observe": "cost"
+            },
+            {
+              "action": "highlight",
+              "observe": "cost"
+            },
+            {
+              "action": "narrate",
+              "text": "最后比较代价：每种策略各用了多少次模型请求。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里计划有几个版本、每次修订依据的是哪条真实错误、改了哪些步骤。",
+              "三组的验收结论都由真实工具结果和周报内容算出，与计划写得如何无关。"
+            ],
+            "does_not_prove": [
+              "只有一种故障、一次运行，不能说明哪种策略普遍更可靠。",
+              "真实模型的规划器第一次可能直接选 backup，那就看不到修订；这不是错误，只是这次没有触发。",
+              "离线测试模式下的计划和周报由固定脚本写成。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "strategy",
+          "label": "策略",
+          "options": [
+            {
+              "value": "static",
+              "label": "静态计划"
+            },
+            {
+              "value": "replan",
+              "label": "失败后重新规划"
+            },
+            {
+              "value": "react",
+              "label": "ReAct 基线"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "重新规划时，为什么只替换还没执行的步骤？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "已执行的步骤有真实结果，重复执行可能浪费，有副作用时还会出错",
+                  "feedback": "对。保留已执行步骤，计划的历史才连贯。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为规划器只能写一步",
+                  "feedback": "不对。规划器可以写多步。"
+                },
+                {
+                  "id": "c",
+                  "text": "为了让计划版本号少一些",
+                  "feedback": "不对。版本号每次修订都会加一。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "修订是在已有事实之上调整后续行动。"
+            },
+            {
+              "id": "q2",
+              "prompt": "lesson.plan 里 event 为 revised 的事件，至少应该包含什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "新版本的步骤、修订原因，以及因哪一步失败而修订",
+                  "feedback": "对。版本、原因、差异三样缺一不可。"
+                },
+                {
+                  "id": "b",
+                  "text": "只有新版本的步骤",
+                  "feedback": "不对。没有原因和差异，就看不出为什么改。"
+                },
+                {
+                  "id": "c",
+                  "text": "规划器的完整思考过程",
+                  "feedback": "不对。需要的是可核对的原因，不是长篇思考。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "修订记录要能回答“改了什么、为什么改”。"
+            },
+            {
+              "id": "q3",
+              "prompt": "规划器连续两次都提出“再试一次主数据源”，本课的运行器会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "达到修订上限后不再修订，交给验收器判定为未通过",
+                  "feedback": "对。修订次数有上限。"
+                },
+                {
+                  "id": "b",
+                  "text": "一直修订，直到规划器换方案",
+                  "feedback": "不对。那样就没有停止条件了。"
+                },
+                {
+                  "id": "c",
+                  "text": "执行器自己改用 backup",
+                  "feedback": "不对。执行器只照计划执行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "每个循环都要有上限，修订循环也一样。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“失败后重新规划”，找出计划被修订的那一步。",
+          "target": {
+            "event": "lesson.plan",
+            "path": "data.diff.failed_step"
+          },
+          "explanation": "这条 lesson.plan 的 event 是 revised，diff.failed_step 指向失败的步骤，reason 是规划器写的修订原因。往前一条是那次失败的 tool_result，往后是按新计划执行的调用。如果你的运行里没有修订，说明规划器第一次就选了 backup。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我把三种策略都运行了一次，并比较了它们的验收结论和模型调用数。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能在重新规划组里找到修订原因，并对上触发它的那条真实错误。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能解释执行器为什么不自己改参数重试。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
