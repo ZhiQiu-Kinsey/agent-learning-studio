@@ -175,7 +175,7 @@ export const backdropPresets = {
       lightMode: false,
     },
     fallback: glow(brand.coral, brand.violet),
-    light: { props: { lightMode: true, backgroundColor: "#f4f2ff" } },
+    light: { props: { lightMode: true, backgroundColor: "#f4f2ff", brightness: 0.95, opacity: 1 } },
   },
   aurora: {
     tint: "#7ce8d6",
