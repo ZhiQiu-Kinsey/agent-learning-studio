@@ -136,10 +136,13 @@ def all_texts(model):
 
 def lesson_problems(lesson_id, model, terms, numbers, code_names, available):
     """一课的用词问题：[(类别, 说明)]。numbers：slug → 课号；available：可运行课程的 slug 集合。"""
+    from server.lesson_refs import resolve_refs
+
     matcher = TermMatcher(terms)
     problems = []
-    marked = "\n".join(marked_texts(model))
-    everything = "\n".join(all_texts(model))
+    # 课程引用 {{lesson:<slug>}} 在网页上显示为“第 N 课”，按显示后的文字检查。
+    marked = "\n".join(resolve_refs(marked_texts(model), numbers))
+    everything = "\n".join(resolve_refs(all_texts(model), numbers))
     first = matcher.first_hits(marked)
     seen = matcher.first_hits(everything)
     by_id = {term["id"]: term for term in terms}

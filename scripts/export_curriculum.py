@@ -9,11 +9,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from server.curriculum import index_catalog  # noqa: E402
+from server.lesson_refs import resolve_refs  # noqa: E402
 
 
 def render(catalog):
     # 显示课号由目录顺序计算；同时完成 slug、别名与先修引用的校验。
     numbers = index_catalog(catalog).numbers
+    # 正文里的 {{lesson:<slug>}} 换成按目录顺序计算的“第 N 课”。
+    catalog = resolve_refs(catalog, numbers)
     lessons = {item["id"]: item for item in catalog["lessons"]}
     sources = {item["id"]: item for item in catalog["sources"]}
 

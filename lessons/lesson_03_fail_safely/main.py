@@ -1,4 +1,4 @@
-"""第 3 课：工具失败时如实说明，不猜测结果。"""
+"""工具失败时如实说明，不猜测结果。"""
 
 from course.runner import run_cli
 from lessons.lesson_03_fail_safely.tools import AVAILABLE_TOOLS, TOOLS
@@ -14,7 +14,7 @@ SYSTEM_PROMPT = (
 
 def main():
     run_cli(
-        title="第 3 课：错误处理与安全边界",
+        title="错误处理与安全边界",
         examples=[
             "12 除以 3 等于多少？",
             "12 除以 0 等于多少？请说明处理过程。",

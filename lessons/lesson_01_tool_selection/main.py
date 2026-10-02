@@ -1,4 +1,4 @@
-"""第 1 课：根据问题，在加法和本地时间工具之间选择。"""
+"""根据问题，在加法和本地时间工具之间选择。"""
 
 from course.runner import run_cli
 from lessons.lesson_01_tool_selection.tools import AVAILABLE_TOOLS, TOOLS
@@ -14,7 +14,7 @@ SYSTEM_PROMPT = (
 
 def main():
     run_cli(
-        title="第 1 课：工具选择",
+        title="工具选择",
         examples=[
             "帮我计算 19 加 23。",
             "现在本地时间是几点？",

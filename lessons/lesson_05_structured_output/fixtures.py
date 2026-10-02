@@ -9,12 +9,12 @@ def create_completion(exercise_id, inputs=None):
     def completion(body, api_key):
         nonlocal calls
         calls += 1
-        card = {"lesson_id": "4", "lesson_title": "任务目标与验收", "prerequisite": "3",
+        card = {"lesson_id": "task-contract", "lesson_title": "任务目标与验收", "prerequisite": "fail-safely",
                 "exercise": "用 19 加 23 的真实工具结果验证任务是否通过。"}
         if calls == 1 and scenario == "missing_field":
             del card["prerequisite"]
         if calls == 1 and scenario == "wrong_fact":
-            card["prerequisite"] = "2"
+            card["prerequisite"] = "dependent-calls"
         return {"choices": [{"message": {"content": json.dumps(card, ensure_ascii=False)}}]}
 
     return completion

@@ -7,6 +7,7 @@ Pydantic 判别联合 → JSON Schema（curriculum/schema/content.v2.schema.json
 """
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -498,7 +499,9 @@ class CodeNote(Strict):
 
     @model_validator(mode="after")
     def _note(self):
-        if len(self.note) > CODE_NOTE_MAX:
+        # 课程引用 {{lesson:<slug>}} 显示为“第 N 课”，按显示长度计算。
+        shown = re.sub(r"\{\{lesson:[^{}]*\}\}", "第 00 课", self.note)
+        if len(shown) > CODE_NOTE_MAX:
             raise ValueError(f"code_notes.{self.name} 的说明不能超过 {CODE_NOTE_MAX} 个字符")
         return self
 

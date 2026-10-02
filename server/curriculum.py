@@ -148,7 +148,8 @@ def public_curriculum():
         lesson.setdefault("aliases", [])
     for source in catalog["sources"]:
         source.pop("local_path", None)
-    return catalog
+    from server.lesson_refs import resolve_refs  # 延迟导入：lesson_refs 依赖本模块的错误类型
+    return resolve_refs(catalog, index.numbers)
 
 
 def roadmap():

@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from server.code_reading import compare_target, lesson_code, validate_code_scene
 from server.content import lesson_content_model, load_lesson_content
 from server.curriculum import LessonValidationError, _require, index_catalog  # noqa: F401
+from server.lesson_refs import check_refs, resolve_refs
 
 ROOT = Path(__file__).resolve().parents[1]
 _MANIFEST_FIELDS = {
@@ -163,6 +164,8 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
     root = Path(root).resolve()
     curriculum = _object(curriculum if curriculum is not None else _json(root / "curriculum" / "catalog.json"), "curriculum")
     index = index_catalog(curriculum)
+    # 目录正文里提到其他课一律写 {{lesson:<slug>}}，课号在读取时计算。
+    check_refs(curriculum, index.numbers, "curriculum")
     catalog = {}
     for identifier in index.order:
         entry = index.entries[identifier]
@@ -184,6 +187,7 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
         _require(identifier in catalog, path, "课程 id 未登记在 curriculum/catalog.json")
         _require(identifier not in found, path, "课程实现 id 重复")
         found[identifier] = _manifest(root, path, catalog[identifier])
+        check_refs(_json(found[identifier]["content_path"]), index.numbers, str(found[identifier]["content_path"]))
     for identifier, entry in catalog.items():
         _require(entry["status"] != "available" or identifier in found,
                  "curriculum lesson " + identifier, "available 课程缺少 lessons/lesson_*/lesson.json 实现声明")
@@ -218,9 +222,10 @@ def catalog_lesson(lesson_id):
     return None if slug is None else {**CATALOG_INDEX.entries[slug], "number": CATALOG_INDEX.numbers[slug]}
 
 
-def public_lesson(spec):
-    return {key: spec[key] for key in ("id", "number", "aliases", "title", "description", "objectives", "subtitle",
-                                      "exercises", "available", "ui", "capabilities", "input_defaults")}
+def public_lesson(spec, locale=None):
+    public = {key: spec[key] for key in ("id", "number", "aliases", "title", "description", "objectives", "subtitle",
+                                         "exercises", "available", "ui", "capabilities", "input_defaults")}
+    return resolve_refs(public, CATALOG_INDEX.numbers, locale)
 
 
 def lesson_runtime(spec):
@@ -240,8 +245,8 @@ def lesson_callable(spec, reference):
 def lesson_code_view(spec, locale=None):
     """读码场景数据：只读本课 sources 白名单，批注取自已合并译文层的内容。"""
     content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
-    learning, _ = load_lesson_content(content_path, spec, locale)
-    return lesson_code(spec, LESSONS, learning)
+    learning, info = load_lesson_content(content_path, spec, locale)
+    return lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers, info["locale"]))
 
 
 def lesson_detail(spec, locale=None):
@@ -260,7 +265,8 @@ def lesson_detail(spec, locale=None):
     # 自定义运行器的输入模型导出 JSON Schema，前端据此生成参数控件；最终仍由后端校验。
     input_model = getattr(module, "INPUT_MODEL", None)
     input_schema = input_model.model_json_schema() if spec["capabilities"]["supports_inputs"] and input_model else None
-    return {**public_lesson(spec), "exercises": exercises, "input_schema": input_schema,
+    learning = resolve_refs(learning, CATALOG_INDEX.numbers, learning_i18n["locale"])
+    return {**public_lesson(spec, learning_i18n["locale"]), "exercises": exercises, "input_schema": input_schema,
             "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
             "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
             "sources": sources, "code_names": lesson_code_names(spec, sources)}

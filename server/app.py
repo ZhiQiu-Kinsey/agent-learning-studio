@@ -30,6 +30,7 @@ from server.content_overlay import LOCALE
 from server.curriculum import public_curriculum, roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
+from server.lesson_refs import resolve_refs
 from server.offline import completion_for
 from server.providers import ProviderRegistry
 from server.recordings import RecordingInvalid, RecordingStale, list_recordings, read_recording
@@ -199,7 +200,8 @@ def onboarding(lang: str | None = None):
     """提供独立的前置阅读内容；不加载课程运行器或调用模型。"""
     locale = require_locale(lang)
     try:
-        return load_onboarding(ROOT / "curriculum" / "onboarding.json", locale)
+        data = load_onboarding(ROOT / "curriculum" / "onboarding.json", locale)
+        return resolve_refs(data, CATALOG_INDEX.numbers, data["i18n"]["locale"])
     except LessonValidationError:
         raise ApiError(503, "onboarding_unavailable", "前置学习内容暂时不可用，请稍后重试。") from None
 

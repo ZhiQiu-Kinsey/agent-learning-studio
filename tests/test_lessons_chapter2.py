@@ -108,9 +108,9 @@ class TaskContractTests(unittest.TestCase):
 
 class StructuredOutputTests(unittest.TestCase):
     def test_layers_distinguish_format_schema_and_fact(self):
-        cases = [('{bad', [False]), ('{"lesson_id":"4"}', [True, False]),
+        cases = [('{bad', [False]), ('{"lesson_id":"task-contract"}', [True, False]),
                  ('NaN', [False]), ('Infinity', [False]), ('-Infinity', [False]),
-                 ('{"lesson_id":"4","lesson_title":"任务目标与验收","prerequisite":"2","exercise":"解释验收流程与证据"}',
+                 ('{"lesson_id":"task-contract","lesson_title":"任务目标与验收","prerequisite":"dependent-calls","exercise":"解释验收流程与证据"}',
                   [True, True, False])]
         for raw, expected in cases:
             with self.subTest(raw=raw):

@@ -1,4 +1,4 @@
-# 第 9 课：上下文预算与压缩
+# 上下文预算与压缩（`context-budget`）
 
 本课有三组实验，都需要真实模型连接，`experiment` 输入决定跑哪一组。
 
@@ -12,6 +12,6 @@
 
 历史消息由运行器组装：assistant 工具调用和旁支回复不是模型之前生成的，工具结果来自本次真实的 Python 读取。规则压缩只用读取结果拼模板，不调用模型；压缩对照里的摘要由当前模型生成，原文记录在第 1 轮响应里。
 
-拆开配对实验故意绕过第 7 课的本地校验，把孤立的 tool 消息原样发出。服务商拒绝时记为 `lesson.provider_error`（状态码、错误类型、原文、`source`），不重试也不改写。离线测试里的 400 由 `fixtures.py` 模拟，`source` 为 `offline_fixture`；要看服务商真实的回应，需要用真实模型运行。`fixtures.py` 只服务自动化测试。
+拆开配对实验故意绕过“消息与上下文”一课的本地校验，把孤立的 tool 消息原样发出。服务商拒绝时记为 `lesson.provider_error`（状态码、错误类型、原文、`source`），不重试也不改写。离线测试里的 400 由 `fixtures.py` 模拟，`source` 为 `offline_fixture`；要看服务商真实的回应，需要用真实模型运行。`fixtures.py` 只服务自动化测试。
 
 参考与取舍见 `docs/architecture/budget-memory-sources.md`。

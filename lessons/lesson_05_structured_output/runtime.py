@@ -7,7 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from course.execution import LessonInputs, RunContext
 
 
-FACTS = {"lesson_id": "4", "lesson_title": "任务目标与验收", "prerequisite": "3"}
+# 课程用 slug 作 ID：显示课号会随课程表插入新课而变化，不能当作可信事实。
+FACTS = {"lesson_id": "task-contract", "lesson_title": "任务目标与验收", "prerequisite": "fail-safely"}
+# “故意写错事实”练习要求模型写成的错误先修课程。
+WRONG_PREREQUISITE = "dependent-calls"
 
 
 class Inputs(LessonInputs):
@@ -20,9 +23,9 @@ INPUT_MODEL = Inputs
 
 class TaskCard(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    lesson_id: str = Field(min_length=1, max_length=8)
+    lesson_id: str = Field(min_length=1, max_length=48)
     lesson_title: str = Field(min_length=1, max_length=60)
-    prerequisite: str = Field(min_length=1, max_length=8)
+    prerequisite: str = Field(min_length=1, max_length=48)
     exercise: str = Field(min_length=8, max_length=120)
 
 
@@ -83,7 +86,7 @@ def run(context: RunContext) -> str:
     if scenario == "missing_field":
         user += " 本轮故意省略 prerequisite 字段，供验证器展示字段错误。"
     elif scenario == "wrong_fact":
-        user += " 本轮故意把 prerequisite 写成 2，供验证器展示事实错误。"
+        user += f" 本轮故意把 prerequisite 写成 {WRONG_PREREQUISITE}，供验证器展示事实错误。"
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     raw = _content(context.complete({"messages": messages, "temperature": 0}, 1))
     card, checks = inspect_output(raw)

@@ -40,7 +40,7 @@
               "id": "03-evidence",
               "label": "03 / EVIDENCE",
               "title": "第二关：字段约束",
-              "description": "TaskCard 定义课程卡：课号、标题、先修课号、练习四个字段，有长度上限，拒绝多余字段。形状对了，内容仍可能是错的。",
+              "description": "TaskCard 定义课程卡：课程 ID、标题、先修课程、练习四个字段，有长度上限，拒绝多余字段。形状对了，内容仍可能是错的。",
               "token": "trace · report"
             }
           ]
@@ -50,7 +50,7 @@
           "type": "prose",
           "title": "模型文本先是待检查输入",
           "paragraphs": [
-            "本课练习结构化输出（Structured Output）：要求模型按约定的 JSON 结构作答，再由程序逐层检查。课程把第 4 课的课号、标题和先修课号作为可信事实写进请求，让模型整理成一张课程卡。课程卡只是本课的练习数据，和第 4 课的任务卡不是一回事：它不规定验收规则，本身就是被检查的对象。模型返回的仍然只是一段 message.content，可能是 JSON，也可能是自然语言、半截文本或写错的事实。提示词里要求 JSON，不等于拿到了可靠的结构。"
+            "本课练习结构化输出（Structured Output）：要求模型按约定的 JSON 结构作答，再由程序逐层检查。课程把{{lesson:task-contract}}的课程 ID、标题和先修课程作为可信事实写进请求，让模型整理成一张课程卡。课程卡只是本课的练习数据，和{{lesson:task-contract}}的任务卡不是一回事：它不规定验收规则，本身就是被检查的对象。模型返回的仍然只是一段 message.content，可能是 JSON，也可能是自然语言、半截文本或写错的事实。提示词里要求 JSON，不等于拿到了可靠的结构。"
           ]
         },
         {
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "第二层：Pydantic 字段约束",
           "paragraphs": [
-            "TaskCard 要求 lesson_id、lesson_title、prerequisite、exercise 四个字段，限制字符串长度，拒绝未知字段。缺字段、类型不对、超长、多出字段，都过不了这一关。Schema 通过只说明形状合理，课号和先修写得对不对，它不管。"
+            "TaskCard 要求 lesson_id、lesson_title、prerequisite、exercise 四个字段，限制字符串长度，拒绝未知字段。缺字段、类型不对、超长、多出字段，都过不了这一关。Schema 通过只说明形状合理，课程 ID和先修写得对不对，它不管。"
           ]
         },
         {
@@ -101,7 +101,7 @@
           "type": "prose",
           "title": "第三层：独立业务事实",
           "paragraphs": [
-            "FACTS 是本课事先给定的可信课程事实。程序拿课号、标题、先修课号逐项与它比较；模型在回答里说“已核实”不起作用。exercise 写得好不好，三个字符串比较判断不了，报告只说核对了能由程序检查的部分。"
+            "FACTS 是本课事先给定的可信课程事实。程序拿课程 ID、标题、先修课程逐项与它比较；模型在回答里说“已核实”不起作用。exercise 写得好不好，三个字符串比较判断不了，报告只说核对了能由程序检查的部分。"
           ]
         },
         {
@@ -119,7 +119,7 @@
               {
                 "id": "b",
                 "text": "不会被拦下，字段 Schema 已经通过",
-                "feedback": "不对。Schema 只检查形状，不检查课号是否正确。"
+                "feedback": "不对。Schema 只检查形状，不检查课程 ID 是否正确。"
               },
               {
                 "id": "c",
@@ -180,7 +180,7 @@
               "label": "第三关",
               "actor": "程序",
               "title": "核对事实",
-              "body": "课号、标题、先修逐项和 FACTS 比较。",
+              "body": "课程 ID、标题、先修逐项和 FACTS 比较。",
               "code": "facts_ok = card.prerequisite == FACTS[\"prerequisite\"]",
               "language": "python",
               "evidence": "报告第三项检查"
@@ -219,36 +219,36 @@
           "id": "code-three-layers",
           "type": "annotated-source",
           "path": "lessons/lesson_05_structured_output/runtime.py",
-          "start": 21,
-          "end": 50,
+          "start": 24,
+          "end": 53,
           "notes": [
             {
               "id": "n22",
-              "line": 22,
+              "line": 25,
               "anchor": "model_config = ConfigDict(extra=\"forbid\")",
               "text": "extra=\"forbid\"：多出一个字段也算 Schema 失败，模型不能夹带未声明的内容。"
             },
             {
               "id": "n36",
-              "line": 36,
+              "line": 39,
               "anchor": "parsed = json.loads(raw, parse_constant=reject_n",
               "text": "json.loads 默认接受 NaN、Infinity 这类非标准常量，parse_constant 把它们拒绝掉。"
             },
             {
               "id": "n41",
-              "line": 41,
+              "line": 44,
               "anchor": "card = TaskCard.model_validate(parsed)",
               "text": "第二层用 Pydantic 校验必填、类型和长度。"
             },
             {
               "id": "n45",
-              "line": 45,
+              "line": 48,
               "anchor": "return None, checks",
               "text": "上游失败就直接返回，后面的层级不做判断，报告里也不会出现未执行的检查。"
             },
             {
               "id": "n47",
-              "line": 47,
+              "line": 50,
               "anchor": "mismatches = [key for key, expected in FACTS.ite",
               "text": "第三层逐项比对 FACTS。结构完全合法的输出仍可能写错事实，wrong_fact 场景就停在这一层。"
             }
@@ -258,30 +258,30 @@
           "id": "code-repair",
           "type": "annotated-source",
           "path": "lessons/lesson_05_structured_output/runtime.py",
-          "start": 78,
-          "end": 103,
+          "start": 81,
+          "end": 106,
           "notes": [
             {
               "id": "n88",
-              "line": 88,
+              "line": 91,
               "anchor": "raw = _content(context.complete({\"messages\": mes",
               "text": "temperature=0 降低随机性，但不保证每次输出相同；结果仍以本次 response 为准。"
             },
             {
               "id": "n92",
-              "line": 92,
+              "line": 95,
               "anchor": "if (not all(item[\"passed\"] for item in checks) a",
               "text": "只有未通过、repair 开启、且模型调用预算至少为 2 时才修复，并且只修一次。"
             },
             {
               "id": "n95",
-              "line": 95,
+              "line": 98,
               "anchor": "messages.extend([{\"role\": \"assistant\", \"content\"",
               "text": "修复请求把原始输出作为 assistant 消息放回，只附上未通过项的具体原因。"
             },
             {
               "id": "n102",
-              "line": 102,
+              "line": 105,
               "anchor": "accepted = len(checks) == 3 and all(c[\"passed\"] ",
               "text": "accepted 要求三层都执行并且都通过；只有两层通过不算。"
             }
@@ -647,11 +647,11 @@
     },
     {
       "name": "FACTS",
-      "note": "本课写死的可信课程事实：第 4 课的课号、标题和先修课号，第三层逐项比对它。"
+      "note": "本课写死的可信课程事实：{{lesson:task-contract}}的课程 ID、标题和先修课程，第三层逐项比对它。"
     },
     {
       "name": "prerequisite",
-      "note": "课程卡字段：先修课号。可信事实里是 \"3\"，“故意写错事实”要求模型写成 2。"
+      "note": "课程卡字段：先修课程。可信事实是 fail-safely，故意写错时改成 dependent-calls。"
     },
     {
       "name": "message.content",

@@ -1,4 +1,4 @@
-"""第 2 课：先读取本地时间，再用返回值做加法。"""
+"""先读取本地时间，再用返回值做加法。"""
 
 from course.runner import run_cli
 from lessons.lesson_01_tool_selection.tools import AVAILABLE_TOOLS, TOOLS
@@ -19,7 +19,7 @@ SYSTEM_PROMPT = (
 
 def main():
     run_cli(
-        title="第 2 课：根据工具结果继续调用",
+        title="根据工具结果继续调用",
         examples=[
             "把现在的小时和分钟相加。",
             "计算 19 加 23，并告诉我现在几点。",
