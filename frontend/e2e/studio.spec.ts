@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { CurriculumData, Detail } from "../src/types";
 import { isRunCreation, mockRunStream, runOffline } from "./runs";
 import { t } from "./i18n";
+import { openLessonById } from "./navigation";
 import { lessonView } from "../src/content/view";
 
 // 学生界面固定真实调用。自动化测试在网络边界改用后端测试适配器，
@@ -39,9 +40,8 @@ test("source is served from the lesson, and replay never sends another run", asy
     await request.get("/api/lessons/tool-selection")
   ).json();
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: detail.title, exact: true }),
-  ).toBeVisible();
+  // 第一门课不带工具；加法、工具结果与两次请求在“执行工具与回传结果”里。
+  await openLessonById(page, request, detail.id);
   await page.getByTestId("scene-tab-code").click();
   // 默认只显示标注范围；“显示完整文件”后与真实源码逐字一致。
   const sourceFrame = page.getByTestId("learn-source-code");
@@ -293,7 +293,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
     if (isRunCreation(req)) runs++;
   });
   const lesson = await (
-    await request.get("/api/lessons/tool-selection")
+    await request.get("/api/lessons/chat-request")
   ).json();
   const submit = page.getByRole("button", {
     name: t("quiz:submit"),
@@ -412,7 +412,7 @@ test("the complete curriculum groups real plans and only starts implemented less
     await request.get("/api/curriculum")
   ).json();
   const firstLesson: Detail = await (
-    await request.get("/api/lessons/tool-selection")
+    await request.get("/api/lessons/chat-request")
   ).json();
   let runs = 0;
   page.on("request", (req) => {

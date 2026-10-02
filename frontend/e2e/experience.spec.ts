@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { CurriculumData, Detail, Lesson } from "../src/types";
 import { isRunCreation, runOffline } from "./runs";
 import { t } from "./i18n";
+import { openLessonById } from "./navigation";
 import { chapterView, lessonView } from "../src/content/view";
 
 const capture = (name: string) =>
@@ -17,7 +18,7 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
     if (isRunCreation(req)) runs++;
   });
   const firstLesson: Detail = await (
-    await request.get("/api/lessons/tool-selection")
+    await request.get("/api/lessons/chat-request")
   ).json();
   await page.goto("/");
   // First visit lands on the home page; chapter 0 (onboarding) is one click away.
@@ -148,7 +149,7 @@ test("interactive lesson explanations are different for all three lessons and ne
     if (isRunCreation(req)) runs++;
   });
   await page.goto("/");
-  for (const id of ["1", "2", "3"]) {
+  for (const id of ["tool-selection", "dependent-calls", "fail-safely"]) {
     const detail = await (await request.get(`/api/lessons/${id}`)).json();
     await page
       .getByTestId("course-nav")
@@ -190,6 +191,7 @@ test("interactive lesson explanations are different for all three lessons and ne
 
 test("stage nodes and tool cards follow execution evidence and replay", async ({
   page,
+  request,
 }) => {
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
@@ -213,6 +215,8 @@ test("stage nodes and tool cards follow execution evidence and replay", async ({
     "[data-testid^='stage-node-']:not([data-state='dormant'])",
   );
   await page.goto("/");
+  // 第一门课不带工具；工具卡片在“执行工具与回传结果”里。
+  await openLessonById(page, request, "tool-selection");
   await page.getByTestId("scene-tab-lab").click();
   // Before any run the stage shows no topology at all, not a placeholder run.
   await expect(nodes).toHaveCount(0);

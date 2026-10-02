@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import type { CurriculumData, Lesson } from "../src/types";
 import { isRunCreation, runOffline } from "./runs";
 import { t } from "./i18n";
+import { openLessonById } from "./navigation";
 
 // ⌘K 命令面板与实验快捷键。回放只读已有事件，全程只允许一次创建运行的请求。
 test.beforeEach(async ({ page }) => {
@@ -193,6 +194,7 @@ test("lab shortcuts replay recorded events and never fire while typing", async (
     if (isRunCreation(request)) runs++;
   });
   await page.goto("/");
+  await openLessonById(page, page.request, "tool-selection");
   await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-answer")).toContainText("42");

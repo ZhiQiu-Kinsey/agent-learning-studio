@@ -30,7 +30,7 @@ async function load(request: import("@playwright/test").APIRequestContext) {
   const catalog: CurriculumData = await (
     await request.get("/api/curriculum")
   ).json();
-  const first: Detail = await (await request.get("/api/lessons/tool-selection")).json();
+  const first: Detail = await (await request.get("/api/lessons/chat-request")).json();
   return { catalog, first };
 }
 
