@@ -62,3 +62,4 @@
 | 14 `todo-planning` | learn-claude-code 2026-10 浅克隆 `ce8f9f1`（MIT） | `s05_todo_write/README.zh.md`、`s05_todo_write/code.py` | todo_write 整体替换清单、同一时间一项进行中、连续几轮未更新就由运行层提醒。本课把提醒改为 OpenAI 兼容格式下 tool 消息之后的单独 user 消息，并加上独立验收器 |
 | 15 `plan-and-replan` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `07-planning-design/README.md`（按固定 commit 的 raw URL 读取） | 任务分解、用结构化输出表示计划、子任务结果影响后续步骤时迭代规划。本课改为单 Agent 的规划器 / 执行器分工，加入固定故障、修订上限和版本差异 |
 | 16 `reflection-revision` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `09-metacognition/README.md`（按固定 commit 的 raw URL 读取） | 自我评估与纠正、外部反馈的作用。本课把“外部反馈”落实为真实执行的测试用例，并加上迭代上限与停止原因 |
+| 17 `workflow-patterns` | claude-cookbooks 2026-10 稀疏克隆 `d7265d6`（MIT） | `patterns/agents/basic_workflows.ipynb` | 提示链、并行、路由三种工作流的划分。原示例路由遇到未知标签会出错、没有步骤间检查；本课加入检查门、兜底记录、标注对照与服务端计时 |

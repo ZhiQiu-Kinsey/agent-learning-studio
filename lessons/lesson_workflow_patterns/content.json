@@ -1,0 +1,862 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "workflow-patterns",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "REASONING / LESSON 17",
+          "headline": "不是每件事都要 Agent 自己决定。",
+          "highlight": "流程固定时，就让程序来排。",
+          "takeaway": "提示链、路由、并行是三种由程序决定流程、由模型完成每一步的工作流。它们比 Agent 循环更容易预测，也更容易测量。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-chain",
+              "label": "01 / CHAIN",
+              "title": "一步接一步",
+              "description": "上一步的输出是下一步的输入，每步之间放一道程序检查，不合格就停。",
+              "token": "gate"
+            },
+            {
+              "id": "02-route",
+              "label": "02 / ROUTE",
+              "title": "先分类，再分派",
+              "description": "模型只输出一个标签，程序按标签选下一步。标签不认识就走兜底，并记下原文。",
+              "token": "label · fallback"
+            },
+            {
+              "id": "03-parallel",
+              "label": "03 / PARALLEL",
+              "title": "同时发出",
+              "description": "互不依赖的子任务可以同时请求，墙钟时间接近最慢的那一个。",
+              "token": "wall_ms"
+            },
+            {
+              "id": "04-measure",
+              "label": "04 / MEASURE",
+              "title": "用数据挑模式",
+              "description": "分类看标注对照出的准确率和混淆矩阵，并行看服务端测得的墙钟时间。",
+              "token": "accuracy · timing"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "什么时候不必让 Agent 自己决定",
+          "paragraphs": [
+            "前几课的 Agent 循环（Agent Loop）里，下一步做什么由模型决定。很多任务其实不需要这种自由：步骤是固定的，只是每一步需要模型来写。这时用程序把流程写死，让模型只负责每一步的内容，结果更好预测，出错时也更容易定位。",
+            "这一课看三种最常见的工作流：提示链（Prompt Chaining），把任务拆成先后几步；路由（Routing），先判断类别再分派；并行，把互不依赖的子任务同时发出。三种都不需要工具，也不需要模型自己决定何时结束。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "提示链：每一步之间放检查门",
+          "paragraphs": [
+            "本课的提示链有三步：从一段笔记里提取 3 个要点，把要点改写成问答，再给问答起标题。上一步的输出原样成为下一步的输入。问题在于，任何一步格式出错，后面每一步都会在错误的基础上继续。",
+            "所以每一步之后有一道检查门：第一步必须恰好 3 行、都以“- ”开头；第二步必须是 3 组 Q/A；第三步必须是 3 个不超过 8 字的 JSON 字符串。检查门由程序执行，不通过就停在这一步，记成 gate_passed 为 false 的 lesson.chain_step 事件。"
+          ]
+        },
+        {
+          "id": "mq-gate",
+          "type": "micro-quiz",
+          "question": {
+            "id": "gate-purpose",
+            "prompt": "第一步只输出了 2 个要点。提示链接下来会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "停在第一步，不把不合格的结果交给第二步",
+                "feedback": "对。检查门的作用就是让错误停在发生的地方。"
+              },
+              {
+                "id": "b",
+                "text": "继续执行，第二步会自己补齐",
+                "feedback": "不对。后面的步骤只会在错误的输入上继续。"
+              },
+              {
+                "id": "c",
+                "text": "自动重试（Retry）第一步，直到通过",
+                "feedback": "不对。本课的检查门不重试，失败就如实停下。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "链越长，越要在中间检查。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "路由：模型只输出一个标签",
+          "paragraphs": [
+            "路由让模型做一件很窄的事：读一张工单，输出 course、account、error、other 四个标签之一。程序拿到标签再决定交给谁处理。模型如果输出了列表外的东西，比如一句解释或一个不存在的标签，程序不会报错退出，而是走兜底标签 other，并把原文记在 lesson.route 的 raw 里。",
+            "路由好不好要用数据说话。本课准备了 20 张作者手工标注的工单，有几张故意写得模棱两可。跑完后报告给出准确率、混淆矩阵（行是标注，列是预测），以及每一张分错或走了兜底的工单。标注本身也可能有争议，分错的工单值得逐条看。"
+          ]
+        },
+        {
+          "id": "mq-fallback",
+          "type": "micro-quiz",
+          "question": {
+            "id": "unknown-label",
+            "prompt": "路由模型对一张工单输出了“billing”，这个标签不在列表里。程序应该怎么做？",
+            "options": [
+              {
+                "id": "a",
+                "text": "走兜底标签 other，并记下原文 billing",
+                "feedback": "对。兜底保证流程能继续，原文留着供复核。"
+              },
+              {
+                "id": "b",
+                "text": "抛出异常，终止整批路由",
+                "feedback": "不对。一张工单的问题不该让其他 19 张白跑。"
+              },
+              {
+                "id": "c",
+                "text": "猜一个最接近的标签",
+                "feedback": "不对。猜测会把错误藏起来。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "兜底路径要有记录，否则看不出模型哪里不稳定。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "并行：墙钟时间与分支耗时",
+          "paragraphs": [
+            "三个复述任务互不依赖，可以一个接一个发，也可以同时发。串行时，墙钟时间约等于三个请求耗时之和；并行时，墙钟时间接近最慢的那一个，各分支耗时之和会大于墙钟时间。时间都由服务端的 perf_counter 测量，记在 lesson.parallel 里。",
+            "并行请求同时在路上，平台要分清哪个响应属于哪个请求。并行组的每个请求带一个 branch 标记，响应带同一个标记，时间线按它配对。串行组不带 branch，按先后顺序配对。网络和服务商的排队会让每次的时间不同，一次测量只说明这一次。"
+          ]
+        },
+        {
+          "id": "mq-parallel",
+          "type": "micro-quiz",
+          "question": {
+            "id": "parallel-sum",
+            "prompt": "并行组的墙钟时间是 1.2 秒，三个分支耗时之和是 3.1 秒。说明了什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "三个请求在时间上有重叠",
+                "feedback": "对。重叠越多，两个数差得越多。"
+              },
+              {
+                "id": "b",
+                "text": "测量出错了，两者应该相等",
+                "feedback": "不对。只有串行时两者才接近相等。"
+              },
+              {
+                "id": "c",
+                "text": "并行让每个请求本身变快了",
+                "feedback": "不对。单个请求的耗时没有变短，是它们同时在跑。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "并行节省的是等待，不是单次请求的时间。"
+          }
+        },
+        {
+          "id": "compare-patterns",
+          "type": "compare",
+          "title": "三种模式",
+          "columns": [
+            "模式",
+            "流程由谁定",
+            "适合",
+            "要测量什么"
+          ],
+          "rows": [
+            [
+              "提示链",
+              "程序，按固定顺序",
+              "步骤固定、每步可检查的任务",
+              "每道检查门是否通过"
+            ],
+            [
+              "路由",
+              "程序，按模型给的标签",
+              "输入种类多、各类处理方式不同",
+              "准确率、混淆矩阵、兜底次数"
+            ],
+            [
+              "并行",
+              "程序，同时发出",
+              "子任务互不依赖",
+              "墙钟时间与分支耗时"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次路由",
+          "description": "按步骤说明路由一张工单时发生的事，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "分类",
+              "actor": "模型",
+              "title": "只输出一个标签",
+              "body": "system 列出四个标签，要求不解释。",
+              "code": "response = context.complete({\"messages\": [router_system, ticket]})",
+              "language": "python",
+              "evidence": "request / response"
+            },
+            {
+              "id": "step-2",
+              "label": "解析",
+              "actor": "程序",
+              "title": "取第一行做标签",
+              "body": "在列表里就用它，不在就走兜底。",
+              "code": "predicted, fallback = parse_label(reply)",
+              "language": "python",
+              "evidence": "lesson.route 的 predicted 与 fallback"
+            },
+            {
+              "id": "step-3",
+              "label": "对照",
+              "actor": "程序",
+              "title": "和人工标注比较",
+              "body": "记录这张工单对不对。",
+              "code": "correct = predicted == gold",
+              "language": "python",
+              "evidence": "lesson.route 的 correct"
+            },
+            {
+              "id": "step-4",
+              "label": "汇总",
+              "actor": "程序",
+              "title": "算准确率和混淆矩阵",
+              "body": "20 张全部跑完后汇总。",
+              "code": "table = confusion(pairs)",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "predict-fallback",
+          "type": "predict",
+          "prompt": "运行“路由：20 张标注工单”之前先猜：这次运行会出现几个 lesson.route 事件？",
+          "experiment": "routing",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.route"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "reflection-revision"
+        },
+        {
+          "id": "code-chain",
+          "type": "annotated-source",
+          "path": "lessons/lesson_workflow_patterns/runtime.py",
+          "start": 34,
+          "end": 136,
+          "notes": [
+            {
+              "id": "n37",
+              "line": 37,
+              "text": "每一步有自己的格式要求，检查完全由程序执行。"
+            },
+            {
+              "id": "n121",
+              "line": 121,
+              "text": "每一步都记录输出和检查结果。"
+            },
+            {
+              "id": "n124",
+              "line": 124,
+              "text": "检查门不通过就停，不把不合格的输出传下去。"
+            },
+            {
+              "id": "n127",
+              "line": 127,
+              "text": "通过之后，这一步的输出成为下一步的输入。"
+            }
+          ]
+        },
+        {
+          "id": "code-route",
+          "type": "annotated-source",
+          "path": "lessons/lesson_workflow_patterns/runtime.py",
+          "start": 57,
+          "end": 168,
+          "notes": [
+            {
+              "id": "n57",
+              "line": 57,
+              "text": "20 张工单都带人工标注，准确率就是和它对照算出来的。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "text": "不在列表里的标签一律走兜底，返回值里同时标出 fallback。"
+            },
+            {
+              "id": "n90",
+              "line": 90,
+              "text": "混淆矩阵的行是标注、列是预测，对角线以外就是分错的数量。"
+            },
+            {
+              "id": "n148",
+              "line": 148,
+              "text": "每张工单记录标注、预测、原文和是否走了兜底。"
+            }
+          ]
+        },
+        {
+          "id": "code-fanout",
+          "type": "annotated-source",
+          "path": "lessons/lesson_workflow_patterns/runtime.py",
+          "start": 171,
+          "end": 210,
+          "notes": [
+            {
+              "id": "n181",
+              "line": 181,
+              "text": "并行请求带 branch 标记，响应按它配对；串行不带。"
+            },
+            {
+              "id": "n188",
+              "line": 188,
+              "text": "三个请求在线程里同时发出，共用同一个调用预算。"
+            },
+            {
+              "id": "n193",
+              "line": 193,
+              "text": "墙钟时间由服务端 perf_counter 测量，不依赖浏览器时钟。"
+            },
+            {
+              "id": "n196",
+              "line": 196,
+              "text": "同时记录墙钟时间和各分支耗时之和，两者的差就是重叠的部分。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "流程写在程序里，模型只做每一步",
+          "chosen": "三种模式的控制流全部由 Python 决定：提示链按顺序加检查门，路由按标签分派并兜底，并行用线程同时发出并按 branch 配对。模型不决定下一步做什么。",
+          "alternatives": [
+            {
+              "id": "agent-loop",
+              "title": "让 Agent 循环自己决定步骤",
+              "why_not": "步骤本来就是固定的，交给模型决定只会增加不确定性，也更难测量。"
+            },
+            {
+              "id": "crash-on-unknown",
+              "title": "路由遇到未知标签直接报错",
+              "why_not": "参考示例就是这样写的，一张工单的问题会让整批停下。兜底加记录更稳妥。"
+            },
+            {
+              "id": "fake-timeline",
+              "title": "并行请求结束后再按顺序补记事件",
+              "why_not": "事件时间会变成补记的时间，时间线就不是真实发生的顺序了。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "chain",
+          "title": "提示链与检查门",
+          "hypothesis": "每一步之后由程序检查格式，格式出错时链会停在出错的那一步，后面的步骤不会在错误的输入上继续。",
+          "arms": [
+            {
+              "id": "chain",
+              "exercise": "chain",
+              "label": "提示链：三步加检查门"
+            }
+          ],
+          "observe": [
+            {
+              "id": "step-one",
+              "text": "第一步的输出和检查结果。",
+              "selector": {
+                "event": "lesson.chain_step",
+                "round": 1,
+                "path": "data"
+              }
+            },
+            {
+              "id": "step-two-input",
+              "text": "第二步的请求：上一步的输出成了它的输入。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "chain-report",
+              "text": "三道检查门的结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "提示链的流程由程序写死。先看第一步。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "step-one"
+            },
+            {
+              "action": "highlight",
+              "observe": "step-one"
+            },
+            {
+              "action": "narrate",
+              "text": "输出之后立刻过检查门，gate_passed 告诉你能不能继续。"
+            },
+            {
+              "action": "seek",
+              "observe": "step-two-input"
+            },
+            {
+              "action": "highlight",
+              "observe": "step-two-input"
+            },
+            {
+              "action": "narrate",
+              "text": "通过了，第一步的输出就原样放进第二步的请求。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "chain-report"
+            },
+            {
+              "action": "highlight",
+              "observe": "chain-report"
+            },
+            {
+              "action": "narrate",
+              "text": "最后汇总每道检查门。哪一步没通过，链就停在哪一步。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "每一步的输出和检查结果都有记录，链在哪一步停下可以直接看出来。"
+            ],
+            "does_not_prove": [
+              "检查门只查格式，不查内容是否正确；格式全对的问答也可能答错。",
+              "离线测试模式下的三步输出由固定脚本写成。"
+            ]
+          }
+        },
+        {
+          "id": "routing",
+          "title": "路由准确率与兜底",
+          "hypothesis": "模型对多数工单能给出与人工标注一致的标签，但模棱两可的工单容易分错；列表外的输出走兜底，不会让整批中断。",
+          "predict": "predict-fallback",
+          "arms": [
+            {
+              "id": "routing",
+              "exercise": "routing",
+              "label": "路由：20 张标注工单"
+            }
+          ],
+          "observe": [
+            {
+              "id": "one-route",
+              "text": "第一张工单的路由记录：标注、预测、原文。",
+              "selector": {
+                "event": "lesson.route",
+                "round": 1,
+                "path": "data"
+              }
+            },
+            {
+              "id": "fallback-route",
+              "text": "走了兜底的工单（如果有）。",
+              "selector": {
+                "event": "lesson.route",
+                "path": "data.fallback"
+              }
+            },
+            {
+              "id": "accuracy",
+              "text": "准确率。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[0]"
+              }
+            },
+            {
+              "id": "misrouted",
+              "text": "分错或走了兜底的工单。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "20 张工单逐张路由，每张都和人工标注对照。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "one-route"
+            },
+            {
+              "action": "highlight",
+              "observe": "one-route"
+            },
+            {
+              "action": "narrate",
+              "text": "这是第一张：模型输出的原文、解析出的标签、是否正确。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "fallback-route"
+            },
+            {
+              "action": "highlight",
+              "observe": "fallback-route"
+            },
+            {
+              "action": "narrate",
+              "text": "fallback 为 true 的工单，模型输出了列表外的东西，程序改走 other。"
+            },
+            {
+              "action": "seek",
+              "observe": "accuracy"
+            },
+            {
+              "action": "highlight",
+              "observe": "accuracy"
+            },
+            {
+              "action": "narrate",
+              "text": "准确率由标注对照算出。"
+            },
+            {
+              "action": "seek",
+              "observe": "misrouted"
+            },
+            {
+              "action": "highlight",
+              "observe": "misrouted"
+            },
+            {
+              "action": "narrate",
+              "text": "分错的工单值得逐条看：有时是模型错了，有时标注本身就有争议。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次 20 张工单各被分到哪一类、和标注是否一致、哪些走了兜底。"
+            ],
+            "does_not_prove": [
+              "20 张工单不足以代表真实流量，准确率的波动可能很大。",
+              "标注由课程作者完成，没有经过多人一致性检查。",
+              "离线测试模式下的路由结果由固定脚本给出，其中分错的工单是脚本故意安排的。"
+            ]
+          }
+        },
+        {
+          "id": "serial-vs-parallel",
+          "title": "串行与并行",
+          "hypothesis": "三个互不依赖的请求同时发出时，墙钟时间明显短于串行；单个请求的耗时不会因此变短。",
+          "arms": [
+            {
+              "id": "serial",
+              "exercise": "serial",
+              "label": "三个子任务，串行"
+            },
+            {
+              "id": "parallel",
+              "exercise": "parallel",
+              "label": "三个子任务，并行"
+            }
+          ],
+          "observe": [
+            {
+              "id": "branch-tag",
+              "text": "并行请求带的 branch 标记。",
+              "selector": {
+                "event": "request",
+                "path": "data.branch"
+              }
+            },
+            {
+              "id": "wall",
+              "text": "墙钟时间。",
+              "selector": {
+                "event": "lesson.parallel",
+                "path": "data.wall_ms"
+              }
+            },
+            {
+              "id": "sum",
+              "text": "各分支耗时之和。",
+              "selector": {
+                "event": "lesson.parallel",
+                "path": "data.sum_of_branches_ms"
+              }
+            },
+            {
+              "id": "branches",
+              "text": "每个分支的开始、结束时间。",
+              "selector": {
+                "event": "lesson.parallel",
+                "path": "data.branches"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组发出同样的三个请求，只是一个接一个，一个同时。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "branch-tag"
+            },
+            {
+              "action": "highlight",
+              "observe": "branch-tag"
+            },
+            {
+              "action": "narrate",
+              "text": "并行请求带着 branch 标记，响应按它配对。串行组没有这个字段。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "wall"
+            },
+            {
+              "action": "highlight",
+              "observe": "wall"
+            },
+            {
+              "action": "narrate",
+              "text": "这是墙钟时间：从第一个请求发出到最后一个响应回来。"
+            },
+            {
+              "action": "seek",
+              "observe": "sum"
+            },
+            {
+              "action": "highlight",
+              "observe": "sum"
+            },
+            {
+              "action": "narrate",
+              "text": "这是三个分支耗时相加。并行时它比墙钟时间大，差值就是重叠的部分。"
+            },
+            {
+              "action": "seek",
+              "observe": "branches"
+            },
+            {
+              "action": "highlight",
+              "observe": "branches"
+            },
+            {
+              "action": "narrate",
+              "text": "看每个分支的开始时间：并行组几乎同时开始。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这一次串行和并行各花了多少墙钟时间，各分支何时开始、何时结束。"
+            ],
+            "does_not_prove": [
+              "一次测量受网络和服务商排队影响很大，要比较需要多跑几次。",
+              "服务商可能限制并发，分支越多不一定越快。",
+              "离线测试模式下每个请求固定停顿 50 毫秒，时间不代表真实服务商。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "pattern",
+          "label": "模式",
+          "options": [
+            {
+              "value": "chain",
+              "label": "提示链"
+            },
+            {
+              "value": "routing",
+              "label": "路由"
+            },
+            {
+              "value": "serial",
+              "label": "串行"
+            },
+            {
+              "value": "parallel",
+              "label": "并行"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "什么样的任务适合用工作流，而不是 Agent 循环？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "步骤固定、可以事先写出来的任务",
+                  "feedback": "对。流程固定时，交给程序排更可控。"
+                },
+                {
+                  "id": "b",
+                  "text": "任何需要调用模型的任务",
+                  "feedback": "不对。步骤取决于中间结果时，仍需要 Agent 循环。"
+                },
+                {
+                  "id": "c",
+                  "text": "只有一个步骤的任务",
+                  "feedback": "不对。一步的任务直接请求一次就行，谈不上工作流。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "先看步骤能不能事先确定，再选模式。"
+            },
+            {
+              "id": "q2",
+              "prompt": "路由准确率 18/20，能说明这个路由器在真实工单上也有 90% 准确率吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不能，20 张样本太少，而且标注只有一个人做",
+                  "feedback": "对。这只是一次小样本测量。"
+                },
+                {
+                  "id": "b",
+                  "text": "能，准确率就是准确率",
+                  "feedback": "不对。样本量和标注质量都会影响结论。"
+                },
+                {
+                  "id": "c",
+                  "text": "能，只要模型不变",
+                  "feedback": "不对。真实工单的分布和这 20 张不一样。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "测量结果要连同样本和标注方式一起看。"
+            },
+            {
+              "id": "q3",
+              "prompt": "并行请求为什么要带 branch 标记？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "响应可能不按发出顺序回来，要靠标记配对",
+                  "feedback": "对。没有标记，时间线就可能把响应配给错误的请求。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务商要求并行请求带这个字段",
+                  "feedback": "不对。branch 只写在平台的事件里，不发给服务商。"
+                },
+                {
+                  "id": "c",
+                  "text": "为了让请求更快",
+                  "feedback": "不对。标记不影响速度。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "并发事件需要显式的配对键。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“路由：20 张标注工单”，找出一张路由结果和人工标注不一致的工单。",
+          "target": {
+            "event": "lesson.route",
+            "path": "data.gold"
+          },
+          "explanation": "每条 lesson.route 都有 gold（标注）和 predicted（预测）。找 correct 为 false 的那条，再读它的 raw，看模型为什么这样分。如果这次 20 张全对，也可以找一条 fallback 为 true 的记录。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我跑过路由，能从混淆矩阵里说出最常被混淆的两个类别。"
+            },
+            {
+              "id": "item-2",
+              "text": "我比较了串行和并行两次运行的墙钟时间与分支耗时之和。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说出提示链的检查门拦下了什么、没拦下什么。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
