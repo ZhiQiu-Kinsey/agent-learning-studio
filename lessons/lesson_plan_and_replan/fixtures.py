@@ -1,4 +1,4 @@
-"""第 15 课离线测试模型：规划器、周报写手和 ReAct 基线的固定回答，只服务自动化测试。
+"""先规划后执行课的离线测试模型：规划器、周报写手和 ReAct 基线的固定回答，只服务自动化测试。
 
 规划器第一次总是选主数据源；收到失败信息后改用备份。这是脚本行为，不代表任何真实模型。
 """
@@ -20,10 +20,15 @@ def _reply(content=None, calls=None):
 
 def _write_report(user_text):
     data = json.loads(user_text.split("工具结果：", 1)[1])
+    lessons = "、".join(data.get("fetch_progress", {}).get("completed", [])) or "若干课"
     scores = data.get("fetch_quiz_scores", {}).get("scores")
     if not scores:
-        return "lin 完成了第 7、8、9 课，但这次没有拿到练习成绩。"
-    return "lin 完成了第 7、8、9 课，得分：" + "，".join(f"第 {k} 课 {v} 分" for k, v in scores.items()) + "。"
+        return f"lin 完成了 {lessons}，但这次没有拿到练习成绩。"
+    return f"lin 完成了 {lessons}，得分：" + _scores(scores) + "。"
+
+
+def _scores(scores):
+    return "，".join(f"{lesson} {value} 分" for lesson, value in scores.items())
 
 
 def create_completion(exercise_id, inputs=None):
@@ -45,7 +50,7 @@ def create_completion(exercise_id, inputs=None):
             source = "primary" if step == 1 else "backup"
             return _reply(calls=[{"id": f"call_{step + 1}", "type": "function", "function": {
                 "name": "fetch_quiz_scores", "arguments": json.dumps({"learner": "lin", "source": source})}}])
-        scores = results[-1]["result"]["scores"]
-        return _reply("lin 完成了第 7、8、9 课，得分：" + "，".join(f"第 {k} 课 {v} 分" for k, v in scores.items()) + "。")
+        lessons = "、".join(results[0]["result"]["completed"])
+        return _reply(f"lin 完成了 {lessons}，得分：" + _scores(results[-1]["result"]["scores"]) + "。")
 
     return complete
