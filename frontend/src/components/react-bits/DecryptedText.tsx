@@ -42,8 +42,8 @@ export default function DecryptedText({
     <span
       ref={ref}
       className={`rb-decrypted-text ${className}`}
-      aria-label={text}
     >
+      <span className="sr-only">{text}</span>
       <span aria-hidden="true">{reduced || !active ? text : display}</span>
     </span>
   );

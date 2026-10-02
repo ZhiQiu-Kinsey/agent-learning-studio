@@ -22,7 +22,7 @@ export function Code({
 }) {
   const grammar = Prism.languages[language] || Prism.languages.plain;
   return (
-    <pre className="code">
+    <pre className="code" tabIndex={0}>
       <code>
         {grammar ? tokens(Prism.tokenize(content, grammar)) : content}
       </code>

@@ -42,8 +42,8 @@ export default function ScrollReveal({
     <p
       ref={ref}
       className={`rb-scroll-reveal ${className}`}
-      aria-label={children}
     >
+      <span className="sr-only">{children}</span>
       {Array.from(children).map((char, index) => (
         <span key={index} aria-hidden="true" className="rb-reveal-word">
           {char}
