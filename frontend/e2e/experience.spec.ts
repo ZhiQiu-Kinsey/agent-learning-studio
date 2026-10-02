@@ -20,6 +20,12 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
     await request.get("/api/lessons/1")
   ).json();
   await page.goto("/");
+  // First visit lands on the home page; chapter 0 (onboarding) is one click away.
+  await expect(page.getByTestId("home-page")).toBeVisible();
+  await expect(page.getByTestId("home-journey-category")).toHaveCount(
+    (await (await request.get("/api/curriculum")).json()).categories.length,
+  );
+  await page.getByTestId("home-start-onboarding").click();
   await expect(
     page.getByTestId("onboarding-hero").getByRole("heading", { level: 1 }),
   ).toBeVisible();
@@ -106,6 +112,7 @@ test("unimplemented navigation stays disabled and an onboarding request failure 
     else await route.continue();
   });
   await page.goto("/");
+  await page.getByTestId("home-start-onboarding").click();
   await expect(page.getByRole("alert")).toContainText(failure);
   fail = false;
   await page.getByTestId("onboarding-retry").click();
@@ -247,6 +254,7 @@ test("new entry and chapters remain readable in light, dark and reduced motion a
     for (const width of [390, 1440, 2560]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1080 });
       await page.goto("/");
+      await page.getByTestId("home-start-onboarding").click();
       await expect(chapterHeading).toHaveText(preface.title);
       // 首页主标题仍硬编码在 Onboarding.tsx。
       await expect(

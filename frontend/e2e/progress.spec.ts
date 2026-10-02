@@ -79,6 +79,7 @@ test("onboarding checkpoints are self-reported and persist locally", async ({
 }) => {
   await page.addInitScript(() => localStorage.removeItem("agent-lab-entry"));
   await page.goto("/");
+  await page.getByTestId("home-start-onboarding").click();
   const content = await (await request.get("/api/onboarding")).json();
   const first = page
     .getByTestId("onboarding-checks")
@@ -91,6 +92,7 @@ test("onboarding checkpoints are self-reported and persist locally", async ({
     `${content.chapters[0].id}/${checkpoint}`,
   ]);
   await page.reload();
+  await page.getByTestId("home-start-onboarding").click();
   await expect(
     page.getByTestId("onboarding-checks").getByRole("checkbox").first(),
   ).toBeChecked();

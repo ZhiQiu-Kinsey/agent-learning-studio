@@ -86,6 +86,11 @@ export function LessonScenes({
     return () => window.removeEventListener(SCENE_EVENT, listener);
   });
 
+  // Recorded only when the learner actually sees the lesson page, not when it preloads.
+  useEffect(() => {
+    if (lessonId && visible) track.lessonOpened(lessonId);
+  }, [lessonId, visible]);
+
   useEffect(() => {
     if (lessonId && visible) track.sceneVisited(lessonId, scene);
   }, [lessonId, scene, visible]);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useReducedMotion } from "../motion";
 import {
@@ -16,6 +16,7 @@ import {
 import Markdown from "react-markdown";
 import { jsonFetch } from "../api";
 import { chapterView } from "../content/view";
+import { IllustrationFlow } from "../content/blocks/IllustrationFlow";
 import { onboardingProgressId, track, useProgress } from "../progress";
 import type { Onboarding as OnboardingContent } from "../content/types.gen";
 import { Button } from "./ui/button";
@@ -99,6 +100,7 @@ export function Onboarding({
     );
   const currentChapter = content.chapters[chapter] || content.chapters[0];
   const current = { ...currentChapter, ...chapterView(currentChapter) };
+  const illustrations = currentChapter.illustrations;
   const completed = content.chapters.filter((item) =>
     chapterView(item).exercise.checkpoints.every(
       (point) => checked[`${item.id}/${point.id}`],
@@ -109,10 +111,7 @@ export function Onboarding({
     window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
   }
   return (
-    <div
-      className="onboarding-page"
-      data-testid="onboarding-page"
-    >
+    <div className="onboarding-page" data-testid="onboarding-page">
       <section
         ref={heroRef}
         data-testid="onboarding-hero"
@@ -161,10 +160,7 @@ export function Onboarding({
               探索完整课程
             </Button>
           </div>
-          <div
-            className="onboarding-meta"
-            data-testid="onboarding-meta"
-          >
+          <div className="onboarding-meta" data-testid="onboarding-meta">
             <span>
               <BookOpen size={14} />
               {content.chapters.length} 节前置导学
@@ -240,60 +236,73 @@ export function Onboarding({
               <p>{current.summary}</p>
             </header>
             {current.sections.map((section, index) => (
-              <AnimatedContent
-                key={section.id}
-                distance={18}
-                duration={0.5}
-                threshold={0.05}
-              >
-                <section
-                  className={`onboarding-section onboarding-section-${section.kind}`}
-                  data-testid="onboarding-section"
+              <Fragment key={section.id}>
+                <AnimatedContent
+                  key={section.id}
+                  distance={18}
+                  duration={0.5}
+                  threshold={0.05}
                 >
-                  <h3>
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    {section.title}
-                  </h3>
-                  {section.paragraphs.map((paragraph, i) => (
-                    <div className="onboarding-prose" key={i}>
-                      <Markdown>{paragraph}</Markdown>
-                    </div>
-                  ))}
-                  {!!section.bullets?.length && (
-                    <ul>
-                      {section.bullets.map((bullet, i) => (
-                        <li key={i}>
-                          <Markdown>{bullet}</Markdown>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {section.table && (
-                    <div className="onboarding-table">
-                      <table>
-                        <thead>
-                          <tr>
-                            {section.table.columns.map((column) => (
-                              <th key={column}>{column}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {section.table.rows.map((row, i) => (
-                            <tr key={i}>
-                              {row.map((cell, j) => (
-                                <td key={j}>
-                                  <Markdown>{cell}</Markdown>
-                                </td>
+                  <section
+                    className={`onboarding-section onboarding-section-${section.kind}`}
+                    data-testid="onboarding-section"
+                  >
+                    <h3>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      {section.title}
+                    </h3>
+                    {section.paragraphs.map((paragraph, i) => (
+                      <div className="onboarding-prose" key={i}>
+                        <Markdown>{paragraph}</Markdown>
+                      </div>
+                    ))}
+                    {!!section.bullets?.length && (
+                      <ul>
+                        {section.bullets.map((bullet, i) => (
+                          <li key={i}>
+                            <Markdown>{bullet}</Markdown>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {section.table && (
+                      <div className="onboarding-table">
+                        <table>
+                          <thead>
+                            <tr>
+                              {section.table.columns.map((column) => (
+                                <th key={column}>{column}</th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {section.table.rows.map((row, i) => (
+                              <tr key={i}>
+                                {row.map((cell, j) => (
+                                  <td key={j}>
+                                    <Markdown>{cell}</Markdown>
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+                </AnimatedContent>
+                {current.flows
+                  .filter((flow) => flow.after === section.id)
+                  .map(({ block }) =>
+                    illustrations[block.illustration] ? (
+                      <IllustrationFlow
+                        key={block.id}
+                        block={block}
+                        illustration={illustrations[block.illustration]}
+                      />
+                    ) : null,
                   )}
-                </section>
-              </AnimatedContent>
+              </Fragment>
             ))}
             <section className="onboarding-exercise">
               <div className="onboarding-eyebrow">

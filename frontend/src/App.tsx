@@ -1,9 +1,11 @@
 import { lazy, Suspense, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "./motion";
 import ShinyText from "./components/react-bits/ShinyText";
 import {
   ArrowUpRight,
   BookOpen,
+  House,
   ChevronRight,
   Layers3,
   Menu,
@@ -34,6 +36,11 @@ const Curriculum = lazy(() =>
     default: module.Curriculum,
   })),
 );
+const Home = lazy(() =>
+  import("./components/home/Home").then((module) => ({
+    default: module.Home,
+  })),
+);
 const LessonScenes = lazy(() =>
   import("./scenes/LessonScenes").then((module) => ({
     default: module.LessonScenes,
@@ -47,17 +54,20 @@ const loadingPanel = (
 
 export default function App() {
   const reducedMotion = useReducedMotion();
+  const { t } = useTranslation("home");
   const studio = useStudio();
   const [catalog, setCatalog] = useState(false);
-  const [intro, setIntro] = useState(() => {
+  // First visit lands on the home page; returning learners go straight to their lesson.
+  const [home, setHome] = useState(() => {
     try {
       return localStorage.getItem("agent-lab-entry") !== "lesson";
     } catch {
       return true;
     }
   });
+  const [intro, setIntro] = useState(false);
   const [introChapter, setIntroChapter] = useState(0);
-  const [hasOpenedLesson, setHasOpenedLesson] = useState(!intro);
+  const [hasOpenedLesson, setHasOpenedLesson] = useState(!home);
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
@@ -67,6 +77,7 @@ export default function App() {
     studio.selectLesson(id);
     setHasOpenedLesson(true);
     setIntro(false);
+    setHome(false);
     try {
       localStorage.setItem("agent-lab-entry", "lesson");
     } catch {
@@ -95,6 +106,22 @@ export default function App() {
       </div>
       <Button
         variant="ghost"
+        className={`rail-catalog ${home ? "is-active" : ""}`}
+        data-testid="app-home-button"
+        aria-pressed={home}
+        disabled={studio.running}
+        onClick={() => {
+          setHome(true);
+          setCatalog(false);
+          setIntro(false);
+          setMenu(false);
+        }}
+      >
+        <House size={17} />
+        {t("nav")}
+      </Button>
+      <Button
+        variant="ghost"
         className={`rail-catalog ${catalog ? "is-active" : ""}`}
         data-testid="app-curriculum-button"
         aria-pressed={catalog}
@@ -102,6 +129,7 @@ export default function App() {
         onClick={() => {
           setCatalog(true);
           setIntro(false);
+          setHome(false);
           setMenu(false);
         }}
       >
@@ -125,6 +153,7 @@ export default function App() {
               disabled={studio.running}
               onClick={() => {
                 setIntro(true);
+                setHome(false);
                 setIntroChapter(index);
                 setCatalog(false);
                 setMenu(false);
@@ -140,7 +169,7 @@ export default function App() {
       </div>
       <CourseNavigation
         lessons={studio.lessons}
-        current={!intro && !catalog ? studio.lessonId : undefined}
+        current={!intro && !catalog && !home ? studio.lessonId : undefined}
         disabled={studio.running}
         onSelect={choose}
       />
@@ -154,6 +183,7 @@ export default function App() {
           onClick={() => {
             setCatalog(true);
             setIntro(false);
+            setHome(false);
             setMenu(false);
           }}
         >
@@ -202,7 +232,13 @@ export default function App() {
             <span>Agent 开发</span>
             <ChevronRight size={13} />
             <strong>
-              {intro ? "开始之前" : catalog ? "课程地图" : "基础实践"}
+              {home
+                ? t("nav")
+                : intro
+                  ? "开始之前"
+                  : catalog
+                    ? "课程地图"
+                    : "基础实践"}
             </strong>
           </div>
           <div className="app-preferences">
@@ -236,6 +272,24 @@ export default function App() {
               </Button>
             </div>
           )}
+          {home && (
+            <Suspense fallback={loadingPanel}>
+              <Home
+                lessons={studio.lessons}
+                onOpenLesson={choose}
+                onStartOnboarding={() => {
+                  setHome(false);
+                  setIntro(true);
+                  setIntroChapter(0);
+                  window.scrollTo({ top: 0 });
+                }}
+                onOpenMap={() => {
+                  setHome(false);
+                  setCatalog(true);
+                }}
+              />
+            </Suspense>
+          )}
           {intro && (
             <Suspense fallback={loadingPanel}>
               <Onboarding
@@ -259,12 +313,12 @@ export default function App() {
               <Curriculum onSelectLesson={choose} />
             </Suspense>
           )}
-          <div hidden={catalog || intro}>
+          <div hidden={catalog || intro || home}>
             {hasOpenedLesson && (
               <Suspense fallback={loadingPanel}>
                 <LessonScenes
                   studio={studio}
-                  visible={!catalog && !intro}
+                  visible={!catalog && !intro && !home}
                   onConfigure={() => setSettings(true)}
                 />
               </Suspense>

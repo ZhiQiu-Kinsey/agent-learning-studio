@@ -76,7 +76,15 @@ export function chapterView(chapter: Chapter) {
       },
     ];
   });
+  // Illustrations keep their authored place: each follows the section before it.
+  const flows: { block: BlockOf<"flow">; after: string | null }[] = [];
+  let previous: string | null = null;
+  for (const block of understand) {
+    if (block.type in sectionKinds) previous = block.id;
+    if (block.type === "flow") flows.push({ block, after: previous });
+  }
   return {
+    flows,
     objectives: blocksOfType(understand, "objectives").flatMap((block) =>
       block.items.map((item) => item.text),
     ),

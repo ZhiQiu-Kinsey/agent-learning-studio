@@ -105,7 +105,6 @@ export function useStudio() {
       .then((value) => {
         if (abort.signal.aborted) return;
         setDetail(value);
-        track.lessonOpened(value.id);
         const exercise = value.exercises.find((item) => !item.offline_only);
         setExerciseId(exercise?.id || "");
         setQuestion(exercise?.question || "");
