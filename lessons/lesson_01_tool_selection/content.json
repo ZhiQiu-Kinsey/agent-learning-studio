@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "tool-selection",
   "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -46,7 +50,7 @@
           "type": "prose",
           "title": "工具定义告诉模型能做什么",
           "paragraphs": [
-            "这课把两个 Python 能力交给模型选择：add_numbers 计算两数之和，get_current_time 读取本机时间。请求里的 tools 只包含名称、用途和参数的 JSON Schema，不包含 Python 函数的执行结果。模型根据问题和这些说明，决定是否提出调用。\n参数 Schema 描述输入应有什么字段和类型；本机的 AVAILABLE_TOOLS 则把允许的工具名映射到真正的函数。看懂这两个位置，就能分清模型看到的接口和 Python 执行的实现。"
+            "工具调用（Tool Calling）指模型只提出要调用哪个工具、带什么参数，由程序真实执行。这课把两个 Python 能力交给模型选择：add_numbers 计算两数之和，get_current_time 读取本机时间。请求里的 tools 只包含名称、用途和参数的 JSON Schema，不包含 Python 函数的执行结果。模型根据问题和这些说明，决定是否提出调用。\n参数 Schema 描述输入应有什么字段和类型；本机的 AVAILABLE_TOOLS 则把允许的工具名映射到真正的函数。看懂这两个位置，就能分清模型看到的接口和 Python 执行的实现。"
           ]
         },
         {
@@ -54,16 +58,70 @@
           "type": "prose",
           "title": "提出调用、执行、观察是三个步骤",
           "paragraphs": [
-            "模型返回 tool_calls 时，只是在提出行动：function.name 说明工具，arguments 是待解析的 JSON 字符串。运行器解析参数、查找已登记函数并执行，然后把结果包装为 ok=true 或 ok=false。比如模型提出 add_numbers(19, 23)，此时尚不能证明已经算出了 42；应继续找 Python 的 tool_result。\n工具结果通过 role=tool 的消息回传，tool_call_id 与原调用 id 配对。下一轮模型才能在请求中看到结果并组织回答。模型选择行动，Python 执行动作，消息历史让两者接成循环。"
+            "模型返回 tool_calls 时，只是在提出行动：function.name 说明工具，arguments 是待解析的 JSON 字符串。运行器解析参数、查找已登记函数并执行，然后把结果包装为 ok=true 或 ok=false。比如模型提出 add_numbers(19, 23)，此时尚不能证明已经算出了 42；应继续找 Python 返回的工具结果（Tool Result），也就是 tool_result 事件。\n工具结果通过 role=tool 的消息回传，tool_call_id 与原调用 id 配对。下一轮模型才能在请求中看到结果并组织回答。每次请求携带的消息序列就是消息历史（Message History）。模型选择行动，Python 执行动作，消息历史让两者接成循环，这就是最小的 Agent 循环（Agent Loop）。"
           ]
+        },
+        {
+          "id": "mq-tools-field",
+          "type": "micro-quiz",
+          "question": {
+            "id": "tools-field",
+            "prompt": "第一轮请求的 tools 里，模型实际能看到什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "工具名称、用途说明和参数的 JSON Schema",
+                "feedback": "对。tools 是接口说明，模型据此决定是否提出调用。"
+              },
+              {
+                "id": "b",
+                "text": "add_numbers 的 Python 源代码",
+                "feedback": "不对。函数实现留在本机，请求里没有源代码。"
+              },
+              {
+                "id": "c",
+                "text": "AVAILABLE_TOOLS 里登记的函数对象",
+                "feedback": "不对。AVAILABLE_TOOLS 是运行器查找并执行函数的本地登记表，不会发给模型。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "模型看到的是接口，Python 持有实现，两者靠工具名对应。"
+          }
         },
         {
           "id": "section-3",
           "type": "prose",
           "title": "相同一轮不等于同时执行",
           "paragraphs": [
-            "“计算 19 加 23，并告诉我现在几点”有两个独立任务，计算的参数已经由用户给出，不需要等时间结果。模型可以在同一个响应中提出两个调用；当前运行器仍按列表逐个执行，并将各自的结果回传。\n网页接入真实模型，Python 在本机执行工具。比较不同模型或不同输入时，应以实际请求和结果为准，不假定每次调用顺序完全相同。回放只查看已收到的事件，不重新查时间或运行工具。"
+            "“计算 19 加 23，并告诉我现在几点”有两个独立任务，计算的参数已经由用户给出，不需要等时间结果。模型可以在同一个响应中提出两个调用；当前运行器仍按列表逐个执行，并将各自的结果回传。\n网页接入真实模型，Python 在本机执行工具。比较不同模型或不同输入时，应以实际请求和结果为准，不假定每次调用顺序完全相同。回放只查看这次运行已记录的轨迹（Trace），不重新查时间或运行工具。"
           ]
+        },
+        {
+          "id": "mq-call-id-pairing",
+          "type": "micro-quiz",
+          "question": {
+            "id": "call-id-pairing",
+            "prompt": "运行器怎样让模型知道某条结果属于哪一次调用？",
+            "options": [
+              {
+                "id": "a",
+                "text": "role=tool 消息里的 tool_call_id 与调用的 id 相同",
+                "feedback": "对。同一轮有多个调用时，靠 id 一一配对。"
+              },
+              {
+                "id": "b",
+                "text": "工具名相同就算对应",
+                "feedback": "不够。同一轮可能两次调用同一个工具，只看名字会配错。"
+              },
+              {
+                "id": "c",
+                "text": "按结果返回的先后顺序对应",
+                "feedback": "不对。顺序不是协议的一部分，配对依据是 tool_call_id。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "tool_call_id 是调用与结果之间唯一的协议纽带。"
+          }
         },
         {
           "id": "walkthrough",
@@ -111,45 +169,307 @@
               "evidence": "在下一轮 request 找到 tool 消息，再核对最终回答是否引用了该结果。"
             }
           ]
+        },
+        {
+          "id": "predict-tool-calls",
+          "type": "predict",
+          "prompt": "在实验“两个独立任务：同一轮提出，逐个执行”运行之前先猜：这次运行会出现几个 tool_call 事件，也就是 Python 实际开始执行工具几次？",
+          "experiment": "two-calls",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "让模型决定何时调用 Python",
+          "id": "which-tool",
+          "title": "问题不同，模型提出的工具不同",
+          "hypothesis": "system 与 tools 完全相同、只换用户问题时，模型会按问题提出不同的工具调用：问加法提出 add_numbers，问时间提出 get_current_time；无论哪个工具，结果都要经 Python 执行，并以 role=tool 消息回到下一轮请求。",
           "arms": [
             {
               "id": "sum",
               "exercise": "sum",
-              "label": "计算加法"
+              "label": "只问加法：帮我计算 19 加 23"
             },
             {
               "id": "time",
               "exercise": "time",
-              "label": "查询本地时间"
-            },
-            {
-              "id": "both",
-              "exercise": "both",
-              "label": "两个独立任务"
+              "label": "只问时间：现在本地时间是几点（system 与 tools 不变）"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "展开第一轮 request：找到 tools 中的名称、description 和 parameters，再判断用户问题需要哪个工具。"
+              "id": "tools-declared",
+              "text": "第一轮 request 的 tools：两组都声明了 add_numbers 与 get_current_time，模型看到的工具清单相同。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "对照 response 的 tool_calls 与随后的 tool_result：检查调用参数、Python 返回值，以及 id 和 tool_call_id 是否一致。"
+              "id": "proposal",
+              "text": "第一轮 response 的 tool_calls[0].function：模型提出的工具名和参数。这是提议，还没有执行。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.tool_calls[0].function"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "展开下一轮 request：找到新增的 assistant 调用消息和 role=tool 结果，再检查最终回答是否依据该结果；回放时观察这些值保持不变。"
+              "id": "executed",
+              "text": "tool_result 的 result：Python 实际执行后的 ok 与返回值。",
+              "selector": {
+                "event": "tool_result",
+                "round": 1,
+                "path": "data.result"
+              }
+            },
+            {
+              "id": "returned",
+              "text": "第二轮 request 的 messages[3]：role=tool 消息带着 tool_call_id，把结果交回模型。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3]"
+              }
+            },
+            {
+              "id": "final-answer",
+              "text": "answer 的 content：最终回答，应能追溯到上面的工具结果。",
+              "selector": {
+                "event": "answer",
+                "path": "data.content"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "下面只讲你刚才这次运行。先看运行器发给模型的第一轮请求。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "tools-declared"
+            },
+            {
+              "action": "highlight",
+              "observe": "tools-declared"
+            },
+            {
+              "action": "narrate",
+              "text": "tools 里只有名称、用途和参数的 JSON Schema，没有 Python 代码。换另一组再跑，这一段不会变。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "proposal"
+            },
+            {
+              "action": "highlight",
+              "observe": "proposal"
+            },
+            {
+              "action": "narrate",
+              "text": "模型用 tool_calls 提出调用：看 function.name 选了哪个工具，arguments 是一段待解析的 JSON 字符串。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "executed"
+            },
+            {
+              "action": "highlight",
+              "observe": "executed"
+            },
+            {
+              "action": "narrate",
+              "text": "这才是 Python 真正执行后的结果。先看 ok：为 true 才说明函数成功返回。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "returned"
+            },
+            {
+              "action": "highlight",
+              "observe": "returned"
+            },
+            {
+              "action": "narrate",
+              "text": "运行器把结果包装成 role=tool 消息，tool_call_id 与上面调用的 id 相同，随消息历史进入第二轮请求。"
+            },
+            {
+              "action": "spotlight",
+              "target": "user"
+            },
+            {
+              "action": "seek",
+              "observe": "final-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "final-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "最后对照回答和工具结果：回答里的数值或时间应来自这次 tool_result，而不是模型自己猜的。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行中模型针对该问题提出了哪个工具、Python 是否成功执行，以及结果是否通过 tool_call_id 回到下一轮请求。",
+              "两组请求的 tools 相同，工具选择上的差别只能来自用户问题（或模型自身的随机性）。"
+            ],
+            "does_not_prove": [
+              "一次运行只是一条样本，不能证明模型对所有类似问题都会选对工具。",
+              "时间工具读的是运行 Python 的机器时钟，只证明这台机器报告的时间，不证明它对用户所在地正确。",
+              "离线测试模式下的模型响应来自确定性脚本，只能验证运行器的执行与回传路径，不代表真实模型的判断。"
+            ]
+          }
+        },
+        {
+          "id": "two-calls",
+          "title": "两个独立任务：同一轮提出，逐个执行",
+          "hypothesis": "两个任务互不依赖时，模型可以在同一个响应里提出两个调用；当前运行器按列表顺序逐个执行，两个结果都回到下一轮请求。",
+          "predict": "predict-tool-calls",
+          "arms": [
+            {
+              "id": "both",
+              "exercise": "both",
+              "label": "计算 19 加 23，并告诉我现在几点"
+            }
+          ],
+          "observe": [
+            {
+              "id": "same-response",
+              "text": "第一轮 response 的 tool_calls[1]：第二个调用和第一个出现在同一个响应里。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.tool_calls[1].function.name"
+              }
+            },
+            {
+              "id": "first-result",
+              "text": "add_numbers 的 tool_result：第一个调用的执行结果。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result",
+                "name": "add_numbers"
+              }
+            },
+            {
+              "id": "second-call",
+              "text": "get_current_time 的 tool_call：在时间线上排在第一个结果之后，说明运行器是逐个执行。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.id",
+                "name": "get_current_time"
+              }
+            },
+            {
+              "id": "both-returned",
+              "text": "第二轮 request 的 messages[4]：第二条 role=tool 消息，两条结果各自带着 tool_call_id。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[4].tool_call_id"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这组只有一个问题，却包含两个互不依赖的任务。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "same-response"
+            },
+            {
+              "action": "highlight",
+              "observe": "same-response"
+            },
+            {
+              "action": "narrate",
+              "text": "如果这次模型在同一个响应里提出了两个调用，这里能看到第二个调用的工具名。若模型分两轮提出，这里会提示本次运行没有这条证据，那同样是一次合法的运行。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "first-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-result"
+            },
+            {
+              "action": "narrate",
+              "text": "第一个工具先执行完，结果才被记录下来。"
+            },
+            {
+              "action": "seek",
+              "observe": "second-call"
+            },
+            {
+              "action": "highlight",
+              "observe": "second-call"
+            },
+            {
+              "action": "narrate",
+              "text": "第二个调用在第一个结果之后才开始：同一轮提出不等于并发执行。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "both-returned"
+            },
+            {
+              "action": "highlight",
+              "observe": "both-returned"
+            },
+            {
+              "action": "narrate",
+              "text": "两条结果都以 role=tool 消息回到下一轮，模型据此一起作答。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行中两个调用是否出现在同一个响应里，以及它们在时间线上的实际执行顺序。",
+              "两条结果各自通过 tool_call_id 对应到自己的调用。"
+            ],
+            "does_not_prove": [
+              "同一轮提出不能证明并发执行；这次的事件顺序显示运行器是逐个执行的。",
+              "不能证明模型每次都会把两个独立任务放进同一轮，它也可能分两轮提出。"
+            ]
+          }
         }
       ]
     },

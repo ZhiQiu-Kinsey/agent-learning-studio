@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "dependent-calls",
   "source_language": "zh-CN",
+  "capabilities": [
+    "tools",
+    "context"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -52,18 +56,79 @@
         {
           "id": "section-2",
           "type": "prose",
-          "title": "消息历史把结果送到下一次决策",
+          "title": "消息历史（Message History）把结果送到下一次决策",
           "paragraphs": [
-            "第一轮模型提出 get_current_time；Python 执行后，将实际时间和调用 id 对应的 tool 消息追加到 messages。第二轮请求再次发送这段历史，模型才有依据提出 add_numbers，并把 hour、minute 放进 a、b。\n当前运行器按模型给出的实参执行，不会自动把占位符替换成另一工具的结果。因此把两个有依赖的调用塞在同一个响应里，即使 Python 按顺序执行，也不能保证后一个参数正确。执行顺序和数据传递都必须成立。"
+            "第一轮模型提出 get_current_time；Python 执行后，把工具结果（Tool Result）包装成与调用 id 对应的 tool 消息，追加到 messages。第二轮请求再次发送这段历史，模型才有依据提出 add_numbers，并把 hour、minute 放进 a、b。\n当前运行器按模型给出的实参执行，不会自动把占位符替换成另一工具的结果。因此把两个有依赖的调用塞在同一个响应里，即使 Python 按顺序执行，也不能保证后一个参数正确。执行顺序和数据传递都必须成立。"
           ]
+        },
+        {
+          "id": "flow-dependent-chain",
+          "type": "flow",
+          "title": "示意：先查时间，再用结果做加法",
+          "illustration": "dependent-chain",
+          "caption": "教学示意 · 非运行记录。调用 id 与数值都是示例；你自己的运行请到实验中查看。"
+        },
+        {
+          "id": "mq-same-response",
+          "type": "micro-quiz",
+          "question": {
+            "id": "same-response-args",
+            "prompt": "如果模型在同一个响应里同时提出 get_current_time 和 add_numbers，运行器会怎样处理 add_numbers 的参数？",
+            "options": [
+              {
+                "id": "a",
+                "text": "按模型写下的实参原样执行，不会自动替换成时间结果",
+                "feedback": "对。运行器不做占位符替换，参数只能来自模型这次写下的值。"
+              },
+              {
+                "id": "b",
+                "text": "等时间结果出来后，自动填入 hour 和 minute",
+                "feedback": "不对。当前运行器没有这种机制；有依赖的调用必须等结果进入下一轮请求。"
+              },
+              {
+                "id": "c",
+                "text": "拒绝执行同一响应里的第二个调用",
+                "feedback": "不对。运行器会逐个执行列表中的调用，问题在于第二个调用的参数可能是猜的。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "执行顺序正确不代表数据传递正确；依赖的参数必须在看到结果之后才能写出。"
+          }
         },
         {
           "id": "section-3",
           "type": "prose",
           "title": "检验参数来源，而不只看最终数字",
           "paragraphs": [
-            "假设时间工具返回 hour=11、minute=33，下一次加法应传 a=11、b=33，结果才是 44。只看到最终的 44 仍不够：模型可能猜对，也可能使用了旧时间。沿 trace 逐步核对输入来源，才能解释这次答案为什么可信。\n典型成功轨迹包含“查时间 → 加法 → 回答”三次模型响应，中间两个工具在本机执行。真实模型可能走不同轨迹，应核对实际事件与参数来源。每次请求重新携带历史只是为本次任务提供上下文，不代表模型参数发生了学习，也不代表已有跨会话记忆。"
+            "假设时间工具返回 hour=11、minute=33，下一次加法应传 a=11、b=33，结果才是 44。只看到最终的 44 仍不够：模型可能猜对，也可能使用了旧时间。沿 trace 逐步核对输入来源，才能解释这次答案为什么可信。\n典型成功的轨迹（Trace）包含“查时间 → 加法 → 回答”三次模型响应，中间两个工具在本机执行。真实模型可能走不同轨迹，应核对实际事件与参数来源。每次请求重新携带历史只是为本次任务提供上下文，不代表模型参数发生了学习，也不代表已有跨会话记忆。"
           ]
+        },
+        {
+          "id": "mq-trust-answer",
+          "type": "micro-quiz",
+          "question": {
+            "id": "provenance-check",
+            "prompt": "最终回答写着 44。要确认这个数字可信，最直接的证据是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "加法调用的 a、b 与上一条时间结果的 hour、minute 一致",
+                "feedback": "对。沿轨迹核对参数来源，才能解释答案为什么可信。"
+              },
+              {
+                "id": "b",
+                "text": "回答里出现了数字 44",
+                "feedback": "不够。数字可能是猜中的，也可能来自旧的时间。"
+              },
+              {
+                "id": "c",
+                "text": "运行状态显示 completed",
+                "feedback": "不对。completed 只说明循环结束，不说明参数来源正确。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "可信度来自可追溯的数据链：时间结果 → 加法参数 → 加法结果 → 回答。"
+          }
         },
         {
           "id": "walkthrough",
@@ -110,40 +175,206 @@
               "evidence": "确认最终答案依据实际加法结果，再与两个独立任务的调用安排作对比。"
             }
           ]
+        },
+        {
+          "id": "predict-request-count",
+          "type": "predict",
+          "prompt": "在实验中运行“小时与分钟相加：参数要从时间结果中取得”之前先猜：这次运行会发出几次模型请求（request 事件）？",
+          "experiment": "chain-dependency",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "把上一步的输出变成下一步的输入",
+          "id": "chain-dependency",
+          "title": "上一步的结果，决定下一步的参数",
+          "hypothesis": "加法的参数要从时间工具的返回值中取得时，模型需要先单独调用 get_current_time，等结果进入消息历史后，下一轮再用返回的 hour、minute 作为 add_numbers 的 a、b。",
+          "predict": "predict-request-count",
           "arms": [
             {
               "id": "chain",
               "exercise": "chain",
-              "label": "小时与分钟相加"
+              "label": "小时与分钟相加：参数要从时间结果中取得"
             },
             {
               "id": "both",
               "exercise": "both",
-              "label": "对比独立调用"
+              "label": "对照：19 加 23 并查时间，参数一开始就已知"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "运行“小时与分钟相加”，检查第一轮 tool_call 是否先请求 get_current_time，记录工具实际返回的 hour、minute 和调用 id。"
+              "id": "clock-first",
+              "text": "第一轮的 tool_call：先调用 get_current_time，此时 a、b 还不存在。",
+              "selector": {
+                "event": "tool_call",
+                "round": 1,
+                "path": "data.function.name",
+                "name": "get_current_time"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "展开第二轮 request：确认上轮 tool 结果已经进入 messages；再对照本轮 add_numbers 的 a、b 是否等于刚才记录的 hour、minute。"
+              "id": "clock-value",
+              "text": "时间工具的 tool_result：记下这次返回的 hour 和 minute。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result",
+                "name": "get_current_time"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "对照加法 tool_result 和最终回答，再运行“两个独立任务”：解释两种输入为什么允许不同的调用安排，而不靠轮数判断对错。"
+              "id": "history-carries",
+              "text": "第二轮 request 的 messages[3]：role=tool 消息的 content 就是上一步的时间结果。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3].content"
+              }
+            },
+            {
+              "id": "dependent-args",
+              "text": "第二轮 add_numbers 的 arguments：a、b 应等于刚才记下的 hour、minute。",
+              "selector": {
+                "event": "tool_call",
+                "round": 2,
+                "path": "data.function.arguments",
+                "name": "add_numbers"
+              }
+            },
+            {
+              "id": "sum-result",
+              "text": "加法的 tool_result：用依赖参数算出的和。",
+              "selector": {
+                "event": "tool_result",
+                "round": 2,
+                "path": "data.result.result",
+                "name": "add_numbers"
+              }
+            },
+            {
+              "id": "parallel-contrast",
+              "text": "对照组第一轮 response 的 tool_calls[1]：参数已知时，两个调用可以在同一轮提出。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.tool_calls[1]"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "这次运行要回答“把现在的小时和分钟相加”。关键问题是：加法的 a、b 从哪里来？"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "clock-first"
+            },
+            {
+              "action": "highlight",
+              "observe": "clock-first"
+            },
+            {
+              "action": "narrate",
+              "text": "第一轮只调用时间工具。此时还没有任何时间数据，模型无法填写加法参数。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "clock-value"
+            },
+            {
+              "action": "highlight",
+              "observe": "clock-value"
+            },
+            {
+              "action": "narrate",
+              "text": "记下这里的 hour 和 minute，它们只出现在这条工具结果里。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "history-carries"
+            },
+            {
+              "action": "highlight",
+              "observe": "history-carries"
+            },
+            {
+              "action": "narrate",
+              "text": "运行器把时间结果作为 role=tool 消息放进第二轮请求，模型这才看得到它。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "dependent-args"
+            },
+            {
+              "action": "highlight",
+              "observe": "dependent-args"
+            },
+            {
+              "action": "narrate",
+              "text": "逐个对照：a 是否等于 hour，b 是否等于 minute？相等才说明参数来自这次观察，而不是猜的。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "sum-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "sum-result"
+            },
+            {
+              "action": "narrate",
+              "text": "加法结果来自依赖参数，最终回答里的数字应与它一致。"
+            },
+            {
+              "action": "seek",
+              "observe": "parallel-contrast"
+            },
+            {
+              "action": "highlight",
+              "observe": "parallel-contrast"
+            },
+            {
+              "action": "narrate",
+              "text": "这一条只在对照组出现：19 和 23 一开始就已知，两个调用可以同轮提出。若你运行的是“小时与分钟相加”，这里会提示本次运行没有这条证据，这正是两组的差别。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行中加法参数是否等于上一步时间结果里的 hour、minute，可以逐字段核对。",
+              "时间结果确实以 role=tool 消息进入了下一轮请求，模型是在看到它之后才提出加法。"
+            ],
+            "does_not_prove": [
+              "不能证明模型理解了“依赖”；它也可能只是遵循了 system 提示里“先查时间再相加”的要求。",
+              "不能证明真实模型每次都会分两轮调用，需要多次运行观察。",
+              "离线测试模式下的加法参数由脚本按真实时钟结果生成，验证的是运行器传递数据的路径。"
+            ]
+          }
         }
       ]
     },
@@ -214,6 +445,252 @@
               "explanation": "messages 是应用构造的本次运行历史。再次发送工具结果，让模型能够使用已有观察；它不等于修改模型参数，也不等于实现跨会话持久记忆。"
             }
           ]
+        }
+      ]
+    }
+  },
+  "illustrations": {
+    "dependent-chain": {
+      "events": [
+        {
+          "type": "request",
+          "round": 1,
+          "data": {
+            "body": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "示例 system：先单独查时间，收到结果后再用 hour、minute 做加法。"
+                },
+                {
+                  "role": "user",
+                  "content": "把现在的小时和分钟相加。"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "response",
+          "round": 1,
+          "data": {
+            "body": {
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [
+                      {
+                        "id": "call_example_clock",
+                        "type": "function",
+                        "function": {
+                          "name": "get_current_time",
+                          "arguments": "{}"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "tool_call",
+          "round": 1,
+          "data": {
+            "id": "call_example_clock",
+            "type": "function",
+            "function": {
+              "name": "get_current_time",
+              "arguments": "{}"
+            }
+          }
+        },
+        {
+          "type": "tool_result",
+          "round": 1,
+          "data": {
+            "tool_call_id": "call_example_clock",
+            "name": "get_current_time",
+            "result": {
+              "ok": true,
+              "result": {
+                "hour": 11,
+                "minute": 33
+              }
+            }
+          }
+        },
+        {
+          "type": "request",
+          "round": 2,
+          "data": {
+            "body": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "示例 system：先单独查时间，收到结果后再用 hour、minute 做加法。"
+                },
+                {
+                  "role": "user",
+                  "content": "把现在的小时和分钟相加。"
+                },
+                {
+                  "role": "assistant",
+                  "content": null,
+                  "tool_calls": [
+                    {
+                      "id": "call_example_clock",
+                      "type": "function",
+                      "function": {
+                        "name": "get_current_time",
+                        "arguments": "{}"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "role": "tool",
+                  "tool_call_id": "call_example_clock",
+                  "content": "{\"ok\": true, \"result\": {\"hour\": 11, \"minute\": 33}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "response",
+          "round": 2,
+          "data": {
+            "body": {
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [
+                      {
+                        "id": "call_example_add",
+                        "type": "function",
+                        "function": {
+                          "name": "add_numbers",
+                          "arguments": "{\"a\": 11, \"b\": 33}"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "tool_call",
+          "round": 2,
+          "data": {
+            "id": "call_example_add",
+            "type": "function",
+            "function": {
+              "name": "add_numbers",
+              "arguments": "{\"a\": 11, \"b\": 33}"
+            }
+          }
+        },
+        {
+          "type": "tool_result",
+          "round": 2,
+          "data": {
+            "tool_call_id": "call_example_add",
+            "name": "add_numbers",
+            "result": {
+              "ok": true,
+              "result": 44
+            }
+          }
+        },
+        {
+          "type": "request",
+          "round": 3,
+          "data": {
+            "body": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "示例 system：先单独查时间，收到结果后再用 hour、minute 做加法。"
+                },
+                {
+                  "role": "user",
+                  "content": "把现在的小时和分钟相加。"
+                },
+                {
+                  "role": "assistant",
+                  "content": null,
+                  "tool_calls": [
+                    {
+                      "id": "call_example_clock",
+                      "type": "function",
+                      "function": {
+                        "name": "get_current_time",
+                        "arguments": "{}"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "role": "tool",
+                  "tool_call_id": "call_example_clock",
+                  "content": "{\"ok\": true, \"result\": {\"hour\": 11, \"minute\": 33}}"
+                },
+                {
+                  "role": "assistant",
+                  "content": null,
+                  "tool_calls": [
+                    {
+                      "id": "call_example_add",
+                      "type": "function",
+                      "function": {
+                        "name": "add_numbers",
+                        "arguments": "{\"a\": 11, \"b\": 33}"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "role": "tool",
+                  "tool_call_id": "call_example_add",
+                  "content": "{\"ok\": true, \"result\": 44}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "response",
+          "round": 3,
+          "data": {
+            "body": {
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "示例回答：小时 11 加分钟 33 等于 44。"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "answer",
+          "round": 3,
+          "data": {
+            "content": "示例回答：小时 11 加分钟 33 等于 44。"
+          }
         }
       ]
     }

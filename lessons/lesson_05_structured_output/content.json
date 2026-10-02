@@ -3,6 +3,10 @@
   "schema_version": 2,
   "lesson": "structured-output",
   "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "trust"
+  ],
   "scenes": {
     "understand": {
       "blocks": [
@@ -46,7 +50,7 @@
           "type": "prose",
           "title": "模型文本先是待检查输入",
           "paragraphs": [
-            "课程把第 4 课的 id、标题和先修作为可信事实传入一次真实模型请求。模型输出只是一段 message.content，可能是 JSON，也可能是自然语言、残缺文本或错误事实。提示要求 JSON 不等于已获得可靠结构。"
+            "本课练习结构化输出（Structured Output）：要求模型按约定的 JSON 结构作答，再由程序逐层校验。课程把第 4 课的 id、标题和先修作为可信事实传入一次真实模型请求。模型输出只是一段 message.content，可能是 JSON，也可能是自然语言、残缺文本或错误事实。提示要求 JSON 不等于已获得可靠结构。"
           ]
         },
         {
@@ -56,6 +60,33 @@
           "paragraphs": [
             "json.loads 只回答文本是否可解析为 JSON；格式破损时立即停止后续字段与业务检查，不把模型响应悄悄改成预设对象。检查报告保留失败原因。某些服务商支持结构化生成，但本实验仍通过统一文本接口比较校验责任。"
           ]
+        },
+        {
+          "id": "mq-json-only",
+          "type": "micro-quiz",
+          "question": {
+            "id": "json-parse-only",
+            "prompt": "模型返回的文本能被 json.loads 解析。此时能确定什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "只确定它是合法 JSON，字段与事实都还没检查",
+                "feedback": "对。第一层只管语法。"
+              },
+              {
+                "id": "b",
+                "text": "任务卡已经可以使用",
+                "feedback": "不对。字段可能缺失，事实也可能写错。"
+              },
+              {
+                "id": "c",
+                "text": "字段一定齐全，只剩事实待查",
+                "feedback": "不对。字段是否齐全由第二层字段 Schema 检查。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "三层检查各管一件事，前一层通过不能替代后一层。"
+          }
         },
         {
           "id": "section-3",
@@ -72,6 +103,33 @@
           "paragraphs": [
             "FACTS 是本课预先给定的可信课程事实。校验器比较 id、标题、先修是否与这些事实一致；模型自称“已核实”不起作用。exercise 的教学质量无法靠这三个字符串比较完全判断，报告只声称核验了可机器检查的部分。"
           ]
+        },
+        {
+          "id": "mq-wrong-fact",
+          "type": "micro-quiz",
+          "question": {
+            "id": "wrong-fact-layer",
+            "prompt": "模型输出的 JSON 字段齐全、类型正确，但 prerequisite 写成了 2。会在哪里被拦下？",
+            "options": [
+              {
+                "id": "a",
+                "text": "业务事实层：与可信事实 FACTS 比较后判为失败",
+                "feedback": "对。结构合法，事实不符。"
+              },
+              {
+                "id": "b",
+                "text": "不会被拦下，字段 Schema 已经通过",
+                "feedback": "不对。Schema 只检查形状，不检查课号是否正确。"
+              },
+              {
+                "id": "c",
+                "text": "JSON 格式层：解析时就会报错",
+                "feedback": "不对。这段文本是合法 JSON，能顺利解析。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "结构合法不等于内容正确，业务事实要由独立规则核对。"
+          }
         },
         {
           "id": "section-5",
@@ -138,14 +196,26 @@
               "evidence": "回答是结论，不是原始证据"
             }
           ]
+        },
+        {
+          "id": "predict-model-calls",
+          "type": "predict",
+          "prompt": "在实验中运行“只改用户消息：要求初稿省略 prerequisite”之前先猜：这次运行一共会发出几次模型请求（request 事件）？",
+          "experiment": "three-layers",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
         }
       ]
     },
     "lab": {
       "experiments": [
         {
-          "id": "explore",
-          "title": "三层检查模型生成的任务卡",
+          "id": "three-layers",
+          "title": "三层检查：哪一层拦下哪种错误",
+          "hypothesis": "缺字段会在第二层字段 Schema 被拦下，写错事实会通过前两层、在第三层业务事实被拦下；只有三层都通过才算验收通过，失败原因会随修复请求发回模型。",
+          "predict": "predict-model-calls",
           "arms": [
             {
               "id": "normal",
@@ -155,32 +225,168 @@
             {
               "id": "missing-field",
               "exercise": "missing-field",
-              "label": "故意缺字段"
+              "label": "只改用户消息：要求初稿省略 prerequisite"
             },
             {
               "id": "wrong-fact",
               "exercise": "wrong-fact",
-              "label": "故意写错事实"
+              "label": "只改用户消息：要求初稿把 prerequisite 写成 2"
             }
           ],
           "observe": [
             {
-              "id": "observe-1",
-              "text": "展开每轮 request/response，再切换证据板的初稿和修复稿报告；预设故障不保证出现，须按实际响应判断。"
+              "id": "raw-draft",
+              "text": "初稿的原始文本：在通过检查之前，它只是一段字符串。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.content"
+              }
             },
             {
-              "id": "observe-2",
-              "text": "对照 lesson.report 中 JSON、Schema、业务事实三个检查；上游失败时下游不应被伪装为通过。"
+              "id": "json-layer",
+              "text": "第一层“JSON 格式”：只回答文本能否解析。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[0]"
+              }
             },
             {
-              "id": "observe-3",
-              "text": "把 repair 设为 false 运行失败预设，观察最终结果保留失败，而不是被程序补出成功字段。"
+              "id": "schema-layer",
+              "text": "第二层“字段 Schema”：缺字段时在这里失败，detail 写明缺了哪个字段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[1]"
+              }
             },
             {
-              "id": "observe-4",
-              "text": "问题栏只作为学习者备注写入每份报告；修改备注不会改变可信课程事实。"
+              "id": "fact-layer",
+              "text": "第三层“业务事实”：与给定的可信事实比较。上游失败的报告里没有这一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[2]"
+              }
+            },
+            {
+              "id": "repair-request",
+              "text": "修复请求的最后一条 user 消息：上一版的失败原因被写了进去。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3].content"
+              }
+            },
+            {
+              "id": "repaired-draft",
+              "text": "修复稿的原始文本：它要重新经过同样的三层检查。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.content"
+              }
             }
-          ]
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "先看模型这次交回的初稿。在通过检查之前，它只是一段待检查的文本。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "raw-draft"
+            },
+            {
+              "action": "highlight",
+              "observe": "raw-draft"
+            },
+            {
+              "action": "narrate",
+              "text": "这就是 message.content 的原文。对照预设：缺字段组是否真的少了 prerequisite？写错事实组是否把它写成了 2？模型不一定照做。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "json-layer"
+            },
+            {
+              "action": "highlight",
+              "observe": "json-layer"
+            },
+            {
+              "action": "narrate",
+              "text": "第一层只检查 JSON 语法。能解析，不代表字段齐全。"
+            },
+            {
+              "action": "seek",
+              "observe": "schema-layer"
+            },
+            {
+              "action": "highlight",
+              "observe": "schema-layer"
+            },
+            {
+              "action": "narrate",
+              "text": "第二层检查字段、类型、长度和多余字段，缺字段会在这里失败。"
+            },
+            {
+              "action": "seek",
+              "observe": "fact-layer"
+            },
+            {
+              "action": "highlight",
+              "observe": "fact-layer"
+            },
+            {
+              "action": "narrate",
+              "text": "第三层才比较业务事实。如果第二层已经失败，这份报告不会出现第三项：上游失败时不对下游作判断。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "repair-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "repair-request"
+            },
+            {
+              "action": "narrate",
+              "text": "初稿未通过且允许修复时，运行器把失败原因写进新的 user 消息再请求一次。正常组没有这一步。"
+            },
+            {
+              "action": "seek",
+              "observe": "repaired-draft"
+            },
+            {
+              "action": "highlight",
+              "observe": "repaired-draft"
+            },
+            {
+              "action": "narrate",
+              "text": "修复稿同样要过三层检查，结论看下一份报告。想看不修复会怎样，可以在参数里关闭 repair，用真实模型重跑失败预设。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次初稿在哪一层失败（或三层都通过），以及失败原因是否随修复请求发回了模型。",
+              "上游失败时报告里没有下游检查项，未执行的检查没有被写成通过。"
+            ],
+            "does_not_prove": [
+              "预设只是要求模型故意出错；真实模型不一定照做，是否触发修复以实际响应的检查为准。",
+              "业务事实层只核对 lesson_id、lesson_title 和 prerequisite，不能证明 exercise 的教学质量。",
+              "离线测试模式下初稿与修复稿由确定性脚本生成。"
+            ]
+          }
         }
       ],
       "inputs": [
