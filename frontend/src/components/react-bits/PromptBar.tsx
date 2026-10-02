@@ -248,9 +248,11 @@ const PromptBar: React.FC<PromptBarProps> = ({
       close();
       return;
     }
+    // Ctrl/⌘+Enter runs: a real model run costs money, so a plain Enter
+    // only inserts a newline and never submits by accident.
     if (
       event.key === "Enter" &&
-      !event.shiftKey &&
+      (event.ctrlKey || event.metaKey) &&
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();
