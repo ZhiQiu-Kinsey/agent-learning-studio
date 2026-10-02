@@ -1,17 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
+import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
+  BookOpen,
+  CircleCheckBig,
   Compass,
   ExternalLink,
+  Layers3,
   LayoutGrid,
   List,
   LoaderCircle,
   Route,
   Search,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { jsonFetch } from "../api";
 import { formatLessonNumber } from "../lib/lessonIds";
@@ -29,10 +40,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import SpotlightCard from "./react-bits/SpotlightCard";
 import CountUp from "./react-bits/CountUp";
 import SquishSwitch from "./react-bits/SquishSwitch";
+import BlurText from "./react-bits/BlurText";
+import StarBorder from "./react-bits/StarBorder";
+import { Backdrop } from "./backdrops/Backdrop";
 import { useReducedMotion } from "../motion";
 import { DomainBento } from "./curriculum/DomainBento";
 import { RoadmapSection } from "./curriculum/RoadmapSection";
 import { ProgressMarks } from "./curriculum/ProgressMarks";
+import { domainAtmosphere } from "./curriculum/atmosphere";
 import {
   buildCurriculumGraph,
   CurriculumGraphError,
@@ -54,30 +69,128 @@ function readView(): MapView {
   }
 }
 
+/** Spring shared by the map's sliding indicators (view switch, filter chips). */
+const pillSpring = {
+  type: "spring",
+  stiffness: 420,
+  damping: 34,
+  mass: 0.8,
+} as const;
+const easeOut = [0.16, 1, 0.3, 1] as const;
+
+/** Hero entrance: blur-in from below, staggered by `step`. */
+function HeroReveal({
+  step,
+  className,
+  children,
+}: {
+  step: number;
+  className?: string;
+  children: ReactNode;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      className={className}
+      initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(10px)" }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        filter: "blur(0px)",
+        transitionEnd: { filter: "none" },
+      }}
+      transition={{ duration: 0.7, delay: 0.1 + step * 0.09, ease: easeOut }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+const viewTabs: { id: MapView; Icon: LucideIcon }[] = [
+  { id: "domains", Icon: LayoutGrid },
+  { id: "roadmap", Icon: Route },
+  { id: "list", Icon: List },
+];
+
+/** A view arriving after a switch: rises out of a soft blur. */
+function ViewPanel({ children }: { children: ReactNode }) {
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      className="curriculum-view-panel"
+      initial={reduced ? false : { opacity: 0, y: 14, filter: "blur(8px)" }}
+      // Drop the filter afterwards: even blur(0) creates a containing block.
+      animate={{
+        opacity: 1,
+        y: 0,
+        filter: "blur(0px)",
+        transitionEnd: { filter: "none" },
+      }}
+      transition={{ duration: 0.45, ease: easeOut }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Active filter chip background; slides between chips on a spring. */
+function ChipPill() {
+  const reduced = useReducedMotion();
+  return (
+    <motion.i
+      className="curriculum-chip-pill"
+      layoutId="curriculum-chip-pill"
+      transition={reduced ? { duration: 0 } : pillSpring}
+      aria-hidden="true"
+    />
+  );
+}
+
 function MapMetric({
   value,
   label,
   index,
+  Icon,
+  ratio,
 }: {
   value: number;
   label: string;
   index: number;
+  Icon: LucideIcon;
+  /** Optional real share (0..1) drawn as a thin meter. */
+  ratio?: number;
 }) {
   const reducedMotion = useReducedMotion();
   return (
-    <div className="curriculum-metric">
+    <motion.div
+      className="curriculum-metric"
+      initial={reducedMotion ? false : { opacity: 0, y: 22, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.65, delay: 0.3 + index * 0.08, ease: easeOut }}
+      style={
+        ratio === undefined
+          ? undefined
+          : ({ "--ratio": ratio } as CSSProperties)
+      }
+    >
+      <Icon className="curriculum-metric-icon" size={16} aria-hidden="true" />
       <strong>
         <span className="sr-only">{value}</span>
         <span aria-hidden="true">
           {reducedMotion ? (
             value
           ) : (
-            <CountUp to={value} duration={1.1} delay={index * 0.09} />
+            <CountUp to={value} duration={1.1} delay={0.35 + index * 0.09} />
           )}
         </span>
       </strong>
       <span>{label}</span>
-    </div>
+      {ratio !== undefined && (
+        <span className="curriculum-metric-meter" aria-hidden="true">
+          <i />
+        </span>
+      )}
+    </motion.div>
   );
 }
 
@@ -257,8 +370,12 @@ function Filters({
   onReset: () => void;
 }) {
   const { t } = useTranslation("curriculum");
+  const reduced = useReducedMotion();
   return (
-    <div className="panel curriculum-controls" data-testid="curriculum-controls">
+    <div
+      className="panel curriculum-controls"
+      data-testid="curriculum-controls"
+    >
       <div className="curriculum-search">
         <label className="field-label" htmlFor="curriculum-search">
           {t("filters.search")}
@@ -289,10 +406,17 @@ function Filters({
         thumbOnColor="var(--surface)"
       />
       <span className="curriculum-result-count" role="status">
-        {t("filters.count", {
-          visible: visibleCount,
-          total: curriculum.lessons.length,
-        })}
+        <motion.span
+          key={visibleCount}
+          initial={reduced ? false : { opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: easeOut }}
+        >
+          {t("filters.count", {
+            visible: visibleCount,
+            total: curriculum.lessons.length,
+          })}
+        </motion.span>
       </span>
       <div
         className="curriculum-category-filter"
@@ -305,7 +429,8 @@ function Filters({
           aria-pressed={!activeCategory}
           onClick={() => setActiveCategory(null)}
         >
-          {t("filters.allCategories")}
+          {!activeCategory && <ChipPill />}
+          <span>{t("filters.allCategories")}</span>
         </button>
         {curriculum.categories.map((category) => (
           <button
@@ -313,21 +438,37 @@ function Filters({
             type="button"
             data-category={category.id}
             aria-pressed={activeCategory === category.id}
+            style={
+              {
+                "--chip-rgb": domainAtmosphere(category.id).accent,
+              } as CSSProperties
+            }
             onClick={() =>
               setActiveCategory(
                 activeCategory === category.id ? null : category.id,
               )
             }
           >
-            {category.title}
+            {activeCategory === category.id && <ChipPill />}
+            <span>{category.title}</span>
           </button>
         ))}
-        {(activeCategory || query || onlyAvailable) && (
-          <button type="button" className="curriculum-reset" onClick={onReset}>
-            <X size={13} aria-hidden="true" />
-            {t("filters.reset")}
-          </button>
-        )}
+        <AnimatePresence>
+          {(activeCategory || query || onlyAvailable) && (
+            <motion.button
+              type="button"
+              className="curriculum-reset"
+              onClick={onReset}
+              initial={reduced ? false : { opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduced ? undefined : { opacity: 0, scale: 0.8 }}
+              transition={pillSpring}
+            >
+              <X size={13} aria-hidden="true" />
+              {t("filters.reset")}
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -345,78 +486,139 @@ function LessonList({
   onReset: () => void;
 }) {
   const { t } = useTranslation("curriculum");
+  const reduced = useReducedMotion();
   return (
     <>
       {!visibleIds.size && (
-        <div className="panel curriculum-no-results">
+        <motion.div
+          className="panel curriculum-no-results"
+          initial={
+            reduced ? false : { opacity: 0, scale: 0.97, filter: "blur(6px)" }
+          }
+          animate={{
+            opacity: 1,
+            scale: 1,
+            filter: "blur(0px)",
+            transitionEnd: { filter: "none" },
+          }}
+          transition={{ duration: 0.4, ease: easeOut }}
+        >
           <Search size={26} aria-hidden="true" />
           <h3>{t("filters.emptyTitle")}</h3>
           <p>{t("filters.emptyHelp")}</p>
           <Button variant="outline" onClick={onReset}>
             {t("filters.showAll")}
           </Button>
-        </div>
+        </motion.div>
       )}
       {curriculum.categories.map((category, index) => {
         const modules = category.modules.filter((module) =>
           module.lesson_ids.some((id) => visibleIds.has(id)),
         );
         if (!modules.length) return null;
+        const { accent } = domainAtmosphere(category.id);
         return (
-          <SpotlightCard
-            className="panel curriculum-category"
+          <motion.div
             key={category.id}
-            spotlightColor="rgba(139, 120, 230, 0.12)"
+            className="curriculum-category-reveal"
+            style={{ "--domain-rgb": accent } as CSSProperties}
+            initial={reduced ? false : { opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.04 }}
+            transition={{ duration: 0.6, ease: easeOut }}
           >
-            <div
-              className="curriculum-category-heading"
-              data-testid="curriculum-category-heading"
+            <SpotlightCard
+              className="panel curriculum-category"
+              spotlightColor={
+                `rgba(${accent}, 0.1)` as `rgba(${number}, ${number}, ${number}, ${number})`
+              }
             >
-              <span className="curriculum-category-number" aria-hidden="true">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <div>
-                <h2>{category.title}</h2>
-                <p>{category.description}</p>
-              </div>
-              <span className="curriculum-category-label">
-                {t("list.modules", { n: modules.length })}
-                <ArrowDown size={13} />
-              </span>
-            </div>
-            {modules.map((module) => {
-              const ids = module.lesson_ids.filter((id) => visibleIds.has(id));
-              return (
-                <div
-                  className="curriculum-module"
-                  key={module.id}
-                  data-testid="curriculum-module"
-                >
-                  <div className="curriculum-module-intro">
-                    <span className="curriculum-module-kicker">
-                      {t("list.moduleKicker", { id: module.id })}
-                    </span>
-                    <h3>{module.title}</h3>
-                    <p>{module.description}</p>
-                    <span className="curriculum-module-count">
-                      {t("list.lessons", { n: ids.length })}
-                      <ArrowRight size={12} />
-                    </span>
-                  </div>
-                  <div className="curriculum-module-lessons">
-                    {ids.map((id) => (
-                      <LessonPlan
-                        key={id}
-                        lesson={curriculum.lessons.find((item) => item.id === id)!}
-                        curriculum={curriculum}
-                        onSelectLesson={onSelectLesson}
-                      />
-                    ))}
-                  </div>
+              <div
+                className="curriculum-category-heading"
+                data-testid="curriculum-category-heading"
+              >
+                <span className="curriculum-category-number" aria-hidden="true">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <h2>{category.title}</h2>
+                  <p>{category.description}</p>
                 </div>
-              );
-            })}
-          </SpotlightCard>
+                <span className="curriculum-category-label">
+                  {t("list.modules", { n: modules.length })}
+                  <ArrowDown size={13} />
+                </span>
+              </div>
+              {modules.map((module) => {
+                const ids = module.lesson_ids.filter((id) =>
+                  visibleIds.has(id),
+                );
+                return (
+                  <div
+                    className="curriculum-module"
+                    key={module.id}
+                    data-testid="curriculum-module"
+                  >
+                    <div className="curriculum-module-intro">
+                      <span className="curriculum-module-kicker">
+                        {t("list.moduleKicker", { id: module.id })}
+                      </span>
+                      <h3>{module.title}</h3>
+                      <p>{module.description}</p>
+                      <span className="curriculum-module-count">
+                        {t("list.lessons", { n: ids.length })}
+                        <ArrowRight size={12} />
+                      </span>
+                    </div>
+                    <div className="curriculum-module-lessons">
+                      <AnimatePresence initial={!reduced}>
+                        {ids.map((id, row) => (
+                          <motion.div
+                            key={id}
+                            className="curriculum-lesson-row"
+                            initial={
+                              reduced
+                                ? false
+                                : { opacity: 0, x: -14, filter: "blur(6px)" }
+                            }
+                            whileInView={{
+                              opacity: 1,
+                              x: 0,
+                              filter: "blur(0px)",
+                              transitionEnd: { filter: "none" },
+                            }}
+                            viewport={{ once: true, amount: 0.2 }}
+                            exit={
+                              reduced
+                                ? undefined
+                                : {
+                                    opacity: 0,
+                                    x: 10,
+                                    transition: { duration: 0.14 },
+                                  }
+                            }
+                            transition={{
+                              duration: 0.45,
+                              delay: Math.min(row, 8) * 0.045,
+                              ease: easeOut,
+                            }}
+                          >
+                            <LessonPlan
+                              lesson={curriculum.lessons.find(
+                                (item) => item.id === id,
+                              )!}
+                              curriculum={curriculum}
+                              onSelectLesson={onSelectLesson}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                );
+              })}
+            </SpotlightCard>
+          </motion.div>
         );
       })}
       {curriculum.electives.length > 0 && (
@@ -499,6 +701,7 @@ export function Curriculum({
   const [query, setQuery] = useState("");
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const reduced = useReducedMotion();
 
   const setView = (value: string) => {
     if (!mapViews.includes(value as MapView)) return;
@@ -615,109 +818,162 @@ export function Curriculum({
 
   return (
     <div className="curriculum-view" data-testid="curriculum-map">
-      <header className="curriculum-map-header" aria-labelledby="curriculum-title">
+      <header
+        className="curriculum-map-header curriculum-hero"
+        aria-labelledby="curriculum-title"
+      >
+        <Backdrop name="topography" className="curriculum-hero-backdrop" />
+        <div className="curriculum-hero-scrim" aria-hidden="true" />
         <div className="curriculum-map-copy">
-          <span className="curriculum-eyebrow">
-            <Compass size={15} aria-hidden="true" />
-            {t("eyebrow", { version: curriculum.version })}
-          </span>
+          <HeroReveal step={0}>
+            <span className="curriculum-eyebrow">
+              <Compass size={15} aria-hidden="true" />
+              {t("eyebrow", { version: curriculum.version })}
+            </span>
+          </HeroReveal>
           <h1 id="curriculum-title" data-testid="curriculum-title">
-            {t("title")}
+            <BlurText text={t("title")} delay={90} />
           </h1>
-          <p className="curriculum-hero-description">
-            {t("description", { title: curriculum.title })}
-          </p>
-          {(lastLesson ?? firstAvailable) && (
+          <HeroReveal step={2}>
+            <p className="curriculum-hero-description">
+              {t("description", { title: curriculum.title })}
+            </p>
+          </HeroReveal>
+          <HeroReveal step={3} className="curriculum-hero-actions">
+            {(lastLesson ?? firstAvailable) && (
+              <StarBorder
+                className="curriculum-start-star"
+                color="#49dec6"
+                speed="6s"
+              >
+                <Button
+                  className="curriculum-start-button"
+                  onClick={() =>
+                    onSelectLesson((lastLesson ?? firstAvailable)!.id)
+                  }
+                >
+                  {lastLesson
+                    ? t("resume", { number: lastLesson.number })
+                    : t("start", { number: firstAvailable!.number })}
+                  <ArrowUpRight size={16} />
+                </Button>
+              </StarBorder>
+            )}
             <Button
-              className="curriculum-start-button"
-              onClick={() => onSelectLesson((lastLesson ?? firstAvailable)!.id)}
+              variant="ghost"
+              className="curriculum-hero-route"
+              onClick={() => setView("roadmap")}
             >
-              {lastLesson
-                ? t("resume", { number: lastLesson.number })
-                : t("start", { number: firstAvailable!.number })}
-              <ArrowUpRight size={16} />
+              <Route size={15} aria-hidden="true" />
+              {t("hero.route")}
             </Button>
-          )}
+          </HeroReveal>
         </div>
         <div className="curriculum-stats" aria-label={t("stats.label")}>
           <MapMetric
             value={curriculum.categories.length}
             label={t("stats.domains")}
             index={0}
+            Icon={Compass}
           />
-          <MapMetric value={moduleCount} label={t("stats.modules")} index={1} />
+          <MapMetric
+            value={moduleCount}
+            label={t("stats.modules")}
+            index={1}
+            Icon={Layers3}
+          />
           <MapMetric
             value={curriculum.lessons.length}
             label={t("stats.lessons")}
             index={2}
+            Icon={BookOpen}
           />
           <MapMetric
             value={availableCount}
             label={t("stats.available")}
             index={3}
+            Icon={CircleCheckBig}
+            ratio={
+              curriculum.lessons.length
+                ? availableCount / curriculum.lessons.length
+                : 0
+            }
           />
         </div>
       </header>
       <Tabs value={view} onValueChange={setView} className="curriculum-tabs">
         <TabsList
+          variant="line"
           className="curriculum-view-switch"
           aria-label={t("views.label")}
           data-testid="curriculum-view-switch"
         >
-          <TabsTrigger value="domains" data-testid="curriculum-view-domains">
-            <LayoutGrid aria-hidden="true" />
-            {t("views.domains")}
-          </TabsTrigger>
-          <TabsTrigger value="roadmap" data-testid="curriculum-view-roadmap">
-            <Route aria-hidden="true" />
-            {t("views.roadmap")}
-          </TabsTrigger>
-          <TabsTrigger value="list" data-testid="curriculum-view-list">
-            <List aria-hidden="true" />
-            {t("views.list")}
-          </TabsTrigger>
+          {viewTabs.map(({ id, Icon }) => (
+            <TabsTrigger
+              key={id}
+              value={id}
+              data-testid={`curriculum-view-${id}`}
+            >
+              {view === id && (
+                <motion.i
+                  className="curriculum-view-pill"
+                  layoutId="curriculum-view-pill"
+                  transition={reduced ? { duration: 0 } : pillSpring}
+                  aria-hidden="true"
+                />
+              )}
+              <Icon aria-hidden="true" />
+              <span>{t(`views.${id}`)}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
         <TabsContent value="domains">
-          <DomainBento
-            curriculum={curriculum}
-            progress={progress}
-            onOpenDomain={(id) => {
-              setActiveCategory(id);
-              setView("list");
-            }}
-          />
+          <ViewPanel>
+            <DomainBento
+              curriculum={curriculum}
+              progress={progress}
+              onOpenDomain={(id) => {
+                setActiveCategory(id);
+                setView("list");
+              }}
+            />
+          </ViewPanel>
         </TabsContent>
         <TabsContent value="roadmap">
-          {filters}
-          {graphResult && "error" in graphResult ? (
-            <div className="alert" role="alert">
-              {t("roadmap.failed", { reason: graphResult.error })}
-            </div>
-          ) : (
-            graphResult && (
-              <RoadmapSection
-                graph={graphResult.graph}
-                lessons={curriculum.lessons}
-                progress={progress}
-                matches={visibleIds}
-                onSelectLesson={onSelectLesson}
-              />
-            )
-          )}
-          {unknown > 0 && (
-            <p className="curriculum-planned-note">
-              {t("roadmap.unknownPrerequisites", { n: unknown })}
-            </p>
-          )}
+          <ViewPanel>
+            {filters}
+            {graphResult && "error" in graphResult ? (
+              <div className="alert" role="alert">
+                {t("roadmap.failed", { reason: graphResult.error })}
+              </div>
+            ) : (
+              graphResult && (
+                <RoadmapSection
+                  graph={graphResult.graph}
+                  lessons={curriculum.lessons}
+                  progress={progress}
+                  matches={visibleIds}
+                  onSelectLesson={onSelectLesson}
+                />
+              )
+            )}
+            {unknown > 0 && (
+              <p className="curriculum-planned-note">
+                {t("roadmap.unknownPrerequisites", { n: unknown })}
+              </p>
+            )}
+          </ViewPanel>
         </TabsContent>
         <TabsContent value="list">
-          {filters}
-          <LessonList
-            curriculum={curriculum}
-            visibleIds={visibleIds}
-            onSelectLesson={onSelectLesson}
-            onReset={resetFilters}
-          />
+          <ViewPanel>
+            {filters}
+            <LessonList
+              curriculum={curriculum}
+              visibleIds={visibleIds}
+              onSelectLesson={onSelectLesson}
+              onReset={resetFilters}
+            />
+          </ViewPanel>
         </TabsContent>
       </Tabs>
     </div>
