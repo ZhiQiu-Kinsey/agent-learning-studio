@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { motion, useScroll, useTransform } from "motion/react";
-import { ArrowUpRight, Check } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../motion";
 import { useResolvedTheme } from "../hooks/useTheme";
@@ -208,7 +208,9 @@ export function LessonMasthead({
             <ul>
               {objectives.map((objective, item) => (
                 <li key={item}>
-                  <Check size={14} aria-hidden="true" />
+                  <span className="band-goal-index" aria-hidden="true">
+                    {String(item + 1).padStart(2, "0")}
+                  </span>
                   {objective}
                 </li>
               ))}
