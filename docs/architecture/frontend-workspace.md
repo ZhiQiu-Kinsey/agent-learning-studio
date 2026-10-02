@@ -31,6 +31,7 @@
 | `src/motion/` | `MotionProvider`（合并系统减少动画、WebGL 与页面可见性）、`useMotionBudget`（离屏暂停，WebGL 同屏最多三个）、`revealProps`（滚动揭示）、`EffectBoundary`（装饰效果出错时退回静态）、`MotionIntent` 意图注册表、动效令牌 |
 | `src/i18n/` | i18next、语言注册表、按命名空间组织的 `locales/zh-CN/*.json`、错误码翻译 |
 | `src/progress/` | 本机学习进度（localStorage，有独立版本线与迁移阶梯），只记录真实动作 |
+| `src/components/react-bits/` | 改编自 React Bits 的组件（文件首行注明来源与许可）。较长的组件把着色器、常量和纯逻辑放在同名目录（例如 `ElectricLogo/shaders.ts`），组件文件路径与导出保持不变，便于对照上游更新 |
 | `src/components/backdrops/` | 英雄带动态背景：`Backdrop` 按预设懒加载 React Bits WebGL 着色器，离屏卸载，静态时退化为同色渐变；`backdropFor(category)` 给每个课程领域分配一种氛围。开发预览：`/dev/backdrops.html` |
 | `src/hooks/useStudio.ts` | 课程、参数、运行（`POST /api/runs`，断线后按 seq 续读）与回放状态 |
 | `src/components/command/` | ⌘K 命令面板（cmdk，懒加载） |
