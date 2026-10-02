@@ -21,9 +21,9 @@ export function chapterChecks(chapter: Chapter, checked: CheckedPoints) {
   };
 }
 
-/** Every chapter has its own sky; unknown chapters cycle through the list. */
+/** Every chapter has its own sky (distinct hues, so the tabs differ); unknown chapters cycle. */
 const chapterSkies: Record<string, BackdropName> = {
-  intro: "aurora",
+  intro: "galaxy",
   "what-is-agent": "web",
   "learning-path": "rays",
   "lab-evidence": "radar",

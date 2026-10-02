@@ -33,42 +33,46 @@ export function ChapterBand({
         {numeral(index)}
       </span>
       <div className="onboarding-band-copy">
-        <span className="onboarding-eyebrow">
-          <span className="onboarding-band-dot" aria-hidden="true" />
-          <Shuffle key={chapter.id} text={chapter.eyebrow} />
-        </span>
-        <h2>
-          <EchoText
-            key={chapter.id}
-            text={chapter.title}
-            tint={dark ? "#b98aff" : "#7c6cf5"}
-            offset={20}
-            echoes={7}
-          />
-        </h2>
-        <motion.p
-          initial={reduced ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35, ease: easeOut }}
-        >
-          {chapter.summary}
-        </motion.p>
-        <motion.div
-          className="onboarding-band-chips"
-          initial={reduced ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.45, ease: easeOut }}
-        >
-          <span>{t("chapterIndex", { index: index + 1, total })}</span>
-          <span>
-            <Clock3 size={13} aria-hidden="true" />
-            {t("minutes", { n: chapter.estimated_minutes })}
+        <div className="onboarding-band-top">
+          <span className="onboarding-eyebrow">
+            <span className="onboarding-band-dot" aria-hidden="true" />
+            <Shuffle key={chapter.id} text={chapter.eyebrow} />
           </span>
-          <span>
-            <ListChecks size={13} aria-hidden="true" />
-            {t("sections", { n: chapter.sections.length })}
-          </span>
-        </motion.div>
+          <motion.div
+            className="onboarding-band-chips"
+            initial={reduced ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.45, ease: easeOut }}
+          >
+            <span>{t("chapterIndex", { index: index + 1, total })}</span>
+            <span>
+              <Clock3 size={13} aria-hidden="true" />
+              {t("minutes", { n: chapter.estimated_minutes })}
+            </span>
+            <span>
+              <ListChecks size={13} aria-hidden="true" />
+              {t("sections", { n: chapter.sections.length })}
+            </span>
+          </motion.div>
+        </div>
+        <div className="onboarding-band-heading">
+          <h2>
+            <EchoText
+              key={chapter.id}
+              text={chapter.title}
+              tint={dark ? "#b98aff" : "#7c6cf5"}
+              offset={20}
+              echoes={7}
+            />
+          </h2>
+          <motion.p
+            initial={reduced ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.35, ease: easeOut }}
+          >
+            {chapter.summary}
+          </motion.p>
+        </div>
       </div>
     </header>
   );
