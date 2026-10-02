@@ -14,9 +14,9 @@
           "id": "hero",
           "type": "hero",
           "eyebrow": "CHAPTER 02 / LESSON 05",
-          "headline": "模型文本先是待检查输入",
-          "highlight": "三层检查模型生成的任务卡",
-          "takeaway": "模型生成的文本依次通过 JSON、字段 Schema、业务事实三层检查。"
+          "headline": "模型写的 JSON，",
+          "highlight": "先当成待检查的输入。",
+          "takeaway": "模型生成的任务卡要依次过三关：能不能解析成 JSON，字段对不对，事实对不对。前一关通过，替代不了后一关。"
         },
         {
           "id": "concepts",
@@ -25,22 +25,22 @@
             {
               "id": "01-goal",
               "label": "01 / GOAL",
-              "title": "模型文本先是待检查输入",
-              "description": "模型文本先是待检查输入：课程把第 4 课的 id、标题和先修作为可信事实传入一次真实模型请求。",
+              "title": "输出先是一段文本",
+              "description": "不管提示怎么要求，模型返回的都是一段 message.content，可能是 JSON，也可能不是。",
               "token": "task · contract"
             },
             {
               "id": "02-check",
               "label": "02 / CHECK",
-              "title": "第一层：JSON 语法",
-              "description": "第一层：JSON 语法：json.loads 只回答文本是否可解析为 JSON。",
+              "title": "第一关：能否解析",
+              "description": "json.loads 只回答这段文本是不是合法 JSON，别的什么都不说明。",
               "token": "validation · evidence"
             },
             {
               "id": "03-evidence",
               "label": "03 / EVIDENCE",
-              "title": "第二层：Pydantic 字段约束",
-              "description": "第二层：Pydantic 字段约束：TaskCard 要求 lesson_id、lesson_title、prerequisite、exercise 四个字段，限制字符串长度并拒绝未知字段。",
+              "title": "第二关：字段约束",
+              "description": "TaskCard 规定四个字段、长度上限，并拒绝多余字段。形状对了，内容仍可能是错的。",
               "token": "trace · report"
             }
           ]
@@ -50,7 +50,7 @@
           "type": "prose",
           "title": "模型文本先是待检查输入",
           "paragraphs": [
-            "本课练习结构化输出（Structured Output）：要求模型按约定的 JSON 结构作答，再由程序逐层校验。课程把第 4 课的 id、标题和先修作为可信事实传入一次真实模型请求。模型输出只是一段 message.content，可能是 JSON，也可能是自然语言、残缺文本或错误事实。提示要求 JSON 不等于已获得可靠结构。"
+            "本课练习结构化输出（Structured Output）：要求模型按约定的 JSON 结构作答，再由程序逐层检查。课程把第 4 课的 id、标题和先修作为可信事实写进请求，让模型生成一张任务卡。模型返回的仍然只是一段 message.content，可能是 JSON，也可能是自然语言、半截文本或写错的事实。提示里要求 JSON，不等于拿到了可靠的结构。"
           ]
         },
         {
@@ -58,7 +58,7 @@
           "type": "prose",
           "title": "第一层：JSON 语法",
           "paragraphs": [
-            "json.loads 只回答文本是否可解析为 JSON；格式破损时立即停止后续字段与业务检查，不把模型响应悄悄改成预设对象。检查报告保留失败原因。某些服务商支持结构化生成，但本实验仍通过统一文本接口比较校验责任。"
+            "json.loads 只回答文本能不能解析成 JSON。格式坏了就立即停下，不再做字段和事实检查，也不会把模型的回答悄悄换成预设对象，报告里写明失败原因。有些服务商支持结构化生成，这里仍然走统一的文本接口，好让三层检查的责任看得清楚。"
           ]
         },
         {
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "第二层：Pydantic 字段约束",
           "paragraphs": [
-            "TaskCard 要求 lesson_id、lesson_title、prerequisite、exercise 四个字段，限制字符串长度并拒绝未知字段。字段缺失、类型错误、越界和多余字段都不能通过。Schema 通过只证明形状合理，尚不能证明课号或先修正确。"
+            "TaskCard 要求 lesson_id、lesson_title、prerequisite、exercise 四个字段，限制字符串长度，拒绝未知字段。缺字段、类型不对、超长、多出字段，都过不了这一关。Schema 通过只说明形状合理，课号和先修写得对不对，它不管。"
           ]
         },
         {
@@ -101,7 +101,7 @@
           "type": "prose",
           "title": "第三层：独立业务事实",
           "paragraphs": [
-            "FACTS 是本课预先给定的可信课程事实。校验器比较 id、标题、先修是否与这些事实一致；模型自称“已核实”不起作用。exercise 的教学质量无法靠这三个字符串比较完全判断，报告只声称核验了可机器检查的部分。"
+            "FACTS 是本课事先给定的可信课程事实。检查器拿 id、标题、先修逐项与它比较；模型在回答里说“已核实”不起作用。exercise 写得好不好，三个字符串比较判断不了，报告只说核对了能由程序检查的部分。"
           ]
         },
         {
@@ -136,64 +136,64 @@
           "type": "prose",
           "title": "有限修复与明确失败",
           "paragraphs": [
-            "第一版失败时可在预算允许下追加一次带错误反馈的修复请求。每次响应后立即发布独立校验报告，证据板可回看初稿与修复稿；第二版仍失败就明确返回未通过。预设会故意要求模型第一轮漏字段或写错事实，但模型不一定照做，是否触发修复以实际响应的三层检查为准。问题栏作为学习者备注写入报告，不改变固定资料和任务。"
+            "第一版没通过时，如果预算允许，会带着错误信息再请求一次修复。每次响应后都立即发布独立的检查报告，证据板上能对照初稿和修复稿；第二版还不通过，就明确返回未通过。预设会让模型第一轮故意漏字段或写错事实，但模型不一定照做，是否触发修复以实际响应的检查结果为准。问题栏只记为学习者备注，不改变固定资料和任务。"
           ]
         },
         {
           "id": "walkthrough",
           "type": "walkthrough",
-          "title": "从任务到可检查结果",
-          "description": "以下代码是跨课概念示意；本次执行证据请查看右侧事件。",
+          "title": "一张任务卡怎样过三关",
+          "description": "按步骤说明本课的检查顺序，代码是简化的示意。本次运行的证据在实验台的事件里。",
           "steps": [
             {
               "id": "step-1",
-              "label": "限定输入",
-              "actor": "Python / 模型",
-              "title": "任务/事实进入运行器",
-              "body": "任务/事实进入运行器；示意不代替本次运行记录。",
+              "label": "取回文本",
+              "actor": "模型",
+              "title": "拿到模型的原始回答",
+              "body": "请求里带着可信事实和格式要求，回来的是一段文本。",
               "code": "raw = context.complete(body, 1)[\"choices\"][0][\"message\"][\"content\"]",
               "language": "python",
-              "evidence": "检查输入范围与默认值"
+              "evidence": "request 与 response"
             },
             {
               "id": "step-2",
-              "label": "执行或生成",
-              "actor": "Python / 模型",
-              "title": "程序调用本地工具或真实模型",
-              "body": "程序调用本地工具或真实模型；示意不代替本次运行记录。",
+              "label": "第一关",
+              "actor": "程序",
+              "title": "解析 JSON",
+              "body": "解析失败就停，后面两关不再执行。",
               "code": "parsed = json.loads(raw)",
               "language": "python",
-              "evidence": "在事件中查看真实调用"
+              "evidence": "报告第一项检查"
             },
             {
               "id": "step-3",
-              "label": "独立检查",
-              "actor": "Python / 模型",
-              "title": "把输出交给验证代码",
-              "body": "把输出交给验证代码；示意不代替本次运行记录。",
+              "label": "第二关",
+              "actor": "程序",
+              "title": "校验字段",
+              "body": "TaskCard 检查字段、类型和长度，拒绝多余字段。",
               "code": "card = TaskCard.model_validate(parsed)",
               "language": "python",
-              "evidence": "查看每项 passed 和 detail"
+              "evidence": "报告第二项检查"
             },
             {
               "id": "step-4",
-              "label": "形成证据",
-              "actor": "Python / 模型",
-              "title": "报告由检查结果生成",
-              "body": "报告由检查结果生成；示意不代替本次运行记录。",
+              "label": "第三关",
+              "actor": "程序",
+              "title": "核对事实",
+              "body": "课号、标题、先修逐项和 FACTS 比较。",
               "code": "facts_ok = card.prerequisite == FACTS[\"prerequisite\"]",
               "language": "python",
-              "evidence": "对照 report 与 tool_result/response"
+              "evidence": "报告第三项检查"
             },
             {
               "id": "step-5",
-              "label": "作出结论",
-              "actor": "Python / 模型",
-              "title": "通过或失败都明确返回",
-              "body": "通过或失败都明确返回；示意不代替本次运行记录。",
+              "label": "报告",
+              "actor": "程序",
+              "title": "通过或失败都写清楚",
+              "body": "每次响应后发布一份报告，修复稿另有一份。",
               "code": "context.emit(\"lesson.report\", {\"checks\": checks, \"metrics\": metrics})",
               "language": "python",
-              "evidence": "回答是结论，不是原始证据"
+              "evidence": "lesson.report"
             }
           ]
         },
