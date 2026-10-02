@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import GlideSelect from "../react-bits/GlideSelect";
-import ElectricBorder from "../react-bits/ElectricBorder";
 import { notify } from "../toast/toast";
 
 type Props = {
@@ -20,7 +19,7 @@ type Props = {
   onOpenChange: (value: boolean) => void;
   onSaved: () => void;
   triggerRef: RefObject<HTMLButtonElement | null>;
-  /** The saved connection is ready (server status); only then the border sparks. */
+  /** The saved connection is ready (server status); only then the dialog says so. */
   connected?: boolean;
 };
 
@@ -154,6 +153,7 @@ export function ModelSettings({
     >
       <DialogContent
         className="connection-dialog"
+        data-connected={connected || undefined}
         showCloseButton={false}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -166,18 +166,15 @@ export function ModelSettings({
           if (saving) event.preventDefault();
         }}
       >
-        {/* Decoration only while the saved connection is really ready. */}
-        {connected && (
-          <ElectricBorder
-            className="connection-electric"
-            color="#49dec6"
-            chaos={0.05}
-            speed={0.7}
-            borderRadius={12}
-          />
-        )}
         <div className="connection-dialog-heading">
           <DialogTitle>{t("title")}</DialogTitle>
+          {/* Only while the saved connection is really ready (server status). */}
+          {connected && (
+            <span className="connection-badge" data-testid="connection-ready">
+              <i aria-hidden="true" />
+              {t("connected")}
+            </span>
+          )}
           <Button
             type="button"
             variant="ghost"

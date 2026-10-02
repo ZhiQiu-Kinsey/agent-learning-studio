@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { animate, useInView } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, BookOpen, Compass, Map as MapIcon } from "lucide-react";
+import { ArrowRight, BookOpen, Compass } from "lucide-react";
 import { MotionIntent, useReducedMotion } from "../../motion";
 import { Backdrop } from "../backdrops/Backdrop";
 import BlurText from "../react-bits/BlurText";
@@ -12,6 +12,7 @@ import ElectricBorder from "../react-bits/ElectricBorder";
 import RotatingText from "../react-bits/RotatingText";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import type { Lesson } from "../../types";
+import { useResolvedTheme } from "../../hooks/useTheme";
 
 export interface HeroStat {
   key: "lessons" | "categories" | "available" | "opened" | "runs";
@@ -77,7 +78,7 @@ function ContinueAction({ children }: { children: ReactNode }) {
 }
 
 /**
- * The dark observatory band: living backdrop, entrance title, the loop in three
+ * The observatory band (ink in dark, lavender paper in light): living backdrop, entrance title, the loop in three
  * rotating phrases, the ways in, and catalogue/device numbers that are all real.
  */
 export function HomeHero({
@@ -96,6 +97,7 @@ export function HomeHero({
   onOpenMap: () => void;
 }) {
   const { t } = useTranslation("home");
+  const light = useResolvedTheme() === "light";
   const onboarding = (primary: boolean) => (
     <button
       type="button"
@@ -121,8 +123,8 @@ export function HomeHero({
           <span className="home-kicker-dot" aria-hidden="true" />
           <ShinyText
             text={t("kicker")}
-            color="#cfc7ff"
-            shineColor="#ffffff"
+            color={light ? "#4a3bb8" : "#cfc7ff"}
+            shineColor={light ? "#b98aff" : "#ffffff"}
             speed={3}
             delay={1.5}
           />
@@ -186,14 +188,16 @@ export function HomeHero({
                   {t("firstLesson")}
                 </button>
               )}
+          {/* Tertiary: a text link, so the three ways in read as one clear
+              primary, one glass secondary and a quiet link. */}
           <button
             type="button"
-            className="home-cta home-cta-ghost"
+            className="home-cta home-cta-link"
             data-testid="home-map"
             onClick={onOpenMap}
           >
-            <MapIcon size={17} aria-hidden="true" />
-            {t("map")}
+            <span>{t("map")}</span>
+            <ArrowRight size={15} aria-hidden="true" />
           </button>
         </div>
       </div>

@@ -11,7 +11,6 @@ import {
 import { useReducedMotion } from "../../motion";
 import type { Lesson } from "../../types";
 import { CourseNavigation } from "../CourseNavigation";
-import LineSidebar from "../react-bits/LineSidebar";
 import { Button } from "../ui/button";
 import { BrandMark } from "./BrandMark";
 import { RailGroup, RailItem } from "./Rail";
@@ -89,33 +88,38 @@ export function RailNavigation({
           <ArrowUpRight size={15} aria-hidden="true" className="rail-trail" />
         </RailItem>
       </div>
-      <div className="nav-prelude">
+      <nav className="nav-prelude" aria-label={t("shell.prelude.title")}>
         <span className="course-tree-heading">
           {t("shell.prelude.title")} <small>{t("shell.prelude.eyebrow")}</small>
         </span>
-        {/* LineSidebar: a numbered rule for the four ordered chapters; the
-            fieldset disables every chapter button while a run is live. */}
-        <fieldset className="nav-prelude-fieldset" disabled={running}>
-          <LineSidebar
-            className="nav-prelude-lines"
-            ariaLabel={t("shell.prelude.title")}
-            items={preludeKeys.map((key) => t(`shell.prelude.${key}`))}
-            activeItem={view === "intro" ? introChapter : null}
-            onItemClick={(index) => onIntro(index)}
-            accentColor="var(--accent)"
-            textColor="var(--text-muted)"
-            markerColor="var(--line-strong, var(--line))"
-            markerLength={14}
-            markerGap={10}
-            tickScale={0.45}
-            maxShift={reduced ? 0 : 6}
-            itemGap={14}
-            fontSize={0.8}
-            proximityRadius={44}
-            smoothing={reduced ? 1 : 110}
-          />
-        </fieldset>
-      </div>
+        {/* The four ordered chapters use the same rail items and sliding pills
+            as home / full curriculum, with a numbered badge on the icon column. */}
+        <ol className="nav-prelude-list">
+          {preludeKeys.map((key, index) => {
+            const active = view === "intro" && introChapter === index;
+            return (
+              <li key={key}>
+                <RailItem
+                  itemKey={`prelude-${key}`}
+                  active={active}
+                  className="nav-prelude-item"
+                  data-testid="nav-prelude-chapter"
+                  aria-current={active ? "step" : undefined}
+                  disabled={running}
+                  onClick={() => onIntro(index)}
+                >
+                  <span className="nav-prelude-badge" aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="rail-label">
+                    {t(`shell.prelude.${key}`)}
+                  </span>
+                </RailItem>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
       <CourseNavigation
         lessons={lessons}
         current={view === "lesson" ? lessonId : undefined}

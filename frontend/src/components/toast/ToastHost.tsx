@@ -11,10 +11,14 @@ const toneStyle: Record<
   ToastTone,
   { accent: string; duration: number; icon: typeof Info }
 > = {
-  success: { accent: "#6fd39a", duration: 5000, icon: CircleCheck },
-  info: { accent: "#9d8fff", duration: 5000, icon: Info },
+  success: {
+    accent: "var(--toast-success)",
+    duration: 5000,
+    icon: CircleCheck,
+  },
+  info: { accent: "var(--toast-info)", duration: 5000, icon: Info },
   // Failures stay longer so there is time to read the reason.
-  error: { accent: "#ff9473", duration: 9000, icon: CircleAlert },
+  error: { accent: "var(--toast-error)", duration: 9000, icon: CircleAlert },
 };
 
 /**
