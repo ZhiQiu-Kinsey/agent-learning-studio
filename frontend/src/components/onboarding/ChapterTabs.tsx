@@ -75,7 +75,11 @@ export function ChapterTabs({
             <span className="onboarding-tab-number">{numeral(index)}</span>
             <strong>{item.title}</strong>
             <small>{t("minutes", { n: item.estimated_minutes })}</small>
+            {/* Self-check progress, not a selection mark: say so with the count. */}
             <span className="onboarding-tab-checks">
+              <span className="onboarding-tab-count" aria-hidden="true">
+                {done}/{total}
+              </span>
               <CheckRing done={done} total={total} />
               <span className="sr-only">{t("tabChecks", { done, total })}</span>
             </span>
