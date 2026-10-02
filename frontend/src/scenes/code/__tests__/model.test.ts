@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Trace } from "../../../types";
 import {
   annotatedLines,
+  codeSegments,
+  gapContaining,
   latestToolResult,
   notesForFile,
   splitLines,
@@ -143,4 +145,105 @@ it("lists added and changed symbols (not unchanged ones) in file and line order"
     ["early", "added"],
     ["late", "added"],
   ]);
+});
+
+describe("codeSegments keeps the annotated range in view", () => {
+  const block = (
+    start: number | null,
+    end: number | null,
+    folds: Annotation["folds"] = [],
+  ): Annotation => ({ id: "b", path: "a.py", start, end, notes: [], folds });
+
+  const file = (count: number) =>
+    Array.from({ length: count }, (_, index) => `line ${index + 1}`);
+
+  it("shows a file without annotations in full", () => {
+    expect(codeSegments(file(5), [], "a.py", new Set())).toEqual([
+      { kind: "lines", start: 1, end: 5 },
+    ]);
+  });
+
+  it("collapses lines outside the annotated range and folds inside it", () => {
+    const segments = codeSegments(
+      file(13),
+      [block(4, 10, [{ id: "f", start: 5, end: 7, label: "平台：发布事件" }])],
+      "a.py",
+      new Set(),
+    );
+    expect(segments).toEqual([
+      {
+        kind: "gap",
+        key: "outside:1-3",
+        start: 1,
+        end: 3,
+        reason: "outside",
+        label: undefined,
+      },
+      { kind: "lines", start: 4, end: 4 },
+      {
+        kind: "gap",
+        key: "fold:b:f",
+        start: 5,
+        end: 7,
+        reason: "fold",
+        label: "平台：发布事件",
+      },
+      { kind: "lines", start: 8, end: 10 },
+      {
+        kind: "gap",
+        key: "outside:11-13",
+        start: 11,
+        end: 13,
+        reason: "outside",
+        label: undefined,
+      },
+    ]);
+    expect(gapContaining(segments, 6)).toBe("fold:b:f");
+    expect(gapContaining(segments, 4)).toBeNull();
+  });
+
+  it("merges expanded gaps with their neighbours and showAll reveals everything", () => {
+    const blocks = [
+      block(4, 10, [{ id: "f", start: 5, end: 7, label: "平台" }]),
+    ];
+    expect(
+      codeSegments(
+        file(13),
+        blocks,
+        "a.py",
+        new Set(["fold:b:f", "outside:1-3"]),
+      ),
+    ).toEqual([
+      { kind: "lines", start: 1, end: 10 },
+      {
+        kind: "gap",
+        key: "outside:11-13",
+        start: 11,
+        end: 13,
+        reason: "outside",
+        label: undefined,
+      },
+    ]);
+    expect(codeSegments(file(13), blocks, "a.py", new Set(), true)).toEqual([
+      { kind: "lines", start: 1, end: 13 },
+    ]);
+  });
+
+  it("keeps short or blank stretches between blocks visible", () => {
+    const lines = ["a", "b", "", "", "c", "d", "", "e"];
+    const blocks: Annotation[] = [
+      { ...block(1, 2), id: "x" },
+      { ...block(5, 6), id: "y" },
+    ];
+    expect(codeSegments(lines, blocks, "a.py", new Set())).toEqual([
+      { kind: "lines", start: 1, end: 8 },
+    ]);
+  });
+
+  it("only uses blocks of the requested file", () => {
+    const other: Annotation = { ...block(1, 1), path: "b.py" };
+    expect(codeSegments(file(3), [other], "a.py", new Set())).toEqual([
+      { kind: "lines", start: 1, end: 3 },
+    ]);
+  });
 });

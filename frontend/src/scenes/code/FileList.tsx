@@ -30,7 +30,18 @@ export function FileList({
               title={file.path}
               onClick={() => onSelect(index)}
             >
-              <span className="code-file-name">{basename(file.path)}</span>
+              <span className="code-file-name">
+                {basename(file.path)}
+                {file.role && file.role !== "lesson" && (
+                  <span
+                    className="code-file-role"
+                    data-role={file.role}
+                    title={t(`role.${file.role}Help`)}
+                  >
+                    {t(`role.${file.role}`)}
+                  </span>
+                )}
+              </span>
               <span className="code-file-dir">{dirname(file.path)}</span>
             </button>
           </li>

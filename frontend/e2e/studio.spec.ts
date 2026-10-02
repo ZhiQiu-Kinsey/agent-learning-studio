@@ -35,14 +35,21 @@ test("source is served from the lesson, and replay never sends another run", asy
   page.on("request", (req) => {
     if (isRunCreation(req)) runCount++;
   });
-  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
+  const detail: Detail = await (
+    await request.get("/api/lessons/tool-selection")
+  ).json();
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: detail.title, exact: true }),
   ).toBeVisible();
   await page.getByTestId("scene-tab-code").click();
-  await expect(page.getByTestId("learn-source-code").locator("pre")).toHaveText(
-    detail.sources[0].content,
+  // 默认只显示标注范围；“显示完整文件”后与真实源码逐字一致。
+  const sourceFrame = page.getByTestId("learn-source-code");
+  await expect(sourceFrame.getByTestId("code-gap").first()).toBeVisible();
+  await sourceFrame.getByTestId("code-show-all").click();
+  const shownPath = await sourceFrame.getAttribute("data-path");
+  await expect(sourceFrame.locator("pre")).toHaveText(
+    detail.sources.find((item) => item.path === shownPath)!.content,
   );
   await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
@@ -85,7 +92,9 @@ test("dependent call receives the real time result, and the full trace can be ex
   page,
   request,
 }) => {
-  const detail: Detail = await (await request.get("/api/lessons/dependent-calls")).json();
+  const detail: Detail = await (
+    await request.get("/api/lessons/dependent-calls")
+  ).json();
   await page.goto("/");
   await page
     .getByTestId("course-nav")
@@ -173,7 +182,9 @@ test("zero division returns an error result and live mode excludes fault injecti
   page,
   request,
 }) => {
-  const detail: Detail = await (await request.get("/api/lessons/fail-safely")).json();
+  const detail: Detail = await (
+    await request.get("/api/lessons/fail-safely")
+  ).json();
   const zero = detail.exercises.find((item) => item.id === "zero")!;
   const live = detail.exercises.filter((item) => !item.offline_only);
   const injected = detail.exercises.filter((item) => item.offline_only);
@@ -213,7 +224,9 @@ test("small screen opens course navigation and keeps content within viewport", a
   page,
   request,
 }) => {
-  const detail: Detail = await (await request.get("/api/lessons/dependent-calls")).json();
+  const detail: Detail = await (
+    await request.get("/api/lessons/dependent-calls")
+  ).json();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByTestId("app-open-course-menu").click();
@@ -279,7 +292,9 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   page.on("request", (req) => {
     if (isRunCreation(req)) runs++;
   });
-  const lesson = await (await request.get("/api/lessons/tool-selection")).json();
+  const lesson = await (
+    await request.get("/api/lessons/tool-selection")
+  ).json();
   const submit = page.getByRole("button", {
     name: t("quiz:submit"),
     exact: true,
@@ -308,7 +323,9 @@ test("lesson self-check explains mistakes and can be reset without calling the m
         : option.id === question.correct,
     );
     // 先评把握，选项才开放作答。
-    await expect(optionsOf(question.prompt).getByRole("radio").first()).toBeDisabled();
+    await expect(
+      optionsOf(question.prompt).getByRole("radio").first(),
+    ).toBeDisabled();
     await confidenceOf(question.prompt)
       .getByRole("radio", {
         name: t(`quiz:confidence.${levels[index % 3]}`),
@@ -327,8 +344,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   for (const [index, question] of questions.entries()) {
     const chosen =
       index === 0
-        ? question.options.find((option) => option.id !== question.correct)!
-            .id
+        ? question.options.find((option) => option.id !== question.correct)!.id
         : question.correct;
     await expect(feedback.nth(index)).toContainText(question.explanation);
     await expect(feedback.nth(index)).toContainText(

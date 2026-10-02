@@ -40,7 +40,13 @@ export type Lesson = {
   input_schema?: InputSchema | null;
 };
 export type Detail = Lesson & {
-  sources: { path: string; language: string; content: string }[];
+  /** role：lesson 课程代码、platform 平台代码、fixture 只服务自动化测试的夹具。 */
+  sources: {
+    path: string;
+    language: string;
+    role?: "lesson" | "platform" | "fixture";
+    content: string;
+  }[];
   /** Names defined in the lesson's Python sources (minus glossary names). */
   code_names?: string[];
   system_prompt: string;

@@ -35,6 +35,7 @@ export function useCodeColumn(
         start: block.start ?? null,
         end: block.end ?? null,
         notes: block.notes,
+        folds: block.folds,
       })),
     // codeBlocks is derived from detail.learning, which changes with the lesson.
     [code, detail.learning],
@@ -69,6 +70,7 @@ export function useCodeColumn(
   }, [code, activePath, tools, notes]);
   return {
     decisions: blocksOfType(codeBlocks, "decision"),
+    annotations,
     tools,
     notes,
     annotated,
