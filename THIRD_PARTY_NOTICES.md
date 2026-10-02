@@ -7,6 +7,7 @@
 - 来源：https://reactbits.dev （David Haz）
 - 许可：MIT + Commons Clause License Condition v1.0，全文见 `frontend/src/components/react-bits/LICENSE.md`
 - 范围：`frontend/src/components/react-bits/` 与 `frontend/src/components/curriculum/` 中注明 React Bits 来源的组件
+- 资源：`frontend/src/assets/lanyard/card.glb`、`lanyard.png` 来自 React Bits 仓库 `src/assets/lanyard/`（Lanyard 组件配套，同一许可）
 
 ## OpenMAIC
 
@@ -44,4 +45,5 @@ SOFTWARE.
 许可证随各包分发，这里只列出需要注意的项：
 
 - elkjs（EPL-2.0）：课程地图路线图布局，懒加载。
+- three、@react-three/fiber、@react-three/drei、meshline、@react-three/rapier（MIT）与 @dimforge/rapier3d-compat（Apache-2.0）：回顾页 3D 学习徽章（Lanyard），懒加载。
 - @xyflow/react（MIT）、cmdk（MIT）、i18next / react-i18next（MIT）、motion（MIT）、@axe-core/playwright（MPL-2.0，仅测试使用）。
