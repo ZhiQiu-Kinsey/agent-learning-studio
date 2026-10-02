@@ -1,0 +1,1132 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "skills-disclosure",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "context"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "CONTEXT / SKILLS",
+          "headline": "做法写得再细，",
+          "highlight": "也不必每次都塞给模型。",
+          "takeaway": "把每个技能的正文都放进系统提示词，每次请求都要带着它们；只放一份目录、让模型用 load_skill 按需取正文，常驻的上下文小得多，代价是多一次工具往返。模型能不能选对技能，取决于目录里那一句描述。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-skill",
+              "label": "01 / SKILL",
+              "title": "一份写给模型的做法",
+              "description": "技能（Skill）是一份写给模型的做法说明。本课每个技能是一个 SKILL.md：开头两行 --- 之间写 name 和 description，后面的正文写步骤、输出格式和自查项。",
+              "token": "SKILL.md"
+            },
+            {
+              "id": "02-full",
+              "label": "02 / FULL",
+              "title": "全量注入",
+              "description": "把所有技能的描述和正文都拼进系统提示词。一次请求就能完成任务，但不管任务用不用得上，每次请求都带着全部正文。",
+              "token": "system"
+            },
+            {
+              "id": "03-disclose",
+              "label": "03 / CATALOG",
+              "title": "先给目录，用到再加载",
+              "description": "渐进式披露（Progressive Disclosure）：系统提示词只放技能目录，每个技能一行 name 和 description；模型需要时调用 load_skill，正文作为工具结果进入下一次请求。",
+              "token": "load_skill"
+            },
+            {
+              "id": "04-description",
+              "label": "04 / TRIGGER",
+              "title": "描述决定能不能被选中",
+              "description": "按需加载时，模型只能凭目录里的描述决定加载哪个技能。该加载没加载叫漏触发，不该加载却加载了叫误触发。",
+              "token": "description"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "做法越多，系统提示词越长",
+          "paragraphs": [
+            "前面几课的系统提示词只有一两句话。学习助手要做的事一多，每件事都有自己的做法：整理复习卡要几张、写成什么格式；把报错写成求助提问要分哪几段。最直接的办法是把这些做法全部写进系统提示词，本课叫它全量注入。",
+            "本课准备了四个技能：review-cards、error-question、unit-test-checklist、three-sentence-summary。全量注入时，系统提示词约 2000 个字符，用户只说一句“你好”也要带着它们。{{lesson:context-budget}}讲过，上下文窗口有限，每次请求的 Token 都要计费；和当前任务无关的做法一直占着位置，也会混在模型要读的内容里。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "一个技能长什么样",
+          "paragraphs": [
+            "打开 skills/review-cards/SKILL.md。开头两行 --- 之间只有两个字段：name 是技能的名字，也是 load_skill 要填的参数；description 用一句话写清什么时候用、输入是什么、输出是什么，还写了什么时候不要用。",
+            "--- 之后是正文：什么时候用、四步做法、输出格式（每张卡一行“问：”、一行“答：”）和交付前自查。正文只有整理复习卡时才用得上，回一句问候时一个字都用不到。读码场景里能看到这份文件的全文。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "先给目录，用到再加载",
+          "paragraphs": [
+            "渐进式披露把技能拆成两层：系统提示词里只放技能目录，每个技能一行 name 和 description，本课的目录约 480 个字符；正文留在文件里。同时给模型一个 load_skill 工具，参数只有一个 name。",
+            "模型读完用户的任务，认为符合某个技能的描述，就提出调用 load_skill；运行器读取对应的 SKILL.md，把正文作为工具结果放回消息历史，模型在下一次请求里按正文完成任务。认为都不符合，就直接回答，一个技能也不加载。"
+          ]
+        },
+        {
+          "id": "predict-load",
+          "type": "predict",
+          "prompt": "读到这里就可以去实验台跑第一次。运行“整理复习卡：两种方式对照”之前先猜：这次运行会出现几个 load_skill 的 tool_call 事件？",
+          "experiment": "full-vs-on-demand",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call",
+            "name": "load_skill"
+          }
+        },
+        {
+          "id": "mq-catalog",
+          "type": "micro-quiz",
+          "question": {
+            "id": "what-model-sees",
+            "prompt": "按需加载时，第 1 次请求里模型能看到 review-cards 的哪些内容？",
+            "options": [
+              {
+                "id": "a",
+                "text": "只有 name 和 description",
+                "feedback": "对。正文要等模型调用 load_skill 之后，才作为工具结果出现在下一次请求里。"
+              },
+              {
+                "id": "b",
+                "text": "完整正文，只是排在目录后面",
+                "feedback": "不对。第 1 次请求的系统提示词只有目录；报告里“第 1 次请求里没有任何技能正文”这条检查，就是按实际发出的消息查的。"
+              },
+              {
+                "id": "c",
+                "text": "什么都看不到，只能猜技能的名字",
+                "feedback": "不对。目录列出了每个技能的 name 和 description，模型据此决定加载哪个。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "目录常驻，正文按需：两层各管一件事。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "load_skill 只认登记过的名字",
+          "paragraphs": [
+            "load_skill 的参数是模型写的。运行器不把这个字符串直接拼成文件路径去读，而是先查白名单 SKILL_NAMES：名字在里面，才去读 skills 目录下对应的 SKILL.md；不在，就抛出错误，由 execute_tool 整理成 ok 为 false 的结构化错误交还给模型。",
+            "例如模型写了 load_skill(\"../../local_config\")，工具结果会是“没有名为 ../../local_config 的技能”，后面列出目录里的四个名字。反过来，skills 目录里多放一个文件也不会自动生效，登记进 SKILL_NAMES 才会出现在目录里。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "描述决定能不能被选中",
+          "paragraphs": [
+            "按需加载时，模型决定加载哪个技能，依据只有目录里的 name 和 description。本课的 review-cards 有两种描述：精确版写明“用户给出学习笔记原文并要求整理成复习卡时使用，输出 3–5 张问答卡，没有笔记原文时不要用”；模糊版只有“帮助学习。”。实验只换这一行，正文和其他技能都不变。",
+            "描述不准有两种表现。漏触发：任务该用技能，模型没有加载，凭自己的理解直接回答。误触发：任务不该用技能，模型却加载了。本课的“复习提问”只问一个知识点、没有给笔记，本课认定它不该加载 review-cards，用来检验误触发。name 本身也带信息，review-cards 这个名字已经暗示了复习卡，所以只改描述不一定改变结果，要看你这次运行的事件。"
+          ]
+        },
+        {
+          "id": "mq-trigger",
+          "type": "micro-quiz",
+          "question": {
+            "id": "which-is-false-trigger",
+            "prompt": "下面哪一种情况算误触发？",
+            "options": [
+              {
+                "id": "a",
+                "text": "用户只问“列表和元组有什么区别”，模型调用 load_skill 加载了 review-cards",
+                "feedback": "对。任务不该用技能，模型却加载了，多花一次往返和一份正文的 Token。"
+              },
+              {
+                "id": "b",
+                "text": "用户贴了笔记要复习卡，模型没有调用 load_skill，直接写出了卡片",
+                "feedback": "不对。这是漏触发：该加载却没加载，即使卡片的格式看起来没问题。"
+              },
+              {
+                "id": "c",
+                "text": "用户贴了笔记要复习卡，模型加载了 three-sentence-summary",
+                "feedback": "不对。任务本来就该用技能，只是选错了，本课记为“加载错技能”。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "判断依据是任务该不该用技能、事件里实际加载了什么，和回答看起来好不好无关。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "多一次往返，换来更小的常驻上下文",
+          "paragraphs": [
+            "按需加载不是免费的。需要技能时，第 1 次请求只是让模型提出加载；第 2 次请求带着目录、load_skill 的调用和正文，才真正完成任务。第 2 次的提示 Token 比第 1 次多出一份正文。按需加载的每次请求还带着 load_skill 的工具定义，它同样计入提示 Token。",
+            "全量注入只要一次请求，但系统提示词每次都带着全部正文。哪种更省，要分两笔账：第 1 次请求的提示 Token 是常驻成本，每个任务都要付；正文的 Token 只在加载时付。技能少、几乎每次都要用时，按需加载的合计可能反而更多；技能多、多数请求用不上时，差距会反过来。实验报告的“每次提示 Token”和“提示 Token 合计”两列就是这两笔账，数值取自每次响应 usage 里的 prompt_tokens，没有报告就写“未报告”。"
+          ]
+        },
+        {
+          "id": "section-7",
+          "type": "prose",
+          "title": "常驻的目录是稳定的前缀",
+          "paragraphs": [
+            "{{lesson:prompt-caching}}讲过，服务商的缓存只对完全相同的请求开头生效。按需加载的系统提示词只有目录，只要不增删技能、不改描述，每次都一样，适合放在请求最前面；加载的正文出现在后面的工具结果里，不会改动前面的内容。",
+            "全量注入的系统提示词同样可以保持不变，但它长得多，而且改动任何一个技能的正文，整段开头都会变。本课的报告不统计缓存；usage 里有没有缓存字段、值是多少，可以按{{lesson:prompt-caching}}的读法自己看 response 事件。"
+          ]
+        },
+        {
+          "id": "mq-cost",
+          "type": "micro-quiz",
+          "question": {
+            "id": "which-is-cheaper",
+            "prompt": "整理复习卡这个任务，全量注入和按需加载哪个提示 Token 更少？",
+            "options": [
+              {
+                "id": "a",
+                "text": "要看两笔账：每次都付的常驻部分，和加载时多出来的往返与正文",
+                "feedback": "对。数字以报告里的“每次提示 Token”和“提示 Token 合计”为准。"
+              },
+              {
+                "id": "b",
+                "text": "按需加载一定更少，因为系统提示词更短",
+                "feedback": "不对。需要技能时多一次请求，第 2 次还要带上正文；技能少时合计可能更多。"
+              },
+              {
+                "id": "c",
+                "text": "全量注入一定更少，因为只请求一次",
+                "feedback": "不对。它的每个请求都带着全部正文，用不上技能的请求也一样；技能越多，常驻部分越大。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "比较时分清常驻成本和按需成本，数字只认 usage。"
+          }
+        },
+        {
+          "id": "compare-modes",
+          "type": "compare",
+          "title": "两种提供方式",
+          "columns": [
+            "对比项",
+            "全量注入",
+            "目录 + 按需加载"
+          ],
+          "rows": [
+            [
+              "系统提示词里有什么",
+              "全部技能的描述和正文",
+              "每个技能一行 name 和 description"
+            ],
+            [
+              "需要技能时的请求数",
+              "1 次",
+              "2 次：先提出加载，拿到正文后回答"
+            ],
+            [
+              "用不上技能时的请求数",
+              "1 次，仍带着全部正文",
+              "1 次，只带目录"
+            ],
+            [
+              "从事件里看用没用技能",
+              "看不出，只能看回答的格式",
+              "看 load_skill 的 tool_call 与 tool_result"
+            ]
+          ]
+        },
+        {
+          "id": "section-8",
+          "type": "prose",
+          "title": "局限：看事件，不看回答",
+          "paragraphs": [
+            "按需加载把“用不用技能”交给了模型。模型可能不加载就硬做，也可能加载错技能。回答看起来对，不代表技能被用过：漏触发时，模型凭自己的理解也可能写出像样的卡片；误触发时，模型读到正文里的“什么时候用”，也可能改为直接回答。",
+            "所以判断要看事件：tool_call 里有没有 load_skill、参数是哪个名字；tool_result 里的 ok 是不是 true；lesson.skill_request 的 skills_in_context 记着每次请求的上下文里有哪些技能正文。报告里的格式初筛只看回答像不像复习卡，不判断内容对错。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "按需加载的一次运行",
+          "description": "按步骤说明按需加载怎么走，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "目录",
+              "actor": "程序",
+              "title": "系统提示词只放目录",
+              "body": "每个技能一行 name 和 description，请求同时带上 load_skill 工具。",
+              "code": "messages = [{\"role\": \"system\", \"content\": catalog_prompt(skills)}, {\"role\": \"user\", \"content\": question}]",
+              "language": "python",
+              "evidence": "lesson.skill_request 的 skills_in_context 为空"
+            },
+            {
+              "id": "step-2",
+              "label": "提出",
+              "actor": "模型",
+              "title": "提出加载",
+              "body": "模型认为任务符合 review-cards 的描述，在 tool_calls 里提出 load_skill。",
+              "code": "{\"name\": \"load_skill\", \"arguments\": \"{\\\"name\\\": \\\"review-cards\\\"}\"}",
+              "language": "json",
+              "evidence": "tool_call"
+            },
+            {
+              "id": "step-3",
+              "label": "读取",
+              "actor": "工具",
+              "title": "查白名单，再读文件",
+              "body": "名字在 SKILL_NAMES 里才读对应的 SKILL.md；不在就返回结构化错误。",
+              "code": "if name not in SKILL_NAMES:\n    raise ValueError(\"没有名为 … 的技能\")",
+              "language": "python",
+              "evidence": "tool_result 的 result.instructions"
+            },
+            {
+              "id": "step-4",
+              "label": "回传",
+              "actor": "程序",
+              "title": "正文回到消息历史",
+              "body": "正文作为工具结果追加进消息历史，下一次请求才看得到。",
+              "code": "messages.append({\"role\": \"tool\", \"tool_call_id\": call[\"id\"], \"content\": json.dumps(result)})",
+              "language": "python",
+              "evidence": "下一次 request 的 messages"
+            },
+            {
+              "id": "step-5",
+              "label": "完成",
+              "actor": "模型",
+              "title": "按正文完成任务",
+              "body": "模型按正文的输出格式回答；运行器对照事件给出加载判定和格式初筛。",
+              "code": "judge_loading(expected, loaded)",
+              "language": "python",
+              "evidence": "answer 与 lesson.report"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "context-budget"
+        },
+        {
+          "id": "code-skill-files",
+          "type": "annotated-source",
+          "path": "lessons/lesson_skills_disclosure/runtime.py",
+          "start": 20,
+          "end": 52,
+          "notes": [
+            {
+              "id": "n22",
+              "line": 22,
+              "anchor": "SKILL_NAMES = (\"review-cards\"",
+              "text": "白名单：目录里列谁、load_skill 能读谁，都只看这里。"
+            },
+            {
+              "id": "n30",
+              "line": 30,
+              "anchor": "_, header, body = text.split(\"---\\n\", 2)",
+              "text": "按前两条 --- 切成三段：空串、头部两行、正文。"
+            },
+            {
+              "id": "n32",
+              "line": 32,
+              "anchor": "if fields.get(\"name\", \"\").strip() != name:",
+              "text": "文件里写的 name 必须和登记的名字一致，避免目录和文件对不上。"
+            },
+            {
+              "id": "n40",
+              "line": 40,
+              "anchor": "skills[0][\"description\"] = VAGUE_DESCRIPTION",
+              "text": "模糊描述只换 review-cards 这一行描述，正文不动，实验只差这一处。"
+            },
+            {
+              "id": "n46",
+              "line": 46,
+              "anchor": "if name not in SKILL_NAMES:",
+              "text": "先查白名单再碰文件：模型写的字符串不会被当成路径。"
+            },
+            {
+              "id": "n49",
+              "line": 49,
+              "anchor": "return {\"name\": name, \"instructions\": read_skill(name)[\"body\"]}",
+              "text": "工具结果只给正文，不再带 name 和 description 的头部。"
+            },
+            {
+              "id": "n52",
+              "line": 52,
+              "anchor": "AVAILABLE_TOOLS = {\"load_skill\": load_skill}",
+              "text": "执行调用提议时按名字查这张表，模型编出来的工具名不会被执行。"
+            }
+          ]
+        },
+        {
+          "id": "code-prompts",
+          "type": "annotated-source",
+          "path": "lessons/lesson_skills_disclosure/runtime.py",
+          "start": 80,
+          "end": 109,
+          "notes": [
+            {
+              "id": "n80",
+              "line": 80,
+              "anchor": "TOOLS = [{\"type\": \"function\", \"function\": {",
+              "text": "按需加载只有这一个工具，参数只有 name。"
+            },
+            {
+              "id": "n83",
+              "line": 83,
+              "anchor": "\"parameters\": {\"type\": \"object\", \"properties\": {\"name\"",
+              "text": "参数不写成枚举：模型写错名字时，由 load_skill 返回结构化错误。"
+            },
+            {
+              "id": "n88",
+              "line": 88,
+              "anchor": "先调用 load_skill 读取它的完整做法",
+              "text": "目录版的系统提示词明确说：符合描述才加载，都不符合就直接回答。"
+            },
+            {
+              "id": "n94",
+              "line": 94,
+              "anchor": "sections = [f\"## 技能 {skill['name']}",
+              "text": "全量注入：每个技能的描述和正文都拼进来，约 2000 个字符。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "anchor": "lines = [f\"- {skill['name']}：{skill['description']}\"",
+              "text": "目录：每个技能一行，约 480 个字符；只要不增删技能、不改描述，这一段就不会变。"
+            },
+            {
+              "id": "n107",
+              "line": 107,
+              "anchor": "response = context.complete({\"messages\": messages, \"temperature\": 0}",
+              "text": "全量注入的请求里没有 tools：做法已经都在上下文里，一次请求就结束。"
+            },
+            {
+              "id": "n108",
+              "line": 108,
+              "anchor": "record = _record(context, \"full\"",
+              "text": "记一条 lesson.skill_request：提示 Token 和这次上下文里的技能正文（_record 在文件末尾）。"
+            }
+          ]
+        },
+        {
+          "id": "code-on-demand",
+          "type": "annotated-source",
+          "path": "lessons/lesson_skills_disclosure/runtime.py",
+          "start": 112,
+          "end": 149,
+          "notes": [
+            {
+              "id": "n114",
+              "line": 114,
+              "anchor": "messages = [{\"role\": \"system\", \"content\": catalog_prompt(skills)}",
+              "text": "第 1 次请求的系统提示词只有目录。"
+            },
+            {
+              "id": "n116",
+              "line": 116,
+              "anchor": "for round_number in range(first_round, first_round + ON_DEMAND_LIMIT):",
+              "text": "循环有轮数上限：最多请求 ON_DEMAND_LIMIT 次。"
+            },
+            {
+              "id": "n119",
+              "line": 119,
+              "anchor": "response = context.complete({\"messages\": messages, \"tools\": TOOLS",
+              "text": "每次请求都带着 load_skill，模型自己决定加载不加载。"
+            },
+            {
+              "id": "n121",
+              "line": 121,
+              "anchor": "requests.append(_record(context, \"on_demand\"",
+              "text": "每次请求后记一条 lesson.skill_request，加载记录就是靠它对应到具体请求。"
+            },
+            {
+              "id": "n125",
+              "line": 125,
+              "anchor": "if not calls:",
+              "text": "没有调用提议就结束；不加载也是模型的一种选择，要从事件里看出来。"
+            },
+            {
+              "id": "n129",
+              "line": 129,
+              "anchor": "messages.append({\"role\": \"assistant\", \"content\": message.get(\"content\"), \"tool_calls\": calls})",
+              "text": "先把带调用提议的 assistant 消息放回历史，工具结果才能按调用 id 配上。"
+            },
+            {
+              "id": "n131",
+              "line": 131,
+              "anchor": "result = context.execute_proposal(call, AVAILABLE_TOOLS)",
+              "text": "执行模型提出的调用，记成 tool_call 与 tool_result 一对事件。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "messages.append({\"role\": \"tool\", \"tool_call_id\": call[\"id\"],",
+              "text": "正文以工具结果进入消息历史，排在目录之后，不改动前面的内容。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "anchor": "return {\"mode\": \"on_demand\", \"answer\": None",
+              "text": "用完轮数上限还在加载：如实记为没有回答。"
+            },
+            {
+              "id": "n142",
+              "line": 142,
+              "anchor": "if loaded is None:",
+              "text": "加载判定：全量注入没有加载这一步，不适用。"
+            },
+            {
+              "id": "n145",
+              "line": 145,
+              "anchor": "漏触发：该加载却没加载",
+              "text": "该用技能却没加载成功，记为漏触发。"
+            },
+            {
+              "id": "n148",
+              "line": 148,
+              "anchor": "误触发：加载了",
+              "text": "不该用技能却加载了，记为误触发。"
+            },
+            {
+              "id": "n149",
+              "line": 149,
+              "anchor": "加载错技能：",
+              "text": "该用技能但加载的不是它，记为加载错技能。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "load_skill 只按登记的名字查表，正文作为工具结果返回",
+          "chosen": "目录和 load_skill 都只认 SKILL_NAMES 里登记的名字；模型写的名字先查白名单，查到了才读对应的 SKILL.md，查不到返回结构化错误。正文作为工具结果放进消息历史，排在目录之后。",
+          "alternatives": [
+            {
+              "id": "path-argument",
+              "title": "让模型直接传文件路径",
+              "why_not": "模型写出的路径可能跳出技能目录，读到本地配置等不该读的文件；名字查表从根上避免了这一点。"
+            },
+            {
+              "id": "inject-all",
+              "title": "全量注入，靠缓存降低费用",
+              "why_not": "缓存能降低重复开头的费用和延迟，但正文仍然占着上下文窗口，和任务无关的做法一直摆在模型面前；改一个技能，整段开头都会变。"
+            },
+            {
+              "id": "keyword-pick",
+              "title": "由程序按关键词先挑出技能，再把正文塞进系统提示词",
+              "why_not": "这是可行的做法，规则清楚、少一次往返；但关键词表要人工维护，换个说法就漏。本课先看模型凭描述选择时会发生什么。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "full-vs-on-demand",
+          "title": "全量注入与按需加载",
+          "hypothesis": "同一个任务，按需加载第 1 次请求的系统提示词只有目录，提示 Token 比全量注入少；需要技能时多一次 load_skill 往返，正文出现在第 2 次请求里；用不上技能时不加载，只发一次请求。",
+          "predict": "predict-load",
+          "arms": [
+            {
+              "id": "cards",
+              "exercise": "compare-cards",
+              "label": "整理复习卡：两种方式对照"
+            },
+            {
+              "id": "chat",
+              "exercise": "compare-chat",
+              "label": "闲聊：两种方式对照"
+            }
+          ],
+          "observe": [
+            {
+              "id": "full-system",
+              "text": "全量注入的系统提示词：四个技能的正文都在里面。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "full-record",
+              "text": "全量注入这次请求的提示 Token；没有报告时是 null，报告里写“未报告”。",
+              "selector": {
+                "event": "lesson.skill_request",
+                "round": 1,
+                "path": "data.prompt_tokens"
+              }
+            },
+            {
+              "id": "catalog-system",
+              "text": "按需加载第 1 次请求的系统提示词：只有目录。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "catalog-record",
+              "text": "按需加载第 1 次请求的记录：skills_in_context 为空，prompt_tokens 比全量注入少。",
+              "selector": {
+                "event": "lesson.skill_request",
+                "round": 2,
+                "path": "data.skills_in_context"
+              }
+            },
+            {
+              "id": "load-call",
+              "text": "模型提出的 load_skill 调用和它填的名字。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.function.arguments",
+                "name": "load_skill"
+              }
+            },
+            {
+              "id": "load-result",
+              "text": "运行器读出的正文，作为工具结果返回。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.instructions",
+                "name": "load_skill"
+              }
+            },
+            {
+              "id": "second-record",
+              "text": "拿到正文后的那次请求：skills_in_context 里有了 review-cards，提示 Token 多出一份正文。",
+              "selector": {
+                "event": "lesson.skill_request",
+                "round": 3,
+                "path": "data.prompt_tokens"
+              }
+            },
+            {
+              "id": "report-table",
+              "text": "两种方式的对照：每次提示 Token、合计、加载记录、加载判定和格式初筛。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组各跑两种方式：第 1 次请求是全量注入，从第 2 次请求开始是按需加载。先看全量注入发了什么。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "full-system"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-system"
+            },
+            {
+              "action": "narrate",
+              "text": "四个技能的正文都在系统提示词里，不管任务用不用得上。"
+            },
+            {
+              "action": "seek",
+              "observe": "full-record"
+            },
+            {
+              "action": "highlight",
+              "observe": "full-record"
+            },
+            {
+              "action": "narrate",
+              "text": "这是服务商报告的提示 Token，全量注入每次请求都要付这么多。"
+            },
+            {
+              "action": "seek",
+              "observe": "catalog-system"
+            },
+            {
+              "action": "highlight",
+              "observe": "catalog-system"
+            },
+            {
+              "action": "narrate",
+              "text": "按需加载的系统提示词只有目录，每个技能一行。"
+            },
+            {
+              "action": "seek",
+              "observe": "catalog-record"
+            },
+            {
+              "action": "highlight",
+              "observe": "catalog-record"
+            },
+            {
+              "action": "narrate",
+              "text": "这次请求的上下文里没有任何技能正文。对比上一条记录的提示 Token。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "load-call"
+            },
+            {
+              "action": "highlight",
+              "observe": "load-call"
+            },
+            {
+              "action": "narrate",
+              "text": "整理复习卡时，模型应当提出加载 review-cards；闲聊那一组看看有没有这一步。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "load-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "load-result"
+            },
+            {
+              "action": "narrate",
+              "text": "运行器查过白名单，读出 SKILL.md 的正文，作为工具结果返回。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "second-record"
+            },
+            {
+              "action": "highlight",
+              "observe": "second-record"
+            },
+            {
+              "action": "narrate",
+              "text": "下一次请求带上了正文，提示 Token 随之增加。这是按需加载多付的那笔账。"
+            },
+            {
+              "action": "seek",
+              "observe": "report-table"
+            },
+            {
+              "action": "highlight",
+              "observe": "report-table"
+            },
+            {
+              "action": "narrate",
+              "text": "报告把两种方式并排：比较第 1 次请求和合计两列，再看加载判定。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里两种方式各发了几次请求、每次的提示 Token 是多少（以 usage 为准，没有报告就没有数字）。",
+              "按需加载的正文只在模型提出 load_skill 之后才进入上下文，每次请求的 skills_in_context 可以逐条核对。"
+            ],
+            "does_not_prove": [
+              "本课只有四个短技能，不能代表技能很多、正文很长时两种方式的差距。",
+              "提示 Token 只说明请求的规模，不说明回答的质量。",
+              "离线测试模式的响应没有 usage，也不代表任何真实模型的选择。"
+            ]
+          }
+        },
+        {
+          "id": "description-precision",
+          "title": "描述精确度与触发",
+          "hypothesis": "只改 review-cards 的 description：精确描述下，整理笔记时加载、复习提问时不加载；换成“帮助学习。”后，模型可能漏加载或误加载。有没有发生，看 load_skill 的 tool_call。",
+          "arms": [
+            {
+              "id": "cards-precise",
+              "exercise": "cards-precise",
+              "label": "整理复习卡：精确描述"
+            },
+            {
+              "id": "cards-vague",
+              "exercise": "cards-vague",
+              "label": "整理复习卡：模糊描述"
+            },
+            {
+              "id": "question-precise",
+              "exercise": "question-precise",
+              "label": "复习提问：精确描述"
+            },
+            {
+              "id": "question-vague",
+              "exercise": "question-vague",
+              "label": "复习提问：模糊描述"
+            }
+          ],
+          "observe": [
+            {
+              "id": "catalog-line",
+              "text": "第 1 次请求的技能目录：review-cards 那一行是精确版还是“帮助学习。”。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "first-decision",
+              "text": "第 1 次响应之后的记录：proposed_loads 里有没有 review-cards。",
+              "selector": {
+                "event": "lesson.skill_request",
+                "round": 1,
+                "path": "data.proposed_loads"
+              }
+            },
+            {
+              "id": "load-call",
+              "text": "load_skill 的调用：出现在复习提问上就是误触发。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.function.arguments",
+                "name": "load_skill"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "报告里的加载判定和格式初筛：两列可能不一致。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "final-answer",
+              "text": "最终回答：只看它，分不出技能有没有被加载。",
+              "selector": {
+                "event": "answer",
+                "path": "data.content"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "四组只差两处：任务，以及 review-cards 的描述。先看这一行描述。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "catalog-line"
+            },
+            {
+              "action": "highlight",
+              "observe": "catalog-line"
+            },
+            {
+              "action": "narrate",
+              "text": "模型决定加载哪个技能，能看到的只有这份目录。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "first-decision"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-decision"
+            },
+            {
+              "action": "narrate",
+              "text": "第 1 次响应里模型有没有提出加载，记在 proposed_loads 里。"
+            },
+            {
+              "action": "seek",
+              "observe": "load-call"
+            },
+            {
+              "action": "highlight",
+              "observe": "load-call"
+            },
+            {
+              "action": "narrate",
+              "text": "整理复习卡时没有这条是漏触发，复习提问时有这条是误触发。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "verdict"
+            },
+            {
+              "action": "highlight",
+              "observe": "verdict"
+            },
+            {
+              "action": "narrate",
+              "text": "加载判定只看事件，格式初筛只看回答，两列分开写。"
+            },
+            {
+              "action": "seek",
+              "observe": "final-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "final-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "回答本身可能完全正常，判断技能用没用，要回到上面的事件。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，模型在精确和模糊两种描述下有没有加载 review-cards，加载发生在哪次请求。",
+              "加载判定和格式初筛可以不一致：只看回答，看不出技能有没有被加载。"
+            ],
+            "does_not_prove": [
+              "每组只跑一次，看不出触发的比例；同一组再跑，结果可能不同。",
+              "“该不该加载”是本课对这三个任务的认定；换了任务和技能，标准要重新定。",
+              "离线测试模式下的漏触发和误触发由脚本写定，不代表任何真实模型。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "mode",
+          "label": "提供方式",
+          "options": [
+            {
+              "value": "both",
+              "label": "两种都跑：先全量注入，再按需加载"
+            },
+            {
+              "value": "full",
+              "label": "只跑全量注入"
+            },
+            {
+              "value": "on_demand",
+              "label": "只跑目录 + 按需加载"
+            }
+          ]
+        },
+        {
+          "name": "task",
+          "label": "任务",
+          "options": [
+            {
+              "value": "make_cards",
+              "label": "整理复习卡（应加载 review-cards）"
+            },
+            {
+              "value": "chat",
+              "label": "闲聊（不该加载技能）"
+            },
+            {
+              "value": "review_question",
+              "label": "复习提问（不该加载，容易误触发）"
+            }
+          ]
+        },
+        {
+          "name": "description",
+          "label": "review-cards 的描述",
+          "help": "只改目录里 review-cards 那一行，正文和其他技能不变。",
+          "options": [
+            {
+              "value": "precise",
+              "label": "精确"
+            },
+            {
+              "value": "vague",
+              "label": "模糊：帮助学习。"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q-path",
+              "prompt": "判断：按需加载时，运行器把 load_skill 的参数拼成文件路径，直接读取那个文件。",
+              "options": [
+                {
+                  "id": "wrong",
+                  "text": "错误",
+                  "feedback": "对，这句话是错的。运行器先查白名单 SKILL_NAMES，名字不在里面就返回结构化错误，不会去读任意路径。"
+                },
+                {
+                  "id": "right",
+                  "text": "正确",
+                  "feedback": "不对。如果直接拼路径，../../local_config 这样的名字就能读到不该读的文件。"
+                }
+              ],
+              "correct": "wrong",
+              "explanation": "模型写的字符串只拿来查表，查到了才读登记过的文件。"
+            },
+            {
+              "id": "q-format",
+              "prompt": "判断：回答写成了 4 张“问：/答：”卡片，就说明模型加载了 review-cards。",
+              "options": [
+                {
+                  "id": "wrong",
+                  "text": "错误",
+                  "feedback": "对，这句话是错的。模型不加载也可能写出卡片，这正是漏触发难发现的地方。"
+                },
+                {
+                  "id": "right",
+                  "text": "正确",
+                  "feedback": "不对。格式初筛只看回答的样子；技能有没有被加载，只有 tool_call 和 tool_result 能证明。"
+                }
+              ],
+              "correct": "wrong",
+              "explanation": "加载判定看事件，格式初筛看回答，两者不能互相代替。"
+            },
+            {
+              "id": "q-resident",
+              "prompt": "判断：全量注入时，用户只说一句“你好”，请求里也带着全部技能正文。",
+              "options": [
+                {
+                  "id": "right",
+                  "text": "正确",
+                  "feedback": "对。正文写在系统提示词里，每次请求都发送；报告里“全量注入：请求里带着全部技能正文”就是按实际消息查的。"
+                },
+                {
+                  "id": "wrong",
+                  "text": "错误",
+                  "feedback": "不对。全量注入不区分任务，系统提示词每次都一样长。"
+                }
+              ],
+              "correct": "right",
+              "explanation": "全量注入的成本是常驻的，和任务需不需要技能无关。"
+            },
+            {
+              "id": "q-total",
+              "prompt": "判断：需要技能时，按需加载的提示 Token 合计一定比全量注入少。",
+              "options": [
+                {
+                  "id": "wrong",
+                  "text": "错误",
+                  "feedback": "对，这句话是错的。多一次请求，第 2 次还要带上正文；技能少时合计可能更多，要看报告里的两列。"
+                },
+                {
+                  "id": "right",
+                  "text": "正确",
+                  "feedback": "不对。按需加载省的是每次都付的常驻部分，需要技能时要多付一次往返和一份正文。"
+                }
+              ],
+              "correct": "wrong",
+              "explanation": "常驻成本和按需成本分开算，数字以 usage 为准。"
+            },
+            {
+              "id": "q-vague",
+              "prompt": "判断：把 review-cards 的描述改成“帮助学习。”，模型就一定会误触发。",
+              "options": [
+                {
+                  "id": "wrong",
+                  "text": "错误",
+                  "feedback": "对，这句话是错的。模糊描述让选择变难，但 name 也带信息；有没有误触发，要看这次运行的 tool_call。"
+                },
+                {
+                  "id": "right",
+                  "text": "正确",
+                  "feedback": "不对。加载与否是模型每次的选择，一次运行说明不了“一定”。"
+                }
+              ],
+              "correct": "wrong",
+              "explanation": "描述影响的是被选中的可能性，结论要从多次运行的事件里看。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“复习提问：模糊描述”或“整理复习卡：两种方式对照”，找出模型提出加载技能的那一步。",
+          "target": {
+            "event": "tool_call",
+            "name": "load_skill"
+          },
+          "explanation": "这条 tool_call 的参数写着模型要加载哪个技能，紧跟着的 tool_result 是运行器读出的正文（或结构化错误）；它所在的轮次就是报告“加载记录”里写的第几次请求。在复习提问上找到它，就是一次误触发。你的运行里没有这条事件，说明这次模型一个技能也没加载，对照报告里的加载判定。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在“整理复习卡：两种方式对照”的报告里，找到了两种方式第 1 次请求的提示 Token（或“未报告”）和合计，并能说出差在哪里。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能指出按需加载时 review-cards 的正文从第几次请求开始进入上下文，依据是哪条 lesson.skill_request。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在 skills 目录里新建了一个技能（写好 name、description 和正文），登记进 SKILL_NAMES，重启后端后再跑“闲聊：两种方式对照”，比较两种方式第 1 次请求的提示 Token 各增加了多少。"
+            },
+            {
+              "id": "item-4",
+              "text": "我把实验台的任务改成“闲聊”、描述改成“模糊”再跑一次，对照加载判定，看有没有误触发。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "load_skill",
+      "note": "本课唯一的工具：按 name 查白名单，返回 SKILL.md 正文；名字没登记就返回结构化错误。"
+    },
+    {
+      "name": "SKILL_NAMES",
+      "note": "技能白名单：只有登记在这里的技能会进目录、能被 load_skill 读取。"
+    },
+    {
+      "name": "description",
+      "note": "SKILL.md 的描述字段，目录只列它和 name；实验只换 review-cards 的这一条。"
+    },
+    {
+      "name": "lesson.skill_request",
+      "note": "每次请求后的记录：提示 Token、上下文里的技能正文、响应提出加载的技能。"
+    },
+    {
+      "name": "skills_in_context",
+      "note": "按实际发出的消息查到的技能正文；按需加载的第 1 次请求应为空。"
+    },
+    {
+      "name": "prompt_tokens",
+      "note": "usage 里服务商报告的提示 Token 数；没有报告时记为 null，报告里写“未报告”。"
+    }
+  ]
+}
