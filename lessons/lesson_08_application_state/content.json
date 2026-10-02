@@ -16,7 +16,7 @@
           "eyebrow": "CHAPTER 03 / STATE",
           "headline": "任务的进度，",
           "highlight": "由程序事件决定。",
-          "takeaway": "消息是模型这次能看到的资料；state 是程序记下的目标、证据和进度。任务走到哪一步，由程序事件说了算。"
+          "takeaway": "消息是模型这次能看到的资料；应用状态是程序记下的目标、证据和进度。任务走到哪一步，由程序事件说了算。"
         },
         {
           "id": "concepts",
@@ -50,7 +50,7 @@
           "type": "prose",
           "title": "消息和状态各管什么",
           "paragraphs": [
-            "messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课只把用户目标放进 messages，读取资料、更新进度、写入终态都发生在 TaskState 里。界面上消息再多，也推不出任务完成了没有。本课不调用模型，免得把程序的状态机说成模型的行为。"
+            "messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课只把用户目标放进 messages，读取资料、更新进度、写入终态都发生在 TaskState 里。界面上消息再多，也推不出任务完成了没有。本课不调用模型，免得把程序写死的状态转换说成模型的行为。"
           ]
         },
         {
@@ -58,7 +58,8 @@
           "type": "prose",
           "title": "任务状态要有来源",
           "paragraphs": [
-            "TaskState 保存 run_id、goal、status、evidence、steps、used_steps、result 和 terminal_reason。goal 来自通过校验的输入；evidence 只从本地 SOURCES 读取，并附上 source 键。读取、核对、生成课内要点三个步骤，每一步执行前都先扣预算。每条 lesson.state 是一份状态快照，可以看到各个值怎样随实际步骤变化。"
+            "本课的应用状态是一个 TaskState 对象。goal 来自通过校验的输入；evidence 只从本地 SOURCES 读取，每条附上 source 键；result 是最后生成的课内要点；status 记录当前走到哪一步，进入终态时把原因写进 terminal_reason。",
+            "读取、核对、生成课内要点三个步骤，每一步执行前都先扣步骤预算，used_steps 记下已经执行了几步。每条 lesson.state 是当时完整状态的一份副本，也就是状态快照，可以看到各个值怎样随实际步骤变化。"
           ]
         },
         {
@@ -93,7 +94,8 @@
           "type": "prose",
           "title": "转换规则守住边界",
           "paragraphs": [
-            "ready 只能进入 running 或 cancelled；running 可以进入等待、完成、失败或取消；终态不能再回到运行。transition 会真的检查这些边。进入 completed 还要求已有证据和实际的 result，任何终态都必须写原因。这里的 completed 只表示“课内资料归纳”这个流程走完了，不说明你输入的任意目标都达成了。如果把模型一句“我已经完成”直接映射成 completed，就绕过了这些检查，所以本课没有这条转换。"
+            "status 只能沿转换表走：ready 只能进入 running 或 cancelled；running 可以进入 waiting、completed、failed 或 cancelled；waiting 可以回到 running，也可以进入 failed 或 cancelled。completed、failed、cancelled 是终态，进入后不能再转出。一组状态加上这样的转换规则，就是状态机；transition 每次转换都会查这张表。",
+            "进入 completed 还要求已有证据和实际的 result，任何终态都必须写原因。这里的 completed 只表示“课内资料归纳”这个流程走完了，不说明你输入的任意目标都达成了。如果把模型一句“我已经完成”直接映射成 completed，就绕过了这些检查，所以本课没有这条转换。"
           ]
         },
         {
@@ -101,7 +103,7 @@
           "type": "prose",
           "title": "等待、失败和预算结束",
           "paragraphs": [
-            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed。预算预设的 step_budget=2，只够读取和核对，第三步生成产物前预算真的用完了。这两种结局和 completed 一样都是明确的终态，只是原因和验收结果不同。在事件序列里可以核对 used_steps 和预算，确认失败时已有的证据仍然保留。报告里的检查项由独立于消息的验证器（Validator）逐项计算。"
+            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed。预算预设的 step_budget=2，只够读取和核对，第三步生成产物前预算真的用完了。这两种结局和 completed 一样都是明确的终态，只是原因和验收结果不同。在事件序列里可以核对 used_steps 和预算，确认失败时已有的证据仍然保留。报告里的检查项由运行器按状态逐项计算，不看消息内容。"
           ]
         },
         {
@@ -136,7 +138,7 @@
           "type": "prose",
           "title": "会话隔离与取消",
           "paragraphs": [
-            "每次运行都新建 TaskState 和 run_id，不用全局的可变状态。取消由平台在步骤之间检查；你点停止时会抛出 RunCancelled，平台记为已停止，不会冒充 completed。内存里的状态随运行结束消失，跨运行保存留给后面的持久记忆课。"
+            "每次运行都新建 TaskState 和 run_id，不用全局的可变状态。取消由平台在步骤之间检查；你点停止时会抛出 RunCancelled，平台把这次运行记为 cancelled，不会冒充 completed。内存里的状态随运行结束消失，跨运行保存放在第 10 课讲。"
           ]
         },
         {
@@ -188,7 +190,7 @@
             {
               "id": "step-5",
               "label": "05",
-              "actor": "验证器",
+              "actor": "运行器",
               "title": "发布报告",
               "body": "比较终态、证据与消息。",
               "code": "context.emit('lesson.report', report)",
@@ -200,7 +202,7 @@
         {
           "id": "predict-model-requests",
           "type": "predict",
-          "prompt": "在实验“三种终态，各有原因”中运行任意一组之前先猜：这一课的一次运行会发出几次模型请求（request 事件）？",
+          "prompt": "在实验“三种终态，各有原因”中运行任意一组之前先猜：这一课的一次运行会有几次模型调用（request 事件）？",
           "experiment": "terminal-states",
           "rule": {
             "kind": "count_events",
@@ -629,5 +631,47 @@
         }
       ]
     }
-  }
+  },
+  "code_notes": [
+    {
+      "name": "TaskState",
+      "note": "本课的应用状态数据类：保存目标、证据、步骤、产物和终态原因，和 messages 分开存放。"
+    },
+    {
+      "name": "transition",
+      "note": "状态转换方法：查 TRANSITIONS，非法就抛错；终态要写原因，completed 还要证据和产物。"
+    },
+    {
+      "name": "TRANSITIONS",
+      "note": "转换表：列出每个状态允许进入的下一状态；三个终态对应空集合，进入后不能再转出。"
+    },
+    {
+      "name": "evidence",
+      "note": "TaskState 字段：核对来源后写入的资料，每条含 source 与 excerpt；失败时也保留。"
+    },
+    {
+      "name": "result",
+      "note": "TaskState 字段：第三步实际生成的课内要点；为空时 transition 不允许进入 completed。"
+    },
+    {
+      "name": "terminal_reason",
+      "note": "进入终态时写入的原因；报告里“终态有原因”一项直接显示它。"
+    },
+    {
+      "name": "step_budget",
+      "note": "本课输入：最多执行几步；每步执行前扣减，不够时状态转为 failed。"
+    },
+    {
+      "name": "SOURCES",
+      "note": "本课内置的两条本地资料（lesson-07、lesson-08）；证据只能从这里读。"
+    },
+    {
+      "name": "lesson.state",
+      "note": "本课事件：每次关键变化时发布动作名和完整的 TaskState 快照。"
+    },
+    {
+      "name": "RunCancelled",
+      "note": "平台在步骤之间发现停止请求时抛出的异常；这次运行记为 cancelled，不算完成。"
+    }
+  ]
 }
