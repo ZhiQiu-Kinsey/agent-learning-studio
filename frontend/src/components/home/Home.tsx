@@ -17,8 +17,8 @@ const stripNumber = (title: string) =>
   title.replace(/^第\s*\d+\s*课[：:]?\s*/, "");
 
 /**
- * Home: a dark observatory hero with real catalogue and device numbers, the
- * illustrated Agent loop (clearly labelled, stepped by hand), the topics and
+ * Home: an observatory hero band with real catalogue and device numbers, the
+ * illustrated Agent loop (clearly labelled, stepped or played on request), the topics and
  * rhythm of the course, and the learning journey with this device's progress.
  */
 export function Home({

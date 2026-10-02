@@ -9,7 +9,7 @@ import Shuffle from "../react-bits/Shuffle";
 /**
  * The authored Agent loop on the real stage. It stays an illustration: the
  * stage watermarks it, the frame says so again, and it only moves when the
- * learner steps it.
+ * learner steps it or presses play (never on load).
  */
 export function HomeStage({
   block,

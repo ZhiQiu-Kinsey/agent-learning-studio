@@ -12,18 +12,34 @@ test("home shows a labelled illustration, the journey and a way back to the last
   await expect(home).toBeVisible();
 
   // The illustration uses the real stage but is marked as not being a run record,
-  // and it only moves when the learner steps it.
+  // and it only moves when the learner steps it or presses play: never on load.
   const stage = home.getByTestId("agent-stage");
   await expect(stage).toHaveAttribute("data-provenance", "illustration");
   await expect(stage).toContainText(t("provenance.illustration"));
   const position = home.getByTestId("illustration-flow");
+  const play = position.getByTestId("illustration-play");
   const before = await position.textContent();
   await page.waitForTimeout(1500);
   expect(await position.textContent()).toBe(before);
+  await expect(play).toHaveAttribute("aria-pressed", "false");
   await position
     .getByRole("button", { name: t("blocks:flow.step"), exact: true })
     .click();
   expect(await position.textContent()).not.toBe(before);
+  // Play advances on its own clock; a manual step pauses it again.
+  const stepped = await position.textContent();
+  await play.click();
+  await expect(play).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() => position.textContent(), { timeout: 4000 })
+    .not.toBe(stepped);
+  await position
+    .getByRole("button", { name: t("blocks:flow.back"), exact: true })
+    .click();
+  await expect(play).toHaveAttribute("aria-pressed", "false");
+  const paused = await position.textContent();
+  await page.waitForTimeout(1600);
+  expect(await position.textContent()).toBe(paused);
 
   // No local history yet: no "continue" button.
   await expect(page.getByTestId("home-continue")).toHaveCount(0);

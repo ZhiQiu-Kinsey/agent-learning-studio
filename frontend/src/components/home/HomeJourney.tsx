@@ -8,6 +8,7 @@ import SpotlightCard from "../react-bits/SpotlightCard";
 import type { CurriculumData } from "../../types";
 import { rgbChannels } from "../../lib/color";
 import { categoryTint } from "./tint";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import Shuffle from "../react-bits/Shuffle";
 
 function Reveal({
@@ -57,6 +58,7 @@ export function HomeJourney({
 }) {
   const { t } = useTranslation("home");
   const progress = useProgress();
+  const theme = useResolvedTheme();
   const checkpoints = Object.keys(
     progress.lessons[onboardingProgressId]?.checkpoints ?? {},
   ).length;
@@ -93,7 +95,7 @@ export function HomeJourney({
               <span
                 className="home-domain-sky"
                 aria-hidden="true"
-                style={{ background: categoryTint("H").sky }}
+                style={{ background: categoryTint("H", theme).sky }}
               >
                 <span className="home-domain-letter">0</span>
                 <Compass className="home-domain-icon" size={20} />
@@ -137,7 +139,7 @@ export function HomeJourney({
           const target =
             available.find((lesson) => !progress.lessons[lesson.id]) ??
             available[0];
-          const tint = categoryTint(category.id);
+          const tint = categoryTint(category.id, theme);
           const rgb = rgbChannels(tint.color);
           const share = inCategory.length
             ? Math.round((opened / inCategory.length) * 100)

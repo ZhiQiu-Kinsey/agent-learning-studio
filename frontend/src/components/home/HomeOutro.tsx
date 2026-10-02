@@ -2,6 +2,13 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight, Compass, Map as MapIcon } from "lucide-react";
 import ParticleText from "../react-bits/ParticleText";
 import Shuffle from "../react-bits/Shuffle";
+import { useResolvedTheme } from "../../hooks/useTheme";
+
+/** Particle hues per theme: brand pastels on ink, deeper brand tones on paper. */
+const particles = {
+  dark: ["#b98aff", "#6d5dfc", "#49dec6"],
+  light: ["#6d5dfc", "#4a3bb8", "#0f9e8a"],
+};
 
 /**
  * Closing band: the course promise as large particle words (decoration; the
@@ -15,6 +22,7 @@ export function HomeOutro({
   onOpenMap: () => void;
 }) {
   const { t } = useTranslation("home");
+  const theme = useResolvedTheme();
   return (
     <section
       className="home-section home-outro"
@@ -26,7 +34,11 @@ export function HomeOutro({
         <Shuffle text={t("outro.kicker")} />
       </p>
       <h2 id="home-outro-title" className="home-outro-title">
-        <ParticleText text={t("outro.word")} className="home-outro-particles" />
+        <ParticleText
+          text={t("outro.word")}
+          colors={particles[theme]}
+          className="home-outro-particles"
+        />
       </h2>
       <p className="home-outro-lead">{t("outro.lead")}</p>
       <div className="home-outro-actions">

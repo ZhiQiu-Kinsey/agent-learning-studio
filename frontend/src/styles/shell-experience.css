@@ -582,6 +582,64 @@
     0 30px 80px -24px rgb(0 0 0 / 0.5),
     inset 0 1px 0 color-mix(in srgb, var(--accent) 30%, transparent);
 }
+/* Model settings: a quiet "connected" state (badge + soft teal edge), shown
+   only while the server reports the saved connection ready. Content scrolls
+   vertically only when it is taller than the viewport. */
+.connection-dialog {
+  --connected: #49dec6;
+  --connected-text: #7ce8d6;
+  overflow-x: hidden;
+}
+:root[data-theme="light"] .connection-dialog {
+  --connected: #0f8f7e;
+  --connected-text: #0a6b60;
+}
+.connection-dialog-heading > [data-slot="dialog-title"] {
+  margin: 0;
+}
+.connection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: auto;
+  padding: 0.18rem 0.6rem 0.18rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--connected) 38%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--connected) 10%, var(--surface));
+  color: var(--connected-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.connection-badge > i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--connected);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--connected) 20%, transparent);
+}
+:root[data-motion="full"] .connection-badge > i {
+  animation: connected-breathe 2.8s ease-in-out infinite;
+}
+@keyframes connected-breathe {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--connected) 6%, transparent);
+  }
+}
+:root .connection-dialog[data-connected] {
+  border-color: color-mix(in srgb, var(--connected) 42%, var(--line));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--connected) 16%, transparent),
+    0 0 40px -12px color-mix(in srgb, var(--connected) 55%, transparent),
+    0 30px 80px -24px rgb(0 0 0 / 0.5);
+}
+:root[data-theme="light"] .connection-dialog[data-connected] {
+  border-color: color-mix(in srgb, var(--connected) 40%, var(--line));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--connected) 14%, transparent),
+    0 0 40px -14px color-mix(in srgb, var(--connected) 45%, transparent),
+    0 34px 80px -30px rgb(60 44 170 / 0.38);
+}
 @keyframes dialog-spring-in {
   from {
     opacity: 0;
@@ -636,50 +694,137 @@ button.rail-brand-mark:focus-visible {
   }
 }
 
-/* ---------- "Before you start": LineSidebar rule ---------- */
-.nav-prelude-fieldset {
-  min-width: 0;
+/* ---------- Rail grid ----------
+   One icon column and one text column for every rail row, in rem so they
+   scale with the viewport-driven root font size (base.css):
+   - --rail-col: centre x of every icon / badge (home, prelude badges, domain
+     icons; the branch trunk is measured from the domain icon);
+   - --rail-text: left edge of every label (home, prelude chapters, domain
+     titles, module titles and lesson numbers).
+   CourseBranches measures the rendered rows, so nothing here is mirrored in px. */
+:is(.course-rail, .course-sheet) {
+  --rail-col: 1.2rem;
+  --rail-badge: 1.45rem;
+  --rail-glyph: 17px;
+  --rail-text: calc(var(--rail-col) + var(--rail-badge) / 2 + 0.6rem);
+  /* One lesson line box (font-size × line-height of .nav-lesson). */
+  --nav-line: calc(0.73rem * 1.55);
+}
+:is(.course-rail, .course-sheet) .rail-catalog {
+  padding-left: calc(var(--rail-col) - var(--rail-glyph) / 2);
+  gap: calc(var(--rail-text) - var(--rail-col) - var(--rail-glyph) / 2);
+}
+:is(.course-rail, .course-sheet) .course-tree-heading {
+  padding-left: calc(var(--rail-col) - var(--rail-badge) / 2);
+}
+:is(.course-rail, .course-sheet) .nav-category-toggle {
+  padding-left: calc(var(--rail-col) - var(--rail-badge) / 2);
+  gap: 0.6rem;
+}
+.nav-category-toggle > .nav-category-icon {
+  width: var(--rail-badge, 1.45rem);
+  height: var(--rail-badge, 1.45rem);
+}
+
+/* ---------- "Before you start": numbered rail items ----------
+   Same RailItem + sliding pills as home / full curriculum; the badges sit on
+   the icon column and a quiet rule threads them like the domain trunk. */
+.nav-prelude-list {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
   margin: 0;
   padding: 0;
-  border: 0;
+  list-style: none;
 }
-.nav-prelude-lines {
-  margin-left: 0.6rem;
+.nav-prelude-list::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--rail-col) - 0.75px);
+  top: 1.2rem;
+  bottom: 1.2rem;
+  width: 1.5px;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--prelude-tint) 45%, var(--line)),
+    color-mix(in srgb, var(--accent) 35%, var(--line))
+  );
+  opacity: 0.8;
 }
-.nav-prelude-lines ul {
-  flex: 1;
-  min-width: 0;
-  padding-block: 0.5rem 0.25rem;
+.nav-prelude {
+  --prelude-tint: #49dec6;
 }
-/* Keep the enlarged hit area inside the rail (no sideways scroll). */
-.nav-prelude-lines li::before {
-  left: -1.6rem;
-  right: 0;
+:root[data-theme="light"] .nav-prelude {
+  --prelude-tint: #0f8f7e;
 }
-.nav-prelude-lines button {
+:is(.course-rail, .course-sheet) .nav-prelude-item {
   width: 100%;
+  height: 2.4rem;
+  padding: 0 0.6rem 0 calc(var(--rail-col) - var(--rail-badge) / 2);
+  gap: 0.6rem;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
   font-weight: 500;
-  border-radius: 0.3rem;
+  transform: none;
 }
-.nav-prelude-lines button[aria-current] {
+:is(.course-rail, .course-sheet) .nav-prelude-item:hover:not(:disabled),
+:is(.course-rail, .course-sheet) .nav-prelude-item.is-active {
+  color: var(--text);
+}
+:is(.course-rail, .course-sheet) .nav-prelude-item.is-active {
   font-weight: 600;
 }
-.nav-prelude-lines button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+.nav-prelude-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--rail-badge);
+  height: var(--rail-badge);
+  border: 1px solid color-mix(in srgb, var(--prelude-tint) 32%, var(--line));
+  border-radius: 0.45rem;
+  /* Opaque so the rule behind passes under the badge. */
+  background: color-mix(in srgb, var(--prelude-tint) 10%, var(--surface));
+  color: color-mix(in srgb, var(--prelude-tint) 62%, var(--text));
+  font:
+    600 0.62rem / 1 "Cascadia Code",
+    ui-monospace,
+    monospace;
+  letter-spacing: 0.02em;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s,
+    color 0.25s,
+    box-shadow 0.35s var(--ease-out),
+    transform 0.35s var(--ease-out);
 }
-.nav-prelude-fieldset:disabled .nav-prelude-lines {
-  opacity: 0.5;
+.nav-prelude-item:hover:not(:disabled) .nav-prelude-badge {
+  border-color: color-mix(in srgb, var(--prelude-tint) 60%, var(--line));
 }
-.nav-prelude-fieldset:disabled .nav-prelude-lines li {
-  cursor: default;
+:root[data-motion="full"] .nav-prelude-item:hover:not(:disabled) .nav-prelude-badge {
+  transform: scale(1.08);
+}
+.nav-prelude-item.is-active .nav-prelude-badge {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7b6bff, #5a49e6);
+  color: #fff;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 6px 14px -6px #6d5dfc;
+}
+.nav-prelude-item .rail-label {
+  white-space: nowrap;
 }
 
 /* ---------- Domain branches (BranchedMenu) ---------- */
-/* The trunk sits under the domain icon (17px), rows start at --branch-indent;
-   both numbers are mirrored in CourseBranches.tsx. */
+/* The trunk sits under the domain icon; lesson rows start at --branch-indent
+   so their numbers (and the module titles) line up on --rail-text. */
 :is(.course-rail, .course-sheet) .nav-category-content {
-  --branch-indent: 32px;
+  --nav-pad: 0.5rem;
+  --branch-indent: calc(var(--rail-text) - var(--nav-pad));
   position: relative;
   margin-left: 0;
   padding-left: 0;
@@ -689,11 +834,39 @@ button.rail-brand-mark:focus-visible {
   width: calc(100% - var(--branch-indent));
   margin-left: var(--branch-indent);
 }
-:is(.course-rail, .course-sheet) .nav-category-content .nav-module h3 {
-  margin-left: calc(var(--branch-indent) + 0.5rem);
+:is(.course-rail, .course-sheet) .nav-module h3 {
+  margin: 0.6rem 0 0.3rem var(--rail-text);
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+}
+/* Lesson rows: number, title and markers share the first line box, so a
+   wrapped title keeps the branch, number and glow on its first line. */
+:is(.course-rail, .course-sheet) .nav-lesson {
+  align-items: flex-start;
+  min-height: 0;
+  padding: calc((2.5rem - var(--nav-line)) / 2) var(--nav-pad);
+  gap: 0.5rem;
+  line-height: 1.55;
+}
+:is(.course-rail, .course-sheet) .nav-lesson > * {
+  line-height: var(--nav-line);
+}
+:is(.course-rail, .course-sheet) .nav-lesson-number {
+  flex: none;
+  min-width: 1.15rem;
+  height: var(--nav-line);
+}
+:is(.course-rail, .course-sheet) .nav-lesson > svg {
+  width: 11px;
+  height: 11px;
+  margin-top: calc((var(--nav-line) - 11px) / 2);
+}
+:is(.course-rail, .course-sheet) .nav-lesson-glow {
+  margin-top: calc((var(--nav-line) - 0.42rem) / 2);
 }
 .nav-category-toggle > .nav-category-icon {
   position: relative;
+  z-index: 1;
 }
 /* Short stem joining the open domain icon to the trunk below it. */
 .nav-category-toggle > .nav-category-icon::after {
@@ -793,6 +966,56 @@ button.rail-brand-mark:focus-visible {
   to {
     stroke-dashoffset: 0;
   }
+}
+
+/* ---------- Light theme: frosted paper shell ----------
+   The rail, sheet and toolbar are white glass with a faint lavender/teal
+   wash and lavender hairlines; shadows are tinted violet instead of black.
+   Overlays dim with a light lavender veil rather than a dark one. */
+:root[data-theme="light"] .course-rail.course-rail,
+:root[data-theme="light"] .course-sheet.course-sheet {
+  background:
+    radial-gradient(130% 34% at 0% 0%, rgb(109 93 252 / 7%), transparent 62%),
+    radial-gradient(120% 26% at 100% 100%, rgb(73 222 198 / 7%), transparent 62%),
+    rgb(255 255 255 / 0.86);
+  border-right-color: rgb(109 93 252 / 13%);
+  box-shadow:
+    inset -1px 0 0 rgb(255 255 255 / 0.8),
+    14px 0 40px -38px rgb(60 44 170 / 0.45);
+}
+:root[data-theme="light"] .experience-shell .app-toolbar {
+  background: rgb(255 255 255 / 0.62);
+  border-bottom-color: rgb(109 93 252 / 9%);
+}
+:root[data-theme="light"] .experience-shell .app-toolbar[data-scrolled] {
+  background: rgb(255 255 255 / 0.82);
+  border-bottom-color: rgb(109 93 252 / 14%);
+  box-shadow: 0 12px 32px -24px rgb(60 44 170 / 0.4);
+}
+:root[data-theme="light"] .rail-pill-hover {
+  background: rgb(109 93 252 / 7%);
+}
+:root[data-theme="light"] :is(.course-rail, .course-sheet) .rail-next {
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgb(109 93 252 / 9%), transparent 60%),
+    #fff;
+  box-shadow: 0 14px 30px -24px rgb(60 44 170 / 0.45);
+}
+:root[data-theme="light"] [data-slot="dialog-overlay"],
+:root[data-theme="light"] [data-slot="sheet-overlay"] {
+  background: rgb(52 40 120 / 0.16);
+  backdrop-filter: blur(8px) saturate(140%);
+}
+:root[data-theme="light"] .connection-dialog {
+  border-color: rgb(109 93 252 / 16%);
+  background:
+    radial-gradient(90% 50% at 100% 0%, rgb(109 93 252 / 8%), transparent 62%),
+    radial-gradient(70% 40% at 0% 100%, rgb(73 222 198 / 7%), transparent 62%),
+    var(--surface);
+  box-shadow:
+    0 34px 80px -30px rgb(60 44 170 / 0.42),
+    0 2px 8px rgb(23 19 46 / 0.06),
+    inset 0 1px 0 #fff;
 }
 
 /* ---------- Mobile ---------- */

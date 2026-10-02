@@ -115,7 +115,7 @@ export function CourseNavigation({
         <span className="nav-lesson-number">
           {formatLessonNumber(lesson.number)}
         </span>
-        <span className="nav-lesson-title">
+        <span className="nav-lesson-title" data-branch-anchor="">
           {lesson.title.replace(/^第\s*\d+\s*课[：:]?\s*/, "")}
         </span>
         {active && (
@@ -283,7 +283,11 @@ function CategoryToggle({
       {...handlers}
     >
       {pills}
-      <span className="nav-category-icon" aria-hidden="true">
+      <span
+        className="nav-category-icon"
+        aria-hidden="true"
+        data-branch-root=""
+      >
         <BookOpen size={14} />
       </span>
       <span>{title}</span>

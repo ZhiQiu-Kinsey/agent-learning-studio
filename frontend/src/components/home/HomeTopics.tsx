@@ -1,8 +1,8 @@
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import ScrollVelocity from "../react-bits/ScrollVelocity";
 import type { CurriculumData } from "../../types";
-import { categoryTint } from "./tint";
+import { tintFor } from "../backdrops/presets";
 import Shuffle from "../react-bits/Shuffle";
 
 /**
@@ -15,7 +15,7 @@ export function HomeTopics({ curriculum }: { curriculum: CurriculumData }) {
     category.modules.map((module) => ({
       id: module.id,
       title: module.title,
-      color: categoryTint(category.id).color,
+      color: tintFor(category.id),
     })),
   );
   const half = Math.ceil(modules.length / 2);
@@ -23,7 +23,10 @@ export function HomeTopics({ curriculum }: { curriculum: CurriculumData }) {
     <>
       {items.map((item) => (
         <Fragment key={item.id}>
-          <span className="home-topic" style={{ color: item.color }}>
+          <span
+            className="home-topic"
+            style={{ "--topic": item.color } as CSSProperties}
+          >
             {item.title}
           </span>
           <span className="home-topic-star">✦</span>
