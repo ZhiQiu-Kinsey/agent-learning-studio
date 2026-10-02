@@ -7,6 +7,7 @@ import type { CurriculumData } from "../../types";
 import { Input } from "../ui/input";
 import SquishSwitch from "../react-bits/SquishSwitch";
 import { domainAtmosphere } from "./atmosphere";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import { easeOut, pillSpring } from "./transitions";
 import type { LessonFilterState } from "./useLessonFilter";
 
@@ -33,6 +34,7 @@ export function CurriculumFilters({
 }) {
   const { t } = useTranslation("curriculum");
   const reduced = useReducedMotion();
+  const theme = useResolvedTheme();
   const {
     query,
     setQuery,
@@ -112,7 +114,7 @@ export function CurriculumFilters({
             aria-pressed={activeCategory === category.id}
             style={
               {
-                "--chip-rgb": domainAtmosphere(category.id).accent,
+                "--chip-rgb": domainAtmosphere(category.id, theme).accent,
               } as CSSProperties
             }
             onClick={() =>

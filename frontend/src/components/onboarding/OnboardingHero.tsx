@@ -15,6 +15,7 @@ import SplitText from "../react-bits/SplitText";
 import ShinyText from "../react-bits/ShinyText";
 import StarBorder from "../react-bits/StarBorder";
 import { Backdrop } from "../backdrops/Backdrop";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import { easeOut } from "./transitions";
 
 /** Orbiting model / tool / evidence diagram beside the hero copy (decorative). */
@@ -51,6 +52,7 @@ export function OnboardingHero({
 }) {
   const { t } = useTranslation("curriculum", { keyPrefix: "onboarding" });
   const reduced = useReducedMotion();
+  const dark = useResolvedTheme() === "dark";
   // CSS orbit loops run only while the hero is on screen in a visible tab.
   const { ref, active } = useMotionBudget<HTMLElement>("css");
   const minutes = content.chapters.reduce(
@@ -89,8 +91,8 @@ export function OnboardingHero({
             speed={4}
             delay={2}
             disabled={!!reduced}
-            color="#8ff0de"
-            shineColor="#ffffff"
+            color={dark ? "#8ff0de" : "#0a6a62"}
+            shineColor={dark ? "#ffffff" : "#6d5dfc"}
           />
         </motion.span>
         {reduced ? (
@@ -111,7 +113,7 @@ export function OnboardingHero({
         <motion.div className="onboarding-hero-actions" {...rise(2)}>
           <StarBorder
             className="onboarding-start-star"
-            color="#49dec6"
+            color={dark ? "#49dec6" : "#6d5dfc"}
             speed="6s"
           >
             <Button

@@ -6,6 +6,7 @@ import { revealProps, useReducedMotion } from "../../motion";
 import type { CurriculumData } from "../../types";
 import SpotlightCard from "../react-bits/SpotlightCard";
 import { domainAtmosphere } from "./atmosphere";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import { LessonPlan } from "./LessonPlan";
 import { easeOut } from "./transitions";
 
@@ -122,11 +123,12 @@ export function CategoryBlock({
 }) {
   const { t } = useTranslation("curriculum");
   const reduced = useReducedMotion();
+  const theme = useResolvedTheme();
   const modules = category.modules.filter((module) =>
     module.lesson_ids.some((id) => visibleIds.has(id)),
   );
   if (!modules.length) return null;
-  const { accent } = domainAtmosphere(category.id);
+  const { accent } = domainAtmosphere(category.id, theme);
   return (
     <motion.div
       className="curriculum-category-reveal"

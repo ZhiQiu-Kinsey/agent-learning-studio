@@ -4,6 +4,7 @@ import { useReducedMotion } from "../../motion";
 import type { Chapter } from "../../content/types.gen";
 import { GlossaryScope } from "../../content/glossary/Glossary";
 import { backdropAccent } from "../curriculum/atmosphere";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import { ChapterBand } from "./ChapterBand";
 import { ChapterExercise } from "./ChapterExercise";
 import { ChapterFooter } from "./ChapterFooter";
@@ -39,6 +40,7 @@ export function ChapterArticle({
   onStart: () => void;
 }) {
   const reduced = useReducedMotion();
+  const theme = useResolvedTheme();
   const sky = skyFor(chapter.id, index);
   const checks = chapterChecks(chapter, checked);
   const glossaryTexts = chapter.sections.flatMap((section) => [
@@ -51,7 +53,7 @@ export function ChapterArticle({
     <motion.article
       className="onboarding-chapter"
       data-testid="onboarding-chapter"
-      style={{ "--chapter-rgb": backdropAccent(sky) } as CSSProperties}
+      style={{ "--chapter-rgb": backdropAccent(sky, theme) } as CSSProperties}
       initial={
         reduced ? false : { opacity: 0, x: offset, filter: "blur(14px)" }
       }

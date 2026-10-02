@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { useReducedMotion } from "../../motion";
 import type { Chapter } from "../../content/types.gen";
 import { backdropAccent } from "../curriculum/atmosphere";
+import { useResolvedTheme } from "../../hooks/useTheme";
 import { chapterChecks, numeral, skyFor, type CheckedPoints } from "./chapters";
 import { tabSpring } from "./transitions";
 
@@ -39,6 +40,7 @@ export function ChapterTabs({
 }) {
   const { t } = useTranslation("curriculum", { keyPrefix: "onboarding" });
   const reduced = useReducedMotion();
+  const theme = useResolvedTheme();
   return (
     <nav
       className="onboarding-chapter-tabs"
@@ -57,7 +59,7 @@ export function ChapterTabs({
             data-complete={total > 0 && done === total}
             style={
               {
-                "--tab-rgb": backdropAccent(skyFor(item.id, index)),
+                "--tab-rgb": backdropAccent(skyFor(item.id, index), theme),
               } as CSSProperties
             }
             onClick={() => onNavigate(index)}

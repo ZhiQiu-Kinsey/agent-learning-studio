@@ -31,6 +31,7 @@ import type { CurriculumData } from "../../types";
 type CurriculumCategory = CurriculumData["categories"][number];
 import { countMarks } from "./graph";
 import { domainAtmosphere } from "./atmosphere";
+import { useResolvedTheme } from "../../hooks/useTheme";
 
 const domainIcons: Record<string, LucideIcon> = {
   A: Terminal,
@@ -77,7 +78,8 @@ function DomainWindow({
   live: boolean;
   Icon: LucideIcon;
 }) {
-  const atmosphere = domainAtmosphere(category.id);
+  const theme = useResolvedTheme();
+  const atmosphere = domainAtmosphere(category.id, theme);
   return (
     <span className="curriculum-domain-window" aria-hidden="true">
       {live ? (
@@ -114,6 +116,7 @@ export function DomainBento({
 }) {
   const { t } = useTranslation("curriculum");
   const { reduced, webgl } = useMotion();
+  const theme = useResolvedTheme();
   const sectionRef = useRef<HTMLElement>(null);
   const entered = useInView(sectionRef, { once: true, amount: 0.08 });
   const [preview, setPreview] = useState<string | null>(null);
@@ -148,14 +151,14 @@ export function DomainBento({
       </div>
       <MagicBento
         className="curriculum-bento"
-        glowColor="109, 93, 252"
+        glowColor={theme === "dark" ? "109, 93, 252" : "93, 76, 235"}
         data-testid="curriculum-domains"
       >
         {curriculum.categories.map((category, index) => {
           const Icon =
             domainIcons[category.id] ??
             fallbackIcons[index % fallbackIcons.length];
-          const { accent } = domainAtmosphere(category.id);
+          const { accent } = domainAtmosphere(category.id, theme);
           const lessons = curriculum.lessons.filter(
             (lesson) => lesson.category_id === category.id,
           );
