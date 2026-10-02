@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { InputField } from "../../content/types.gen";
 import RubberSegment from "../react-bits/RubberSegment";
 import ScrubField from "../react-bits/ScrubField";
+import ElasticSlider from "../react-bits/ElasticSlider";
 import SquishSwitch from "../react-bits/SquishSwitch";
 import GlideSelect from "../react-bits/GlideSelect";
 import { Input } from "../ui/input";
@@ -27,11 +28,20 @@ export type ControlKind =
   | "select"
   | "switch"
   | "scrub"
+  | "elastic"
   | "text"
   | "textarea"
   | "unsupported";
 
-/** Picks a control from the schema alone; labels come from lesson content. */
+/** Integer ranges up to this many steps fit an elastic slider's whole track. */
+export const ELASTIC_MAX_STEPS = 30;
+
+/**
+ * Picks a control from the schema alone; labels come from lesson content.
+ * Bounded numbers: a short integer range becomes an elastic slider (the whole
+ * range is visible and each value is one drag or arrow press away); wide or
+ * fractional ranges stay a ScrubField (precise drag plus typing).
+ */
 export function controlFor(property: PropertySchema): ControlKind {
   if (property.enum?.length)
     return property.enum.length <= 4 ? "segment" : "select";
@@ -41,7 +51,10 @@ export function controlFor(property: PropertySchema): ControlKind {
     property.minimum !== undefined &&
     property.maximum !== undefined
   )
-    return "scrub";
+    return property.type === "integer" &&
+      property.maximum - property.minimum <= ELASTIC_MAX_STEPS
+      ? "elastic"
+      : "scrub";
   if (property.type === "string")
     return (property.maxLength ?? 0) > 120 ? "textarea" : "text";
   return "unsupported";
@@ -88,6 +101,10 @@ export function SchemaInputs({
               <label htmlFor={id} className="schema-input-label">
                 {label}
               </label>
+            ) : kind === "elastic" ? (
+              <span id={`${id}-label`} className="schema-input-label">
+                {label}
+              </span>
             ) : kind !== "scrub" ? (
               <span className="schema-input-label" aria-hidden="true">
                 {label}
@@ -164,6 +181,20 @@ export function SchemaInputs({
                   {t("range", { min: property.minimum, max: property.maximum })}
                 </small>
               </>
+            )}
+            {kind === "elastic" && (
+              <ElasticSlider
+                ariaLabelledBy={`${id}-label`}
+                value={typeof value === "number" ? value : property.minimum!}
+                min={property.minimum!}
+                max={property.maximum!}
+                step={1}
+                disabled={disabled}
+                accent="var(--role-runtime)"
+                className="schema-elastic"
+                data-testid={`input-${name}-slider`}
+                onChange={(next) => set(name, Math.round(next))}
+              />
             )}
             {kind === "text" && (
               <Input

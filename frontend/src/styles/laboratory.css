@@ -49,7 +49,7 @@
   font-weight: 500;
   color: var(--text);
 }
-.form-field textarea {
+.form-field textarea:not(.prompt-bar__input) {
   min-height: 12.85714rem;
   resize: vertical;
   line-height: 1.8;
@@ -84,22 +84,23 @@
   border: 1px solid var(--line);
   max-width: calc(100vw - 2.85714rem);
 }
-.composer-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.57143rem;
-  margin-top: 1.42857rem;
-}
-.composer-actions > small {
-  color: var(--text-muted);
-  font-size: 0.71429rem;
-}
 .composer-note {
   font-size: 0.71429rem;
   color: var(--text-muted);
   line-height: 1.8;
   margin-top: 1.07143rem;
+}
+.composer-mode {
+  display: inline-block;
+  margin-right: 0.45rem;
+  padding: 0 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.lab-composer > [data-testid="lab-configure-button"] {
+  width: 100%;
 }
 .lab-answer {
   border-top: 1px solid var(--line);
@@ -272,6 +273,68 @@
   padding: 0.71429rem 1.71429rem;
   border-bottom: 1px solid var(--line);
 }
+/* Waiting for the model: lattice + real timer, tinted with the model colour. */
+.trace-activity.is-waiting {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--role-model) 10%, transparent),
+    transparent 70%
+  );
+  animation: lab-row-in 320ms var(--ease-out) both;
+}
+.trace-activity .thought-line__glyph:has(.ll-root) {
+  width: auto;
+  height: auto;
+  margin-right: 0.5em;
+}
+.trace-activity .thought-line__timer {
+  margin-left: 0.4em;
+  color: var(--role-model);
+  font-family: "Cascadia Code", ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+/* One chip per real tool call; click to inspect its events. */
+.tool-call-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.7rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+}
+.tool-call-chips > li {
+  min-width: 0;
+  max-width: 100%;
+  animation: lab-chip-in 380ms var(--ease-out) both;
+}
+.tool-call-chips .call-chip {
+  --cc-color: var(--text);
+  max-width: 100%;
+  color: var(--text);
+}
+.tool-call-chips .call-chip__name {
+  color: var(--role-tool);
+}
+.tool-call-chips .call-chip__arg {
+  max-width: 14rem;
+}
+@keyframes lab-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+    filter: blur(4px);
+  }
+}
+@keyframes lab-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
 .replay-toolbar {
   display: flex;
   align-items: center;
@@ -353,9 +416,49 @@
 .event + .event {
   margin-top: 0.21429rem;
 }
+/* Each real event slides in once when it arrives (or is replayed into view). */
+.timeline > .event {
+  position: relative;
+  isolation: isolate;
+  animation: lab-event-in 360ms var(--ease-out) both;
+  transition:
+    background-color 0.2s var(--ease-out),
+    transform 0.2s var(--ease-out);
+}
+.timeline > .event:hover:not(.is-selected) {
+  transform: translateX(2px);
+}
 .event.is-selected {
+  border-color: transparent;
+  background: transparent;
+}
+/* Shared selection pill: glides between events (motion layoutId spring). */
+.event-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: inherit;
   background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 17%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+@keyframes lab-event-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+}
+/* Event detail: a new selection fades the JSON in from slightly below. */
+.event-detail-body {
+  animation: lab-detail-in 300ms var(--ease-out) both;
+}
+@keyframes lab-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(3px);
+  }
 }
 .event-index {
   color: var(--text-muted);
@@ -425,7 +528,7 @@
   line-height: 1.8;
   border-bottom: 1px solid var(--line);
 }
-.event-detail > .code {
+.event-detail-body > .code {
   min-height: 25.35714rem;
   max-height: 28.92857rem;
   font-size: 0.85714rem;
@@ -546,7 +649,7 @@
   color: #89bcdc;
 }
 
-/* ---------- 动效：运行中流光边框、运行按钮星光、实验面板与导览入场 ---------- */
+/* ---------- 动效：运行中流光边框、观察台入场、实验面板与导览入场 ---------- */
 .lab-frame {
   position: relative;
   border-radius: 18px;
@@ -554,48 +657,53 @@
 .lab-running-border {
   border-radius: 18px;
 }
-.lab-run-star.rb-star-border {
-  display: inline-block;
-  border-radius: 0.6rem;
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.lab-run-star .rb-star-inner {
-  border-radius: calc(0.6rem - 1px);
-  background: transparent;
-}
-.lab-run-star [data-testid="lab-run-button"] {
-  position: relative;
-  overflow: hidden;
-  border-radius: calc(0.6rem - 1px);
-  background: linear-gradient(115deg, #7762ed, #574ac4);
-  color: white;
-  box-shadow: 0 4px 20px #7160db40;
-  transition:
-    box-shadow 0.25s var(--ease-out),
-    transform 0.25s var(--ease-out);
-}
-.lab-run-star [data-testid="lab-run-button"]:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 28px #7160db70;
-}
-.lab-run-star [data-testid="lab-run-button"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 35%,
-    rgb(255 255 255 / 0.35) 50%,
-    transparent 65%
-  );
-  transform: translateX(-120%);
-  transition: transform 0.7s var(--ease-out);
-}
-.lab-run-star [data-testid="lab-run-button"]:not(:disabled):hover::after {
-  transform: translateX(120%);
-}
 .lab-frame[data-running] .lab-border-glow {
   box-shadow: 0 0 60px -20px rgb(143 125 255 / 0.55) !important;
+}
+/* While a real run is live the inspector heading carries a thin scanning rule. */
+.lab-workspace[data-running] .inspector-heading {
+  position: relative;
+}
+.lab-workspace[data-running] .inspector-heading::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 80%, transparent),
+    transparent
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: lab-scan 1.8s linear infinite;
+}
+@keyframes lab-scan {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+/* Evidence panes rise in the first time a run produces them. */
+.inspector-trace > .run-timeline,
+.inspector-trace > .stage-detail-grid,
+.inspector-trace > .replay-toolbar {
+  animation: lab-card-in 480ms var(--ease-out) backwards;
+}
+.inspector-trace > .stage-detail-grid {
+  animation-delay: 80ms;
+}
+.guide-electric {
+  border-radius: inherit;
+}
+@media (max-width: 760px) {
+  .event-detail-body > .code {
+    max-height: 30rem;
+    min-height: 15.71429rem;
+  }
 }
 
 /* Experiment framing: cards rise in, lift on hover. */
@@ -706,13 +814,18 @@
   .experiment-observe li[data-status="found"] small,
   .experiment-conclusion ul li,
   .scene-lab .guide-bar,
-  .scene-lab .guide-bubble p {
+  .scene-lab .guide-bubble p,
+  .timeline > .event,
+  .event-detail-body,
+  .tool-call-chips > li,
+  .trace-activity.is-waiting,
+  .inspector-trace > .run-timeline,
+  .inspector-trace > .stage-detail-grid,
+  .inspector-trace > .replay-toolbar,
+  .lab-workspace[data-running] .inspector-heading::after {
     animation: none;
   }
-  .lab-run-star [data-testid="lab-run-button"]::after {
-    display: none;
-  }
-  .lab-run-star [data-testid="lab-run-button"]:not(:disabled):hover {
+  .timeline > .event:hover:not(.is-selected) {
     transform: none;
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Play } from "lucide-react";
 import { jsonFetch } from "../api";
@@ -7,6 +7,7 @@ import { LessonExtension } from "../lesson-extensions/LessonExtension";
 import { Button } from "../components/ui/button";
 import RubberSegment from "../components/react-bits/RubberSegment";
 import ElectricBorder from "../components/react-bits/ElectricBorder";
+import { notify } from "../components/toast/toast";
 import { ExperimentPanel } from "./lab/ExperimentPanel";
 import { GuideBar } from "./lab/GuideBar";
 import { RecordingView, type RecordingMeta } from "./lab/RecordingView";
@@ -17,6 +18,7 @@ import type { SceneProps } from "./types";
 /** 实验：experiments frame the run; the stage, film and cards show what really happened. */
 export function LabScene({ studio, active, onConfigure }: SceneProps) {
   const { t, i18n } = useTranslation("lesson", { keyPrefix: "lab" });
+  const { t: tLab } = useTranslation("lab");
   const detail = studio.detail!;
   const experiments = detail.learning?.scenes.lab?.experiments ?? [];
   const [experimentId, setExperimentId] = useState(experiments[0]?.id ?? "");
@@ -53,6 +55,43 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
   // A new run invalidates the guide position on the previous one.
   useEffect(() => {
     if (studio.running) setGuideStep(null);
+  }, [studio.running]);
+
+  // Report how a live run really ended, once, when it stops running.
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    const ended = wasRunning.current && !studio.running;
+    wasRunning.current = studio.running;
+    if (!ended) return;
+    const events = studio.events;
+    const last = events.at(-1);
+    const error = events.findLast((event) => event.type === "error");
+    if (last?.type === "done" && last.data.status === "completed") {
+      const ms = Date.parse(last.timestamp) - Date.parse(events[0].timestamp);
+      notify({
+        tone: "success",
+        title: tLab("toast.completed"),
+        description: Number.isFinite(ms)
+          ? tLab("toast.completedDetail", {
+              count: events.length,
+              seconds: new Intl.NumberFormat(i18n.language, {
+                maximumFractionDigits: 2,
+              }).format(Math.max(0, ms) / 1000),
+            })
+          : tLab("toast.completedCount", { count: events.length }),
+      });
+    } else if (error) {
+      notify({
+        tone: "error",
+        title: tLab("toast.error"),
+        description:
+          typeof error.data.message === "string" && error.data.message
+            ? error.data.message
+            : tLab("toast.errorFallback"),
+      });
+    }
+    // Only the running edge matters; events are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studio.running]);
 
   const exitGuide = useCallback(() => setGuideStep(null), []);

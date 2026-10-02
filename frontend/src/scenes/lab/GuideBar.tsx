@@ -5,6 +5,7 @@ import type { StudioState } from "../../hooks/useStudio";
 import { resolveGuide } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { Button } from "../../components/ui/button";
+import ElectricBorder from "../../components/react-bits/ElectricBorder";
 
 const preview = (value: unknown) => {
   const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -77,6 +78,14 @@ export function GuideBar({
       aria-label={t("region")}
       data-testid="guide-bar"
     >
+      {/* Decoration: the bar only exists while a guided replay is in progress. */}
+      <ElectricBorder
+        className="guide-electric"
+        color="#49dec6"
+        chaos={0.05}
+        speed={0.8}
+        borderRadius={13}
+      />
       <div className="guide-bubble" aria-live="polite">
         {frame.narration && (
           <p key={frame.step} data-testid="guide-narration">

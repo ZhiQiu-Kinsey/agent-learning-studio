@@ -1,284 +1,189 @@
 // Adapted from https://reactbits.dev/r/CallChip-TS-CSS.json (MIT + Commons Clause).
-"use client";
-
+// Changes for real tool calls: the timer never runs its own clock — while a
+// call is open it shows the real time since that call's event (`startAt`, a
+// server timestamp); once closed it shows the server timestamp difference
+// (`durationMs`). The estimated progress fill is replaced by an indeterminate
+// sweep (it never implies how far along a call is). Copy comes from the caller,
+// it renders as a button when `onClick` is given, and motion follows the app
+// motion level.
 import React, {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { prefersReducedMotionNow } from "../../motion/level";
 import {
+  Cancel01Icon,
   CommandLineIcon,
-  File02Icon,
-  PencilEdit01Icon,
-  RefreshIcon,
-  Search01Icon,
+  HelpCircleIcon,
+  StopIcon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
+import { prefersReducedMotionNow } from "../../motion/level";
+import { useElapsedMs } from "../../stage/useElapsed";
 
 import "./CallChip.css";
 
-export type CallChipStatus = "idle" | "running" | "done" | "error";
-export type CallChipIcon = "terminal" | "file" | "search" | "edit";
+/** `unknown`: the call closed but its result declared no ok/failed status. */
+export type CallChipStatus =
+  "running" | "done" | "error" | "stopped" | "unknown";
 
 export interface CallChipProps {
-  icon?: CallChipIcon | ReactNode;
-  name?: string;
+  name: string;
   argument?: string;
-  status?: CallChipStatus;
-  expectedMs?: number;
+  status: CallChipStatus;
+  /** Server timestamp of the call event; drives the live timer while running. */
+  startAt?: string | null;
+  /** Server timestamp difference once the call closed; null when unreadable. */
+  durationMs?: number | null;
+  /** Accessible status words, already translated. */
+  statusLabel: string;
+  formatMs?: (ms: number) => string;
+  icon?: ReactNode;
+  onClick?: () => void;
+  pressed?: boolean;
   size?: number;
   radius?: number;
   color?: string;
   surfaceColor?: string;
-  progressColor?: string;
-  progressOpacity?: number;
   doneColor?: string;
   errorColor?: string;
-  washOpacity?: number;
   shake?: number;
-  showTimer?: boolean;
-  onRetry?: () => void;
   className?: string;
   style?: CSSProperties;
+  "data-testid"?: string;
 }
 
-type Glyph = "tool" | "check" | "retry";
-
-const HOLD_AT = 0.9;
 const SHAKE = [0, -1, 1, -0.66, 0.66, -0.33, 0];
-const ICONS: Record<CallChipIcon, typeof CommandLineIcon> = {
-  terminal: CommandLineIcon,
-  file: File02Icon,
-  search: Search01Icon,
-  edit: PencilEdit01Icon,
-};
-const WORDS: Record<CallChipStatus, string> = {
-  running: "running",
-  done: "done",
-  error: "failed",
-  idle: "queued",
-};
-
-const fmt = (ms: number) =>
+const defaultFormat = (ms: number) =>
   ms < 10000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
-const reduceMotion = prefersReducedMotionNow;
-const glyphOf = (s: CallChipStatus): Glyph =>
-  s === "done" ? "check" : s === "error" ? "retry" : "tool";
+const GLYPHS: Record<CallChipStatus, typeof CommandLineIcon> = {
+  running: CommandLineIcon,
+  done: Tick02Icon,
+  error: Cancel01Icon,
+  stopped: StopIcon,
+  unknown: HelpCircleIcon,
+};
 
 const CallChip: React.FC<CallChipProps> = ({
-  icon = "terminal",
-  name = "bash",
-  argument = "npm test",
-  status = "running",
-  expectedMs = 2500,
-  size = 34,
-  radius = 10,
+  name,
+  argument = "",
+  status,
+  startAt,
+  durationMs = null,
+  statusLabel,
+  formatMs = defaultFormat,
+  icon,
+  onClick,
+  pressed,
+  size = 30,
+  radius = 9,
   color = "currentColor",
-  surfaceColor = "#27272a",
-  progressColor = "currentColor",
-  progressOpacity = 0.08,
-  doneColor = "#22c55e",
-  errorColor = "#ef4444",
-  washOpacity = 0.14,
-  shake = 6,
-  showTimer = true,
-  onRetry,
+  surfaceColor = "var(--surface-muted)",
+  doneColor = "var(--success, #22c55e)",
+  errorColor = "var(--danger, #ef4444)",
+  shake = 5,
   className = "",
   style,
+  "data-testid": testId,
 }) => {
-  const rootRef = useRef<HTMLSpanElement>(null);
-  const fillRef = useRef<HTMLSpanElement>(null);
-  const timerRef = useRef<HTMLSpanElement>(null);
-  const mountedRef = useRef(false);
-  const fraction = useRef(0);
-  const clock = useRef({ ms: 0 });
-  const shakeAnim = useRef<Animation | null>(null);
-  const statusRef = useRef(status);
-  statusRef.current = status;
-  const [mounted, setMounted] = useState(false);
-  const [pressed, setPressed] = useState(false);
-  const [announce, setAnnounce] = useState("");
-  const roll = useRef<{ cur: Glyph; prev: Glyph | null }>({
-    cur: glyphOf(status),
-    prev: null,
-  });
-  if (glyphOf(status) !== roll.current.cur)
-    roll.current = { cur: glyphOf(status), prev: roll.current.cur };
+  const rootRef = useRef<HTMLElement | null>(null);
+  const previous = useRef(status);
+  const [settled, setSettled] = useState(false);
+  const live = useElapsedMs(status === "running" ? startAt : null);
+  const ms = status === "running" ? live : durationMs;
+  const timer = ms == null ? "—" : formatMs(ms);
 
-  const setFraction = (f: number, instant: boolean) => {
-    const fill = fillRef.current;
-    if (!fill) return;
-    fraction.current = f;
-    if (instant) fill.style.transition = "none";
-    fill.style.transform = `scaleX(${f})`;
-    if (instant) {
-      void fill.getBoundingClientRect();
-      fill.style.transition = "";
-    }
-  };
-  const apply = (s: CallChipStatus, animate: boolean) => {
-    if (s === "running") {
-      shakeAnim.current?.cancel();
-      setFraction(0, true);
-      if (animate) setFraction(HOLD_AT, false);
-    } else if (s === "done") {
-      setFraction(1, !animate);
-    } else if (s === "error") {
-      const fill = fillRef.current;
-      const live = fill
-        ? new DOMMatrix(getComputedStyle(fill).transform).a
-        : fraction.current;
-      setFraction(Math.min(1, Math.max(0, live)), true);
-      if (animate && shake > 0 && !reduceMotion() && rootRef.current) {
-        shakeAnim.current = rootRef.current.animate(
-          SHAKE.map((k) => ({
-            transform: `translateX(${k * shake}px)`,
-            easing: "cubic-bezier(0.77, 0, 0.175, 1)",
-          })),
-          { duration: 450, composite: "add" },
-        );
-      }
-    } else setFraction(0, true);
-  };
-
+  // Shake once when a call that was running comes back with an error.
   useEffect(() => {
-    mountedRef.current = true;
-    setMounted(true);
-    apply(statusRef.current, statusRef.current === "running");
-    return () => {
-      mountedRef.current = false;
-      shakeAnim.current?.cancel();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useLayoutEffect(() => {
-    if (mountedRef.current) apply(status, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
-
-  useEffect(() => {
-    const write = (ms: number) => {
-      clock.current.ms = ms;
-      if (timerRef.current) timerRef.current.textContent = fmt(ms);
-    };
-    if (!showTimer || status !== "running") {
-      if ((status === "idle" || !clock.current.ms) && timerRef.current)
-        timerRef.current.textContent = "—";
-      return undefined;
+    const from = previous.current;
+    previous.current = status;
+    if (from === "running" && status !== "running") setSettled(true);
+    if (
+      from === "running" &&
+      status === "error" &&
+      shake > 0 &&
+      !prefersReducedMotionNow() &&
+      rootRef.current?.animate
+    ) {
+      rootRef.current.animate(
+        SHAKE.map((k) => ({ transform: `translateX(${k * shake}px)` })),
+        { duration: 450, easing: "cubic-bezier(0.77, 0, 0.175, 1)" },
+      );
     }
-    const startedAt = performance.now();
-    write(0);
-    if (reduceMotion()) {
-      const id = setInterval(() => write(performance.now() - startedAt), 100);
-      return () => {
-        clearInterval(id);
-        write(performance.now() - startedAt);
-      };
-    }
-    let raf = 0;
-    const tick = () => {
-      write(performance.now() - startedAt);
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => {
-      cancelAnimationFrame(raf);
-      write(performance.now() - startedAt);
-    };
-  }, [status, showTimer]);
-  useEffect(() => {
-    const ms = showTimer && clock.current.ms ? Math.round(clock.current.ms) : 0;
-    const when =
-      status === "done" && ms
-        ? ` in ${ms} ms`
-        : status === "error" && ms
-          ? ` after ${ms} ms`
-          : "";
-    setAnnounce(`${name} ${argument}, ${WORDS[status] ?? status}${when}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, shake]);
 
-  const font = Math.max(11, Math.round(size * 0.38));
-  const glyphState = (g: Glyph) =>
-    g === roll.current.cur ? "in" : g === roll.current.prev ? "out" : undefined;
-  const toolIcon =
-    typeof icon === "string"
-      ? (ICONS[icon as CallChipIcon] ?? ICONS.terminal)
-      : null;
-  const iconSize = font + 2;
-
-  return (
-    <span
-      ref={rootRef}
-      role="status"
-      aria-busy={status === "running" || undefined}
-      data-status={status}
-      data-mounted={mounted ? "" : undefined}
-      data-pressed={pressed ? "" : undefined}
-      className={`call-chip${className ? ` ${className}` : ""}`}
-      style={
-        {
-          "--cc-size": `${size}px`,
-          "--cc-font": `${font}px`,
-          "--cc-pad": `${Math.round(size * 0.35)}px`,
-          "--cc-gap": `${Math.round(font * 0.55)}px`,
-          "--cc-radius": `${radius}px`,
-          "--cc-color": color,
-          "--cc-surface": surfaceColor,
-          "--cc-progress": progressColor,
-          "--cc-progress-pct": `${progressOpacity * 100}%`,
-          "--cc-done": doneColor,
-          "--cc-error": errorColor,
-          "--cc-wash-pct": `${washOpacity * 100}%`,
-          "--cc-expected": `${expectedMs}ms`,
-          ...style,
-        } as CSSProperties
-      }
-    >
-      <span ref={fillRef} className="call-chip__fill" aria-hidden="true" />
-      <span className="call-chip__slot" aria-hidden="true">
-        <span className="call-chip__glyph" data-state={glyphState("tool")}>
-          {toolIcon ? (
-            <HugeiconsIcon icon={toolIcon} size={iconSize} strokeWidth={1.8} />
-          ) : (
-            icon
-          )}
-        </span>
-        <span className="call-chip__glyph" data-state={glyphState("check")}>
-          <HugeiconsIcon icon={Tick02Icon} size={iconSize} strokeWidth={2.2} />
-        </span>
-        <span className="call-chip__glyph" data-state={glyphState("retry")}>
-          <HugeiconsIcon icon={RefreshIcon} size={iconSize} strokeWidth={2} />
-        </span>
+  const font = Math.max(11, Math.round(size * 0.4));
+  const vars = {
+    "--cc-size": `${size}px`,
+    "--cc-font": `${font}px`,
+    "--cc-pad": `${Math.round(size * 0.34)}px`,
+    "--cc-gap": `${Math.round(font * 0.55)}px`,
+    "--cc-radius": `${radius}px`,
+    "--cc-color": color,
+    "--cc-surface": surfaceColor,
+    "--cc-done": doneColor,
+    "--cc-error": errorColor,
+    ...style,
+  } as CSSProperties;
+  const content = (
+    <>
+      <span className="call-chip__fill" aria-hidden="true" />
+      <span className="call-chip__glyph" aria-hidden="true" key={status}>
+        {status === "running" && icon ? (
+          icon
+        ) : (
+          <HugeiconsIcon
+            icon={GLYPHS[status]}
+            size={font + 2}
+            strokeWidth={status === "running" ? 1.8 : 2.2}
+          />
+        )}
       </span>
+      {/* Visual text is hidden from assistive tech; statusLabel names the chip. */}
       <span className="call-chip__name" aria-hidden="true">
         {name}
       </span>
-      <span className="call-chip__arg" aria-hidden="true">
-        {argument}
-      </span>
-      {showTimer ? (
-        <span ref={timerRef} className="call-chip__timer" aria-hidden="true">
-          0 ms
+      {argument ? (
+        <span className="call-chip__arg" aria-hidden="true">
+          {argument}
         </span>
       ) : null}
-      {status === "error" && onRetry ? (
-        <button
-          type="button"
-          className="call-chip__retry"
-          aria-label={`Retry ${name} ${argument}`}
-          onClick={() => onRetry()}
-          onPointerDown={() => setPressed(true)}
-          onPointerUp={() => setPressed(false)}
-          onPointerCancel={() => setPressed(false)}
-        />
-      ) : null}
-      <span className="call-chip__sr">{announce}</span>
+      <span className="call-chip__timer" aria-hidden="true">
+        {timer}
+      </span>
+      <span className="call-chip__sr">{statusLabel}</span>
+    </>
+  );
+  const common = {
+    className: `call-chip${className ? ` ${className}` : ""}`,
+    "data-status": status,
+    "data-settled": settled ? "" : undefined,
+    "data-testid": testId,
+    style: vars,
+  };
+  return onClick ? (
+    <button
+      {...common}
+      ref={(node) => {
+        rootRef.current = node;
+      }}
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  ) : (
+    <span
+      {...common}
+      ref={(node) => {
+        rootRef.current = node;
+      }}
+    >
+      {content}
     </span>
   );
 };
