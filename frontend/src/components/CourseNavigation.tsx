@@ -7,7 +7,8 @@ import { formatLessonNumber } from "../lib/lessonIds";
 import { useReducedMotion } from "../motion";
 import type { CurriculumData, Lesson } from "../types";
 import { tintFor } from "./backdrops/presets";
-import { RailItem, useRailHighlight } from "./shell/Rail";
+import { RailItem, useRailHighlight, useRailHovered } from "./shell/Rail";
+import { CourseBranches } from "./shell/CourseBranches";
 import { Button } from "./ui/button";
 
 /** Each domain's glow follows the hue of its hero backdrop. */
@@ -34,6 +35,10 @@ export function CourseNavigation({
   const { t } = useTranslation();
   const treeId = useId();
   const reduced = useReducedMotion();
+  const hovered = useRailHovered();
+  const hoveredLesson = hovered?.startsWith("lesson-")
+    ? hovered.slice("lesson-".length)
+    : null;
   const [data, setData] = useState<CurriculumData | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -101,6 +106,8 @@ export function CourseNavigation({
         className="nav-lesson"
         style={{ "--i": index } as CSSProperties}
         data-testid="course-nav-lesson"
+        data-branch-id={lesson.id}
+        data-branch-planned={!available || undefined}
         aria-current={active ? "page" : undefined}
         onClick={() => onSelect(lesson.id)}
         title={!available ? t("nav.plannedTitle") : lesson.title}
@@ -157,6 +164,12 @@ export function CourseNavigation({
           const open = expanded.includes(category.id);
           const tint = domainTint(category.id);
           let order = 0;
+          const signature = category.modules
+            .flatMap((module) => module.lesson_ids)
+            .map(
+              (id) => `${id}:${lessons.some((item) => item.id === id) ? 1 : 0}`,
+            )
+            .join(",");
           return (
             <section
               className="nav-category"
@@ -191,13 +204,19 @@ export function CourseNavigation({
                     );
                 }}
               >
+                <CourseBranches
+                  open={open}
+                  activeId={current}
+                  hoveredId={hoveredLesson}
+                  signature={signature}
+                />
                 {category.modules.map((module) => (
                   <div
                     className="nav-module"
                     key={module.id}
                     data-testid="course-nav-module"
                   >
-                    <h3>{module.title}</h3>
+                    <h3 data-branch-node="">{module.title}</h3>
                     {module.lesson_ids.map((id) => {
                       const lesson = data.lessons.find(
                         (item) => item.id === id,

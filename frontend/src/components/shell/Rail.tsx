@@ -50,6 +50,9 @@ export function RailGroup({
   );
 }
 
+/** Key of the item under the pointer or focus in this rail (null when none). */
+export const useRailHovered = () => useContext(RailContext)?.hovered ?? null;
+
 /** Hover handlers plus the pills to render inside an item. */
 export function useRailHighlight(
   key: string,

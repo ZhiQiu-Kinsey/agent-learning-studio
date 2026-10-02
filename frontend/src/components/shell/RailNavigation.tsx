@@ -7,13 +7,13 @@ import {
   House,
   Layers3,
   Search,
-  Waypoints,
 } from "lucide-react";
 import { useReducedMotion } from "../../motion";
 import type { Lesson } from "../../types";
 import { CourseNavigation } from "../CourseNavigation";
-import ShinyText from "../react-bits/ShinyText";
+import LineSidebar from "../react-bits/LineSidebar";
 import { Button } from "../ui/button";
+import { BrandMark } from "./BrandMark";
 import { RailGroup, RailItem } from "./Rail";
 
 const preludeKeys = ["preface", "agent", "route", "workbench"] as const;
@@ -51,25 +51,7 @@ export function RailNavigation({
   const reduced = useReducedMotion();
   return (
     <RailGroup id={id}>
-      <div className="rail-brand">
-        <span className="rail-brand-mark" aria-hidden="true">
-          <i className="rail-brand-halo" />
-          <i className="rail-brand-core">
-            <Waypoints size={21} />
-          </i>
-        </span>
-        <div>
-          <ShinyText
-            text="Agent Lab"
-            color="var(--text)"
-            shineColor="var(--rail-shine)"
-            speed={3}
-            delay={3}
-            disabled={!!reduced}
-          />
-          <small>{t("shell.brandTagline")}</small>
-        </div>
-      </div>
+      <BrandMark running={running} onHome={onHome} />
       <div className="rail-primary">
         <RailItem
           itemKey="home"
@@ -111,24 +93,28 @@ export function RailNavigation({
         <span className="course-tree-heading">
           {t("shell.prelude.title")} <small>{t("shell.prelude.eyebrow")}</small>
         </span>
-        {preludeKeys.map((key, index) => {
-          const active = view === "intro" && introChapter === index;
-          return (
-            <RailItem
-              key={key}
-              itemKey={`intro-${index}`}
-              active={active}
-              className="nav-prelude-link"
-              aria-current={active ? "page" : undefined}
-              disabled={running}
-              onClick={() => onIntro(index)}
-            >
-              <span>0{index + 1}</span>
-              {t(`shell.prelude.${key}`)}
-              <ChevronRight size={12} aria-hidden="true" />
-            </RailItem>
-          );
-        })}
+        {/* LineSidebar: a numbered rule for the four ordered chapters; the
+            fieldset disables every chapter button while a run is live. */}
+        <fieldset className="nav-prelude-fieldset" disabled={running}>
+          <LineSidebar
+            className="nav-prelude-lines"
+            ariaLabel={t("shell.prelude.title")}
+            items={preludeKeys.map((key) => t(`shell.prelude.${key}`))}
+            activeItem={view === "intro" ? introChapter : null}
+            onItemClick={(index) => onIntro(index)}
+            accentColor="var(--accent)"
+            textColor="var(--text-muted)"
+            markerColor="var(--line-strong, var(--line))"
+            markerLength={14}
+            markerGap={10}
+            tickScale={0.45}
+            maxShift={reduced ? 0 : 6}
+            itemGap={14}
+            fontSize={0.8}
+            proximityRadius={44}
+            smoothing={reduced ? 1 : 110}
+          />
+        </fieldset>
       </div>
       <CourseNavigation
         lessons={lessons}
