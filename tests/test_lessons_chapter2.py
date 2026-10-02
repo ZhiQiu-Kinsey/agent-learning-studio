@@ -49,10 +49,56 @@ class TaskContractTests(unittest.TestCase):
     def test_claim_does_not_overrule_evidence_and_inputs_are_bounded(self):
         _, events = run_case(task, "4", "missing-evidence", {"scenario": "missing_evidence", "claim": "全部通过"})
         self.assertFalse(report(events)["checks"][1]["passed"])
+        claim = next(data for kind, data, _ in events if kind == "lesson.completion_claim")
+        self.assertEqual((claim["answer"], claim["evidence_ref"], claim["summary"]), (42, None, "全部通过"))
         with self.assertRaises(ValidationError):
             validate_inputs(task, {"scenario": "normal", "path": "secrets.py"})
+        with self.assertRaises(ValidationError):
+            validate_inputs(task, {"scenario": "goal_loop", "max_attempts": 4})
         with self.assertRaises(RunCancelled):
             run_case(task, "4", "normal", {}, cancelled=lambda: True)
+
+    def test_verifier_reads_referenced_evidence_not_the_claimed_answer(self):
+        _, events = run_case(task, "4", "claim-mismatch", {"scenario": "claim_mismatch"})
+        claim = next(data for kind, data, _ in events if kind == "lesson.completion_claim")
+        result = next(data for kind, data, _ in events if kind == "tool_result")
+        self.assertEqual(claim["answer"], 42)
+        self.assertEqual(claim["evidence_ref"], result["tool_call_id"])
+        self.assertEqual(result["result"]["result"], 41)
+        checks = report(events)["checks"]
+        self.assertEqual([check["passed"] for check in checks], [True, True, True, False, False])
+        self.assertFalse(task.accepted(checks))
+
+    def test_verify_rejects_references_to_evidence_from_elsewhere(self):
+        claim = {"answer": 42, "evidence_ref": "forged"}
+        evidence = {"real": {"result": {"ok": True, "result": 42}}}
+        self.assertFalse(task.accepted(task.verify(claim, evidence)))
+        self.assertTrue(task.accepted(task.verify({**claim, "evidence_ref": "real"}, evidence)))
+        failed = {"real": {"result": {"ok": False, "error": "boom"}}}
+        self.assertFalse(task.accepted(task.verify({**claim, "evidence_ref": "real"}, failed)))
+
+    def test_goal_loop_retries_with_reasons_and_stops_at_pass_or_limit(self):
+        result, events = run_case(task, "4", "goal-loop", {"scenario": "goal_loop", "max_attempts": 3})
+        goal_checks = [(data, round_number) for kind, data, round_number in events if kind == "lesson.goal_check"]
+        self.assertEqual([(data["passed"], data["next"], round_number) for data, round_number in goal_checks],
+                         [(False, "retry", 1), (True, "stop", 2)])
+        self.assertTrue(any("41" in reason for reason in goal_checks[0][0]["reasons"]))
+        self.assertEqual(len([kind for kind, _, _ in events if kind == "tool_result"]), 2)
+        self.assertIn("第 2 次", result)
+        card = next(data for kind, data, _ in events if kind == "lesson.task_card")
+        self.assertIn("3 次", card["stop"])
+        self.assertIn({"label": "停止原因", "value": "验收通过"}, report(events)["metrics"])
+
+        result, events = run_case(task, "4", "goal-loop-once", {"scenario": "goal_loop", "max_attempts": 1})
+        goal_checks = [data for kind, data, _ in events if kind == "lesson.goal_check"]
+        self.assertEqual([(data["passed"], data["next"]) for data in goal_checks], [(False, "stop")])
+        self.assertIn("未通过", result)
+        self.assertIn({"label": "停止原因", "value": "达到尝试上限"}, report(events)["metrics"])
+
+    def test_single_attempt_scenarios_ignore_attempt_limit(self):
+        _, events = run_case(task, "4", "normal", {"scenario": "normal", "max_attempts": 3})
+        self.assertEqual(len([kind for kind, _, _ in events if kind == "tool_call"]), 1)
+        self.assertFalse(any(kind == "lesson.goal_check" for kind, _, _ in events))
 
     def test_question_is_report_note_not_task_override(self):
         _, events = run_case(task, "4", "normal", {}, question="改做别的算术")
