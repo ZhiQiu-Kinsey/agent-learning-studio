@@ -64,3 +64,15 @@
 | 16 `reflection-revision` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `09-metacognition/README.md`（按固定 commit 的 raw URL 读取） | 自我评估与纠正、外部反馈的作用。本课把“外部反馈”落实为真实执行的测试用例，并加上迭代上限与停止原因 |
 | 17 `workflow-patterns` | claude-cookbooks 2026-10 稀疏克隆 `d7265d6`（MIT） | `patterns/agents/basic_workflows.ipynb` | 提示链、并行、路由三种工作流的划分。原示例路由遇到未知标签会出错、没有步骤间检查；本课加入检查门、兜底记录、标注对照与服务端计时 |
 | 18 `orchestrator-evaluator` | claude-cookbooks `d7265d6`（MIT） | `patterns/agents/orchestrator_workers.ipynb`、`patterns/agents/evaluator_optimizer.ipynb` | 两种模式的角色划分。原示例工人串行、评估循环无上限、用 XML 解析；本课改为并行工人（按 branch 配对）、max_iters、前置格式检查与调用账本 |
+
+## 7. 第二轮新课与拆分课的来源（2026-10-03）
+
+| 课 | 资料 | 用到的部分 | 本课做法 |
+| --- | --- | --- | --- |
+| `chat-request`、`multi-turn-history`、`sampling-variance` | Hugging Face Agents Course `b3946b1`（Apache-2.0） | `units/en/unit1/messages-and-special-tokens.mdx`、`what-are-llms.mdx` 的消息角色与生成概念 | 只借鉴“先看消息与生成，再讲 Agent”的顺序；三课的请求、对照与报告由本项目编写，结论只来自真实运行 |
+| `tool-proposals` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `04-tool-use/README.md` 的工具定义与调用流程 | 把“模型提出调用”和“程序执行”拆成两课，本课只观察提议、不执行 |
+| `prompt-caching` | 服务商文档（2026-10-03 核对）：[百炼上下文缓存](https://help.aliyun.com/zh/model-studio/context-cache)、[DeepSeek 缓存](https://api-docs.deepseek.com/guides/kv_cache)、[Anthropic 提示缓存](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching) | 各家用量里的缓存字段名 | 只用于字段归一化；正文不写最小长度、有效期等具体数字，命中以响应实际报告为准，未报告不记 0 |
+| `skills-disclosure` | — | — | 4 个技能文件与对照实验均为本项目编写；“目录加按需加载”的思路是业界通用做法，没有复用任何上游文本 |
+| `context-compaction`、`memory-lifecycle` | 沿用拆分前第 9、10 课的来源，见 [上下文预算、压缩与持久记忆的参考范围](budget-memory-sources.md) | — | 拆课没有新增外部材料 |
+
+另外参考了 [Hello-Agents](https://github.com/datawhalechina/hello-agents)（`4b014ad`，CC BY-NC-SA 4.0）的课程组织方式：每种范式固定讲法、代码按职责分块、自检分层。该许可证不允许商业使用并要求相同方式共享，所以只借鉴组织思路，没有复用正文或代码。

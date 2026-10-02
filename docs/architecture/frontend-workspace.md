@@ -14,7 +14,7 @@
 五个场景都实现 `scenes/types.ts` 中的 `SceneProps`。场景在首次访问时挂载，之后保留状态；运行开始时自动切到实验场景。其他组件可以调用 `requestScene()` 切换场景，例如命令面板。
 
 - **理解**（`UnderstandScene`）：`content/blocks/UnderstandBlocks.tsx` 按作者编排的顺序渲染 v2 块，包括概念、正文、分步讲解、示意舞台、微型自测和先预测。
-- **读码**（`CodeScene`）：从 `/api/lessons/{id}/code` 读取由真实源码计算出的“本课新增”、带行号的批注和设计决策。工具函数可以跳到实验中对应的真实 `tool_result`。
+- **读码**（`CodeScene`）：从 `/api/lessons/{id}/code` 读取由真实源码计算出的“本课新增”（只比较课程代码，不含平台与测试夹具）、带行号的批注和设计决策。工具函数可以跳到实验中对应的真实 `tool_result`。默认打开有批注的文件，只显示标注范围：范围外的行和 `folds` 折叠的平台代码收起成一行，点击原地展开，“显示完整文件”可切换（`scenes/code/model.ts` 的 `codeSegments`）；定位到收起的行时自动展开。文件列表标出“平台”“测试夹具”。
 - **实验**（`LabScene`）：
   - 实验面板：假设、对照组、观察点，观察点按学习者自己的运行核对；
   - 实验台（`components/workspace/Laboratory.tsx` 只做组装，部件在 `components/workspace/lab/`）：提问栏、舞台、等待模型状态、工具调用条、时间线、上下文胶片、工具卡片、通用视图，以及 JSON 检视器；

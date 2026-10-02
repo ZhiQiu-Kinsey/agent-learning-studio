@@ -195,3 +195,23 @@ catalog 每课增加：`estimated_minutes`（预计时长）、`difficulty`（�
 | 5a | 课程表骨架：A0 三课、`tool-proposals`、`context-compaction`、`memory-lifecycle`、规划课拆分（检索三课、流式与取消、目标循环、备份与回退），每课预计时长与难度 | `d97934c`、`c115ca9` | 后端全部测试 |
 | 5b | 节奏与读码规范写进 `adding-lessons.md`；`scripts/run_live.py` | `d49eae3`、`f3e4b9a` | — |
 | 5c | 课程表细纲：难度、预计时长、是否调用模型、小节、本课术语（`server/outline.py`），课程列表与路线图显示；规划课 29 课补计划小节；路线图最小缩放 0.1 | `b0b624e`、`2c9da76` | 后端全部测试、vitest、Playwright 全量 56 项 |
+| 5d | 第三章 C1：`messages-context` 改为“上下文组成与消息协议”（一次拿掉一部分上下文的合法消融，只拿掉工具结果的一组在发送前被协议检查拦下）；`application-state` 按新规范整理 | `696607e`（合并 `a7a0e34`） | 全部后端测试；真实运行两个练习各 4 次调用 |
+| 5e | 第三章 C4：新课 `prompt-caching`（三种请求结构，缓存字段归一化，“未报告”不记 0） | `5b5ecbc`（合并 `bffa3dd`） | 真实运行 19 次调用：动态内容在前 0/0/0/0；稳定前缀 0/1024/1792/1792；预热后 1024/1792/1792/1792 |
+| 5f | 第三章 C4：新课 `skills-disclosure`（全量注入对照目录 + `load_skill`，描述精确度与误触发） | `80b3b66`（合并 `1efb420`） | 真实运行 6 个练习；技能少时按需加载合计 Token 反而更多；模糊描述出现一次误触发 |
+| 5g | 第三章 C2：`context-budget` 改为“上下文预算与截取窗口”，新课 `context-compaction` | `8c65bb7`（合并 `920bc22`） | 真实运行两课共 30 次调用；当前服务商接受了孤立的 tool 消息，正文改为“有的拒绝，有的照样接受” |
+| 5h | 第三章 C3：`persistent-memory` 改为“保存、重开与召回”（新增召回后让模型回答的真实练习），新课 `memory-lifecycle`；存储拆到 `store.py` | `ea950a2`、`5e5f3cd`（合并 `d63e268`） | 真实运行 6 个练习，2 次模型调用 |
+| 5i | 原生基础：A0 三课（`chat-request`、`multi-turn-history`、`sampling-variance`）、`tool-proposals`；`tool-selection` 按新节奏重写；“同一轮两个独立调用”移到 `dependent-calls`；术语 first_lesson 重新分配 | `fc2572f`、`e2706db`（合并 `d2373b2`） | 真实运行 35 次调用；`max_tokens=16` 时推理用完上限、content 为空，正文按此说明 |
+| 5j | 任务与接口、推理与控制模式 8 门课的读码整理：18 个基线块全部达标，报告组装移入 `_report`，运行数据与源码不再写死课号 | `b738ac7`…`e183375`（合并 `44338a9`） | 真实运行 13 个练习 |
+| 5k | 收尾：密度基线清零；每课新概念不超过 5 个、predict 在第一道微测之前、源码不写死课号都改为硬性检查；枚举参数选项过长时改用下拉 | `2a89747`、`6f09f6f`、`44338a9` | 后端全部测试、vitest 181、i18n、Playwright 56 项全部通过；合并后在 main 上抽查 5 个练习真实运行 |
+
+### 8.9 执行中的决定与遗留
+
+| 项 | 决定或说明 |
+| --- | --- |
+| `tool-selection` 的 slug | 保持指向“执行工具与回传结果”（大量测试与旧链接依赖它）；只看提议的新课用 `tool-proposals` |
+| `messages-context` 的课名 | 改为“上下文组成与消息协议”；“重发历史”由 `multi-turn-history` 先讲 |
+| 读码块数 | 每课最多 3 个读码块（已有测试），没放进块的代码在文件视图里展开阅读 |
+| predict 位置 | 一律放在第一道微测之前；过渡清单已清空 |
+| 第三章（上下文与状态） | 8 门课全部可运行：`messages-context`、`application-state`、`context-budget`、`context-compaction`、`persistent-memory`、`memory-lifecycle`、`prompt-caching`、`skills-disclosure` |
+| 尚未做 | 没有导出随课录制（`scripts/export_recording.py`）；源码再改就要重录，建议在课程稳定后统一录。规划中的 29 课只有计划小节，尚未实现 |
+| 真实模型验证的范围 | 每个练习至少真实运行一次，模型为百炼兼容接口上的 deepseek-v4.1-flash；一次运行只说明这一次的行为，换模型或服务商需要重新核对（例如孤立 tool 消息是否被拒、缓存命中多少） |
