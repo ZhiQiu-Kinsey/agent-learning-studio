@@ -1,6 +1,6 @@
 """先规划后执行：静态计划、失败后重新规划、ReAct 基线，三种策略做同一份学习周报。
 
-主数据源 fetch_quiz_scores(source="primary") 在本课固定失败，这是课程程序写死的教学夹具，
+主数据源 fetch_quiz_scores(source="primary") 在本课固定失败，这是运行器写死的受控故障，
 不是网络故障；备份数据源 backup 能正常返回。三种策略用同一个验收器判定。
 任务分解与“结果影响后续步骤时迭代规划”的讲法参考 Microsoft AI Agents for Beginners 07（MIT），
 规划器提示词、计划格式、执行器与实验由本项目编写。
@@ -33,7 +33,7 @@ def fetch_quiz_scores(learner: str, source: str = "primary") -> dict:
     if learner != LEARNER:
         raise ValueError(f"没有学习者 {learner} 的记录。")
     if source == "primary":
-        raise ValueError("成绩主数据源暂时不可用（教学夹具：本课固定失败）。可以改用 source=backup。")
+        raise ValueError("成绩主数据源暂时不可用（受控故障：本课固定失败）。可以改用 source=backup。")
     if source != "backup":
         raise ValueError("source 只能是 primary 或 backup。")
     return SCORES
@@ -234,7 +234,7 @@ def run(context: RunContext) -> str:
     accepted = all(check["passed"] for check in checks)
     context.emit("lesson.report", {
         "title": {"static": "静态计划", "replan": "失败后重新规划", "react": "ReAct 基线"}[strategy],
-        "summary": "主数据源固定失败（教学夹具）。验收只看真实工具结果和周报里的分数，不看计划本身。",
+        "summary": "主数据源固定失败（受控故障）。验收只看真实工具结果和周报里的分数，不看计划本身。",
         "checks": checks,
         "metrics": [{"label": "验收结论", "value": "通过" if accepted else "未通过"},
                     *({"label": key, "value": value} for key, value in outcome["stats"].items()),

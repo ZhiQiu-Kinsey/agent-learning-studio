@@ -62,7 +62,7 @@ def _usage(response: dict) -> str:
 
 
 def _pair(tool_id: str, source_key: str, tool_result: dict) -> list[dict]:
-    """一次工具调用与它的回执：assistant 消息由课程程序组装，回执来自本次真实执行。"""
+    """一次工具调用与它的工具结果：assistant 消息由运行器组装，工具结果来自本次真实执行。"""
     call = {"role": "assistant", "content": None, "tool_calls": [{"id": tool_id, "type": "function", "function": {
         "name": "lookup_lesson", "arguments": json.dumps({"source_key": source_key})}}]}
     receipt = {"role": "tool", "tool_call_id": tool_id, "content": json.dumps(tool_result, ensure_ascii=False)}
@@ -100,7 +100,7 @@ def build_variants(source_key: str, noise_repeats: int, char_budget: int, tool_r
         validate_tool_history(candidate)
     if _chars(compressed) > char_budget:
         raise ValueError(f"字符预算 {char_budget} 小于保留关键证据所需的 {_chars(compressed)} 字符。")
-    return {"完整": full, "窗口": window, "保留证据压缩": compressed}
+    return {"完整": full, "窗口": window, "规则压缩": compressed}
 
 
 def build_history(noise_repeats: int, results: dict[str, dict]) -> tuple[list[dict], list[dict]]:
@@ -114,7 +114,7 @@ def build_history(noise_repeats: int, results: dict[str, dict]) -> tuple[list[di
 
 
 def clear_old_tool_results(messages: list[dict], keep_latest: int = 1) -> list[dict]:
-    """把较早的 tool 回执换成占位说明；调用与回执仍成对出现，只是内容被清掉。"""
+    """把较早的 tool 消息换成占位说明；调用与结果仍成对出现，只是内容被清掉。"""
     tool_indexes = [index for index, message in enumerate(messages) if message.get("role") == "tool"]
     cleared = set(tool_indexes[:-keep_latest] if keep_latest else tool_indexes)
     return [{**message, "content": json.dumps(CLEARED, ensure_ascii=False)} if index in cleared else message
@@ -126,7 +126,7 @@ def probe_hit(answer: str) -> bool:
 
 
 def naive_tail(messages: list[dict], keep: int) -> list[dict]:
-    """按条数截断：保留 system 和最后 keep 条消息，不看工具调用与回执是否成对。"""
+    """按条数截断：保留 system 和最后 keep 条消息，不看工具调用与结果是否成对。"""
     return [messages[0], *messages[1:][-keep:]]
 
 
@@ -162,7 +162,7 @@ def run_layouts(context: RunContext, values: Inputs) -> str:
     observed = result["result"]
     question = context.question.strip() or QUESTION
     variants = build_variants(values.source_key, values.noise_repeats, values.char_budget, result, question)
-    context.emit("lesson.context_variant", {"kind": "construction", "detail": "三组消息均由课程程序组装为受控样本；assistant 工具调用与旁支回复不是先前模型生成。工具回执来自本次实际 Python lookup_lesson。", "question": question})
+    context.emit("lesson.context_variant", {"kind": "construction", "detail": "三组消息均由运行器组装为受控样本；assistant 工具调用与旁支回复不是先前模型生成。工具结果来自本次实际 Python lookup_lesson。", "question": question})
     rows = []
     actual_usage = []
     for index, (name, messages) in enumerate(variants.items(), 1):
@@ -174,18 +174,18 @@ def run_layouts(context: RunContext, values: Inputs) -> str:
         rows.append([name, _chars(messages), _visible(messages, values.source_key), _visible(messages, observed["fact"]), answer,
                      _usage(response)])
     context.emit("lesson.report", {
-        "title": "三种上下文布局对照", "summary": "程序组装的受控上下文，工具回执来自实际 Python 读取；字符数不等于 token，usage 仅展示供应商响应实际返回值。",
+        "title": "三种上下文布局对照", "summary": "程序组装的受控上下文，工具结果来自实际 Python 读取；字符数不等于 token，usage 仅展示服务商响应实际返回值。",
         "checks": [
-            {"label": "三种请求协议合法", "passed": True, "detail": "调用与回执成组保留或成组移除。"},
-            {"label": "压缩保留来源和事实", "passed": _visible(variants["保留证据压缩"], observed["source"]) and _visible(variants["保留证据压缩"], observed["fact"]), "detail": "由本次实际工具回执构造。"},
+            {"label": "三种请求协议合法", "passed": True, "detail": "调用与结果成组保留或成组移除。"},
+            {"label": "压缩保留来源和事实", "passed": _visible(variants["规则压缩"], observed["source"]) and _visible(variants["规则压缩"], observed["fact"]), "detail": "由本次实际工具结果构造。"},
             {"label": "压缩低于字符预算", "passed": rows[2][1] <= values.char_budget, "detail": f"预算 {values.char_budget} 字符。"},
         ],
-        "metrics": [{"label": "模型请求数", "value": 3}, {"label": "本地字符预算", "value": values.char_budget},
+        "metrics": [{"label": "模型调用数", "value": 3}, {"label": "本地字符预算", "value": values.char_budget},
                     {"label": "返回 usage 的请求数", "value": sum(value is not None for value in actual_usage)},
                     {"label": "实际追问", "value": question}],
-        "table": {"columns": ["布局", "JSON 字符数", "有来源", "有事实", "模型回答", "供应商 usage"], "rows": rows},
+        "table": {"columns": ["布局", "JSON 字符数", "有来源", "有事实", "模型回答", "服务商 usage"], "rows": rows},
     })
-    return "三种实际模型响应已记录。请比较 request 的信息保留、response 的答案和供应商 usage。"
+    return "三种实际模型响应已记录。请比较 request 的信息保留、response 的答案和服务商 usage。"
 
 
 def run_compaction(context: RunContext, values: Inputs) -> str:
@@ -199,7 +199,7 @@ def run_compaction(context: RunContext, values: Inputs) -> str:
     older, recent = build_history(values.noise_repeats, results)
     system = {"role": "system", "content": SYSTEM}
     probe = {"role": "user", "content": PROBE}
-    context.emit("lesson.compaction", {"kind": "construction", "detail": "历史由课程程序组装：两次 lookup_lesson 的回执来自本次真实执行，assistant 调用消息与旁支回复不是模型生成的。摘要由当前模型生成。", "question": PROBE})
+    context.emit("lesson.compaction", {"kind": "construction", "detail": "历史由运行器组装：两次 lookup_lesson 的工具结果来自本次真实执行，assistant 调用消息与旁支回复不是模型生成的。摘要由当前模型生成。", "question": PROBE})
     # 摘要压缩：先让模型把较早部分写成摘要，再用摘要替换它。摘要本身也花一次请求。
     summary_body = {"messages": [{"role": "system", "content": SUMMARY_SYSTEM}, *older,
                                  {"role": "user", "content": SUMMARY_INSTRUCTION}], "temperature": 0}
@@ -228,10 +228,10 @@ def run_compaction(context: RunContext, values: Inputs) -> str:
         "title": "三种压缩策略与探针问题",
         "summary": "探针只能靠最早那次工具结果回答。“上下文里还在”由本地字符串检查得出，“回答命中”是关键词初筛；字符数不等于 token。",
         "checks": checks,
-        "metrics": [{"label": "模型请求数", "value": 4}, {"label": "摘要请求的 usage", "value": _usage(summary_response)},
+        "metrics": [{"label": "模型调用数", "value": 4}, {"label": "摘要请求的 usage", "value": _usage(summary_response)},
                     {"label": "摘要原文", "value": summary_text}, {"label": "探针问题", "value": PROBE},
                     {"label": "学习者备注", "value": context.question or "（空）"}],
-        "table": {"columns": ["策略", "JSON 字符数", "原话还在上下文里", "探针回答", "初筛", "供应商 usage"], "rows": rows},
+        "table": {"columns": ["策略", "JSON 字符数", "原话还在上下文里", "探针回答", "初筛", "服务商 usage"], "rows": rows},
     })
     return "摘要请求和三次探针请求已记录。请对照每种策略的上下文、探针回答与 usage。"
 
@@ -248,7 +248,7 @@ def run_broken_pair(context: RunContext, values: Inputs) -> str:
                *_noise(values.noise_repeats), *_pair("lesson9_lookup", values.source_key, result),
                {"role": "user", "content": question}]
     attempts = {"按条数截断（保留最后 2 条）": naive_tail(history, 2),
-                "按配对截断（切点不拆开调用与回执）": pair_aware_tail(history, 2)}
+                "按配对截断（切点不拆开调用与结果）": pair_aware_tail(history, 2)}
     rows, checks = [], []
     for index, (name, messages) in enumerate(attempts.items(), 1):
         context.check_cancelled()
@@ -275,10 +275,10 @@ def run_broken_pair(context: RunContext, values: Inputs) -> str:
             continue
         rows.append([name, len(messages), local, "已接受", _text(response)])
     context.emit("lesson.report", {
-        "title": "拆开工具调用与回执",
+        "title": "拆开工具调用与结果",
         "summary": "同一段历史按两种方式截断后原样发送。服务商是否拒绝以本次记录为准；离线模式下的拒绝由测试夹具模拟。",
         "checks": checks,
-        "metrics": [{"label": "模型请求数", "value": len(attempts)}, {"label": "历史消息数", "value": len(history)},
+        "metrics": [{"label": "模型调用数", "value": len(attempts)}, {"label": "历史消息数", "value": len(history)},
                     {"label": "运行模式", "value": "离线测试（夹具）" if context.mode == "offline" else "真实模型"}],
         "table": {"columns": ["截断方式", "消息数", "本地校验", "服务商结果", "模型回答"], "rows": rows},
     })

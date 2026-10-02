@@ -22,7 +22,7 @@ INPUT_MODEL = Inputs
 NOTES = {
     "7": "模型只看到本次请求里的消息，历史要由应用程序重发。",
     "8": "应用状态记录目标和证据，消息列表不会自动更新它。",
-    "9": "压缩上下文时，工具调用和回执要成对保留或成对删除。",
+    "9": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。",
 }
 TASK = "为第 7、8、9 课各出一道四选一的选择题，题目要考到该课要点。"
 QUESTION_FORMAT = ('只输出一个 JSON 对象：{"question": "题干", "options": ["A", "B", "C", "D"], '
@@ -183,10 +183,10 @@ def run_evaluator(context: RunContext, ledger: Ledger, max_iters: int) -> tuple[
                      len(ledger.rows))
         rows.append([iteration, source, verdict, "；".join(feedback) or "—"])
         if verdict == "pass":
-            stop_reason = "评估通过"
+            stop_reason = "评审通过"
             break
         if verdict == "invalid":
-            stop_reason = "评估输出不合格式"
+            stop_reason = "评审输出不合格式"
             break
         previous = output
     return {lesson: {"question": question, "problems": check_question(question) if question is not None else ["没有 JSON"]}}, rows, stop_reason

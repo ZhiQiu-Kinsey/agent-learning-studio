@@ -178,7 +178,7 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   const payloads: Record<string, unknown>[] = [];
   const snapshot = {
     title: "状态快照",
-    summary: "参数已传入课程程序",
+    summary: "参数已传入运行器",
     state: { counter: 7 },
   };
   await mockRunStream(

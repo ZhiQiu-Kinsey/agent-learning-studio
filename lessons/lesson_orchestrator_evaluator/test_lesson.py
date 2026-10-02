@@ -88,9 +88,9 @@ class PatternTests(unittest.TestCase):
         drafts = of(events, "lesson.draft")
         self.assertIn("修订版", drafts[1]["question"]["question"])
         self.assertIsNotNone(drafts[1]["previous"])
-        self.assertEqual(metric(events, "停止原因"), "评估通过")
+        self.assertEqual(metric(events, "停止原因"), "评审通过")
         self.assertEqual(len(of(events, "request")), 4)
-        self.assertIn("停止原因：评估通过", answer)
+        self.assertIn("停止原因：评审通过", answer)
 
     def test_evaluator_limit_and_format_gate(self):
         _, events = run_case("evaluator-once", {"pattern": "evaluator", "max_iters": 1})

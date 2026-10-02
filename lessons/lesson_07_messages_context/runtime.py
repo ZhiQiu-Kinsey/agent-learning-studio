@@ -32,7 +32,7 @@ def validate_tool_history(messages: list[dict]) -> None:
     for message in messages:
         role = message.get("role")
         if outstanding and role != "tool":
-            raise ValueError("工具调用后必须先提供对应的 tool 回执。")
+            raise ValueError("工具调用后必须先提供对应的 tool 消息。")
         if role == "assistant":
             for call in message.get("tool_calls", []):
                 call_id = call.get("id")
@@ -43,12 +43,12 @@ def validate_tool_history(messages: list[dict]) -> None:
         elif role == "tool":
             call_id = message.get("tool_call_id")
             if call_id not in outstanding:
-                raise ValueError("孤立或重复的 tool 回执。")
+                raise ValueError("孤立或重复的 tool 消息。")
             outstanding.remove(call_id)
         elif role not in {"system", "user"}:
             raise ValueError("未知消息角色。")
     if outstanding:
-        raise ValueError("工具调用缺少对应回执。")
+        raise ValueError("工具调用缺少对应的 tool 消息。")
 
 
 def run(context: RunContext) -> str:
@@ -82,7 +82,7 @@ def run(context: RunContext) -> str:
     context.emit("lesson.report", {
         "title": "消息历史对照", "summary": f"同一追问、同一模型；实际追问：{follow_up}。答案以 response 事件为准。",
         "checks": checks,
-        "metrics": [{"label": "模型请求数", "value": len(rows) + 1}, {"label": "完整历史消息数", "value": len(full)},
+        "metrics": [{"label": "模型调用数", "value": len(rows) + 1}, {"label": "完整历史消息数", "value": len(full)},
                     {"label": "实际追问", "value": follow_up}],
         "table": {"columns": ["请求", "消息数", "包含早先事实", "模型回答"], "rows": rows},
     })

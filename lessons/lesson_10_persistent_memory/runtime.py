@@ -144,7 +144,7 @@ def _execute(context: RunContext, path: Path, values: Inputs) -> str:
             context.emit("lesson.memory", {"action": "recall_only", "record": before,
                                             "storage": "temporary" if context.mode == "offline" else "local-persistent"})
             context.emit("lesson.report", {
-                "title": "只读恢复", "summary": "读取阶段未写入；live 读取固定教学库，offline 事先在临时库预置受控旧记录。",
+                "title": "只读恢复", "summary": "读取阶段未写入；真实运行读取固定教学库，offline 事先在临时库预置受控旧记录。",
                 "checks": [{"label": "读取阶段未写入", "passed": True, "detail": "进入读取阶段后只运行 get；offline 预置发生在此前。"},
                            {"label": "恢复结果有来源", "passed": before is None or bool(before["source"]),
                             "detail": "若无记录则明确显示无；有记录时展示保存的来源。"}],
@@ -207,7 +207,7 @@ def _execute(context: RunContext, path: Path, values: Inputs) -> str:
     checks = [
         {"label": "重开连接后恢复", "passed": restored is not None and restored["value"] == values.value,
          "detail": "关闭第一条连接后，使用新连接按 namespace/key 查询。"},
-        {"label": "另一个范围未被本次写入改变", "passed": isolated, "detail": "比较另一 namespace 同键的写入前后结果；namespace 是教学分区，不是用户认证。"},
+        {"label": "另一个命名空间未被本次写入改变", "passed": isolated, "detail": "比较另一 namespace 同键的写入前后结果；namespace 是教学分区，不是用户认证。"},
     ]
     if conflict_rejected is not None:
         checks.append({"label": "过时版本被拒绝", "passed": conflict_rejected, "detail": "乐观版本比较在写入前执行。"})
@@ -217,7 +217,7 @@ def _execute(context: RunContext, path: Path, values: Inputs) -> str:
             {"label": "删除后重开仍为空", "passed": deleted_and_gone and final_record is None, "detail": "删除后再次打开 SQLite 连接核对。"},
         ])
     context.emit("lesson.report", {
-        "title": "SQLite 记忆生命周期", "summary": "offline 使用一次性临时库；live 写入固定本地教学库。没有模型调用或参数训练。",
+        "title": "SQLite 记忆生命周期", "summary": "离线测试模式使用一次性临时库；真实运行写入固定本地教学库。没有模型调用或参数训练。",
         "checks": checks,
         "metrics": [{"label": "初次写入版本", "value": saved["version"]},
                     {"label": "最终可检索", "value": "是" if final_record else "否"},
@@ -313,7 +313,7 @@ def _scope_filter(context: RunContext, path: Path, values: Inputs) -> str:
 def run(context: RunContext) -> str:
     values = Inputs.model_validate(context.inputs)
     if values.scenario == "scope_filter":
-        # 预置的演示记录只放在一次性临时库里，live 模式也不写入固定教学库。
+        # 预置的演示记录只放在一次性临时库里，真实运行也不写入固定教学库。
         with tempfile.TemporaryDirectory(prefix="lesson10-scope-") as directory:
             return _scope_filter(context, Path(directory) / "memory.sqlite3", values)
     if context.mode == "offline":

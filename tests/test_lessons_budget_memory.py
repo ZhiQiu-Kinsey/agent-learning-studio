@@ -42,9 +42,9 @@ class BudgetTests(unittest.TestCase):
             budget_runtime.build_variants("lesson-07", 8, 1, result)
 
     def test_summary_uses_actual_tool_receipt_and_common_question(self):
-        result = {"ok": True, "result": {"source": "lesson-07", "fact": "本次真实回执里的特殊事实。"}}
+        result = {"ok": True, "result": {"source": "lesson-07", "fact": "本次真实工具结果里的特殊事实。"}}
         variants = budget_runtime.build_variants("lesson-07", 2, 600, result, "同一条自定义追问？")
-        self.assertTrue(budget_runtime._visible(variants["保留证据压缩"], "本次真实回执里的特殊事实。"))
+        self.assertTrue(budget_runtime._visible(variants["规则压缩"], "本次真实工具结果里的特殊事实。"))
         self.assertTrue(all(messages[-1]["content"] == "同一条自定义追问？" for messages in variants.values()))
 
     def test_compaction_probe_separates_three_strategies(self):

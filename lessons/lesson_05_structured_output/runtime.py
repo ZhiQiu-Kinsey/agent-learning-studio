@@ -81,9 +81,9 @@ def run(context: RunContext) -> str:
     system = "只输出一个 JSON 对象，字段 lesson_id、lesson_title、prerequisite、exercise。不得编造给定事实；exercise 是 8 到 120 字的练习说明。"
     user = f"把这些可信课程事实整理为学习任务卡：{facts_text}。练习要求：用固定输入 19+23 比较运行结束和验收通过。"
     if scenario == "missing_field":
-        user += " 本轮故意省略 prerequisite 字段，供校验器展示字段错误。"
+        user += " 本轮故意省略 prerequisite 字段，供验证器展示字段错误。"
     elif scenario == "wrong_fact":
-        user += " 本轮故意把 prerequisite 写成 2，供校验器展示事实错误。"
+        user += " 本轮故意把 prerequisite 写成 2，供验证器展示事实错误。"
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     raw = _content(context.complete({"messages": messages, "temperature": 0}, 1))
     card, checks = inspect_output(raw)
