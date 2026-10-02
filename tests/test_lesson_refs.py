@@ -13,6 +13,11 @@ from server.lesson_refs import check_refs, lesson_refs, resolve_refs
 
 ROOT = Path(__file__).resolve().parents[1]
 HARDCODED = re.compile(r"第 ?\d+ ?课")
+# 运行器、夹具、测试、README 与实现清单里的文档串和运行时字符串也不写死课号。
+# 下面这些课还没改；改好的课从这里删掉，不再往里加。
+SOURCE_LEGACY = {"lesson_01_tool_selection", "lesson_02_dependent_calls", "lesson_03_fail_safely",
+                 "lesson_07_messages_context", "lesson_08_application_state", "lesson_09_context_budget",
+                 "lesson_10_persistent_memory"}
 
 
 class LessonRefTests(unittest.TestCase):
@@ -33,6 +38,15 @@ class LessonRefTests(unittest.TestCase):
         for path in files:
             with self.subTest(path=Path(path).name):
                 self.assertEqual(HARDCODED.findall(Path(path).read_text(encoding="utf-8")), [])
+
+    def test_lesson_sources_never_hardcode_lesson_numbers(self):
+        # 源码和运行事件不做 {{lesson:<slug>}} 替换：提到别的课写课名或 slug。
+        for directory in sorted((ROOT / "lessons").glob("lesson_*")):
+            if directory.name in SOURCE_LEGACY:
+                continue
+            for path in sorted([*directory.glob("*.py"), *directory.glob("*.md"), *directory.glob("*.json")]):
+                with self.subTest(path=f"{directory.name}/{path.name}"):
+                    self.assertEqual(HARDCODED.findall(path.read_text(encoding="utf-8")), [])
 
     def test_api_serves_resolved_text(self):
         client = TestClient(web.app, base_url="http://localhost")
