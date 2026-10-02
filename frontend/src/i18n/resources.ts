@@ -7,6 +7,18 @@ import lab from "./locales/zh-CN/lab.json";
 import quiz from "./locales/zh-CN/quiz.json";
 import stage from "./locales/zh-CN/stage.json";
 import settings from "./locales/zh-CN/settings.json";
+import command from "./locales/zh-CN/command.json";
 
 /** Source-locale resources are bundled for first paint and define the key types. */
-export const sourceResources = { common, settings, quiz, lab, errors, stage, lesson, blocks, home } as const;
+export const sourceResources = {
+  common,
+  settings,
+  quiz,
+  lab,
+  errors,
+  stage,
+  lesson,
+  blocks,
+  home,
+  command,
+} as const;

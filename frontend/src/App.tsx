@@ -18,6 +18,7 @@ import { ModelSettings } from "./components/workspace/ModelSettings";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { MotionSwitch } from "./components/MotionSwitch";
 import { CourseNavigation } from "./components/CourseNavigation";
+import { CommandButton, CommandMenu } from "./components/command/CommandMenu";
 import { Button } from "./components/ui/button";
 import {
   Sheet,
@@ -242,6 +243,7 @@ export default function App() {
             </strong>
           </div>
           <div className="app-preferences">
+            <CommandButton />
             <MotionSwitch />
             <ThemeSwitch />
             <Button
@@ -333,6 +335,24 @@ export default function App() {
           void studio.refreshStatus();
         }}
         triggerRef={settingsRef}
+      />
+      <CommandMenu
+        studio={studio}
+        lessonOpen={!intro && !catalog}
+        onLesson={choose}
+        onIntro={(chapter) => {
+          setIntro(true);
+          setIntroChapter(chapter);
+          setCatalog(false);
+          setMenu(false);
+          window.scrollTo({ top: 0 });
+        }}
+        onMap={() => {
+          setCatalog(true);
+          setIntro(false);
+          setMenu(false);
+        }}
+        onSettings={() => setSettings(true)}
       />
     </div>
   );

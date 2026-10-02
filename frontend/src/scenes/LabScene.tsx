@@ -9,6 +9,8 @@ import RubberSegment from "../components/react-bits/RubberSegment";
 import { ExperimentPanel } from "./lab/ExperimentPanel";
 import { GuideBar } from "./lab/GuideBar";
 import { RecordingView, type RecordingMeta } from "./lab/RecordingView";
+import { ShortcutHelp } from "./lab/ShortcutHelp";
+import { useLabShortcuts } from "./lab/useLabShortcuts";
 import type { SceneProps } from "./types";
 
 /** 实验：experiments frame the run; the stage, film and cards show what really happened. */
@@ -54,6 +56,13 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
 
   const exitGuide = useCallback(() => setGuideStep(null), []);
   const recording = recordings.find((item) => item.name === source);
+  const [help, setHelp] = useState(false);
+  useLabShortcuts({
+    studio,
+    enabled: active && !studio.running && !recording,
+    guideActive: guideStep !== null && finished,
+    onHelp: () => setHelp(true),
+  });
   const dateOf = (item: RecordingMeta) =>
     new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(
       new Date(item.metadata!.recorded_at),
@@ -185,6 +194,7 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
           )}
         </>
       )}
+      <ShortcutHelp open={help} onOpenChange={setHelp} />
     </div>
   );
 }
