@@ -165,15 +165,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "Python 已经执行加法，结果一定是 42。"
+                  "text": "Python 已经执行加法，结果一定是 42。",
+                  "feedback": "还不能确定。tool_calls 只是模型提出的行动请求；Python 是否执行、结果是多少，要看随后的 tool_result。"
                 },
                 {
                   "id": "b",
-                  "text": "模型提出了调用；需要继续查看 Python 执行结果才能确认。"
+                  "text": "模型提出了调用；需要继续查看 Python 执行结果才能确认。",
+                  "feedback": "对。响应里的调用只是提议；运行器解析参数、执行登记的函数之后，tool_result 才是这次执行的收据。"
                 },
                 {
                   "id": "c",
-                  "text": "模型把 Python 函数代码上传给服务商运行了。"
+                  "text": "模型把 Python 函数代码上传给服务商运行了。",
+                  "feedback": "模型不会上传或运行你的 Python 代码。它只返回函数名和 JSON 参数，执行发生在本机运行器里。"
                 }
               ],
               "correct": "b",
@@ -185,15 +188,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "模型训练时记住的当前时间。"
+                  "text": "模型训练时记住的当前时间。",
+                  "feedback": "模型没有可靠的“当前时间”；训练数据里的时间早已过去，不能作为依据。"
                 },
                 {
                   "id": "b",
-                  "text": "浏览器界面上猜测的用户所在时区。"
+                  "text": "浏览器界面上猜测的用户所在时区。",
+                  "feedback": "界面没有查询过用户时区，猜测会引入未经核实的信息；工具返回的是运行 Python 那台机器的时区。"
                 },
                 {
                   "id": "c",
-                  "text": "这次 get_current_time 的实际返回值及其时区。"
+                  "text": "这次 get_current_time 的实际返回值及其时区。",
+                  "feedback": "对。get_current_time 读取本机时钟并带上时区，这个返回值会进入下一轮消息，回答应以它为准。"
                 }
               ],
               "correct": "c",
@@ -205,19 +211,52 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "可以同轮提出；Python 按列表逐个执行，再回传各自的结果。"
+                  "text": "可以同轮提出；Python 按列表逐个执行，再回传各自的结果。",
+                  "feedback": "对。两个任务没有数据依赖，可以同轮提出；本课运行器用 for 循环逐个执行，再按 tool_call_id 回传各自的结果。"
                 },
                 {
                   "id": "b",
-                  "text": "同轮提出就证明两个 Python 函数真实并发执行。"
+                  "text": "同轮提出就证明两个 Python 函数真实并发执行。",
+                  "feedback": "同轮提出只说明模型一次给了两个请求；本课运行器是逐个执行的，不能据此认定真实并发。"
                 },
                 {
                   "id": "c",
-                  "text": "加法一定要等待时间返回，因此必须分成两次模型调用。"
+                  "text": "加法一定要等待时间返回，因此必须分成两次模型调用。",
+                  "feedback": "加法不需要等时间结果，两者没有依赖，所以不必拆成两次模型调用；有依赖时才需要分轮（下一课）。"
                 }
               ],
               "correct": "a",
               "explanation": "两个任务没有数据依赖，所以模型可同轮提出。是否并发取决于运行器的实现；这课的 for 循环逐个执行工具，不能仅凭同轮调用认定真实并发。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "找出模型第一次能看到 Python 工具结果的那次请求。",
+          "target": {
+            "event": "request",
+            "path": "data.body.messages[3].tool_call_id"
+          },
+          "explanation": "这是第 2 轮 request：messages 里出现了 role 为 tool、带 tool_call_id 的消息，它是运行器把 tool_result 序列化后放回消息历史。之前的 tool_result 事件只是 Python 的执行记录，模型要到这次请求才看到它。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在 response 里找到了模型提出的 tool_calls，能说出函数名和参数。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能用 tool_call 的 id 对上随后 tool_result 的 tool_call_id，确认是哪一次执行的结果。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说明 tool_result 要等到下一次 request 才会被模型看到。"
             }
           ]
         }

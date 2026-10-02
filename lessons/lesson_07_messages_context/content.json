@@ -220,15 +220,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "模型自动保存所有浏览器对话"
+                  "text": "模型自动保存所有浏览器对话",
+                  "feedback": "模型服务不会自动保存浏览器里的对话；每次请求只处理本次收到的 messages。"
                 },
                 {
                   "id": "b",
-                  "text": "程序把前一轮消息重新放入本次 messages"
+                  "text": "程序把前一轮消息重新放入本次 messages",
+                  "feedback": "对。程序把前一轮的 user 与 assistant 消息重新放进本次 messages，模型才看得到那个事实。"
                 },
                 {
                   "id": "c",
-                  "text": "页面回放提供了隐藏记忆"
+                  "text": "页面回放提供了隐藏记忆",
+                  "feedback": "回放只给人看，不会发送给模型；模型看不到页面上的任何记录。"
                 }
               ],
               "correct": "b",
@@ -240,15 +243,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "只有 role=tool 且 tool_call_id=x"
+                  "text": "只有 role=tool 且 tool_call_id=x",
+                  "feedback": "孤立的 tool 消息前面没有对应的 assistant 调用，协议检查会判为非法。"
                 },
                 {
                   "id": "b",
-                  "text": "assistant 的 tool_calls 含 id=x，后面有匹配的 tool 回执"
+                  "text": "assistant 的 tool_calls 含 id=x，后面有匹配的 tool 回执",
+                  "feedback": "对。tool 回执必须接在声明了相同 id 的 assistant tool_calls 之后，调用与回执成对出现。"
                 },
                 {
                   "id": "c",
-                  "text": "assistant 声称已经调用工具即可"
+                  "text": "assistant 声称已经调用工具即可",
+                  "feedback": "assistant 用文字声称调用过，不构成协议记录；没有 tool_calls 和匹配的回执，就没有可核对的调用。"
                 }
               ],
               "correct": "b",
@@ -260,15 +266,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "直接判定模型推理失败"
+                  "text": "直接判定模型推理失败",
+                  "feedback": "答错可能是请求失败、事实根本不在 messages 里，或模型没用好证据；不先排除前两者就无法归因。"
                 },
                 {
                   "id": "b",
-                  "text": "先确认 API 成功、事实是否在本次 messages，再比较答案"
+                  "text": "先确认 API 成功、事实是否在本次 messages，再比较答案",
+                  "feedback": "对。先确认 API 成功、事实确实在本次请求里，再比较答案，才能把原因落到具体层次。"
                 },
                 {
                   "id": "c",
-                  "text": "把答案写进 system 让它正确"
+                  "text": "把答案写进 system 让它正确",
+                  "feedback": "把答案写进 system 改变了实验条件，只会掩盖问题，不能解释消融组为什么答错。"
                 }
               ],
               "correct": "b",
@@ -280,19 +289,52 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "模型仍必然能读取回放"
+                  "text": "模型仍必然能读取回放",
+                  "feedback": "回放保存在运行记录里，不会自动进入请求；第三次请求里没有那段历史，模型就读不到。"
                 },
                 {
                   "id": "b",
-                  "text": "回放存有记录，但模型只收到第三次实际 messages"
+                  "text": "回放存有记录，但模型只收到第三次实际 messages",
+                  "feedback": "对。回放是给人看的记录；模型只收到第三次请求实际发送的 messages。"
                 },
                 {
                   "id": "c",
-                  "text": "浏览器自动将回放塞入模型"
+                  "text": "浏览器自动将回放塞入模型",
+                  "feedback": "浏览器不会把回放塞进请求；请求内容完全由程序构造，可以在 request 事件里核对。"
                 }
               ],
               "correct": "b",
               "explanation": "回放用于人观察，不能替代当前请求的上下文。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "找出模型能同时看到早先事实和追问的那次请求。",
+          "target": {
+            "event": "request",
+            "path": "data.body.messages[3]"
+          },
+          "explanation": "这次 request 的 messages 至少有 4 条：system 之外，还有先前给出事实的 user 消息、assistant 的确认，以及最后的追问。事实之所以可见，是因为程序重发了前一轮消息；消融请求只有 system 和追问两条。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我比较了完整历史与消融两次请求的 messages，找到了事实所在的那条消息。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能说明网页回放与模型实际收到的 messages 有什么不同。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说出工具消息合法配对的要求。"
             }
           ]
         }

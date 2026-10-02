@@ -170,15 +170,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "除法已成功，completed 可以覆盖 ok=false。"
+                  "text": "除法已成功，completed 可以覆盖 ok=false。",
+                  "feedback": "completed 只说明运行生命周期结束；工具结果的 ok=false 仍是这次除法失败的事实，不会被覆盖。"
                 },
                 {
                   "id": "b",
-                  "text": "模型解释错误，所以工具结果不必再检查。"
+                  "text": "模型解释错误，所以工具结果不必再检查。",
+                  "feedback": "模型的解释是否准确，正要对照 tool_result 才能判断，不能因为它说了什么就跳过检查。"
                 },
                 {
                   "id": "c",
-                  "text": "运行已结束，但除法失败；是否合格还要看模型有没有如实处理错误。"
+                  "text": "运行已结束，但除法失败；是否合格还要看模型有没有如实处理错误。",
+                  "feedback": "对。done 和 ok 是两个不同的信号：运行结束了，但除法失败；合格与否要看模型是否如实说明了错误。"
                 }
               ],
               "correct": "c",
@@ -190,15 +193,18 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "说明除数不能为零，请用户提供非零除数。"
+                  "text": "说明除数不能为零，请用户提供非零除数。",
+                  "feedback": "对。除数为零违反领域规则，应保留失败原因，并请用户给出有效输入。"
                 },
                 {
                   "id": "b",
-                  "text": "反复用同一参数重试，直到返回结果。"
+                  "text": "反复用同一参数重试，直到返回结果。",
+                  "feedback": "这不是网络抖动之类的暂时故障；同一参数重试多少次都会得到同样的错误，只会浪费调用。"
                 },
                 {
                   "id": "c",
-                  "text": "为了完成任务，自行把除数改成 1 并报告商。"
+                  "text": "为了完成任务，自行把除数改成 1 并报告商。",
+                  "feedback": "擅自改数改变了用户的任务，报告出的商也不是用户要的答案。"
                 }
               ],
               "correct": "a",
@@ -210,19 +216,53 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "自动寻找并执行同名 Python 函数，以免中断任务。"
+                  "text": "自动寻找并执行同名 Python 函数，以免中断任务。",
+                  "feedback": "运行器只查 AVAILABLE_TOOLS 白名单，不会按名字去找任意 Python 函数；否则模型就能自行扩展执行权限。"
                 },
                 {
                   "id": "b",
-                  "text": "拒绝执行，返回结构化错误，再让模型根据允许的能力继续。"
+                  "text": "拒绝执行，返回结构化错误，再让模型根据允许的能力继续。",
+                  "feedback": "对。未登记的名称会被拒绝，返回 ok=false 的结构化错误，模型只能在允许的能力里继续。"
                 },
                 {
                   "id": "c",
-                  "text": "只要 arguments 是合法 JSON，就有权执行这个名称。"
+                  "text": "只要 arguments 是合法 JSON，就有权执行这个名称。",
+                  "feedback": "合法 JSON 只说明参数能解析，不代表这个工具被授权执行。"
                 }
               ],
               "correct": "b",
               "explanation": "合法 JSON 只表示参数可解析，不表示工具被授权。AVAILABLE_TOOLS 是明确的执行白名单；未知名称必须被拒绝，不能由模型的提议扩展程序执行权限。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“除数为零”练习，找出 Python 拒绝执行、返回结构化错误的那一步。",
+          "target": {
+            "event": "tool_result",
+            "path": "data.result.error_type",
+            "name": "divide_numbers"
+          },
+          "explanation": "这是 divide_numbers 的 tool_result：result 里 ok 为 false，并带有 error_type 和 error。错误被转换成结构化结果回传给模型，程序没有崩溃；之后运行仍可能以 completed 结束，但这一步记录的是失败。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我运行了“除数为零”练习，在 tool_result 里看到了 ok=false 和 error_type。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能区分 done 的 completed 与工具结果的 ok=false 各自说明了什么。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说出未登记的工具名为什么会被拒绝执行。"
             }
           ]
         }
