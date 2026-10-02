@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def request(path, payload=None):
-    req = urllib.request.Request("http://127.0.0.1:8765" + path,
+    req = urllib.request.Request(os.environ.get("AGENT_LAB_URL", "http://127.0.0.1:8765") + path,
                                  data=None if payload is None else json.dumps(payload).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=180) as response:
@@ -30,7 +30,7 @@ def main():
             if provider_id == "custom":
                 settings.update(model=MODEL, api_base=API_URL, api_key=key)
             request("/api/settings", settings)
-            created = json.loads(request("/api/runs", {"lesson_id": "1", "mode": "live", "exercise_id": "sum",
+            created = json.loads(request("/api/runs", {"lesson_id": "tool-selection", "mode": "live", "exercise_id": "sum",
                                                        "question": "帮我计算 19 加 23，并说明结果。"}))
             stream = request(f"/api/runs/{created['run_id']}/events")
             events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
