@@ -98,11 +98,46 @@
 
 确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None)` 工厂，返回 `completion(body, api_key)`。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`。
 
-## 教学内容与动效复用
+## 教学内容（content v2）
 
-`content.json` 的基础结构是 `sections`、`observe`、`quiz`；每道自测有唯一 ID、题目、选项、正确选项与解释。通用导读直接使用这些内容。
+`content.json` 声明“怎么教”，结构由 `server/content_schema.py` 中的 Pydantic 模型唯一定义。文件开头的 `$schema` 指向 `curriculum/schema/content.v2.schema.json`，编辑器可以据此补全。基本骨架：
 
-可选 `presentation` 描述开场标题、重点命题、概念卡片和分步机制示意，结构参见已有课程的 `content.json`。它由现有 React Bits 组件呈现，不必为文字特效另建一套页面。示意是教学解释，必须与真实运行事件区分；不要把写死的流程图当成模型运行证据。
+```text
+{ "$schema": "...", "schema_version": 2, "lesson": "<slug>", "source_language": "zh-CN",
+  "capabilities": ["tools", ...],
+  "scenes": {
+    "understand": { "blocks": [hero, concepts, prose, micro-quiz, walkthrough, flow, predict, ...] },
+    "code":       { "blocks": [whats-new, annotated-source, decision] },
+    "lab":        { "experiments": [...], "inputs": [...] },
+    "check":      { "blocks": [quiz, trace-hunt, checkpoint] } },
+  "illustrations": { "<id>": { "events": [...] } } }
+```
+
+- **块与 id**：每个块和条目都有稳定 id，块 id 在整份文档内唯一。块类型与场景无关，场景顺序固定。表现形式只写语义意图（如 `"reveal": "split"`），由前端动效层映射到具体组件。
+- **实验**：`experiments` 中每个实验由以下部分组成：
+  - `hypothesis`：可检验的假设；
+  - `arms`：对照组，用 `exercise` 引用 lesson.json 的练习；
+  - `observe`：观察点，带选择器（`event`、`round`、`path`、`span_kind`、`name`）；
+  - `guide`：导览动作 `narrate`、`spotlight`、`highlight`、`seek`；
+  - `conclusion`：`proves` 写能证明的，`does_not_prove` 写不能证明的。
+
+  选择器的语义由 `server/selectors.py` 和 `frontend/src/content/selector.ts` 共同实现，两边跑同一份共享测试向量。`tests/test_lesson_experiments.py` 会用确定性运行逐个检查观察点和导览目标都能命中；在这次运行中找不到的证据，界面会如实显示“本次运行没有出现这条证据”。
+- **预测**：`predict` 只能用能从真实事件计算出的规则（`count_events`），只和学习者自己的运行对照，示意和录制都不算。
+- **示意**：`flow` 块引用 `illustrations` 中的合成事件序列。这些事件必须通过 `server/illustrations.py` 的契约：
+  - 调用与结果成对；
+  - 调用 id 使用示例 id（含 `example`）；
+  - 不出现耗时、用量、费用等执行测量值。
+
+  `walkthrough` 是作者写的分步讲解，界面一律标注“教学示意 · 非运行记录”。
+- **参数标签**：自定义运行器的 `INPUT_MODEL` 会导出 JSON Schema，前端据此生成参数控件。控件的标签、帮助和选项文字写在 `lab.inputs`，测试保证它与模型字段一一对应。枚举请用 `Literal`，不要用正则 `pattern`。
+- **读码块**：`annotated-source` 的路径必须在本课 sources 中，行号必须真实存在。“本课新增”由后端从源码 AST 计算，不要手写。
+- **术语**：外来术语首次出现时写作“中文（English）”，以 `curriculum/glossary.json` 为准。
+
+**版本与迁移**：旧版本内容会在加载时走 `server/content_migrations.py` 的迁移阶梯。写回磁盘并规范格式用 `scripts/migrate_content.py`，加 `--check` 只检查。修改 schema 后，运行 `scripts/export_content_schema.py`，再在 frontend 目录运行 `npm run content:types`；测试会检查三者同步。
+
+**译文层**：在源文件旁放 `content.<语言>.json`，按 id 路径覆盖文本，例如 `hero.headline`、`concepts.<条目>.title`、`inputs.<字段>.label`。事实字段（id、正确答案、代码、选择器、URL 等）不能被覆盖。每条译文记录源文本摘要，源文本改动后这条译文视为过期，回落到源文本。`scripts/validate_lessons.py` 会报告每个译文层的覆盖率。
+
+**随课录制**：真实模型运行后，用 `scripts/export_recording.py --run <run_id> --name <名称>` 原样导出到 `lessons/<目录>/recordings/`。录制只能来自 live 运行，带源码哈希和完整性哈希；源码变化后会提示重新录制。
 
 ## 独立运行器
 

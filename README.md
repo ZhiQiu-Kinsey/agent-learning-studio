@@ -81,16 +81,23 @@ AgentStart/
 ├── main.py                    # 原有百炼命令行课程入口
 ├── local_config.example.py    # 百炼配置模板；本机配置由 .gitignore 排除
 ├── course/                    # 请求传输、模型适配、原生 Agent 循环
-├── curriculum/catalog.json    # 分类、课次、目标、实验与验收的唯一规划数据源
-├── curriculum/onboarding.json # 前置导学、概念对照、自检与固定版本资料出处
-├── lessons/                   # 各课 lesson.json、Python、说明、教学内容与测试 fixture
+├── curriculum/
+│   ├── catalog.json           # 分类、课次、目标、实验与验收的唯一规划数据源（42 课）
+│   ├── onboarding.json        # 前置导学（第 0 章），content v2 格式
+│   ├── glossary.json          # 术语表单一来源
+│   └── schema/                # 由 Pydantic 导出的内容 JSON Schema
+├── lessons/                   # 各课 lesson.json、content.json（v2）、Python、录制与测试 fixture
 ├── server/
-│   ├── app.py                 # HTTP、SSE、执行互斥与数据边界
+│   ├── app.py                 # HTTP、SSE、运行接口、执行互斥与数据边界
 │   ├── catalog.py             # 自动发现课程清单、校验与源码白名单
-│   └── offline.py             # 按课程查找确定性测试 fixture
-├── frontend/                  # React + TypeScript + Vite
+│   ├── content*.py            # 内容 v2 schema、迁移阶梯、加载与译文层
+│   ├── envelope.py / run_store.py  # 事件信封 v2 与 SQLite 运行存储
+│   ├── code_reading.py        # 读码场景：从真实源码计算新增符号与批注校验
+│   ├── selectors.py / illustrations.py  # 观察点选择器与教学示意契约
+│   └── recordings.py          # 随课真实运行录制的导出与校验
+├── frontend/                  # React + TypeScript + Vite（结构见 docs/architecture/frontend-workspace.md）
 ├── tests/                     # Python 行为与 API 测试
-└── docs/architecture/         # 架构约定与课程来源与架构说明
+└── docs/architecture/         # 架构约定、重构方案、课程来源
 ```
 
 规划新课先修改 `curriculum/catalog.json`。使用 `python scripts/new_lesson.py --id 11 --slug document_loading --dry-run` 预览脚手架；去掉 `--dry-run` 创建目录，复杂课程加 `--kind custom`。课号需替换为实际仍处于 `planned` 的课程。生成器不会解锁课程或覆盖已有目录。
@@ -103,11 +110,16 @@ AgentStart/
 
 ## 交互与动效
 
-界面使用 React Bits 的文字分拆、模糊入场、渐变与解码、滚动揭示、轮换标题、聚光与扫光、极光背景、磁吸、点击火花和数字过渡；运行状态由真实事件驱动。结构与复用方式见 [前端工作区](docs/architecture/frontend-workspace.md)。
+全站的视觉母题是 **Agent 舞台**：用户、运行层、模型、工具、状态与记忆之间的连线由每个真实事件点亮。实验场景同时提供：
 
-尊重系统“减少动画”设置，并支持页面打开后立即切换。动态背景、课程开场与文字循环在离屏或页面隐藏时暂停；极光使用受限分辨率和帧率，WebGL 不可用时保留静态背景。导学、课程、地图、实验工作台按需加载，已经打开的实验与自测状态在工作区切换时保留。
+- 时间线：可切换按真实时间排布或等距排布；
+- 上下文胶片：每轮实际发送的消息，新增项高亮；
+- 工具卡片；
+- 导览回放：讲解你自己的那次运行，证据缺失时会如实说明。
 
-课程 `content.json` 的可选 `presentation` 描述标题、关键命题、概念卡片与分步教学示意。它补充原来的 `sections` / `observe` / `quiz`；示意会明确标注“非运行记录”，不代替真实实验数据。前置数据通过只读 `/api/onboarding` 返回，不加入可执行课程注册表。
+教学示意由同一个舞台渲染，但画成虚线，并加上“教学示意 · 非运行记录”水印。
+
+动效由统一的动效层管理，可选“跟随系统 / 完整 / 简洁 / 静态”。系统开启减少动画时，“跟随系统”会使页面静止；重效果按需加载、离屏暂停，WebGL 同屏最多一个。⌘K（Ctrl+K）打开命令面板；实验中可用空格、方向键和 `[ ]` 控制回放，`?` 查看全部快捷键。结构见 [前端结构](docs/architecture/frontend-workspace.md)，方案见 [平台重构方案](docs/architecture/redesign-plan.md)。
 
 ## 开发与验证
 
@@ -122,6 +134,7 @@ npm.cmd --prefix frontend run dev
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 npm.cmd --prefix frontend run build
+npm.cmd --prefix frontend exec vitest run
 # 服务与前端构建已就绪时，在 frontend 目录执行浏览器测试
 Set-Location frontend
 npx.cmd playwright test
@@ -140,5 +153,5 @@ npx.cmd playwright test
 
 `main.py` 默认第 3 课；网页入口为 `run_web.py`，构建源入口为 `frontend/index.html`。
 
-本平台面向单人本地学习，运行记录暂存在页面内，刷新后不恢复。未来课程和共享部署功能会按学习进展单独实现。
+本平台面向单人本地学习：运行记录脱敏后保存在 `.runtime/runs.sqlite3`，学习进度保存在浏览器本机，都只记录真实发生的动作。共享部署需要另行设计身份与存储。
 

@@ -38,3 +38,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## 通过 npm 引入的依赖（未复制源码）
+
+许可证随各包分发，这里只列出需要注意的项：
+
+- elkjs（EPL-2.0）：课程地图路线图布局，懒加载。
+- @xyflow/react（MIT）、cmdk（MIT）、i18next / react-i18next（MIT）、motion（MIT）、@axe-core/playwright（MPL-2.0，仅测试使用）。

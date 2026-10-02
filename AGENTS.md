@@ -28,7 +28,11 @@ Agent Learning Studio 是本地 Agent 教学平台，后端采用 Python/FastAPI
 - `server/`：REST/SSE 接口、课程注册及确定性测试适配器。
 - `lessons/lesson_NN_topic/`：各课 Python 实现、教学内容和说明文档。
 - `curriculum/catalog.json`：课程规划的唯一数据源；生成的课程大纲位于 `docs/course-plan.md`。
-- `frontend/src/`：前端组件、Hooks 和样式。React Bits 组件放在 `components/react-bits/`，补充的 shadcn/ui 组件放在 `components/ui/`，业务样式按模块放在 `styles/`；`workspace.css` 仅保留导入入口。
+- `frontend/src/`：前端，结构见 `docs/architecture/frontend-workspace.md`。
+  - `scenes/`：课程页五个场景；`stage/`：舞台、胶片、时间线、工具卡片。
+  - `content/`：v2 类型、块渲染、选择器、导览；`motion/`：统一动效层。
+  - `i18n/`：多语言，文案只写在 locales；`progress/`：本机学习进度。
+  - React Bits 组件放在 `components/react-bits/`，shadcn/ui 组件放在 `components/ui/`；业务样式按模块放在 `styles/`，`workspace.css` 仅保留导入入口。
 - `tests/`、`frontend/e2e/`：Python 测试和浏览器测试。`frontend/dist/` 为构建产物，`.runtime/` 存放本地诊断文件。
 
 ## 构建、测试与开发命令
@@ -53,15 +57,22 @@ npm.cmd --prefix frontend run dev              # 启动 Vite，代理 /api 到�
 .\.venv\Scripts\python.exe scripts/validate_lessons.py
 # 把一次真实模型运行原样导出为随课录制（规则见 docs/architecture/event-envelope-v2.md 第 6 节）
 .\.venv\Scripts\python.exe scripts/export_recording.py --run <run_id> --name <kebab-case 名称>
+# 内容 v2：迁移与规范化（--check 只检查）、导出 schema、生成前端类型
+.\.venv\Scripts\python.exe scripts/migrate_content.py --check
+.\.venv\Scripts\python.exe scripts/export_content_schema.py
+npm.cmd --prefix frontend run content:types
+# 前端单元测试与翻译键检查
+npm.cmd --prefix frontend exec vitest run
+npm.cmd --prefix frontend run i18n:check
 ```
 
-浏览器测试前先构建前端并启动后端，再进入 `frontend/` 执行 `npx.cmd playwright test`。测试使用已安装的 Chrome；由于后端执行互斥，测试按顺序运行。
+浏览器测试前先构建前端并启动后端，再进入 `frontend/` 执行 `npx.cmd playwright test`（可用 `AGENT_LAB_URL` 指定其他端口）。测试使用已安装的 Chrome；由于后端执行互斥，测试按顺序运行。测试用 role、`data-testid` 和 `e2e/i18n.ts` 的文案键定位，选择器基线与硬编码中文基线都只许减少。
 
 ## 编码风格与命名约定
 
 Python 使用 4 空格缩进，TypeScript/CSS 使用 2 空格缩进。Python 函数和变量使用 `snake_case`，React 组件使用 PascalCase，Hooks 使用 `useSomething`。前端已安装 Prettier，仅格式化本次修改涉及的文件，避免无关改动。
 
-优先复用免费 React Bits 组件，缺少的能力再使用 shadcn/ui 补充。保留无障碍支持、减少动态效果设置和上游许可证声明。
+优先复用免费 React Bits 组件，缺少的能力再使用 shadcn/ui 补充。保留无障碍支持、减少动态效果设置和上游许可证声明。界面文案写在 `frontend/src/i18n/locales/`，不在组件中硬编码中文；动效判断只用 `frontend/src/motion`，不直接写 `prefers-reduced-motion`；运行数据只来自真实事件，教学示意必须标注“非运行记录”。
 
 ## 测试要求
 
