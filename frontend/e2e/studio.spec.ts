@@ -345,6 +345,7 @@ test("the complete curriculum groups real plans and only starts implemented less
   await page.goto("/");
   await page.getByTestId("app-curriculum-button").click();
   await expect(page.getByTestId("curriculum-title")).toBeVisible();
+  await page.getByTestId("curriculum-view-list").click();
   await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(
     curriculum.categories.length,
   );
