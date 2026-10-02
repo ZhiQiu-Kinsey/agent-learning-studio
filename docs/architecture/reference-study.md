@@ -50,4 +50,12 @@
 
 平台使用 React + TypeScript + Vite、FastAPI 和本机 Python。课程按“概念 → 最小实现 → 运行证据 → 实验 → 自检”组织。框架课程在制作时核对 API 与依赖；运行和回放保持独立，回放不产生新请求。
 
-当前第 1–10 课可运行，其余课次保留为规划。课程目录由 `curriculum/catalog.json` 统一维护；实现方式见 [新增课程指南](adding-lessons.md)，完整验收见 [开发验证](validation.md)。
+当前第 1–10 课与“推理与控制模式”中已完成的新课可运行（见第 6 节），其余课次保留为规划。课程目录由 `curriculum/catalog.json` 统一维护；实现方式见 [新增课程指南](adding-lessons.md)，完整验收见 [开发验证](validation.md)。
+
+## 6. 推理与控制模式新课的来源（2026-10）
+
+“推理与控制模式”大类按 `curriculum-research.md` 第 9 节决策 1 编写。每课只登记实际读过的文件；固定版本沿用第 1 节与 `curriculum-research.md` 第 1 节的快照。提示词、解析器、夹具与实验均由本项目编写，没有复制参考项目的代码。
+
+| 课程 | 来源与固定版本 | 实际阅读 | 借鉴了什么 |
+| --- | --- | --- | --- |
+| 13 `text-actions` | Hugging Face Agents Course `b3946b1`（Apache-2.0） | `units/en/unit1/actions.mdx`、`units/en/unit1/dummy-agent-library.mdx` | stop-and-parse 的讲法；“不加 stop 时模型自己写出 Observation”这一现象。本课改为本地成绩表、严格解析和编造内容的并列记录 |

@@ -97,9 +97,10 @@ class RealCatalogTests(unittest.TestCase):
                 # 旧课程保留原数字 ID 作为别名；扩充后新增的课程从未有过数字 ID，可以没有别名。
                 if item["aliases"]:
                     self.assertTrue(any(alias.isdigit() for alias in item["aliases"]), "别名应为旧数字 ID")
-        # 已实现的第 1–10 课显示课号不变，与旧数字 ID 一致。
+        # 已实现的第 1–10 课显示课号不变，与旧数字 ID 一致；扩充后新增的课程没有数字别名。
         for spec in LESSONS:
-            self.assertEqual(str(spec["number"]), spec["aliases"][0])
+            if spec["aliases"]:
+                self.assertEqual(str(spec["number"]), spec["aliases"][0])
         self.assertEqual(index.numbers["tool-selection"], 1)
         self.assertEqual(index.resolve("10"), "persistent-memory")
 

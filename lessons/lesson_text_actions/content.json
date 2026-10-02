@@ -1,0 +1,934 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "text-actions",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "REASONING / LESSON 13",
+          "headline": "动作写在文本里，",
+          "highlight": "就得有人负责停下和解析。",
+          "takeaway": "文本协议靠 stop 和解析器把模型写的字变成动作；原生工具调用把这一步交给服务商。去掉 stop，模型可能连工具结果都替你编好。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-text",
+              "label": "01 / TEXT",
+              "title": "文本动作协议",
+              "description": "模型按 Thought、Action、Action Input 的格式写字，程序用正则从文本里取出工具名和参数。",
+              "token": "Action · Action Input"
+            },
+            {
+              "id": "02-stop",
+              "label": "02 / STOP",
+              "title": "停在该停的地方",
+              "description": "请求带上 stop: [\"Observation:\"]，模型写到这里就被截断，控制权回到程序。",
+              "token": "stop"
+            },
+            {
+              "id": "03-fake",
+              "label": "03 / FAKE",
+              "title": "编出来的 Observation",
+              "description": "没有 stop 时，模型可能接着写出 Observation 和最终答案。那些数字是猜的。",
+              "token": "Observation:"
+            },
+            {
+              "id": "04-native",
+              "label": "04 / NATIVE",
+              "title": "原生调用：tool_calls 字段",
+              "description": "动作放在响应的 tool_calls 字段里，结构由服务商保证，程序不用解析自由文本。",
+              "token": "tool_calls"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "模型只会输出文本",
+          "paragraphs": [
+            "第 1 课里，模型通过 tool_calls 字段提出工具调用（Tool Calling），平台执行后把工具结果（Tool Result）放进 tool 消息。早期的 Agent 没有这个字段：模型的每一步都写在普通文本里，由程序自己读懂。这种做法叫文本动作协议，ReAct（Reasoning + Acting）是最常见的格式：Thought 写思考，Action 写工具名，Action Input 写参数，程序执行后把结果以观察结果（Observation）的形式贴回去。",
+            "学这个协议有两个用处。一是不少框架和开源项目还在用它，比如给不支持原生工具调用的本地模型用；二是它把“模型提出动作、程序执行动作”这层分工摆在了明面上，原生调用只是把同一件事做成了结构化字段。"
+          ]
+        },
+        {
+          "id": "mq-who-executes",
+          "type": "micro-quiz",
+          "question": {
+            "id": "who-executes",
+            "prompt": "文本协议里，Action 写的工具由谁执行？",
+            "options": [
+              {
+                "id": "a",
+                "text": "程序：解析出工具名和参数后，调用登记过的函数",
+                "feedback": "对。模型只产生文字，执行永远在程序这一侧。"
+              },
+              {
+                "id": "b",
+                "text": "模型：写出 Action 就等于执行了",
+                "feedback": "不对。模型输出的只是文本，没有任何东西被执行。"
+              },
+              {
+                "id": "c",
+                "text": "服务商：识别到 Action 后自动执行",
+                "feedback": "不对。服务商不认识这个格式，它只是返回了一段文字。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "动作的提出者和执行者是分开的，这一点在原生调用里也一样。"
+          }
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "stop：让模型在该停的地方停下",
+          "paragraphs": [
+            "模型写完 Action Input 后应该停下，等程序把真实结果贴回来。可模型自己并不知道要停，它只是按概率往下写。停止序列（Stop Sequence）解决这个问题：请求里写 stop: [\"Observation:\"]，服务商在输出这串字符之前截断，返回的 finish_reason 是 stop。",
+            "带 stop 的那组实验，每次请求都带着这个参数。第 1 次响应停在 Action Input 之后；程序执行 lookup_quiz_score，把结果写成“Observation: …”追加为一条 user 消息，再发第 2 次请求。模型看到真实成绩后写出 Final Answer。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "去掉 stop：模型替你写好 Observation",
+          "paragraphs": [
+            "把 stop 去掉，模型可能一口气写下去：Action Input 之后接着写“Observation: {\"score\": …}”，再写 Final Answer。这些数字是模型猜的，它根本没看到成绩表。程序如果直接采用这个 Final Answer，用户拿到的就是编出来的成绩。",
+            "本课的运行器发现模型自己写了 Observation，会把它切下来记成 lesson.fabricated_observation 事件，然后照常执行工具，只把 Observation 之前的文本和真实结果放回上下文。事件里并列写着模型编的内容和真实结果，可以直接对比。模型会不会编、编成什么样，取决于你用的模型和这一次采样，以本次记录为准。"
+          ]
+        },
+        {
+          "id": "mq-fabricated",
+          "type": "micro-quiz",
+          "question": {
+            "id": "fabricated-score",
+            "prompt": "去掉 stop 后，模型在 Action Input 后面写了“Observation: {\"score\": 88}”。成绩表里 s-1042 是 73 分。程序应该怎么办？",
+            "options": [
+              {
+                "id": "a",
+                "text": "丢掉模型写的 Observation，执行工具，用真实的 73 分继续",
+                "feedback": "对。观察结果只能来自真实执行。"
+              },
+              {
+                "id": "b",
+                "text": "采用 88 分，反正模型已经给出了结果",
+                "feedback": "不对。模型没看到成绩表，88 是它猜的。"
+              },
+              {
+                "id": "c",
+                "text": "两个分数取平均",
+                "feedback": "不对。编出来的数据不能参与任何计算。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "模型可以提议动作，但不能替环境回答。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "解析失败要记下来，不要偷偷修",
+          "paragraphs": [
+            "文本协议的另一个弱点是格式。模型可能漏写 Action Input，可能把 JSON 写成 {student_id: s-1042}，也可能直接用一句话作答。解析器遇到这些情况，最省事的办法是猜：补引号、补括号、从句子里抠数字。这样做会让错误变得看不见。",
+            "本课的解析器只做一件宽容的事：用 json.JSONDecoder.raw_decode 读 Action Input 开头的那个 JSON 值，允许后面跟着换行或别的文字。除此之外，任何不合格式的输出都记成 ok 为 false 的 lesson.parse 事件，带上原文和错误原因，然后停止运行。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "原生工具调用把解析交给服务商",
+          "paragraphs": [
+            "原生组用同一个问题，改为在请求里提供 tools，让模型在 tool_calls 字段里返回调用。工具名是字段值，参数是一段 JSON 字符串，不用从自由文本里找。这一轮的 finish_reason 是 tool_calls，程序按 tool_call_id 把结果配回去。",
+            "原生调用也会出错：参数可能不是合法 JSON，工具名可能不在登记表里，这些第 3 课已经见过。区别在于错误出在结构化字段里，比从一段话里猜格式容易发现。原生调用也不会出现编造观察结果的问题，工具结果只能由 tool 消息带回来。"
+          ]
+        },
+        {
+          "id": "mq-native",
+          "type": "micro-quiz",
+          "question": {
+            "id": "native-saves",
+            "prompt": "和文本协议相比，原生工具调用省掉了程序的哪一步？",
+            "options": [
+              {
+                "id": "a",
+                "text": "从自由文本里解析工具名和参数",
+                "feedback": "对。这一步交给了服务商。"
+              },
+              {
+                "id": "b",
+                "text": "执行工具",
+                "feedback": "不对。执行仍然由程序负责。"
+              },
+              {
+                "id": "c",
+                "text": "检查参数是否合法",
+                "feedback": "不对。参数照样可能写错，程序仍要校验。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "原生调用改变的是动作的表示方式，执行和校验的责任没有变。"
+          }
+        },
+        {
+          "id": "compare-protocols",
+          "type": "compare",
+          "title": "三组实验的差别",
+          "columns": [
+            "对比项",
+            "文本协议，带 stop",
+            "文本协议，无 stop",
+            "原生工具调用"
+          ],
+          "rows": [
+            [
+              "动作写在哪",
+              "content 文本",
+              "content 文本",
+              "tool_calls 字段"
+            ],
+            [
+              "谁让模型停下",
+              "服务商按 stop 截断",
+              "没人，模型可能继续写",
+              "服务商在提出调用后结束本轮"
+            ],
+            [
+              "谁解析动作",
+              "本课的正则解析器",
+              "本课的正则解析器",
+              "服务商返回结构化字段"
+            ],
+            [
+              "可能出的问题",
+              "格式错误、漏写字段",
+              "编造 Observation 和最终答案",
+              "参数 JSON 错误、工具名不存在"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "文本协议的一轮",
+          "description": "按步骤说明运行器怎么处理一次文本输出，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "请求",
+              "actor": "程序",
+              "title": "带上 stop 发请求",
+              "body": "system 写明格式，请求带 stop。",
+              "code": "body = {\"messages\": messages, \"stop\": [\"Observation:\"]}",
+              "language": "python",
+              "evidence": "request.body.stop"
+            },
+            {
+              "id": "step-2",
+              "label": "切分",
+              "actor": "程序",
+              "title": "先切掉模型自写的 Observation",
+              "body": "Observation 之后的内容单独保存，不进入上下文。",
+              "code": "kept, marker, rest = content.partition(\"Observation:\")",
+              "language": "python",
+              "evidence": "lesson.parse 的 model_wrote_observation"
+            },
+            {
+              "id": "step-3",
+              "label": "解析",
+              "actor": "程序",
+              "title": "从文本里取出动作",
+              "body": "取工具名和 Action Input；格式不对就记失败并停止。",
+              "code": "arguments, _ = json.JSONDecoder().raw_decode(text)",
+              "language": "python",
+              "evidence": "lesson.parse 的 ok 与 error"
+            },
+            {
+              "id": "step-4",
+              "label": "执行",
+              "actor": "工具",
+              "title": "执行登记过的工具",
+              "body": "lookup_quiz_score 在 Python 里查本地成绩表。",
+              "code": "result = context.call_tool(name, arguments, TOOLS)",
+              "language": "python",
+              "evidence": "tool_call 与 tool_result"
+            },
+            {
+              "id": "step-5",
+              "label": "贴回",
+              "actor": "程序",
+              "title": "把真实结果贴回去",
+              "body": "真实结果以 Observation 文本追加为 user 消息，再请求下一轮。",
+              "code": "messages.append({\"role\": \"user\", \"content\": \"Observation: \" + json.dumps(result)})",
+              "language": "python",
+              "evidence": "下一次 request 的 messages"
+            }
+          ]
+        },
+        {
+          "id": "predict-fabricated",
+          "type": "predict",
+          "prompt": "运行“去掉 stop：s-1042”之前先猜：这次运行会出现几个 lesson.fabricated_observation 事件？",
+          "experiment": "stop-vs-no-stop",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.fabricated_observation"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "fail-safely"
+        },
+        {
+          "id": "code-parse",
+          "type": "annotated-source",
+          "path": "lessons/lesson_text_actions/runtime.py",
+          "start": 63,
+          "end": 89,
+          "notes": [
+            {
+              "id": "n68",
+              "line": 68,
+              "text": "先在 Observation: 处切开：前面是模型该写的部分，后面是它不该写的部分。"
+            },
+            {
+              "id": "n80",
+              "line": 80,
+              "text": "raw_decode 只读开头的一个 JSON 值，是解析器唯一的宽容之处。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "text": "既没有动作也没有最终答案，就判为解析失败，不从句子里猜。"
+            }
+          ]
+        },
+        {
+          "id": "code-text-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_text_actions/runtime.py",
+          "start": 97,
+          "end": 134,
+          "notes": [
+            {
+              "id": "n105",
+              "line": 105,
+              "text": "只有带 stop 的那组发送 stop 参数，这是两组文本实验唯一的差别。"
+            },
+            {
+              "id": "n110",
+              "line": 110,
+              "text": "每次输出都发布 lesson.parse，原文、解析结果和 finish_reason 一起记录。"
+            },
+            {
+              "id": "n116",
+              "line": 116,
+              "text": "解析失败立即停止，不重试也不修复。"
+            },
+            {
+              "id": "n122",
+              "line": 122,
+              "text": "工具由程序按解析结果执行，事件标记为课程程序发起。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "text": "模型自写的 Observation 与真实结果并列记录，方便对比。"
+            },
+            {
+              "id": "n131",
+              "line": 131,
+              "text": "放回上下文的只有 Observation 之前的文本和真实结果。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "text": "最后用实际发出的消息核对：自写的 Observation 一段都没有混进去。"
+            }
+          ]
+        },
+        {
+          "id": "code-native",
+          "type": "annotated-source",
+          "path": "lessons/lesson_text_actions/runtime.py",
+          "start": 155,
+          "end": 185,
+          "notes": [
+            {
+              "id": "n160",
+              "line": 160,
+              "text": "原生组把工具定义放进 tools，不再要求模型遵守文本格式。"
+            },
+            {
+              "id": "n172",
+              "line": 172,
+              "text": "调用按模型给的 id 原样记录，tool 消息用同一个 id 配对。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "解析严格，失败就停，不替模型补格式",
+          "chosen": "解析器只接受 Action / Action Input 或 Final Answer 两种格式，Action Input 用 raw_decode 读第一个 JSON 值；其余情况记成 ok 为 false 的 lesson.parse 并停止。模型自写的 Observation 切下来单独记录，不进入上下文。",
+          "alternatives": [
+            {
+              "id": "lenient-repair",
+              "title": "宽松修复：补引号、补括号、从句子里抠参数",
+              "why_not": "修复成功时看不出模型其实写错了；修复错误时，执行的是程序猜的参数，而不是模型提的参数。"
+            },
+            {
+              "id": "retry-on-error",
+              "title": "解析失败时把错误发回模型，让它重写",
+              "why_not": "这是可行的做法，但会把“格式不稳定”藏进重试次数里。本课先让失败原样可见，重试留给后面的可靠工具课。"
+            },
+            {
+              "id": "trust-final-answer",
+              "title": "模型一旦写出 Final Answer 就直接采用",
+              "why_not": "去掉 stop 时，Final Answer 可能建立在模型自己编的 Observation 上。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "stop-vs-no-stop",
+          "title": "带 stop 与去掉 stop",
+          "hypothesis": "去掉 stop 后，模型可能在 Action Input 后面接着写出 Observation 和最终答案；这些内容与真实工具结果不一定一致，运行器把它们切下来单独记录，不让它们进入上下文。",
+          "predict": "predict-fabricated",
+          "arms": [
+            {
+              "id": "with-stop",
+              "exercise": "text-stop",
+              "label": "带 stop：s-1042"
+            },
+            {
+              "id": "no-stop",
+              "exercise": "text-no-stop",
+              "label": "去掉 stop：s-1042"
+            },
+            {
+              "id": "no-stop-fail",
+              "exercise": "text-no-stop-fail",
+              "label": "去掉 stop：不及格的 s-2077"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stop-param",
+              "text": "带 stop 组请求里的 stop 参数；去掉 stop 的组没有这个字段。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.stop"
+              }
+            },
+            {
+              "id": "raw-output",
+              "text": "第 1 次模型输出的原文。",
+              "selector": {
+                "event": "lesson.parse",
+                "round": 1,
+                "path": "data.raw"
+              }
+            },
+            {
+              "id": "fabricated",
+              "text": "模型自己写的 Observation。",
+              "selector": {
+                "event": "lesson.fabricated_observation",
+                "path": "data.model_wrote"
+              }
+            },
+            {
+              "id": "real-result",
+              "text": "lookup_quiz_score 的真实返回。",
+              "selector": {
+                "event": "tool_result",
+                "round": 1,
+                "path": "data.result.result"
+              }
+            },
+            {
+              "id": "naive-final",
+              "text": "如果直接采信模型写的 Final Answer，用户会拿到什么。",
+              "selector": {
+                "event": "lesson.fabricated_observation",
+                "path": "data.naive_final_answer"
+              }
+            },
+            {
+              "id": "second-request",
+              "text": "第 2 次请求的上下文：最后一条是真实的 Observation。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "final-answer",
+              "text": "最终回答。",
+              "selector": {
+                "event": "answer",
+                "path": "data.content"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "三组用同一个文本协议，差别只在请求带不带 stop。先看请求。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "stop-param"
+            },
+            {
+              "action": "highlight",
+              "observe": "stop-param"
+            },
+            {
+              "action": "narrate",
+              "text": "带 stop 时，服务商会在模型写出 “Observation:” 之前截断。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "raw-output"
+            },
+            {
+              "action": "highlight",
+              "observe": "raw-output"
+            },
+            {
+              "action": "narrate",
+              "text": "这是模型第 1 次输出的原文。去掉 stop 时，看它在 Action Input 后面有没有接着写。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "fabricated"
+            },
+            {
+              "action": "highlight",
+              "observe": "fabricated"
+            },
+            {
+              "action": "narrate",
+              "text": "运行器发现模型自己写了 Observation，就把它切下来，单独记成一条事件。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "real-result"
+            },
+            {
+              "action": "highlight",
+              "observe": "real-result"
+            },
+            {
+              "action": "narrate",
+              "text": "这才是成绩表里的数字。和上面模型写的比一比。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "naive-final"
+            },
+            {
+              "action": "highlight",
+              "observe": "naive-final"
+            },
+            {
+              "action": "narrate",
+              "text": "如果程序直接采用模型写的 Final Answer，用户拿到的就是这句话。"
+            },
+            {
+              "action": "seek",
+              "observe": "second-request"
+            },
+            {
+              "action": "highlight",
+              "observe": "second-request"
+            },
+            {
+              "action": "narrate",
+              "text": "第 2 次请求里，模型自写的部分已经去掉，最后一条是真实结果。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "final-answer"
+            },
+            {
+              "action": "highlight",
+              "observe": "final-answer"
+            },
+            {
+              "action": "narrate",
+              "text": "最终回答建立在真实结果之上。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里模型有没有自己写 Observation、写了什么，以及它和真实工具结果是否一致。",
+              "运行器没有让自写的 Observation 进入后续请求，最终回答来自看到真实结果之后的那次输出。"
+            ],
+            "does_not_prove": [
+              "一次没有编造，不代表这个模型去掉 stop 时永远不编；反过来也一样。",
+              "stop 只能截断字符串，模型如果写成别的形式（比如“观察：”），stop 就拦不住。",
+              "离线测试模式下的编造内容由确定性脚本写成，不代表任何真实模型的行为。"
+            ]
+          }
+        },
+        {
+          "id": "text-vs-native",
+          "title": "文本协议与原生工具调用",
+          "hypothesis": "同一个问题，文本协议的动作出现在 content 里，需要程序解析；原生调用的动作出现在 tool_calls 字段里，程序不解析自由文本，工具结果用 tool 消息带回。",
+          "arms": [
+            {
+              "id": "text",
+              "exercise": "text-stop",
+              "label": "文本协议，带 stop"
+            },
+            {
+              "id": "native",
+              "exercise": "native",
+              "label": "原生工具调用"
+            }
+          ],
+          "observe": [
+            {
+              "id": "text-content",
+              "text": "第 1 次响应的 content：文本协议的动作写在这里。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "native-calls",
+              "text": "第 1 次响应的 tool_calls：原生调用的动作写在这里。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].message.tool_calls"
+              }
+            },
+            {
+              "id": "finish-reason",
+              "text": "第 1 次响应的 finish_reason。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.choices[0].finish_reason"
+              }
+            },
+            {
+              "id": "parse-event",
+              "text": "文本协议的解析结果；原生组没有这条事件。",
+              "selector": {
+                "event": "lesson.parse",
+                "path": "data.ok"
+              }
+            },
+            {
+              "id": "result-message",
+              "text": "第 2 次请求里工具结果怎么回来：文本协议是一条 Observation 文本，原生调用是 role 为 tool 的消息。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "两组问同一个问题。先看模型的动作出现在响应的哪个位置。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "text-content"
+            },
+            {
+              "action": "highlight",
+              "observe": "text-content"
+            },
+            {
+              "action": "narrate",
+              "text": "文本协议的动作是 content 里的一段文字。"
+            },
+            {
+              "action": "seek",
+              "observe": "native-calls"
+            },
+            {
+              "action": "highlight",
+              "observe": "native-calls"
+            },
+            {
+              "action": "narrate",
+              "text": "原生调用的动作在 tool_calls 字段里，工具名和参数是分开的字段。"
+            },
+            {
+              "action": "seek",
+              "observe": "finish-reason"
+            },
+            {
+              "action": "highlight",
+              "observe": "finish-reason"
+            },
+            {
+              "action": "narrate",
+              "text": "对照 finish_reason：文本协议被 stop 截断，原生调用以 tool_calls 结束。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "parse-event"
+            },
+            {
+              "action": "highlight",
+              "observe": "parse-event"
+            },
+            {
+              "action": "narrate",
+              "text": "只有文本协议需要程序解析，原生组运行时没有这一步。"
+            },
+            {
+              "action": "seek",
+              "observe": "result-message"
+            },
+            {
+              "action": "highlight",
+              "observe": "result-message"
+            },
+            {
+              "action": "narrate",
+              "text": "工具结果的回传方式也不一样：一个是普通文本，一个是带 tool_call_id 的 tool 消息。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "两组的动作分别出现在 content 和 tool_calls 里，解析事件只出现在文本协议组。",
+              "两组的工具都由程序执行，结果回传的消息形式不同。"
+            ],
+            "does_not_prove": [
+              "不能说明原生调用一定更准确；它只是把格式问题交给了服务商，参数仍可能填错。",
+              "只有一个工具、一个问题，不能代表多工具、多步骤任务里两种协议的表现。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "protocol",
+          "label": "协议",
+          "options": [
+            {
+              "value": "text_stop",
+              "label": "文本协议，带 stop"
+            },
+            {
+              "value": "text_no_stop",
+              "label": "文本协议，去掉 stop"
+            },
+            {
+              "value": "native",
+              "label": "原生工具调用"
+            }
+          ]
+        },
+        {
+          "name": "student_id",
+          "label": "学号",
+          "options": [
+            {
+              "value": "s-1042",
+              "label": "s-1042"
+            },
+            {
+              "value": "s-2077",
+              "label": "s-2077"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "文本协议的请求里写 stop: [\"Observation:\"]，作用是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "让服务商在模型写出 Observation: 之前截断输出",
+                  "feedback": "对。截断后控制权回到程序，由程序执行工具。"
+                },
+                {
+                  "id": "b",
+                  "text": "告诉模型不要调用工具",
+                  "feedback": "不对。stop 只是一个停止字符串，不改变模型能不能提出动作。"
+                },
+                {
+                  "id": "c",
+                  "text": "让服务商自动执行 Action",
+                  "feedback": "不对。服务商不认识 Action 格式。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "stop 把“模型写到哪里为止”这件事交给服务商来保证。"
+            },
+            {
+              "id": "q2",
+              "prompt": "模型输出里出现了 Observation 和 Final Answer，但程序还没执行过任何工具。这个 Final Answer 能用吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不能，它依据的观察结果是模型自己写的",
+                  "feedback": "对。工具没执行，观察结果就不可能是真的。"
+                },
+                {
+                  "id": "b",
+                  "text": "能，模型给出的格式完全正确",
+                  "feedback": "不对。格式正确不代表内容来自真实执行。"
+                },
+                {
+                  "id": "c",
+                  "text": "能，只要数字看起来合理",
+                  "feedback": "不对。“看起来合理”正是编造内容最难被发现的原因。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "判断答案能不能用，要看它依据的证据从哪里来。"
+            },
+            {
+              "id": "q3",
+              "prompt": "解析器收到 Action Input: {student_id: s-1042}，正确的处理是？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "记成解析失败，带上原文和原因，然后停止",
+                  "feedback": "对。失败被看见，才谈得上修。"
+                },
+                {
+                  "id": "b",
+                  "text": "自动补上引号再执行",
+                  "feedback": "不对。补对了也会掩盖模型格式不稳定的事实，补错了就执行了错误的参数。"
+                },
+                {
+                  "id": "c",
+                  "text": "当作没有参数，直接调用工具",
+                  "feedback": "不对。这等于执行了模型没提出的调用。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "解析器的职责是如实转换，不是替模型做决定。"
+            },
+            {
+              "id": "q4",
+              "prompt": "原生工具调用为什么不会出现“模型自己写 Observation”的问题？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "工具结果只能通过 role 为 tool 的消息由程序带回",
+                  "feedback": "对。模型的输出里没有地方放工具结果。"
+                },
+                {
+                  "id": "b",
+                  "text": "原生调用的模型更聪明",
+                  "feedback": "不对。同一个模型两种协议都能用，差别在协议结构。"
+                },
+                {
+                  "id": "c",
+                  "text": "原生调用不需要执行工具",
+                  "feedback": "不对。工具仍然由程序执行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "协议结构决定了哪些内容只能由程序提供。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“文本协议，去掉 stop”，找出运行器发现模型自己写了 Observation 的那一步。",
+          "target": {
+            "event": "lesson.fabricated_observation"
+          },
+          "explanation": "这条事件把模型自写的 Observation、真实工具结果和模型自写的 Final Answer 放在一起。运行器在这一步切掉了自写部分，之后的请求里只有真实结果。如果你的运行里没有这条事件，说明这一次模型在 Action Input 后停下了，可以换个模型或再跑一次对比。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我对比了带 stop 和去掉 stop 两次运行的第 1 次输出原文。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能指出模型自写的 Observation 和真实工具结果在哪两条事件里。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说出原生工具调用省掉了哪一步，又保留了哪些责任。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
