@@ -1,12 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { EffectBoundary, useMotion, useMotionBudget } from "../motion";
 import { duration, ease } from "../motion/tokens";
 import type { Trace } from "../types";
 import LatticeLoader from "../components/react-bits/LatticeLoader";
-import { deriveStage, type StageNode, type StageSpan } from "./derive";
+import type { StageNode, StageSpan } from "./derive";
+import { openLlmSpan } from "./spans";
 import { useElapsedMs } from "./useElapsed";
+import { useStageProjection } from "./useStageProjection";
 import "../styles/stage.css";
 
 const MetaBalls = lazy(() => import("../components/react-bits/MetaBalls"));
@@ -114,17 +116,14 @@ export function AgentStage({
 }) {
   const { t, i18n } = useTranslation(["stage", "common"]);
   const { reduced } = useMotion();
-  const stage = useMemo(() => deriveStage(events, cursor), [events, cursor]);
-  const final = useMemo(() => deriveStage(events, events.length), [events]);
+  const { stage, final } = useStageProjection(events, cursor);
   const places = layout(stage.nodes);
   const seconds = new Intl.NumberFormat(i18n.language, {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
 
-  const openLlm = stage.spans.find(
-    (span) => span.kind === "llm" && span.status === "open",
-  );
+  const openLlm = openLlmSpan(stage.spans);
   const liveSeconds =
     (useElapsedMs(live && openLlm ? openLlm.startAt : null) ?? 0) / 1000;
   const finalOf = (span: StageSpan | undefined) =>

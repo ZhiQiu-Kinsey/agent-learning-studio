@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { jsonFetch } from "../../api";
 import type { Trace } from "../../types";
@@ -6,7 +6,7 @@ import { AgentStage } from "../../stage/AgentStage";
 import { Timeline } from "../../stage/Timeline";
 import { ToolCards } from "../../stage/ToolCards";
 import { ContextFilm } from "../../stage/ContextFilm";
-import { deriveStage } from "../../stage/derive";
+import { useStageProjection } from "../../stage/useStageProjection";
 
 export interface RecordingMeta {
   name: string;
@@ -18,6 +18,14 @@ export interface RecordingMeta {
     provider_label?: string;
   } | null;
 }
+
+/** Recording date as shown in the source switch and on the stage badge. */
+export const formatRecordingDate = (recordedAt: string, language: string) =>
+  new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(
+    new Date(recordedAt),
+  );
+
+const NO_EVENTS: Trace[] = [];
 
 /**
  * Read-only view of a recording shipped with the lesson. It never mixes into
@@ -53,20 +61,11 @@ export function RecordingView({
       });
     return () => abort.abort();
   }, [lessonId, recording.name]);
-  const stage = useMemo(
-    () => (events ? deriveStage(events, cursor) : null),
-    [events, cursor],
-  );
-  const spans = useMemo(
-    () => (events ? deriveStage(events, events.length).spans : []),
-    [events],
-  );
+  const { stage, final } = useStageProjection(events ?? NO_EVENTS, cursor);
   if (error) return <p role="alert">{t("failed", { reason: error })}</p>;
-  if (!events || !stage) return <p role="status">{t("loading")}</p>;
+  if (!events) return <p role="status">{t("loading")}</p>;
   const date = recording.metadata
-    ? new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(
-        new Date(recording.metadata.recorded_at),
-      )
+    ? formatRecordingDate(recording.metadata.recorded_at, i18n.language)
     : "";
   return (
     <div className="recording-view" data-testid="recording-view">
@@ -87,7 +86,7 @@ export function RecordingView({
       />
       <Timeline
         events={events}
-        spans={spans}
+        spans={final.spans}
         cursor={cursor}
         onSeek={setCursor}
       />

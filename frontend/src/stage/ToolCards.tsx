@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Trace } from "../types";
 import type { StageSpan } from "./derive";
+import { toolSpanStatus, toolSpans } from "./spans";
 
 export const PREVIEW_CHARS = 2000;
 
@@ -84,16 +85,7 @@ function ToolCard({
   const args = parseArguments(
     (call.data.function as { arguments?: unknown } | undefined)?.arguments,
   );
-  const status =
-    span.status === "stopped"
-      ? "stopped"
-      : span.status === "open"
-        ? "running"
-        : span.ok === true
-          ? "ok"
-          : span.ok === false
-            ? "failed"
-            : "undeclared";
+  const status = toolSpanStatus(span);
   return (
     <details
       className="tool-card"
@@ -159,7 +151,7 @@ export function ToolCards({
   onSelect?: (eventIndex: number) => void;
 }) {
   const { t } = useTranslation("stage", { keyPrefix: "tool" });
-  const tools = spans.filter((span) => span.kind === "tool");
+  const tools = toolSpans(spans);
   if (!tools.length) return null;
   return (
     <section
