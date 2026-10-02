@@ -1,18 +1,28 @@
-import { test, expect, type Page } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { Detail } from "../src/types";
 import type { LessonCode } from "../src/scenes/code/model";
 import { runOffline } from "./runs";
 import { t } from "./i18n";
+import { openLessonById } from "./navigation";
 
 const capture = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
 
-async function openCodeScene(page: Page) {
+async function openCodeScene(
+  page: Page,
+  lesson?: { request: APIRequestContext; id: string },
+) {
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   await page.goto("/");
+  if (lesson) await openLessonById(page, lesson.request, lesson.id);
   await page.getByTestId("scene-tab-code").click();
   await expect(page.getByTestId("scene-code")).toBeVisible();
 }
@@ -26,11 +36,12 @@ test("reading code shows files, code and notes side by side, and what's new jump
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  // 工具定义第一次出现在“工具定义与调用提议”：add_numbers 在这里算本课新增。
   const code: LessonCode = await (
-    await request.get("/api/lessons/tool-selection/code")
+    await request.get("/api/lessons/tool-proposals/code")
   ).json();
-  const detail: Detail = await (await request.get("/api/lessons/tool-selection")).json();
-  await openCodeScene(page);
+  const detail: Detail = await (await request.get("/api/lessons/tool-proposals")).json();
+  await openCodeScene(page, { request, id: detail.id });
 
   // 三栏：文件列表、代码、批注在同一行从左到右排列。
   const files = await box(page, "code-files");
@@ -127,6 +138,7 @@ test("reading code shows files, code and notes side by side, and what's new jump
 
 test("a tool's evidence link opens its latest real tool_result in the lab", async ({
   page,
+  request,
 }) => {
   await page.route("**/api/status", async (route) => {
     const response = await route.fetch();
@@ -145,6 +157,8 @@ test("a tool's evidence link opens its latest real tool_result in the lab", asyn
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   await page.goto("/");
+  // 真正执行工具的是“执行工具与回传结果”。
+  await openLessonById(page, request, "tool-selection");
   await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-answer")).toContainText("42");

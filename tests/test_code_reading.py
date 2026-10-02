@@ -74,17 +74,30 @@ class RealLessonTests(unittest.TestCase):
         return lesson_code_view(next(spec for spec in LESSONS if spec["id"] == lesson_id))
 
     def test_first_lesson_has_no_baseline_and_lists_everything_as_added(self):
-        data = self.view("tool-selection")
+        self.assertEqual(LESSONS[0]["id"], "chat-request")
+        data = self.view("chat-request")
         self.assertIsNone(data["whats_new"]["compare_with"])
         self.assertEqual(data["whats_new"]["changed"], [])
         names = {item["name"] for item in data["whats_new"]["added"]}
-        self.assertTrue({"TOOLS", "add_numbers", "get_current_time", "SYSTEM_PROMPT"} <= names)
-        # 平台代码与测试夹具不算本课新增：run_agent 在 course/，create_completion 在 fixtures.py。
-        self.assertFalse({"run_agent", "create_completion", "call_bailian"} & names)
+        self.assertTrue({"build_request", "read_reply", "run", "INPUT_MODEL"} <= names)
+        # 平台代码与测试夹具不算本课新增：send_bailian 在 course/，create_completion 在 fixtures.py。
+        self.assertFalse({"send_bailian", "call_bailian", "create_completion"} & names)
+        roles = {item["path"]: item["role"] for item in data["files"]}
+        self.assertEqual(roles["course/api_client.py"], "platform")
+        self.assertEqual(roles["lessons/lesson_chat_request/runtime.py"], "lesson")
+        self.assertEqual(roles["lessons/lesson_chat_request/fixtures.py"], "fixture")
+        self.assertEqual([item["path"] for item in data["files"]], [s["path"] for s in LESSONS[0]["sources"]])
+
+    def test_tool_lessons_share_the_tool_definitions(self):
+        # 执行课沿用提议课的 tools.py：工具定义显示为沿用，main.py 的系统提示词与入口才是新内容。
+        data = self.view("tool-selection")
+        news = data["whats_new"]
+        self.assertEqual(news["compare_with"]["id"], "tool-proposals")
+        self.assertTrue({"TOOLS", "add_numbers", "get_current_time"} <= {item["name"] for item in news["unchanged"]})
+        self.assertFalse({"run_agent", "execute_tool"} & {item["name"] for item in news["added"]})
         roles = {item["path"]: item["role"] for item in data["files"]}
         self.assertEqual(roles["course/runner.py"], "platform")
         self.assertEqual(roles["lessons/lesson_01_tool_selection/tools.py"], "lesson")
-        self.assertEqual([item["path"] for item in data["files"]], [s["path"] for s in LESSONS[0]["sources"]])
 
     def test_second_lesson_compares_with_previous_and_keeps_shared_tools(self):
         data = self.view("dependent-calls")

@@ -33,12 +33,21 @@ test("lesson prose separates new, review and background terms and explains code 
   await expect(card).toBeVisible();
   await expect(card).toContainText("evidence");
 
-  // Lesson 9: sampling temperature is background knowledge, not a course concept.
+  // Context budget: sampling temperature was introduced by sampling-variance, so it is a review here.
   await openLessonById(page, request, "context-budget");
   await expect(
     page
       .getByTestId("learn-reading-document")
       .locator("[data-testid='glossary-term'][data-term='temperature']"),
+  ).toHaveAttribute("data-tier", "review");
+
+  // Replay is platform background knowledge, not a course concept.
+  await openLessonById(page, request, "tool-selection");
+  await expect(
+    page
+      .getByTestId("learn-reading-document")
+      .locator("[data-testid='glossary-term'][data-term='replay']")
+      .first(),
   ).toHaveAttribute("data-tier", "background");
   expect(errors).toEqual([]);
 });
