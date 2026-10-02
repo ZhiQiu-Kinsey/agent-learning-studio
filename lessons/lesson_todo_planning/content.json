@@ -1,0 +1,720 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "todo-planning",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "planning",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "REASONING / LESSON 14",
+          "headline": "清单写在哪里，",
+          "highlight": "进度才看得见。",
+          "takeaway": "todo_write 让模型把计划写成可回放的清单，运行层在它忘了更新时提醒一句。清单是模型的自报，任务做没做完仍由验收器判定。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-todo",
+              "label": "01 / TODO",
+              "title": "清单是一个工具",
+              "description": "todo_write 接收完整清单并整体替换，返回带版本号的快照；它不做任何实际工作。",
+              "token": "todo_write"
+            },
+            {
+              "id": "02-snapshot",
+              "label": "02 / SNAPSHOT",
+              "title": "快照与差异",
+              "description": "每次更新都记成 lesson.todo，带版本号和与上一版的差异，可以逐轮回放。",
+              "token": "version · diff"
+            },
+            {
+              "id": "03-reminder",
+              "label": "03 / REMINDER",
+              "title": "运行层插话",
+              "description": "连续几轮没更新清单，运行层追加一条提醒。它是程序写的，不是模型或用户说的。",
+              "token": "harness_injected"
+            },
+            {
+              "id": "04-verify",
+              "label": "04 / VERIFY",
+              "title": "清单不等于完成",
+              "description": "模型把每项都标成 done，也只是自报。验收器只看复习卡和本次查询结果。",
+              "token": "verify_card"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "长任务为什么需要清单",
+          "paragraphs": [
+            "任务一长，模型容易漏步骤：查了两课就去保存，或者在某个工具出错后忘了原本要做什么。第 8 课把目标和进度放进应用状态（Application State），由程序维护；这一课换一种做法，让模型自己维护一份清单，写在 todo_write 工具里。",
+            "本课的任务是做一张复习卡：查第 7、8、9 课的要点，把三条要点连同编号存进卡片。三个工具：lookup_note 查要点，save_card 存卡片，todo_write 写清单。前两个做实际工作，todo_write 只改清单。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "todo_write：整体替换，带版本",
+          "paragraphs": [
+            "todo_write 每次接收完整清单，而不是增删单项。每项有 id、content 和 status（pending、in_progress、done），同一时间最多一项 in_progress。校验不通过就返回错误，清单保持原样；通过了版本号加一。",
+            "运行器每次在 todo_write 成功后发布 lesson.todo 事件，里面是这一版的完整清单和与上一版的差异：新增了哪些项、删了哪些、哪些项的状态变了。回放时逐条看这些事件，就能看到计划是怎么推进的。"
+          ]
+        },
+        {
+          "id": "mq-todo-work",
+          "type": "micro-quiz",
+          "question": {
+            "id": "todo-does-work",
+            "prompt": "模型调用 todo_write 把“查第 9 课要点”标成 done。第 9 课的要点查到了吗？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不一定，要看有没有成功的 lookup_note 结果",
+                "feedback": "对。todo_write 只改清单，不做实际工作。"
+              },
+              {
+                "id": "b",
+                "text": "查到了，清单已经标为完成",
+                "feedback": "不对。清单是模型自己写的，标 done 不需要任何证据。"
+              },
+              {
+                "id": "c",
+                "text": "查到了，否则 todo_write 会报错",
+                "feedback": "不对。todo_write 只检查清单格式，不知道别的工具有没有被调用。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "清单记录的是模型认为的进度，事实要到工具结果（Tool Result）里找。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "运行层提醒：谁在说话",
+          "paragraphs": [
+            "模型可能列完清单就再也不更新。“有提醒”这组实验里，运行层（Harness）数着模型连续多少轮没调用 todo_write，到了阈值就在本轮全部 tool 消息之后追加一条 user 消息：“已经 N 轮没有更新 TODO……”。",
+            "这条消息由程序写入，不来自用户，也不来自模型。运行器同时发布 lesson.harness_injected 事件，标明 source 为 harness，回放时能分清哪些文字是运行层加的。提醒要放在 tool 消息之后：OpenAI 兼容接口要求 tool 消息紧跟在对应的调用后面，插在中间会被拒绝。"
+          ]
+        },
+        {
+          "id": "mq-reminder",
+          "type": "micro-quiz",
+          "question": {
+            "id": "reminder-position",
+            "prompt": "运行层要在某一轮插入提醒。这一轮模型调用了两个工具。提醒放在哪里？",
+            "options": [
+              {
+                "id": "a",
+                "text": "两条 tool 消息之后，作为单独的 user 消息",
+                "feedback": "对。调用和回执先成对放好，再追加提醒。"
+              },
+              {
+                "id": "b",
+                "text": "assistant 调用消息和 tool 消息之间",
+                "feedback": "不对。tool 消息必须紧跟对应的调用，中间插入别的消息会被服务商拒绝。"
+              },
+              {
+                "id": "c",
+                "text": "改写进 system 提示词（Prompt）",
+                "feedback": "不对。这会改变整段对话的前提，而且回放时看不出提醒是哪一轮加的。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "运行层插话也要遵守消息协议。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "由验收器判定完成",
+          "paragraphs": [
+            "三组实验最后都交给同一个验收器 verify_card。它只看两样东西：复习卡里有哪些课、每条的要点编号；本次运行里 lookup_note 真实返回过哪些编号。三项检查：卡片已保存、覆盖第 7、8、9 课、编号都能对上本次查询。",
+            "模型最后说的“都完成了”和清单上的 done 都写进报告，但不参与判定。这沿用第 4 课的验收标准（Acceptance Criteria）思路：结论从证据算出来，不从声明里读出来。三组的模型、任务和验收器都相同，差别只在有没有清单、有没有提醒。"
+          ]
+        },
+        {
+          "id": "mq-verify",
+          "type": "micro-quiz",
+          "question": {
+            "id": "verify-ignores-claim",
+            "prompt": "模型把清单四项都标成 done，也说“全部完成”，但复习卡里只有第 7、8 课。验收结论是？",
+            "options": [
+              {
+                "id": "a",
+                "text": "未通过：卡片没有覆盖第 9 课",
+                "feedback": "对。清单和说法都是自报，卡片才是产物。"
+              },
+              {
+                "id": "b",
+                "text": "通过：清单显示全部完成",
+                "feedback": "不对。清单不是证据。"
+              },
+              {
+                "id": "c",
+                "text": "部分通过：完成了三分之二",
+                "feedback": "不对。验收器按任务定义判定，没有部分通过。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "验收只看产物和真实工具结果。"
+          }
+        },
+        {
+          "id": "compare-conditions",
+          "type": "compare",
+          "title": "三组条件",
+          "columns": [
+            "条件",
+            "工具",
+            "system 里的规则",
+            "运行层提醒"
+          ],
+          "rows": [
+            [
+              "无 TODO",
+              "lookup_note、save_card",
+              "只说明任务",
+              "无"
+            ],
+            [
+              "有 TODO，无提醒",
+              "再加 todo_write",
+              "要求先列清单、逐步更新",
+              "无"
+            ],
+            [
+              "有 TODO，有提醒",
+              "再加 todo_write",
+              "要求先列清单、逐步更新",
+              "连续 N 轮没更新时追加一条"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一轮里发生了什么",
+          "description": "按步骤说明运行器每一轮做的事，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "请求",
+              "actor": "程序",
+              "title": "带上本组的工具发请求",
+              "body": "无 TODO 组不提供 todo_write。",
+              "code": "tools = tool_specs(condition)",
+              "language": "python",
+              "evidence": "request.body.tools"
+            },
+            {
+              "id": "step-2",
+              "label": "执行",
+              "actor": "工具",
+              "title": "执行模型提出的调用",
+              "body": "lookup_note、save_card 做实际工作，todo_write 只改清单。",
+              "code": "result = execute_tool(call, tools)",
+              "language": "python",
+              "evidence": "tool_call 与 tool_result"
+            },
+            {
+              "id": "step-3",
+              "label": "快照",
+              "actor": "程序",
+              "title": "清单变了就记一版",
+              "body": "发布完整清单和差异。",
+              "code": "context.emit(\"lesson.todo\", {\"version\": v, \"todos\": todos, \"diff\": diff})",
+              "language": "python",
+              "evidence": "lesson.todo"
+            },
+            {
+              "id": "step-4",
+              "label": "计数",
+              "actor": "运行层",
+              "title": "数一数多少轮没更新",
+              "body": "本轮调用过 todo_write 就清零，否则加一。",
+              "code": "since_update = 0 if updated else since_update + 1",
+              "language": "python"
+            },
+            {
+              "id": "step-5",
+              "label": "提醒",
+              "actor": "运行层",
+              "title": "到阈值就追加提醒",
+              "body": "放在本轮 tool 消息之后，并记成运行层注入事件。",
+              "code": "messages.append({\"role\": \"user\", \"content\": reminder_text(n)})",
+              "language": "python",
+              "evidence": "lesson.harness_injected"
+            }
+          ]
+        },
+        {
+          "id": "predict-reminders",
+          "type": "predict",
+          "prompt": "运行“有 TODO，有提醒（2 轮）”之前先猜：这次运行会出现几个 lesson.harness_injected 事件？",
+          "experiment": "todo-conditions",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.harness_injected"
+          }
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "application-state"
+        },
+        {
+          "id": "code-workspace",
+          "type": "annotated-source",
+          "path": "lessons/lesson_todo_planning/runtime.py",
+          "start": 34,
+          "end": 100,
+          "notes": [
+            {
+              "id": "n42",
+              "line": 42,
+              "text": "todo_write 接收完整清单并整体替换，没有“增加一项”这种操作。"
+            },
+            {
+              "id": "n59",
+              "line": 59,
+              "text": "同一时间最多一项进行中，避免清单变成一堆半成品。"
+            },
+            {
+              "id": "n60",
+              "line": 60,
+              "text": "全部校验通过后才替换，失败的更新不改动清单。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "text": "验收器的输入只有复习卡和真实查询结果，没有模型的说法，也没有清单。"
+            },
+            {
+              "id": "n90",
+              "line": 90,
+              "text": "编号必须和本次 lookup_note 的返回一致；没查过的课填什么编号都不算。"
+            }
+          ]
+        },
+        {
+          "id": "code-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_todo_planning/runtime.py",
+          "start": 127,
+          "end": 197,
+          "notes": [
+            {
+              "id": "n163",
+              "line": 163,
+              "text": "清单每变一次就发布一版快照和差异。"
+            },
+            {
+              "id": "n169",
+              "line": 169,
+              "text": "这一轮调用过 todo_write 就清零，否则加一。"
+            },
+            {
+              "id": "n170",
+              "line": 170,
+              "text": "只有“有提醒”组会插话，阈值来自输入 reminder_after。"
+            },
+            {
+              "id": "n173",
+              "line": 173,
+              "text": "提醒是一条单独的 user 消息，排在本轮所有 tool 消息之后。"
+            },
+            {
+              "id": "n174",
+              "line": 174,
+              "text": "同时发布运行层注入事件，标明 source 为 harness。"
+            },
+            {
+              "id": "n178",
+              "line": 178,
+              "text": "无论哪一组，最后都由同一个验收器判定。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "清单由模型维护，完成由验收器判定",
+          "chosen": "todo_write 只保存模型写的清单并发布快照；运行层按计数插入提醒；是否完成只由 verify_card 根据复习卡和真实查询结果判定。",
+          "alternatives": [
+            {
+              "id": "program-plan",
+              "title": "由程序维护进度，不让模型写清单",
+              "why_not": "第 8 课已经这样做过。这一课要看的正是模型自己规划时会发生什么，以及提醒有没有用。"
+            },
+            {
+              "id": "trust-todo",
+              "title": "清单全部 done 就算完成",
+              "why_not": "标 done 不需要任何证据，模型可以在没做完时把清单划掉。"
+            },
+            {
+              "id": "reminder-in-system",
+              "title": "把提醒改写进 system 提示词",
+              "why_not": "会改变整段对话的前提，回放时也看不出提醒是在哪一轮出现的。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "todo-conditions",
+          "title": "无 TODO、有 TODO、有提醒",
+          "hypothesis": "提供 todo_write 并在模型忘记更新时提醒，清单会随任务推进；但任务是否完成只能由验收器根据复习卡和真实查询结果判定，三组可以各自通过或失败。",
+          "predict": "predict-reminders",
+          "arms": [
+            {
+              "id": "no-todo",
+              "exercise": "no-todo",
+              "label": "无 TODO"
+            },
+            {
+              "id": "todo",
+              "exercise": "todo",
+              "label": "有 TODO，无提醒"
+            },
+            {
+              "id": "todo-reminder",
+              "exercise": "todo-reminder",
+              "label": "有 TODO，有提醒（2 轮）"
+            }
+          ],
+          "observe": [
+            {
+              "id": "tools-offered",
+              "text": "第 1 次请求提供的工具：无 TODO 组没有 todo_write。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools"
+              }
+            },
+            {
+              "id": "first-plan",
+              "text": "第一版清单。",
+              "selector": {
+                "event": "lesson.todo",
+                "path": "data.todos"
+              }
+            },
+            {
+              "id": "plan-diff",
+              "text": "清单的差异：哪些项的状态变了。",
+              "selector": {
+                "event": "lesson.todo",
+                "path": "data.diff"
+              }
+            },
+            {
+              "id": "reminder",
+              "text": "运行层插入的提醒，source 为 harness。",
+              "selector": {
+                "event": "lesson.harness_injected",
+                "path": "data"
+              }
+            },
+            {
+              "id": "card",
+              "text": "save_card 的结果。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result",
+                "name": "save_card"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "验收器的三项检查。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            },
+            {
+              "id": "self-report",
+              "text": "模型最后的说法：只记录，不参与判定。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[5]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "action": "narrate",
+              "text": "三组用同一个任务和同一个验收器，差别只在有没有清单、有没有提醒。先看提供了哪些工具。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "tools-offered"
+            },
+            {
+              "action": "highlight",
+              "observe": "tools-offered"
+            },
+            {
+              "action": "narrate",
+              "text": "无 TODO 组只有两个干活的工具；另外两组多一个 todo_write。"
+            },
+            {
+              "action": "spotlight",
+              "target": "model"
+            },
+            {
+              "action": "seek",
+              "observe": "first-plan"
+            },
+            {
+              "action": "highlight",
+              "observe": "first-plan"
+            },
+            {
+              "action": "narrate",
+              "text": "有清单的组里，模型通常先列计划。这一版是它自己写的。"
+            },
+            {
+              "action": "seek",
+              "observe": "plan-diff"
+            },
+            {
+              "action": "highlight",
+              "observe": "plan-diff"
+            },
+            {
+              "action": "narrate",
+              "text": "之后每次更新都对比上一版，看哪些项从 pending 变成了 done。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "reminder"
+            },
+            {
+              "action": "highlight",
+              "observe": "reminder"
+            },
+            {
+              "action": "narrate",
+              "text": "连续几轮没更新时，运行层插了一句提醒。这是程序写的，不是模型或你说的。"
+            },
+            {
+              "action": "spotlight",
+              "target": "tool"
+            },
+            {
+              "action": "seek",
+              "observe": "card"
+            },
+            {
+              "action": "highlight",
+              "observe": "card"
+            },
+            {
+              "action": "narrate",
+              "text": "复习卡是这个任务真正的产物。"
+            },
+            {
+              "action": "spotlight",
+              "target": "runtime"
+            },
+            {
+              "action": "seek",
+              "observe": "verdict"
+            },
+            {
+              "action": "highlight",
+              "observe": "verdict"
+            },
+            {
+              "action": "narrate",
+              "text": "验收器只看卡片和真实查询结果。"
+            },
+            {
+              "action": "seek",
+              "observe": "self-report"
+            },
+            {
+              "action": "highlight",
+              "observe": "self-report"
+            },
+            {
+              "action": "narrate",
+              "text": "模型的说法记在这里，和验收结论放在一起对照。说完成不代表通过。"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行的清单如何逐版变化、运行层在哪几轮插入了提醒，都有事件可查。",
+              "验收结论由复习卡和本次 lookup_note 结果算出，模型的说法和清单状态没有参与判定。"
+            ],
+            "does_not_prove": [
+              "每组只跑一次，不能说明清单或提醒普遍提高完成率；要比较完成率需要多次运行。",
+              "这个任务只有四步，清单在更长的任务里作用可能完全不同。",
+              "离线测试模式下三组的行为来自固定脚本，例如无 TODO 组漏掉第 9 课是脚本写的。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "condition",
+          "label": "条件",
+          "options": [
+            {
+              "value": "no_todo",
+              "label": "无 TODO"
+            },
+            {
+              "value": "todo",
+              "label": "有 TODO，无提醒"
+            },
+            {
+              "value": "todo_reminder",
+              "label": "有 TODO，有提醒"
+            }
+          ]
+        },
+        {
+          "name": "reminder_after",
+          "label": "提醒阈值（轮）",
+          "help": "连续这么多轮没调用 todo_write 就插入提醒；只在“有提醒”条件下生效。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "lesson.harness_injected 事件说明了什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这条消息是运行层插入的，不是用户或模型说的",
+                  "feedback": "对。回放时靠它分清说话的是谁。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型请求了一次提醒",
+                  "feedback": "不对。提醒是运行层按计数决定的，模型没有请求。"
+                },
+                {
+                  "id": "c",
+                  "text": "用户在运行中补充了一句话",
+                  "feedback": "不对。用户在运行中不能插话。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "运行层注入的内容要单独标注来源。"
+            },
+            {
+              "id": "q2",
+              "prompt": "todo_write 收到两项 in_progress，会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "返回错误，清单保持上一版",
+                  "feedback": "对。校验失败不改动清单。"
+                },
+                {
+                  "id": "b",
+                  "text": "接受，只保留第一项为 in_progress",
+                  "feedback": "不对。程序不替模型改清单。"
+                },
+                {
+                  "id": "c",
+                  "text": "接受，状态以最后一次为准",
+                  "feedback": "不对。违反约束的更新整体被拒绝。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "工具在执行前校验输入，失败就如实返回错误。"
+            },
+            {
+              "id": "q3",
+              "prompt": "为什么三组要用同一个验收器？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "只有判定标准相同，三组的结果才能比较",
+                  "feedback": "对。改变的只能是实验条件。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为有清单的组不需要验收",
+                  "feedback": "不对。清单是自报，同样需要验收。"
+                },
+                {
+                  "id": "c",
+                  "text": "为了少写代码",
+                  "feedback": "不对。原因是对照实验的要求。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "对照实验只改一个条件，判定方法保持不变。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“有 TODO，有提醒”，找出运行层第一次插入提醒的那一步。",
+          "target": {
+            "event": "lesson.harness_injected"
+          },
+          "explanation": "这条事件记录了运行层插入的提醒文字和触发时的计数。对照下一次请求的 messages，可以看到它作为一条 user 消息排在 tool 消息之后。如果你的运行里没有这条事件，说明模型每隔几轮都更新了清单，没有触发阈值。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我逐版看了 lesson.todo，能说出清单在哪一轮发生了什么变化。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能在请求的 messages 里找到运行层插入的提醒，并说明它为什么排在 tool 消息之后。"
+            },
+            {
+              "id": "item-3",
+              "text": "我对比了模型的最后说法和验收结论，至少找到一次两者不一致，或者能说明这次为什么一致。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
