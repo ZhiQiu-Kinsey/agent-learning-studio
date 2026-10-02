@@ -21,6 +21,7 @@ import {
 } from "./components/command/CommandMenu";
 import { RailNavigation } from "./components/shell/RailNavigation";
 import { ShellAmbient } from "./components/shell/ShellAmbient";
+import { ToastHost } from "./components/toast/ToastHost";
 import ClickSparkLayer from "./components/react-bits/ClickSparkLayer";
 import { Button } from "./components/ui/button";
 import {
@@ -386,6 +387,7 @@ export default function App() {
           void studio.refreshStatus();
         }}
         triggerRef={settingsRef}
+        connected={ready}
       />
       <CommandMenu
         studio={studio}
@@ -407,6 +409,7 @@ export default function App() {
         }}
         onSettings={() => setSettings(true)}
       />
+      <ToastHost />
     </div>
   );
 }

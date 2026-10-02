@@ -12,12 +12,16 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import GlideSelect from "../react-bits/GlideSelect";
+import ElectricBorder from "../react-bits/ElectricBorder";
+import { notify } from "../toast/toast";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   onSaved: () => void;
   triggerRef: RefObject<HTMLButtonElement | null>;
+  /** The saved connection is ready (server status); only then the border sparks. */
+  connected?: boolean;
 };
 
 export function ModelSettings({
@@ -25,8 +29,10 @@ export function ModelSettings({
   onOpenChange,
   onSaved,
   triggerRef,
+  connected = false,
 }: Props) {
   const { t } = useTranslation("settings");
+  const { t: tc } = useTranslation("common");
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
   const [providerId, setProviderId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -114,9 +120,25 @@ export function ModelSettings({
       setApiBase("");
       onSaved();
       onOpenChange(false);
+      notify({
+        tone: "success",
+        title: tc("toast.settingsSaved"),
+        description: tc("toast.settingsSavedBody", {
+          provider: provider?.label || providerId,
+          model: modelId.trim(),
+        }),
+      });
     } catch (reason) {
-      if (!abort.signal.aborted)
-        setError(reason instanceof Error ? reason.message : String(reason));
+      if (!abort.signal.aborted) {
+        const message =
+          reason instanceof Error ? reason.message : String(reason);
+        setError(message);
+        notify({
+          tone: "error",
+          title: tc("toast.settingsFailed"),
+          description: message,
+        });
+      }
     } finally {
       saveController.current = null;
       if (!abort.signal.aborted) setSaving(false);
@@ -144,6 +166,16 @@ export function ModelSettings({
           if (saving) event.preventDefault();
         }}
       >
+        {/* Decoration only while the saved connection is really ready. */}
+        {connected && (
+          <ElectricBorder
+            className="connection-electric"
+            color="#49dec6"
+            chaos={0.05}
+            speed={0.7}
+            borderRadius={12}
+          />
+        )}
         <div className="connection-dialog-heading">
           <DialogTitle>{t("title")}</DialogTitle>
           <Button
@@ -157,9 +189,7 @@ export function ModelSettings({
             <X size={18} />
           </Button>
         </div>
-        <DialogDescription>
-          {t("description")}
-        </DialogDescription>
+        <DialogDescription>{t("description")}</DialogDescription>
         {loading && (
           <p className="connection-status" role="status">
             <LoaderCircle size={15} className="connection-spinner" />{" "}
@@ -253,9 +283,7 @@ export function ModelSettings({
               }
             />
           </div>
-          <p className="connection-note">
-            {t("storageNote")}
-          </p>
+          <p className="connection-note">{t("storageNote")}</p>
           {!modelId.trim() && !loading && (
             <p className="connection-error">{t("modelRequired")}</p>
           )}
@@ -263,9 +291,7 @@ export function ModelSettings({
             provider.requires_api_key !== false &&
             !provider.api_key_configured &&
             !apiKey.trim() && (
-              <p className="connection-note">
-                {t("keyMissing")}
-              </p>
+              <p className="connection-note">{t("keyMissing")}</p>
             )}
           {provider?.requires_api_key === false && (
             <p className="connection-note">{t("keyNotRequired")}</p>
