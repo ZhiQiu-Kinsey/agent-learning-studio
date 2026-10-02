@@ -56,14 +56,15 @@ test("memory lens shows scope filtering and flags recalled instructions without 
   page,
   request,
 }) => {
+  // 范围过滤与“召回内容只当数据”在拆分后属于“记忆的更新、过期与召回范围”一课。
   const detail = await (
-    await request.get("/api/lessons/persistent-memory")
+    await request.get("/api/lessons/memory-lifecycle")
   ).json();
   const scope = detail.exercises.find(
     (item: { id: string }) => item.id === "scope_filter",
   );
   await page.goto("/");
-  await openLessonById(page, request, "persistent-memory");
+  await openLessonById(page, request, "memory-lifecycle");
   await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
   await page.getByRole("option", { name: scope.title, exact: true }).click();

@@ -163,7 +163,8 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
   await openLesson(
     page,
     catalog,
-    catalog.lessons.find((lesson) => lesson.id === "persistent-memory")!,
+    // 不调用模型的课：持久记忆拆分后，保存与召回范围的本地练习在这门课里。
+    catalog.lessons.find((lesson) => lesson.id === "memory-lifecycle")!,
   );
   await page.getByTestId("scene-tab-lab").click();
   await expect(page.getByTestId("lab-configure-button")).toHaveCount(0);
