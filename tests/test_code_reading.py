@@ -148,9 +148,11 @@ class ValidationTests(unittest.TestCase):
                                         "objectives": ["目标"], "status": "available"})
         return f"lessons/{module}/runtime.py"
 
-    def note_block(self, path, line, **extra):
+    def note_block(self, path, line, anchor=None, **extra):
+        # runtime.py 第 1 行是 def run(context):，第 2 行是 return 'ok'。
+        anchor = anchor or {1: "def run", 2: "return"}.get(line, "x")
         return {"id": "src", "type": "annotated-source", "path": path, **extra,
-                "notes": [{"id": "n", "line": line, "text": "批注"}]}
+                "notes": [{"id": "n", "line": line, "anchor": anchor, "text": "批注"}]}
 
     def load(self):
         return load_lessons(self.root, self.catalog)
@@ -181,6 +183,28 @@ class ValidationTests(unittest.TestCase):
     def test_path_outside_lesson_sources_is_rejected_even_if_file_exists(self):
         self.course("one", [self.note_block("lessons/lesson_code_one/other.py", 1)], extra_file=True)
         with self.assertRaisesRegex(LessonValidationError, "不在本课 sources 中"):
+            self.load()
+
+    def test_anchor_must_appear_on_the_annotated_line(self):
+        path = "lessons/lesson_code_one/runtime.py"
+        self.course("one", [self.note_block(path, 2, anchor="def run")])
+        with self.assertRaisesRegex(LessonValidationError, "锚点「def run」不在第 2 行"):
+            self.load()
+
+    def test_fold_must_stay_inside_block_range(self):
+        path = "lessons/lesson_code_one/runtime.py"
+        block = self.note_block(path, 1, start=1, end=1)
+        block["folds"] = [{"id": "f", "start": 2, "end": 2, "label": "平台代码"}]
+        self.course("one", [block])
+        with self.assertRaisesRegex(LessonValidationError, "折叠 f 的 2–2 不在 1–1 范围内"):
+            self.load()
+
+    def test_note_inside_fold_is_rejected(self):
+        path = "lessons/lesson_code_one/runtime.py"
+        block = self.note_block(path, 2)
+        block["folds"] = [{"id": "f", "start": 2, "end": 2, "label": "平台代码"}]
+        self.course("one", [block])
+        with self.assertRaisesRegex(LessonValidationError, "折叠 f 内不能有批注"):
             self.load()
 
     def test_compare_with_must_reference_another_implemented_lesson(self):

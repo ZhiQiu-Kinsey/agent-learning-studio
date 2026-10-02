@@ -274,7 +274,17 @@ class WhatsNew(Block):
 class SourceNote(Strict):
     id: Id
     line: Annotated[int, Field(ge=1)]
+    # 该行必须包含的一段原文；源码移动后批注错位会在校验时直接报错。
+    anchor: Fact
     text: Text
+
+
+class Fold(Strict):
+    """展示范围内可折叠的行（通常是平台代码），界面收起为一行说明，可展开。"""
+    id: Id
+    start: Annotated[int, Field(ge=1)]
+    end: Annotated[int, Field(ge=1)]
+    label: Text
 
 
 class AnnotatedSource(Block):
@@ -283,12 +293,24 @@ class AnnotatedSource(Block):
     start: Annotated[int, Field(ge=1)] | None = None
     end: Annotated[int, Field(ge=1)] | None = None
     notes: list[SourceNote] = []
+    folds: list[Fold] = []
 
     @model_validator(mode="after")
     def _range(self):
         if self.start and self.end and self.end < self.start:
             raise ValueError("annotated-source 的 end 不能小于 start")
         _unique([note.id for note in self.notes], "annotated-source.notes")
+        _unique([fold.id for fold in self.folds], "annotated-source.folds")
+        previous = 0
+        for fold in sorted(self.folds, key=lambda item: item.start):
+            if fold.end < fold.start:
+                raise ValueError(f"折叠 {fold.id} 的 end 不能小于 start")
+            if fold.start <= previous:
+                raise ValueError(f"折叠 {fold.id} 与前一个折叠重叠")
+            previous = fold.end
+            inside = [note.id for note in self.notes if fold.start <= note.line <= fold.end]
+            if inside:
+                raise ValueError(f"折叠 {fold.id} 内不能有批注：{'、'.join(inside)}")
         return self
 
 

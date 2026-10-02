@@ -71,6 +71,32 @@ def validate_vocabulary(root, specs):
     return problems
 
 
+DENSITY_BASELINE = ("tests", "baselines", "code-note-density.json")
+
+
+def validate_note_density(root, specs):
+    """读码批注密度：返回（不在基线里的问题，已经达标、应从基线删除的块）。基线只许减少。"""
+    import json
+
+    from server.code_reading import density_issues
+    from server.catalog import _safe_file
+    from server.content import lesson_content_model
+
+    root = Path(root).resolve()
+    path = root.joinpath(*DENSITY_BASELINE)
+    baseline = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    new, fixed = [], []
+    for spec in specs:
+        model = lesson_content_model(spec["content_path"], spec)
+        issues = density_issues(model, lambda relative: _safe_file(root, relative, "sources", source=True)
+                                .read_text(encoding="utf-8"))
+        allowed = set(baseline.get(spec["id"], []))
+        failing = {issue.split("：", 1)[0] for issue in issues}
+        new += [(spec["id"], issue) for issue in issues if issue.split("：", 1)[0] not in allowed]
+        fixed += [(spec["id"], block) for block in sorted(allowed - failing)]
+    return new, fixed
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT, help="包含 curriculum/catalog.json 的项目根目录")
@@ -92,6 +118,14 @@ def main(argv=None):
                     print(f"用词问题 {lesson} [{kind}] {message}", file=sys.stderr)
                 print("逐课明细：scripts/term_report.py；规则：docs/architecture/terminology.md", file=sys.stderr)
                 return 1
+        density, fixed = validate_note_density(args.root, specs)
+        print(f"读码批注密度：{len(density)} 个新问题，{len(fixed)} 个基线块已达标。")
+        if density or fixed:
+            for lesson, issue in density:
+                print(f"批注不足 {lesson} {issue}", file=sys.stderr)
+            for lesson, block in fixed:
+                print(f"基线可删除 {lesson} {block}（已达标，请从 {'/'.join(DENSITY_BASELINE)} 删掉）", file=sys.stderr)
+            return 1
         passed, failures = validate_recordings(args.root, specs)
         print(f"随课录制：{passed} 份通过，{len(failures)} 份未通过。")
         if failures:

@@ -292,11 +292,22 @@ export interface AnnotatedSource {
   start: number | null;
   end: number | null;
   notes: SourceNote[];
+  folds: Fold[];
 }
 export interface SourceNote {
   id: string;
   line: number;
+  anchor: string;
   text: string;
+}
+/**
+ * 展示范围内可折叠的行（通常是平台代码），界面收起为一行说明，可展开。
+ */
+export interface Fold {
+  id: string;
+  start: number;
+  end: number;
+  label: string;
 }
 export interface Decision {
   id: string;

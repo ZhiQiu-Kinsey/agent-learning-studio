@@ -97,16 +97,17 @@ def validate_code_scene(model: LessonContent, sources: list[dict[str, Any]], rea
                         location: str) -> None:
     """annotated-source 的 path 必须在本课 sources 中，行号不得超出文件行数，批注须落在声明的范围内。"""
     declared = {source["path"] for source in sources}
-    counts: dict[str, int] = {}
+    files: dict[str, list[str]] = {}
     for block in _code_blocks(model):
         if not isinstance(block, AnnotatedSource):
             continue
         where = f"{location}: scenes.code 块 {block.id}"
         if block.path not in declared:
             raise LessonValidationError(f"{where}: path「{block.path}」不在本课 sources 中")
-        if block.path not in counts:
-            counts[block.path] = line_count(read(block.path))
-        total = counts[block.path]
+        if block.path not in files:
+            files[block.path] = split_lines(read(block.path))
+        lines = files[block.path]
+        total = len(lines)
         for name in ("start", "end"):
             value = getattr(block, name)
             if value is not None and value > total:
@@ -117,6 +118,48 @@ def validate_code_scene(model: LessonContent, sources: list[dict[str, Any]], rea
                 raise LessonValidationError(f"{where}: 批注 {note.id} 的行号 {note.line} 超出文件行数 {total}")
             if not low <= note.line <= high:
                 raise LessonValidationError(f"{where}: 批注 {note.id} 的行号 {note.line} 不在 {low}–{high} 范围内")
+            if note.anchor not in lines[note.line - 1]:
+                raise LessonValidationError(
+                    f"{where}: 批注 {note.id} 的锚点「{note.anchor}」不在第 {note.line} 行"
+                    f"（该行是「{lines[note.line - 1].strip()[:60]}」）；源码可能已移动，请重新对准批注")
+        for fold in block.folds:
+            if not low <= fold.start <= fold.end <= high:
+                raise LessonValidationError(f"{where}: 折叠 {fold.id} 的 {fold.start}–{fold.end} 不在 {low}–{high} 范围内")
+
+
+# 批注密度门槛：展示范围内每 NOTE_EVERY 个非空、未折叠的行至少一条批注，连续无批注不超过 MAX_GAP 行。
+NOTE_EVERY = 8
+MAX_GAP = 12
+
+
+def note_density(block: AnnotatedSource, lines: list[str]) -> dict[str, int]:
+    """统计一个读码块的可见非空行数、批注数与最长无批注空段（只数非空、未折叠的行）。"""
+    low, high = block.start or 1, block.end or len(lines)
+    folded = {line for fold in block.folds for line in range(fold.start, fold.end + 1)}
+    noted = {note.line for note in block.notes}
+    visible = gap = longest = 0
+    for number in range(low, high + 1):
+        if number in folded or not lines[number - 1].strip():
+            continue
+        visible += 1
+        gap = 0 if number in noted else gap + 1
+        longest = max(longest, gap)
+    return {"lines": visible, "notes": len(block.notes), "longest_gap": longest}
+
+
+def density_issues(model: LessonContent, read: Callable[[str], str]) -> list[str]:
+    """不满足批注密度门槛的读码块，返回“块 id：原因”列表（基线比对由调用方完成）。"""
+    issues = []
+    for block in _code_blocks(model):
+        if not isinstance(block, AnnotatedSource):
+            continue
+        stats = note_density(block, split_lines(read(block.path)))
+        needed = -(-stats["lines"] // NOTE_EVERY)
+        if stats["notes"] < needed:
+            issues.append(f"{block.id}：{stats['lines']} 行只有 {stats['notes']} 条批注，至少需要 {needed} 条")
+        if stats["longest_gap"] > MAX_GAP:
+            issues.append(f"{block.id}：连续 {stats['longest_gap']} 行没有批注，最多 {MAX_GAP} 行")
+    return issues
 
 
 def _file_symbols(path: Path) -> list[dict[str, Any]]:
@@ -174,7 +217,7 @@ def lesson_code(spec: dict[str, Any], lessons: list[dict[str, Any]], learning: d
             symbol["status"] = statuses[symbol["name"]]
             groups[symbol["status"]].append(_ref(item["path"], symbol))
     blocks = (learning.get("scenes", {}).get("code") or {}).get("blocks", [])
-    annotations = [{key: block[key] for key in ("id", "path", "start", "end", "notes")}
+    annotations = [{key: block[key] for key in ("id", "path", "start", "end", "notes", "folds")}
                    for block in blocks if block.get("type") == "annotated-source"]
     compare = ({"id": baseline_spec["id"], "number": baseline_spec["number"], "title": baseline_spec["title"]}
                if baseline_spec else None)
