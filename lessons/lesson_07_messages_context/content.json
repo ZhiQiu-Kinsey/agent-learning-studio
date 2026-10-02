@@ -16,7 +16,7 @@
           "eyebrow": "CHAPTER 03 / CONTEXT",
           "headline": "模型读到的历史，",
           "highlight": "由本次消息决定。",
-          "takeaway": "历史要重发；工具消息要配对；答案只能按实际请求和响应判断。"
+          "takeaway": "模型只读得到这一次请求里的消息。历史要由程序重发，工具消息要成对，结论只能按实际请求和响应下。"
         },
         {
           "id": "concepts",
@@ -26,21 +26,21 @@
               "id": "01-roles",
               "label": "01 / ROLES",
               "title": "消息角色",
-              "description": "system、user、assistant 和 tool 有不同协议作用。",
+              "description": "system、user、assistant、tool 各有各的位置，不能互相顶替。",
               "token": "messages[]"
             },
             {
               "id": "02-replay",
               "label": "02 / REPLAY",
               "title": "历史重发",
-              "description": "程序把上一轮消息再次放入请求，模型才可能用到。",
+              "description": "程序把上一轮的消息再放进请求，模型这一次才可能用到它。",
               "token": "append → complete"
             },
             {
               "id": "03-evidence",
               "label": "03 / EVIDENCE",
               "title": "合法消融",
-              "description": "只移除可选历史，保持相同追问并检查实际请求。",
+              "description": "只拿掉可选的历史，追问保持一字不差，再看实际请求里少了什么。",
               "token": "full / omit"
             }
           ]
@@ -50,7 +50,7 @@
           "type": "prose",
           "title": "模型看到的是本次请求",
           "paragraphs": [
-            "先写入事实，再进行追问。第二次调用能否使用先前事实，取决于程序是否把那轮消息重新放入 messages，也就是本次请求携带的消息历史（Message History）。RunContext.complete 会记录实际发送的 body；展开 request 才能确认可见上下文。上一轮出现在网页回放，不代表它自动进入下一轮模型请求。"
+            "先告诉模型一条事实，再追问。第二次调用能不能用上这条事实，取决于程序有没有把第一轮的消息重新放进 messages，也就是本次请求携带的消息历史（Message History）。RunContext.complete 会记录实际发出的 body，展开 request 就能确认模型这次看到了什么。网页回放里看得到上一轮，不代表它进了下一轮请求。"
           ]
         },
         {
@@ -58,7 +58,7 @@
           "type": "prose",
           "title": "角色与轮次",
           "paragraphs": [
-            "system 表达本课的回答约束，user 包含用户事实或追问，assistant 是模型已生成的回复。程序在第二次请求中加入第一次的 user 与 assistant 消息；这才是历史重发。模型供应商会把角色消息转换为自身格式，不能把页面上的消息列表误称为模型内部持久记忆。"
+            "system 写本课的回答约束，user 是用户给的事实或追问，assistant 是模型之前的回复。第二次请求里，程序把第一次的 user 和 assistant 消息一起带上，这才叫历史重发。服务商会把这些角色消息转换成自己的格式；页面上的消息列表只是这次请求的内容，不是模型内部的长期记忆。"
           ]
         },
         {
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "工具消息有配对规则",
           "paragraphs": [
-            "工具调用（Tool Calling）先由 assistant 消息中的 tool_calls 提出，每个 id 后面必须有相应 role=tool 且 tool_call_id 相同的结果。孤立的 tool 回执或未补齐结果的调用可能被 API 拒绝。此课用验证器（Validator）validate_tool_history 做本地协议检查；真实对照没有工具调用，因此不虚构一条模型工具调用记录。"
+            "工具调用（Tool Calling）由 assistant 消息里的 tool_calls 提出，每个 id 后面都要跟一条 role=tool、tool_call_id 相同的结果。孤立的 tool 回执，或者提出了调用却没有补上结果，都可能被接口拒绝。本课用验证器（Validator）validate_tool_history 在本地检查这条规则；对照实验本身不涉及工具，所以不会虚构一条模型的工具调用。"
           ]
         },
         {
@@ -101,7 +101,7 @@
           "type": "prose",
           "title": "做一次合法消融",
           "paragraphs": [
-            "默认练习先向模型发送事实并取得真实回复，再用完整历史追问；第三次只保留 system 与相同追问。两条追问均是合法消息序列，变化的是可见事实。先检查请求是否被供应商接受，再比较证据是否出现在 messages，最后看答案是否正确；三者不能混为同一指标。"
+            "默认练习先把事实发给模型并拿到真实回复，再带着完整历史追问；第三次只保留 system 和同一句追问。两次追问都是合法的消息序列，变的只是模型能看到的事实。比较时分三步：请求有没有被服务商接受，事实有没有出现在 messages 里，回答对不对。这是三个不同的指标，不能混在一起。"
           ]
         },
         {
@@ -136,14 +136,14 @@
           "type": "prose",
           "title": "证据与边界",
           "paragraphs": [
-            "报告里的消息数和可见事实布尔值由本次请求对象计算，回答文本来自真实 response。若移除历史后模型仍猜中事实，也不能据此声称它读到了已删除消息；若完整历史回答错误，也不能把它归为协议失败。页面上的流程动效是示意，具体运行证据应以 request、response 和报告事件为准。"
+            "报告里的消息条数和“事实是否可见”都从本次请求对象算出，回答文本来自真实 response。拿掉历史后模型仍然答对，不能说明它读到了被删掉的消息，可能只是猜中；带着完整历史却答错，也不是协议出了问题。页面上的流程动画是示意，证据以 request、response 和报告事件为准。"
           ]
         },
         {
           "id": "walkthrough",
           "type": "walkthrough",
           "title": "三次请求，一次合法对照",
-          "description": "以下代码是机制示意；真实字段和回答请到事件面板核对。",
+          "description": "按步骤说明三次请求怎样组装，代码是简化的示意。真实字段和回答在事件面板里核对。",
           "steps": [
             {
               "id": "step-1",

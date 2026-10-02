@@ -16,7 +16,7 @@
           "eyebrow": "CHAPTER 03 / STATE",
           "headline": "任务的进度，",
           "highlight": "由程序事件决定。",
-          "takeaway": "消息是本次模型可见资料；state 是应用对目标、证据和生命周期的结构化记录。"
+          "takeaway": "消息是模型这次能看到的资料；state 是程序记下的目标、证据和进度。任务走到哪一步，由程序事件说了算。"
         },
         {
           "id": "concepts",
@@ -26,21 +26,21 @@
               "id": "01-input",
               "label": "01 / INPUT",
               "title": "目标与会话",
-              "description": "新 run_id 隔离每次任务，输入给出可校验的目标。",
+              "description": "每次运行用新的 run_id，目标来自通过校验的输入。",
               "token": "run_id · goal"
             },
             {
               "id": "02-evidence",
               "label": "02 / EVIDENCE",
               "title": "来源证据",
-              "description": "状态证据由真实本地资料读取产生。",
+              "description": "证据只来自真实的本地资料读取，并带上来源键。",
               "token": "source → evidence"
             },
             {
               "id": "03-terminal",
               "label": "03 / TERMINAL",
               "title": "终态约束",
-              "description": "完成、失败和取消都有允许的入口与原因。",
+              "description": "完成、失败、取消都只能从允许的状态进入，而且要写明原因。",
               "token": "transition()"
             }
           ]
@@ -50,7 +50,7 @@
           "type": "prose",
           "title": "消息和状态各管什么",
           "paragraphs": [
-            "messages 是发给模型的对话资料，应用状态（Application State）是程序用于协调任务的结构化记录，代码里简称 state。本课只在 messages 中保存用户目标；读取资料、更新进度与写入终态都发生在 TaskState，不能因为界面显示了若干消息就推断任务完成。此课不调用模型，避免把程序状态机伪装成模型行为。"
+            "messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课只把用户目标放进 messages，读取资料、更新进度、写入终态都发生在 TaskState 里。界面上消息再多，也推不出任务完成了没有。本课不调用模型，免得把程序的状态机说成模型的行为。"
           ]
         },
         {
@@ -58,7 +58,7 @@
           "type": "prose",
           "title": "任务状态要有来源",
           "paragraphs": [
-            "TaskState 保存本次 run_id、goal、status、evidence、steps、used_steps、result 和 terminal_reason。goal 来自通过校验的输入；evidence 只从本地 SOURCES 中读取并附上 source 键。读取、核对、生成课内要点三个步骤每次都在执行前消耗预算。每次 lesson.state 是状态快照，能看到值怎样随实际步骤改变。"
+            "TaskState 保存 run_id、goal、status、evidence、steps、used_steps、result 和 terminal_reason。goal 来自通过校验的输入；evidence 只从本地 SOURCES 读取，并附上 source 键。读取、核对、生成课内要点三个步骤，每一步执行前都先扣预算。每条 lesson.state 是一份状态快照，可以看到各个值怎样随实际步骤变化。"
           ]
         },
         {
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "转换规则守住边界",
           "paragraphs": [
-            "ready 只能进入 running 或 cancelled，running 可等待、完成、失败或取消，终态不能再跳回运行。transition 会真的检查允许的边；完成还要求已有证据和实际 result 产物，终态必须有原因。这里的 completed 只表示课内资料归纳流程完成，不自动证明输入的任意自由目标达成。把模型的一句“我已经完成”直接映射成 completed 会绕过这些检查，因此本课没有这样的转移。"
+            "ready 只能进入 running 或 cancelled；running 可以进入等待、完成、失败或取消；终态不能再回到运行。transition 会真的检查这些边。进入 completed 还要求已有证据和实际的 result，任何终态都必须写原因。这里的 completed 只表示“课内资料归纳”这个流程走完了，不说明你输入的任意目标都达成了。如果把模型一句“我已经完成”直接映射成 completed，就绕过了这些检查，所以本课没有这条转换。"
           ]
         },
         {
@@ -101,7 +101,7 @@
           "type": "prose",
           "title": "等待、失败和预算结束",
           "paragraphs": [
-            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed；预算预设的 step_budget=2，只能执行读取和核对，第三步生成产物前真实耗尽。它们和 completed 都是明确终态，但原因与验收结果不同。可在事件序列中核对 used_steps 和预算，确认失败时证据仍保留。报告中的检查项由独立于消息的验证器（Validator）逐项计算。"
+            "缺少资料时先进入 waiting，随后以“无可核验资料”转为 failed。预算预设的 step_budget=2，只够读取和核对，第三步生成产物前预算真的用完了。这两种结局和 completed 一样都是明确的终态，只是原因和验收结果不同。在事件序列里可以核对 used_steps 和预算，确认失败时已有的证据仍然保留。报告里的检查项由独立于消息的验证器（Validator）逐项计算。"
           ]
         },
         {
@@ -136,14 +136,14 @@
           "type": "prose",
           "title": "会话隔离与取消",
           "paragraphs": [
-            "每次 run 创建新的 TaskState 和 run_id，不使用全局可变任务状态。取消由平台在步骤边界检查；若用户停止，抛出 RunCancelled，平台记录停止，不会伪造 completed。内存状态会随本次运行结束消失；跨运行保存属于后续持久记忆课。"
+            "每次运行都新建 TaskState 和 run_id，不用全局的可变状态。取消由平台在步骤之间检查；你点停止时会抛出 RunCancelled，平台记为已停止，不会冒充 completed。内存里的状态随运行结束消失，跨运行保存留给后面的持久记忆课。"
           ]
         },
         {
           "id": "walkthrough",
           "type": "walkthrough",
           "title": "从输入走到终态",
-          "description": "下面是教学示意；本次实际状态快照见 lesson.state。",
+          "description": "按步骤说明一次运行从输入到终态，代码是简化的示意。本次实际状态快照见 lesson.state。",
           "steps": [
             {
               "id": "step-1",
