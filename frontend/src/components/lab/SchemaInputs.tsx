@@ -36,6 +36,8 @@ export type ControlKind =
 
 /** Integer ranges up to this many steps fit an elastic slider's whole track. */
 export const ELASTIC_MAX_STEPS = 30;
+/** 分段按钮放得下的选项文字总长度（字符）；更长就改用下拉，避免窄屏横向溢出。 */
+export const SEGMENT_MAX_CHARS = 18;
 
 /**
  * Picks a control from the schema alone; labels come from lesson content.
@@ -43,9 +45,15 @@ export const ELASTIC_MAX_STEPS = 30;
  * range is visible and each value is one drag or arrow press away); wide or
  * fractional ranges stay a ScrubField (precise drag plus typing).
  */
-export function controlFor(property: PropertySchema): ControlKind {
+export function controlFor(
+  property: PropertySchema,
+  labels: readonly string[] = property.enum?.map(String) ?? [],
+): ControlKind {
   if (property.enum?.length)
-    return property.enum.length <= 4 ? "segment" : "select";
+    return property.enum.length <= 4 &&
+      labels.reduce((sum, label) => sum + label.length, 0) <= SEGMENT_MAX_CHARS
+      ? "segment"
+      : "select";
   if (property.type === "boolean") return "switch";
   if (
     (property.type === "integer" || property.type === "number") &&
@@ -84,10 +92,10 @@ export function SchemaInputs({
         const field = fields.find((item) => item.name === name);
         const label = field?.label ?? property.title ?? name;
         const id = `${baseId}-${name}`;
-        const kind = controlFor(property);
         const optionLabel = (value: string) =>
           field?.options.find((option) => option.value === value)?.label ??
           value;
+        const kind = controlFor(property, property.enum?.map(optionLabel));
         const value = values[name];
         return (
           <div

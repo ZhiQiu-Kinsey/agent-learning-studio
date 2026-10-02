@@ -155,6 +155,8 @@ test("an interrupted event stream resumes from the last received seq without dup
     },
   );
   await page.goto("/");
+  // 默认打开的是第一门课（不带工具）；这里要看工具调用的事件流，打开执行工具的课。
+  await openLessonById(page, request, "tool-selection");
   await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
@@ -292,9 +294,7 @@ test("lesson self-check explains mistakes and can be reset without calling the m
   page.on("request", (req) => {
     if (isRunCreation(req)) runs++;
   });
-  const lesson = await (
-    await request.get("/api/lessons/chat-request")
-  ).json();
+  const lesson = await (await request.get("/api/lessons/chat-request")).json();
   const submit = page.getByRole("button", {
     name: t("quiz:submit"),
     exact: true,
@@ -647,12 +647,14 @@ test("lesson scenes support arrow keys, Home and End with matching content", asy
 
 test("switching scenes preserves answers, inputs and run evidence without new requests", async ({
   page,
+  request,
 }) => {
   let runs = 0;
-  page.on("request", (request) => {
-    if (isRunCreation(request)) runs++;
+  page.on("request", (req) => {
+    if (isRunCreation(req)) runs++;
   });
   await page.goto("/");
+  await openLessonById(page, request, "tool-selection");
   await page.getByTestId("scene-tab-check").click();
   const firstAnswer = page.getByRole("radio").first();
   await firstAnswer.click();
@@ -676,8 +678,10 @@ test("switching scenes preserves answers, inputs and run evidence without new re
 
 test("understand scene leads into the lab by keyboard and metrics settle on real counts", async ({
   page,
+  request,
 }) => {
   await page.goto("/");
+  await openLessonById(page, request, "tool-selection");
   const start = page.getByTestId("understand-start-lab");
   await start.focus();
   await start.press("Enter");
