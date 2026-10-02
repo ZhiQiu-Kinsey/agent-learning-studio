@@ -6,9 +6,7 @@ import { MotionIntent, useReducedMotion } from "../../motion";
 import { Backdrop } from "../backdrops/Backdrop";
 import BlurText from "../react-bits/BlurText";
 import ShinyText from "../react-bits/ShinyText";
-import StarBorder from "../react-bits/StarBorder";
 import Magnet from "../react-bits/Magnet";
-import ElectricBorder from "../react-bits/ElectricBorder";
 import RotatingText from "../react-bits/RotatingText";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import type { Lesson } from "../../types";
@@ -50,31 +48,9 @@ function StatValue({ value }: { value: number }) {
   }, [inView, reduced, value]);
   return <span ref={ref}>{value}</span>;
 }
+/** The one luminous button of the band; its light comes from CSS, not a border effect. */
 function PrimaryAction({ children }: { children: ReactNode }) {
-  return (
-    <Magnet className="home-cta-magnet">
-      <StarBorder className="home-cta-star" color="#b98aff" speed="6s">
-        {children}
-      </StarBorder>
-    </Magnet>
-  );
-}
-
-/** "Continue" exists only when this device really opened a lesson: electric outline. */
-function ContinueAction({ children }: { children: ReactNode }) {
-  return (
-    <Magnet className="home-cta-magnet">
-      <span className="home-cta-electric">
-        {children}
-        <ElectricBorder
-          color="#b98aff"
-          chaos={0.07}
-          speed={0.9}
-          borderRadius={14}
-        />
-      </span>
-    </Magnet>
-  );
+  return <Magnet className="home-cta-magnet">{children}</Magnet>;
 }
 
 /**
@@ -147,7 +123,7 @@ export function HomeHero({
         <p className="home-loop">
           <span className="home-loop-label">{t("hero.loopLabel")}</span>
           <RotatingText
-            className="home-loop-pill"
+            className="home-loop-phrase"
             texts={[t("hero.loop1"), t("hero.loop2"), t("hero.loop3")]}
             separator=" → "
           />
@@ -157,7 +133,7 @@ export function HomeHero({
         </p>
         <div className="home-actions">
           {last ? (
-            <ContinueAction>
+            <PrimaryAction>
               <button
                 type="button"
                 className="home-cta home-cta-primary"
@@ -171,7 +147,7 @@ export function HomeHero({
                 })}
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
-            </ContinueAction>
+            </PrimaryAction>
           ) : (
             <PrimaryAction>{onboarding(true)}</PrimaryAction>
           )}
