@@ -19,7 +19,46 @@
   display: grid;
   place-items: center;
   min-height: 8rem;
+  overflow: hidden;
+  isolation: isolate;
   color: var(--text-muted);
+}
+/* Decoration behind the empty stage (MetaBalls, WebGL budgeted); gone once a
+   real event arrives. A soft gradient stays underneath at static motion. */
+.stage-empty-decor {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    60% 80% at 50% 50%,
+    color-mix(in srgb, #6d5dfc 10%, transparent),
+    transparent 70%
+  );
+}
+.stage-empty-decor > div {
+  opacity: 0.38;
+  animation: stage-decor-in 900ms var(--ease-out) both;
+}
+:root[data-theme="dark"] .stage-empty-decor > div {
+  opacity: 0.5;
+}
+.agent-stage.is-empty > p {
+  position: relative;
+  max-width: 26rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(6px);
+  text-align: center;
+}
+.inspector-trace .agent-stage.is-empty {
+  min-height: 13rem;
+}
+@keyframes stage-decor-in {
+  from {
+    opacity: 0;
+  }
 }
 .agent-stage[data-provenance="illustration"] {
   border-style: dashed;
@@ -163,7 +202,7 @@
   border-style: dashed;
 }
 
-/* Waiting shows three dots and the real elapsed time; never "thinking". */
+/* Waiting shows a lattice loader and the real elapsed time; never "thinking". */
 .stage-waiting {
   display: inline-flex;
   align-items: center;
@@ -173,29 +212,27 @@
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
-.stage-waiting > i {
-  width: 0.28rem;
-  height: 0.28rem;
-  border-radius: 999px;
-  background: currentColor;
-  animation: stage-dot 1.2s var(--ease-out) infinite;
+.stage-waiting > span:last-child {
+  margin-left: 0.3rem;
 }
-.stage-waiting > i:nth-child(2) {
-  animation-delay: 0.15s;
+/* Live wait only: a slow halo around the model node while the request is open. */
+.stage-node[data-live-wait] {
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--node) 40%, transparent);
+  animation: stage-wait-halo 1.8s var(--ease-out) infinite;
 }
-.stage-waiting > i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-.stage-waiting > span {
-  margin-left: 0.25rem;
-}
-@keyframes stage-dot {
-  0%,
-  100% {
-    opacity: 0.25;
+@keyframes stage-wait-halo {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--node) 40%, transparent);
   }
-  40% {
-    opacity: 1;
+  70%,
+  100% {
+    box-shadow: 0 0 0 12px color-mix(in oklab, var(--node) 0%, transparent);
+  }
+}
+:root:not([data-motion="full"]) {
+  .stage-node[data-live-wait],
+  .stage-empty-decor > div {
+    animation: none;
   }
 }
 
@@ -666,4 +703,36 @@
   bottom: -3px;
   width: 2px;
   background: var(--text);
+}
+
+/* Entrances: a card or film round appears once, when its real event arrives. */
+.tool-card,
+.context-film li {
+  animation: stage-item-in 380ms var(--ease-out) backwards;
+}
+.tool-card {
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+.tool-card:hover {
+  box-shadow: 0 10px 26px -18px var(--role-tool);
+}
+.tool-card[data-status="running"] {
+  border-color: var(--role-tool);
+}
+.tool-card[open] {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--role-tool) 14%, transparent);
+}
+@keyframes stage-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+:root:not([data-motion="full"]) {
+  .tool-card,
+  .context-film li {
+    animation: none;
+  }
 }

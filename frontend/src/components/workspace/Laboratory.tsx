@@ -1,17 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { motion } from "motion/react";
 import { useReducedMotion } from "../../motion";
+
+/** Selection pill glides between events; a snappy spring, no overshoot. */
+const PILL_SPRING = {
+  type: "spring",
+  stiffness: 520,
+  damping: 40,
+  mass: 0.8,
+} as const;
 import BorderGlow from "../react-bits/BorderGlow";
 import CountUp from "../react-bits/CountUp";
-import ClickSpark from "../react-bits/ClickSpark";
-import StarBorder from "../react-bits/StarBorder";
 import TextType from "../react-bits/TextType";
 import StatusMark from "../react-bits/StatusMark";
+import CallChip, { type CallChipStatus } from "../react-bits/CallChip";
+import LatticeLoader from "../react-bits/LatticeLoader";
+import PromptBar from "../react-bits/PromptBar";
 import { AgentStage } from "../../stage/AgentStage";
 import { ContextFilm } from "../../stage/ContextFilm";
 import { Timeline } from "../../stage/Timeline";
-import { ToolCards } from "../../stage/ToolCards";
-import { deriveStage } from "../../stage/derive";
+import { ToolCards, summarize } from "../../stage/ToolCards";
+import { deriveStage, type StageSpan } from "../../stage/derive";
+import { useElapsedMs } from "../../stage/useElapsed";
 import { Lenses } from "../../stage/Lenses";
 import RubberSegment from "../react-bits/RubberSegment";
 import { LessonExtension } from "../../lesson-extensions/LessonExtension";
@@ -22,20 +33,17 @@ import {
   Copy,
   Download,
   FlaskConical,
-  LoaderCircle,
   MessageSquare,
   Pause,
   Play,
   RotateCcw,
   SkipForward,
-  Square,
   Terminal,
   Waypoints,
 } from "lucide-react";
 import type { StudioState } from "../../hooks/useStudio";
 import type { Trace } from "../../types";
 import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import GlideSelect from "../react-bits/GlideSelect";
 import WakeSlider from "../react-bits/WakeSlider";
@@ -121,6 +129,152 @@ function RunMetric({ value }: { value: number }) {
   );
 }
 
+/**
+ * The run's activity line. While a model request is open (request sent, no
+ * response yet) it says "waiting for the model response" with the real time
+ * since that request's server timestamp; otherwise it names the latest event.
+ */
+function RunActivity({
+  openLlm,
+  last,
+}: {
+  openLlm: StageSpan | undefined;
+  last: Trace | undefined;
+}) {
+  const { t, i18n } = useTranslation("lab", { keyPrefix: "bench.wait" });
+  const elapsed = useElapsedMs(openLlm?.startAt);
+  if (openLlm)
+    return (
+      <div className="trace-activity is-waiting" data-testid="lab-model-wait">
+        <ThoughtLine
+          label={`${t("model")} · ${t("round", { round: openLlm.round ?? 1 })}`}
+          working
+          glyph={
+            <LatticeLoader
+              pattern="orbit"
+              cellSize={4}
+              gap={1.5}
+              color="var(--role-model)"
+              className="trace-activity-lattice"
+            />
+          }
+          elapsed={elapsed == null ? undefined : elapsed / 1000}
+          showTimer={elapsed != null}
+          collapsible={false}
+          color="var(--text)"
+          fontSize={13}
+        />
+        <span className="sr-only">
+          {elapsed != null &&
+            t("seconds", {
+              value: new Intl.NumberFormat(i18n.language, {
+                maximumFractionDigits: 0,
+              }).format(elapsed / 1000),
+            })}
+        </span>
+      </div>
+    );
+  return (
+    <div className="trace-activity">
+      <ThoughtLine
+        label={
+          last
+            ? `${label(last)} · ${summary(last).slice(0, 50)}`
+            : t("connecting")
+        }
+        working
+        showTimer={false}
+        glyph="dot"
+        collapsible={false}
+        color="var(--text-muted)"
+        glyphColor="var(--accent)"
+        fontSize={13}
+      />
+    </div>
+  );
+}
+
+/** One chip per real tool call at the cursor; times come from server timestamps. */
+function ToolCallChips({
+  spans,
+  events,
+  live,
+  activeIndex,
+  onSelect,
+}: {
+  spans: StageSpan[];
+  events: readonly Trace[];
+  live: boolean;
+  activeIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  const { t, i18n } = useTranslation("lab", { keyPrefix: "bench.calls" });
+  const tools = spans.filter((span) => span.kind === "tool");
+  if (!tools.length) return null;
+  const number = new Intl.NumberFormat(i18n.language, {
+    maximumFractionDigits: 1,
+  });
+  const formatMs = (ms: number) =>
+    ms < 1000
+      ? t("ms", { value: number.format(Math.round(ms)) })
+      : t("s", { value: number.format(ms / 1000) });
+  return (
+    <ul
+      className="tool-call-chips"
+      aria-label={t("region")}
+      data-testid="lab-call-chips"
+    >
+      {tools.map((span) => {
+        const call = events[span.startIndex];
+        const { name, args } = summarize(call, undefined, 28);
+        const status: CallChipStatus =
+          span.status === "stopped"
+            ? "stopped"
+            : span.status === "open"
+              ? "running"
+              : span.ok === false
+                ? "error"
+                : span.ok === true
+                  ? "done"
+                  : "unknown";
+        // Only a call that is open right now ticks; a replayed open call shows no time.
+        const startAt = status === "running" && live ? span.startAt : null;
+        const time =
+          span.durationMs != null ? formatMs(span.durationMs) : t("noTime");
+        const target = span.endIndex ?? span.startIndex;
+        return (
+          <li key={`${span.id}-${span.startIndex}`}>
+            <CallChip
+              name={name}
+              argument={args}
+              status={status}
+              startAt={startAt}
+              durationMs={status === "running" ? null : span.durationMs}
+              formatMs={formatMs}
+              statusLabel={
+                status === "running"
+                  ? t("running", { name })
+                  : status === "stopped"
+                    ? t("stopped", { name })
+                    : t(status === "unknown" ? "undeclared" : status, {
+                        name,
+                        time,
+                      })
+              }
+              pressed={
+                activeIndex >= span.startIndex &&
+                activeIndex <= (span.endIndex ?? span.startIndex)
+              }
+              onClick={() => onSelect(target)}
+              data-testid="lab-call-chip"
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function Laboratory({
   studio: s,
   onConfigure,
@@ -135,6 +289,8 @@ export function Laboratory({
 }) {
   const reducedMotion = useReducedMotion();
   const { t } = useTranslation("stage");
+  const { t: tb } = useTranslation("lab", { keyPrefix: "bench" });
+  const pillId = useId();
   const [tab, setTab] = useState("trace");
   // One projection of the real events feeds the stage, film, cards and timeline.
   const stage = useMemo(
@@ -156,6 +312,10 @@ export function Laboratory({
   const last = s.events.at(-1);
   const completed = last?.type === "done" && last.data.status === "completed";
   const ready = s.canRun;
+  const live = s.running && s.cursor === s.events.length;
+  const openLlm = live
+    ? stage.spans.find((span) => span.kind === "llm" && span.status === "open")
+    : undefined;
   const needsConnection =
     s.requiresModel &&
     !(
@@ -167,9 +327,18 @@ export function Laboratory({
       ? s.active.data.body
       : s.active.data
     : null;
+  const activeIndex = s.active ? s.visible.indexOf(s.active) : -1;
   const file = s.detail?.sources[s.source];
   const requests = s.visible.filter((e: Trace) => e.type === "request").length;
   const tools = s.visible.filter((e: Trace) => e.type === "tool_call").length;
+  const exercises = useMemo(
+    () => s.detail?.exercises.filter((e) => !e.offline_only) ?? [],
+    [s.detail],
+  );
+  const canSend =
+    !!s.detail &&
+    ready &&
+    (!!s.question.trim() || !!s.detail.capabilities?.supports_inputs);
   useEffect(() => {
     if (s.running && list.current)
       list.current.scrollTop = list.current.scrollHeight;
@@ -193,54 +362,86 @@ export function Laboratory({
       fillOpacity={0.035}
       animated={active && !reducedMotion}
     >
-      <div className="lab-workspace" data-testid="lab-workspace">
+      <div
+        className="lab-workspace"
+        data-testid="lab-workspace"
+        data-running={s.running || undefined}
+      >
         <div className="lab-command-column">
           <section className="lab-composer">
             <div className="pane-heading">
               <span>
                 <FlaskConical size={17} />
-                运行一个问题
+                {tb("composer.title")}
               </span>
               <small>LIVE</small>
             </div>
             <p className="pane-description">
               {s.requiresModel
                 ? s.detail?.capabilities?.custom_runtime
-                  ? "修改参数，观察本课模型请求、校验和执行证据。"
-                  : "修改输入，观察模型如何选择和执行工具。"
-                : "修改输入，观察本课程序的执行过程。"}
+                  ? tb("composer.descCustom")
+                  : tb("composer.descModel")
+                : tb("composer.descLocal")}
             </p>
             <div className="form-field" data-testid="lab-exercise-field">
-              <label>练习场景</label>
+              <label>{tb("composer.exercise")}</label>
               <GlideSelect
                 {...pickerColors}
                 size="lg"
                 className="full-picker"
-                ariaLabel="练习场景"
+                ariaLabel={tb("composer.exercise")}
                 value={s.exerciseId}
                 onChange={s.selectExercise}
                 disabled={s.running || !s.detail}
-                options={
-                  s.detail?.exercises
-                    .filter((e) => !e.offline_only)
-                    .map((e) => ({ value: e.id, label: e.title })) || []
-                }
+                options={exercises.map((e) => ({
+                  value: e.id,
+                  label: e.title,
+                }))}
               />
             </div>
             <div className="form-field">
               <label htmlFor="lab-question">
-                {s.detail?.ui?.question_label || "你的问题"}
+                {s.detail?.ui?.question_label || tb("composer.question")}
               </label>
-              <Textarea
-                id="lab-question"
-                data-testid="lab-question-input"
+              <PromptBar
+                className="lab-prompt-bar"
                 value={s.question}
+                onChange={s.setQuestion}
                 disabled={s.running}
-                onChange={(e) => s.setQuestion(e.target.value)}
-                placeholder="输入你想让 Agent 完成的任务…"
-                aria-describedby={
-                  s.detail?.ui?.question_help ? "lab-question-help" : undefined
-                }
+                busy={s.running}
+                canSend={canSend}
+                onSend={() => {
+                  setTab("trace");
+                  void s.run();
+                }}
+                onStop={s.cancel}
+                commands={exercises.map((e) => ({
+                  key: e.id,
+                  name: e.title,
+                  description: e.question,
+                  active: e.id === s.exerciseId,
+                }))}
+                onCommand={s.selectExercise}
+                placeholder={tb("composer.placeholder")}
+                labels={{
+                  send: tb("composer.run"),
+                  sendText: tb("composer.runShort"),
+                  stop: tb("composer.stop"),
+                  stopText: tb("composer.stopShort"),
+                  commands: tb("composer.commands"),
+                  openCommands: tb("composer.openCommands"),
+                  noMatch: tb("composer.noMatch"),
+                }}
+                hint={tb("composer.hint")}
+                sendTestId="lab-run-button"
+                stopTestId="lab-stop-button"
+                textareaProps={{
+                  id: "lab-question",
+                  "data-testid": "lab-question-input",
+                  "aria-describedby": s.detail?.ui?.question_help
+                    ? "lab-question-help"
+                    : undefined,
+                }}
               />
               {s.detail?.ui?.question_help && (
                 <p id="lab-question-help" className="composer-note">
@@ -254,82 +455,49 @@ export function Laboratory({
                 onClick={onConfigure}
                 data-testid="lab-configure-button"
               >
-                配置模型连接
+                {tb("composer.configure")}
               </Button>
             )}
-            <ClickSpark
-              sparkColor="#a49cff"
-              sparkCount={reducedMotion ? 0 : 7}
-              sparkRadius={30}
-              sparkSize={7}
-              duration={450}
-            >
-              <div className="composer-actions">
-                {s.running ? (
-                  <Button onClick={s.cancel} variant="destructive">
-                    <Square size={14} />
-                    停止运行
-                  </Button>
-                ) : (
-                  <StarBorder
-                    className="lab-run-star"
-                    color="#c4b5ff"
-                    speed="4s"
-                  >
-                    <Button
-                      data-testid="lab-run-button"
-                      onClick={() => {
-                        setTab("trace");
-                        void s.run();
-                      }}
-                      disabled={
-                        !s.detail ||
-                        !ready ||
-                        (!s.question.trim() &&
-                          !s.detail.capabilities?.supports_inputs)
-                      }
-                    >
-                      <Play size={15} />
-                      运行练习
-                    </Button>
-                  </StarBorder>
-                )}
-                <small>
-                  {s.requiresModel ? "使用真实模型" : "运行本课程序"}
-                </small>
-              </div>
-            </ClickSpark>
             <p className="composer-note">
+              <span className="composer-mode">
+                {s.requiresModel
+                  ? tb("composer.modeModel")
+                  : tb("composer.modeLocal")}
+              </span>
               {s.requiresModel
-                ? "模型请求按服务商规则计费。工具在本机 Python 执行。"
-                : "本课无需模型连接，使用本地课程程序运行。"}
+                ? tb("composer.noteModel")
+                : tb("composer.noteLocal")}
             </p>
           </section>
           <section className="lab-answer" aria-live="polite">
             <div className="pane-heading">
               <span>
                 <MessageSquare size={17} />
-                最终回答
+                {tb("answer.title")}
               </span>
               {s.answer && <Check size={15} />}
             </div>
             {s.answer ? (
               <Answer
-                content={String(s.answer.data.content || "（模型未返回文本）")}
+                content={String(s.answer.data.content || tb("answer.noText"))}
               />
             ) : (
               <div className="answer-placeholder">
                 {s.running ? (
-                  <>
-                    <LoaderCircle size={17} className="spin" />
-                    {s.requiresModel
-                      ? "等待模型完成当前任务…"
-                      : "等待本课程序完成当前任务…"}
-                  </>
+                  <LatticeLoader
+                    pattern="snake"
+                    color="var(--accent)"
+                    fontSize={13}
+                    label={
+                      s.requiresModel
+                        ? tb("answer.waitingModel")
+                        : tb("answer.waitingLocal")
+                    }
+                  />
                 ) : (
                   <>
-                    回答会出现在这里。
-                    <span>回放时，这里与选中的进度保持同步。</span>
+                    {tb("answer.empty")}
+                    <span>{tb("answer.emptyReplay")}</span>
                   </>
                 )}
               </div>
@@ -339,16 +507,16 @@ export function Laboratory({
             <i />
             <span>
               {s.requiresModel
-                ? s.status?.provider_label || "未连接"
-                : "本地课程程序"}
+                ? s.status?.provider_label || tb("connection.none")
+                : tb("connection.local")}
               <small>
                 {s.requiresModel
-                  ? s.status?.model || "请先设置模型"
-                  : "无需配置模型连接"}
+                  ? s.status?.model || tb("connection.noModel")
+                  : tb("connection.localNote")}
               </small>
             </span>
             <Button variant="ghost" size="sm" onClick={onConfigure}>
-              设置
+              {tb("connection.settings")}
             </Button>
           </div>
         </div>
@@ -357,9 +525,9 @@ export function Laboratory({
             <div>
               <h2>
                 <Waypoints size={18} />
-                运行观察台
+                {tb("inspector.title")}
               </h2>
-              <p>看到每一步，也看到每一步的数据。</p>
+              <p>{tb("inspector.subtitle")}</p>
             </div>
             <span
               className={`trace-status ${s.running ? "is-running" : ""}`}
@@ -385,21 +553,24 @@ export function Laboratory({
                 />
               </span>
               {s.running
-                ? "运行中"
+                ? tb("status.running")
                 : completed
-                  ? "已完成"
+                  ? tb("status.completed")
                   : s.events.length
-                    ? "已结束"
-                    : "等待运行"}
+                    ? tb("status.ended")
+                    : tb("status.idle")}
             </span>
           </div>
           <Tabs value={tab} onValueChange={setTab} className="inspector-tabs">
-            <TabsList aria-label="实验观察内容" className="inspector-tab-list">
-              <TabsTrigger value="trace">执行记录</TabsTrigger>
+            <TabsList
+              aria-label={tb("inspector.tabs")}
+              className="inspector-tab-list"
+            >
+              <TabsTrigger value="trace">{tb("inspector.trace")}</TabsTrigger>
               <TabsTrigger value="source" data-testid="lab-tab-source">
-                Python 源码
+                {tb("inspector.source")}
               </TabsTrigger>
-              <TabsTrigger value="prompt">提示词与工具</TabsTrigger>
+              <TabsTrigger value="prompt">{tb("inspector.prompt")}</TabsTrigger>
             </TabsList>
             <TabsContent value="trace" className="inspector-trace">
               <LessonExtension
@@ -411,36 +582,29 @@ export function Laboratory({
                 <AgentStage
                   events={s.events}
                   cursor={s.cursor}
-                  live={s.running && s.cursor === s.events.length}
+                  live={live}
                   spotlight={spotlight}
                 />
               </LessonExtension>
               <div className="inspector-summary" data-testid="lab-run-metrics">
                 <span>
-                  <RunMetric value={requests} /> 模型请求
+                  <RunMetric value={requests} /> {tb("metrics.requests")}
                 </span>
                 <span>
-                  <RunMetric value={tools} /> 工具调用
+                  <RunMetric value={tools} /> {tb("metrics.tools")}
                 </span>
                 <span>
-                  <RunMetric value={s.cursor} /> 运行事件
+                  <RunMetric value={s.cursor} /> {tb("metrics.events")}
                 </span>
               </div>
-              {s.running && (
-                <ThoughtLine
-                  label={
-                    last
-                      ? `${label(last)} · ${summary(last).slice(0, 50)}`
-                      : "正在建立连接"
-                  }
-                  working
-                  showTimer={false}
-                  glyph="dot"
-                  collapsible={false}
-                  className="trace-activity"
-                  fontSize={13}
-                />
-              )}
+              {s.running && <RunActivity openLlm={openLlm} last={last} />}
+              <ToolCallChips
+                spans={stage.spans}
+                events={s.events}
+                live={live}
+                activeIndex={activeIndex}
+                onSelect={s.selectEvent}
+              />
               {s.events.length > 0 && (
                 <div
                   className="replay-toolbar"
@@ -451,7 +615,9 @@ export function Laboratory({
                     size="icon"
                     disabled={s.running}
                     data-testid="lab-replay-play"
-                    aria-label={s.playing ? "暂停回放" : "播放回放"}
+                    aria-label={
+                      s.playing ? tb("replay.pause") : tb("replay.play")
+                    }
                     onClick={s.replay}
                   >
                     {s.playing ? <Pause size={15} /> : <Play size={15} />}
@@ -461,7 +627,7 @@ export function Laboratory({
                     size="icon"
                     disabled={s.running || s.cursor >= s.events.length}
                     data-testid="lab-replay-step"
-                    aria-label="下一步"
+                    aria-label={tb("replay.step")}
                     onClick={s.step}
                   >
                     <SkipForward size={15} />
@@ -471,13 +637,13 @@ export function Laboratory({
                     size="icon"
                     disabled={s.running}
                     data-testid="lab-replay-rewind"
-                    aria-label="回到起点"
+                    aria-label={tb("replay.rewind")}
                     onClick={() => s.seek(0)}
                   >
                     <RotateCcw size={15} />
                   </Button>
                   <WakeSlider
-                    ariaLabel="回放进度"
+                    ariaLabel={tb("replay.progress")}
                     className="replay-slider"
                     value={s.cursor}
                     min={0}
@@ -521,7 +687,7 @@ export function Laboratory({
                     variant="ghost"
                     size="icon"
                     data-testid="lab-download-trace"
-                    aria-label="下载本次运行记录"
+                    aria-label={tb("replay.download")}
                     onClick={s.download}
                   >
                     <Download size={16} />
@@ -556,44 +722,59 @@ export function Laboratory({
               <div className="trace-split">
                 <div className="trace-list-pane" data-testid="lab-trace-list">
                   <div className="subpane-label">
-                    执行顺序 <small>EVENTS</small>
+                    {tb("list.title")} <small>EVENTS</small>
                   </div>
                   <div
                     className="timeline"
                     ref={list}
                     data-testid="lab-timeline"
                   >
-                    {s.visible.map((event: Trace, index: number) => (
-                      <Button
-                        key={index}
-                        variant="ghost"
-                        className={`event event-${event.type} ${s.active === event ? "is-selected" : ""}`}
-                        data-testid={`lab-event-${event.type.replace(/[._]/g, "-")}`}
-                        aria-pressed={s.active === event}
-                        onClick={() => s.selectEvent(index)}
-                      >
-                        <span className="event-index">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span className="event-text">
-                          <strong>{label(event)}</strong>
-                          <small>{summary(event)}</small>
-                        </span>
-                        <span className="event-round">
-                          {event.round ? `R${event.round}` : ""}
-                        </span>
-                      </Button>
-                    ))}
+                    {s.visible.map((event: Trace, index: number) => {
+                      const selected = s.active === event;
+                      return (
+                        <Button
+                          key={index}
+                          variant="ghost"
+                          className={`event event-${event.type} ${selected ? "is-selected" : ""}`}
+                          data-testid={`lab-event-${event.type.replace(/[._]/g, "-")}`}
+                          aria-pressed={selected}
+                          onClick={() => s.selectEvent(index)}
+                        >
+                          {selected && (
+                            <motion.span
+                              layoutId={`${pillId}-event`}
+                              className="event-pill"
+                              aria-hidden="true"
+                              transition={
+                                reducedMotion ? { duration: 0 } : PILL_SPRING
+                              }
+                            />
+                          )}
+                          <span className="event-index">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span className="event-text">
+                            <strong>{label(event)}</strong>
+                            <small>{summary(event)}</small>
+                          </span>
+                          <span className="event-round">
+                            {event.round ? `R${event.round}` : ""}
+                          </span>
+                        </Button>
+                      );
+                    })}
                     {!s.visible.length && (
                       <div className="trace-list-empty">
                         <Waypoints size={24} />
                         <p>
-                          {s.events.length ? "已回到起点" : "还没有运行事件"}
+                          {s.events.length
+                            ? tb("list.rewound")
+                            : tb("list.empty")}
                         </p>
                         <small>
                           {s.events.length
-                            ? "播放回放或向前一步。"
-                            : "运行后，步骤会依次出现在这里。"}
+                            ? tb("list.rewoundHint")
+                            : tb("list.emptyHint")}
                         </small>
                       </div>
                     )}
@@ -601,12 +782,14 @@ export function Laboratory({
                 </div>
                 <div className="event-detail" data-testid="lab-event-detail">
                   <div className="subpane-label">
-                    <span>{s.active ? label(s.active) : "请求与响应"}</span>
+                    <span>
+                      {s.active ? label(s.active) : tb("detail.title")}
+                    </span>
                     {s.active && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="复制事件 JSON"
+                        aria-label={tb("detail.copy")}
                         onClick={async () => {
                           try {
                             await navigator.clipboard.writeText(
@@ -614,7 +797,7 @@ export function Laboratory({
                             );
                             setCopied(true);
                           } catch {
-                            s.setError("复制失败，请手动选中数据复制。");
+                            s.setError(tb("detail.copyFailed"));
                           }
                         }}
                       >
@@ -623,27 +806,27 @@ export function Laboratory({
                     )}
                   </div>
                   {s.active ? (
-                    <>
+                    <div className="event-detail-body" key={activeIndex}>
                       <p className="event-explanation">
                         {s.active.data.representation === "sdk_standardized"
-                          ? "SDK 标准化数据，不等同于原始 HTTP 报文。"
+                          ? tb("detail.sdk")
                           : ["request", "response"].includes(s.active.type)
-                            ? "完整 HTTP 请求或响应数据，可检查 messages、tools 和 tool_call_id。"
-                            : "当前事件的完整执行数据。"}
+                            ? tb("detail.http")
+                            : tb("detail.generic")}
                       </p>
                       <Code
                         content={JSON.stringify(activeBody, null, 2) || "null"}
                       />
-                    </>
+                    </div>
                   ) : (
                     <div className="inspector-empty">
                       <div>
                         <Code2 size={28} />
                       </div>
-                      <h3 aria-label="让执行过程变得可读">
+                      <h3 aria-label={tb("detail.emptyTitle")}>
                         {active ? (
                           <TextType
-                            text="让执行过程变得可读"
+                            text={tb("detail.emptyTitle")}
                             typingSpeed={90}
                             startOnVisible
                             loop={false}
@@ -651,28 +834,26 @@ export function Laboratory({
                             aria-hidden="true"
                           />
                         ) : (
-                          "让执行过程变得可读"
+                          tb("detail.emptyTitle")
                         )}
                       </h3>
                       <p>
-                        在左侧运行问题，再选择一个事件。
+                        {tb("detail.emptyLine1")}
                         <br />
-                        这里会显示完整请求、响应或工具结果。
+                        {tb("detail.emptyLine2")}
                       </p>
                       <div className="empty-flow">
-                        <span>问题</span>
+                        <span>{tb("detail.flowQuestion")}</span>
                         <ArrowRight size={13} />
-                        <span>模型</span>
+                        <span>{tb("detail.flowModel")}</span>
                         <ArrowRight size={13} />
-                        <span>工具</span>
+                        <span>{tb("detail.flowTool")}</span>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-              <p className="replay-footnote">
-                回放只读取本次记录，不会再次请求模型。
-              </p>
+              <p className="replay-footnote">{tb("replay.footnote")}</p>
             </TabsContent>
             <TabsContent
               value="source"
@@ -683,7 +864,7 @@ export function Laboratory({
                 <Terminal size={16} />
                 <GlideSelect
                   {...pickerColors}
-                  ariaLabel="实验源码文件"
+                  ariaLabel={tb("source.file")}
                   className="full-picker"
                   value={String(s.source)}
                   onChange={(v) => s.setSource(Number(v))}
@@ -694,7 +875,7 @@ export function Laboratory({
                     })) || []
                   }
                 />
-                <small>只读</small>
+                <small>{tb("source.readonly")}</small>
               </div>
               {file && (
                 <Code
@@ -706,7 +887,7 @@ export function Laboratory({
             <TabsContent value="prompt" className="lab-prompt">
               <h3>System prompt</h3>
               <pre>{s.detail?.system_prompt}</pre>
-              <h3>工具定义</h3>
+              <h3>{tb("prompt.tools")}</h3>
               <Code
                 content={JSON.stringify(s.detail?.tools, null, 2) || "[]"}
               />

@@ -1,160 +1,130 @@
+/* Adapted from https://reactbits.dev/r/CallChip-TS-CSS.json (MIT + Commons Clause). */
 .call-chip {
-  --cc-size: 34px;
-  --cc-font: 13px;
-  --cc-pad: 12px;
-  --cc-gap: 7px;
-  --cc-radius: 10px;
-  --cc-color: currentColor;
-  --cc-surface: #27272a;
-  --cc-progress: currentColor;
-  --cc-progress-pct: 8%;
-  --cc-done: #22c55e;
-  --cc-error: #ef4444;
-  --cc-wash-pct: 14%;
-  --cc-expected: 2500ms;
   --cc-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-
   position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: var(--cc-gap);
   box-sizing: border-box;
+  max-width: 100%;
   height: var(--cc-size);
   padding: 0 var(--cc-pad);
+  border: 1px solid color-mix(in srgb, var(--cc-color) 14%, transparent);
   border-radius: var(--cc-radius);
   overflow: hidden;
   background: var(--cc-surface);
   color: var(--cc-color);
+  font: inherit;
   font-size: var(--cc-font);
   line-height: 1;
   white-space: nowrap;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  transition: transform 160ms var(--cc-ease-out);
+  transition:
+    transform 160ms var(--cc-ease-out),
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
-
-.call-chip[data-status='error'] {
+button.call-chip {
   cursor: pointer;
 }
-
-.call-chip[data-pressed] {
+button.call-chip:active {
   transform: scale(0.97);
 }
+button.call-chip:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+.call-chip[aria-pressed="true"] {
+  border-color: color-mix(
+    in srgb,
+    var(--accent, currentColor) 60%,
+    transparent
+  );
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--accent, currentColor) 18%, transparent);
+}
 
+/* Running: an indeterminate sweep, never an estimate of progress. */
 .call-chip__fill {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--cc-progress) var(--cc-progress-pct), transparent);
-  transform: scaleX(0);
-  transform-origin: left center;
-  clip-path: inset(0 0 0 0);
+  z-index: -1;
   pointer-events: none;
 }
-
-.call-chip[data-status='running'] .call-chip__fill {
-  transition: transform var(--cc-expected) linear;
+.call-chip[data-status="running"] .call-chip__fill {
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--cc-color) 12%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 220% 100%;
+  animation: call-chip-sweep 1.4s linear infinite;
 }
-
-.call-chip[data-status='done'] .call-chip__fill {
-  background: color-mix(in srgb, var(--cc-done) var(--cc-wash-pct), transparent);
-  clip-path: inset(100% 0 0 0);
-  transition:
-    transform 200ms var(--cc-ease-out),
-    background-color 120ms ease,
-    clip-path 400ms var(--cc-ease-out) 200ms;
+.call-chip[data-status="done"] .call-chip__fill {
+  background: color-mix(in srgb, var(--cc-done) 12%, transparent);
 }
-
-.call-chip[data-status='error'] .call-chip__fill {
-  background: color-mix(in srgb, var(--cc-error) var(--cc-wash-pct), transparent);
-  transition: background-color 200ms ease;
+.call-chip[data-status="done"][data-settled] .call-chip__fill {
+  animation: call-chip-wash 700ms var(--cc-ease-out) both;
 }
-
-.call-chip:not([data-mounted]) .call-chip__fill,
-.call-chip:not([data-mounted]) .call-chip__glyph {
-  transition: none !important;
+.call-chip[data-status="error"] .call-chip__fill {
+  background: color-mix(in srgb, var(--cc-error) 14%, transparent);
 }
-
-.call-chip__slot {
-  position: relative;
-  flex: none;
-  width: calc(var(--cc-font) + 2px);
-  height: calc(var(--cc-font) + 2px);
-  overflow: hidden;
+.call-chip[data-status="stopped"] {
+  border-style: dashed;
+  opacity: 0.8;
+}
+@keyframes call-chip-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+@keyframes call-chip-wash {
+  from {
+    background: color-mix(in srgb, var(--cc-done) 34%, transparent);
+  }
 }
 
 .call-chip__glyph {
-  position: absolute;
-  inset: 0;
-  display: grid;
+  display: inline-grid;
+  flex: none;
   place-items: center;
-  opacity: 0;
-  transform: translateY(70%);
-  filter: blur(3px);
+  width: calc(var(--cc-font) + 2px);
+  height: calc(var(--cc-font) + 2px);
+  animation: call-chip-glyph 260ms var(--cc-ease-out) both;
 }
-
-.call-chip__glyph[data-state='in'] {
-  opacity: 1;
-  transform: none;
-  filter: blur(0);
-  transition:
-    opacity 240ms var(--cc-ease-out),
-    transform 240ms var(--cc-ease-out),
-    filter 240ms var(--cc-ease-out);
-}
-
-.call-chip__glyph[data-state='out'] {
-  transform: translateY(-70%);
-  transition:
-    opacity 160ms var(--cc-ease-out),
-    transform 160ms var(--cc-ease-out),
-    filter 160ms var(--cc-ease-out);
-}
-
-.call-chip[data-status='done'] .call-chip__glyph[data-state='in'] {
+.call-chip[data-status="done"] .call-chip__glyph {
   color: var(--cc-done);
 }
-
-.call-chip[data-status='error'] .call-chip__glyph[data-state='in'] {
+.call-chip[data-status="error"] .call-chip__glyph {
   color: var(--cc-error);
 }
-
-.call-chip__name,
-.call-chip__arg,
-.call-chip__timer {
-  position: relative;
+@keyframes call-chip-glyph {
+  from {
+    opacity: 0;
+    transform: translateY(70%);
+    filter: blur(3px);
+  }
 }
-
 .call-chip__name {
-  font-weight: 500;
+  font-family: "Cascadia Code", ui-monospace, monospace;
+  font-weight: 600;
 }
-
 .call-chip__arg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   opacity: 0.72;
 }
-
 .call-chip__timer {
-  min-width: 6ch;
+  min-width: 5ch;
   font-variant-numeric: tabular-nums;
   text-align: right;
-  opacity: 0.5;
+  opacity: 0.62;
 }
-
-.call-chip__retry {
-  position: absolute;
-  inset: -5px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--cc-radius);
-  background: transparent;
-  appearance: none;
-  cursor: pointer;
-  outline: none;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
 .call-chip__sr {
   position: absolute;
   width: 1px;
@@ -165,17 +135,12 @@
 }
 
 :root:not([data-motion="full"]) {
-  .call-chip[data-status='done'] .call-chip__fill {
-    clip-path: inset(0 0 0 0);
-    transition: background-color 120ms ease;
-  }
-
+  .call-chip,
+  .call-chip__fill,
   .call-chip__glyph {
-    transform: none !important;
-    filter: none !important;
+    animation: none !important;
   }
-
-  .call-chip[data-pressed] {
+  button.call-chip:active {
     transform: none;
   }
 }

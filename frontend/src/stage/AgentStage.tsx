@@ -1,11 +1,43 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { useMotion } from "../motion";
+import { useMotion, useMotionBudget } from "../motion";
 import { duration, ease } from "../motion/tokens";
 import type { Trace } from "../types";
+import LatticeLoader from "../components/react-bits/LatticeLoader";
 import { deriveStage, type StageNode, type StageSpan } from "./derive";
+import { useElapsedMs } from "./useElapsed";
 import "../styles/stage.css";
+
+const MetaBalls = lazy(() => import("../components/react-bits/MetaBalls"));
+
+/**
+ * Decoration behind the empty stage only (before any real event). It holds a
+ * WebGL slot while on screen at full motion and unmounts as soon as the stage
+ * has events, because the stage itself then renders instead.
+ */
+function EmptyStageDecor() {
+  const { ref, active } = useMotionBudget<HTMLDivElement>("webgl");
+  return (
+    <div ref={ref} className="stage-empty-decor" aria-hidden="true">
+      {active && (
+        <Suspense fallback={null}>
+          <MetaBalls
+            color="#8f7dff"
+            cursorBallColor="#49dec6"
+            cursorBallSize={2.4}
+            ballCount={14}
+            animationSize={20}
+            clumpFactor={1.25}
+            speed={0.22}
+            hoverSmoothness={0.06}
+            enableTransparency
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}
 
 type Point = { x: number; y: number };
 
@@ -63,16 +95,6 @@ function SignalDot({ at }: { at: (t: number) => Point }) {
   );
 }
 
-function useSeconds(startAt: string | null) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!startAt) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
-  }, [startAt]);
-  return startAt ? Math.max(0, now - Date.parse(startAt)) / 1000 : 0;
-}
-
 export function AgentStage({
   events,
   cursor,
@@ -101,7 +123,8 @@ export function AgentStage({
   const openLlm = stage.spans.find(
     (span) => span.kind === "llm" && span.status === "open",
   );
-  const liveSeconds = useSeconds(live && openLlm ? openLlm.startAt : null);
+  const liveSeconds =
+    (useElapsedMs(live && openLlm ? openLlm.startAt : null) ?? 0) / 1000;
   const finalOf = (span: StageSpan | undefined) =>
     span &&
     final.spans.find(
@@ -124,6 +147,7 @@ export function AgentStage({
         aria-label={t("region")}
         data-testid="agent-stage"
       >
+        <EmptyStageDecor />
         <p>{t("empty")}</p>
       </section>
     );
@@ -192,6 +216,7 @@ export function AgentStage({
               className="stage-node"
               data-role={node.role}
               data-state={node.state}
+              data-live-wait={waiting && live ? "" : undefined}
               data-spotlit={
                 spotlight && node.role === spotlight ? true : undefined
               }
@@ -206,9 +231,15 @@ export function AgentStage({
               )}
               {waiting ? (
                 <span className="stage-waiting">
-                  <i aria-hidden="true" />
-                  <i aria-hidden="true" />
-                  <i aria-hidden="true" />
+                  {/* Lattice moves only while the real wait is ongoing. */}
+                  <LatticeLoader
+                    paused={!live}
+                    cellSize={3}
+                    gap={1.5}
+                    step={80}
+                    idleOpacity={0.22}
+                    className="stage-waiting-lattice"
+                  />
                   <span>
                     {live
                       ? t("waiting", { seconds: seconds.format(liveSeconds) })
