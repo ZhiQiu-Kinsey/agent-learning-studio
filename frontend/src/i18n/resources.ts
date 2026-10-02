@@ -8,6 +8,7 @@ import quiz from "./locales/zh-CN/quiz.json";
 import stage from "./locales/zh-CN/stage.json";
 import settings from "./locales/zh-CN/settings.json";
 import command from "./locales/zh-CN/command.json";
+import curriculum from "./locales/zh-CN/curriculum.json";
 
 /** Source-locale resources are bundled for first paint and define the key types. */
 export const sourceResources = {
@@ -21,4 +22,5 @@ export const sourceResources = {
   blocks,
   home,
   command,
+  curriculum,
 } as const;

@@ -1,10 +1,11 @@
-# Curriculum animation sources
+# Course map
 
-These components were read and downloaded from the official React Bits TypeScript/CSS registry. Copyright (c) 2026 David Haz; the shared [license](../react-bits/LICENSE.md) applies.
+`../Curriculum.tsx` renders the course map with three views: domains, roadmap and list. Everything shown comes from `/api/curriculum` and, for progress, from the local records in `src/progress/` (opened, completed a run, self-checked). Nothing here judges mastery.
 
-- [RotatingText](https://reactbits.dev/r/RotatingText-TS-CSS.json): original spring and per-character transitions retained. Added reduced-motion handling and suspension when the component is outside the viewport or the browser document is hidden. The curriculum reserves text dimensions and uses a 3.4-second interval.
-- [GlareHover](https://reactbits.dev/r/GlareHover-TS-CSS.json): original gradient sweep and variables retained. Added keyboard focus feedback, non-intercepting pseudo-elements, and a static reduced-motion variant.
+- `graph.ts`: pure data. Prerequisite graph (alias resolution, duplicate collapse, unknown/self prerequisites dropped and reported or thrown in strict mode, cycles always throw, implied edges hidden), filters, progress marks, spatial keyboard navigation and narrow-screen stages. Unit tests in `__tests__/`.
+- `layout.ts`: ELK layered layout (elkjs, EPL-2.0), loaded only with the roadmap chunk.
+- `RoadmapView.tsx`: lazy-loaded @xyflow/react canvas. Nodes are buttons with a roving tabindex; arrow keys move between lessons, Enter opens an available lesson, planned lessons only show their plan. Panning/zooming uses the Controls; reduced motion makes viewport moves instant.
+- `RoadmapSection.tsx`: switches to a vertical stage list at 720px and below, so the page never scrolls sideways.
+- `DomainBento.tsx`: domain tiles on React Bits [MagicBento](../react-bits/MagicBento.tsx) (MIT + Commons Clause, see `../react-bits/LICENSE.md`), with CountUp for lesson counts. Particles and the spotlight only run at the full motion level while the grid is on screen; only the hovered tile animates, so a single looping effect is ever visible.
 
-The curriculum also uses existing React Bits `AnimatedContent`, `CountUp`, `ShinyText`, `SpotlightCard`, and `SquishSwitch`. Statistics and availability are computed from the catalogue response; the visual treatment does not imply that planned courses are runnable.
-
-Reviewed but not added: `TiltedCard` is image-oriented and would distort the reading surface; `ScrollFloat` requires extra scroll ownership and cleanup for a mostly text-based course list. The selected effects support the specific navigation and reading interactions here.
+The list view keeps the existing SpotlightCard categories and SquishSwitch filter. RotatingText and GlareHover were removed with the old hero: they added continuous motion next to MagicBento.

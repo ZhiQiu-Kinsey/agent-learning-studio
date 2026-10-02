@@ -24,10 +24,11 @@ async function runEvents(request: APIRequestContext, runId: string) {
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/status", async (route) => {
     const response = await route.fetch();
-    await route.fulfill({
-      response,
-      json: { ...(await response.json()), config_ready: true },
-    });
+    // The test ends right after a reload; a status request still in flight then
+    // has its response disposed with the page. Nothing is waiting for it.
+    const body = await response.json().catch(() => undefined);
+    if (body === undefined) return;
+    await route.fulfill({ response, json: { ...body, config_ready: true } });
   });
   await runOffline(page);
 });

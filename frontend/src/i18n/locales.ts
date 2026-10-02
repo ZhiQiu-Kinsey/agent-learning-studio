@@ -27,6 +27,7 @@ export const namespaces = [
   "blocks",
   "home",
   "command",
+  "curriculum",
 ] as const;
 export type Namespace = (typeof namespaces)[number];
 

@@ -45,6 +45,7 @@ test("themes persist, follow system changes, sync tabs and cover mobile screens"
     path: capture("theme-code.png"),
   });
   await page.getByTestId("app-curriculum-button").click();
+  await page.getByTestId("curriculum-view-list").click();
   await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(
     (await (await page.request.get("/api/curriculum")).json()).categories
       .length,
@@ -156,10 +157,12 @@ test("reduced motion keeps learning and curriculum headings visible", async ({
   const heading = page.getByTestId("curriculum-title");
   await expect(heading).toHaveRole("heading");
   await expect(heading).toBeVisible();
-  await expect(heading.locator("..").locator("..").locator("..")).toHaveCSS(
-    "opacity",
-    "1",
+  await expect(page.getByTestId("curriculum-map")).toHaveCSS("opacity", "1");
+  await expect(page.getByTestId("curriculum-domain-card")).toHaveCount(
+    (await (await page.request.get("/api/curriculum")).json()).categories
+      .length,
   );
+  await page.getByTestId("curriculum-view-list").click();
   await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(
     (await (await page.request.get("/api/curriculum")).json()).categories
       .length,

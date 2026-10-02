@@ -17,7 +17,7 @@ Motion is decided once by `src/motion/` (`MotionProvider`): the OS preference an
 | responsive.css | Breakpoints |
 | experience.css | Shared luminous surfaces, full course sidebar and execution signal flow |
 | learning-experience.css | Interactive lesson hero, concept cards, walkthrough and reading layout |
-| curriculum-experience.css | Curriculum hero, domain navigation and animated overview |
+| curriculum-experience.css | Course map header, view switch, MagicBento domains, xyflow roadmap and its narrow list |
 | onboarding.css | Four prerequisite chapters, multi-level navigation and self-checks |
 | self-check.css | Lesson 自检 (confidence, option feedback, trace hunt, checkpoints) and 回顾; imported by those scenes |
 
