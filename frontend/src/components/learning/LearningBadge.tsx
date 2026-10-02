@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -201,18 +202,20 @@ function BadgeStage({ face }: { face: Face }) {
 /**
  * 回顾页的本机学习徽章：卡面只写这台设备的真实数字（打开过的场景、
  * 完成的运行、自测作答次数）。桌面 + 完整动效 + WebGL 名额允许时是可拖动的
- * 3D 挂牌（懒加载），否则是同内容的静态卡片。
+ * 3D 挂牌（懒加载），否则是同内容的静态卡片。children 放在说明下方。
  */
 export function LearningBadge({
   number,
   title,
   record,
   quizAttempts,
+  children,
 }: {
   number: string;
   title: string;
   record: LessonProgress | undefined;
   quizAttempts: number;
+  children?: ReactNode;
 }) {
   const { t } = useTranslation("lesson", { keyPrefix: "review.badge" });
   const desktop = useDesktop();
@@ -236,12 +239,15 @@ export function LearningBadge({
   );
   return (
     <section className="learning-badge" data-testid="learning-badge">
-      <div className="learning-badge-copy">
-        <span className="reading-eyebrow">
-          <Shuffle text={t("kicker")} />
-        </span>
-        <h3>{t("title")}</h3>
-        <p>{desktop && !reduced ? t("hint") : t("staticHint")}</p>
+      <div className="learning-badge-main">
+        <div className="learning-badge-copy">
+          <span className="reading-eyebrow">
+            <Shuffle text={t("kicker")} />
+          </span>
+          <h3>{t("title")}</h3>
+          <p>{desktop && !reduced ? t("hint") : t("staticHint")}</p>
+        </div>
+        {children}
       </div>
       {desktop ? <BadgeStage face={face} /> : <StaticBadge face={face} />}
     </section>

@@ -138,131 +138,131 @@ export function ReviewScene({ studio }: SceneProps) {
         }
         record={record}
         quizAttempts={numbers.quizAttempts}
-      />
+      >
+        <div className="review-grid">
+          <section className="review-card" data-testid="review-scenes">
+            <h3>{t("scenes.title")}</h3>
+            <ul className="review-scenes">
+              {sceneIds.map((scene) => {
+                const visited = !!record?.scenes[scene];
+                return (
+                  <li
+                    key={scene}
+                    data-scene={scene}
+                    data-visited={visited}
+                    className={visited ? "is-visited" : undefined}
+                  >
+                    {visited ? (
+                      <Check size={14} aria-hidden="true" />
+                    ) : (
+                      <Circle size={14} aria-hidden="true" />
+                    )}
+                    {tl(`scenes.${scene}`)}
+                    <span className="sr-only">
+                      {visited ? t("scenes.visited") : t("scenes.notVisited")}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
 
-      <div className="review-grid">
-        <section className="review-card" data-testid="review-scenes">
-          <h3>{t("scenes.title")}</h3>
-          <ul className="review-scenes">
-            {sceneIds.map((scene) => {
-              const visited = !!record?.scenes[scene];
-              return (
-                <li
-                  key={scene}
-                  data-scene={scene}
-                  data-visited={visited}
-                  className={visited ? "is-visited" : undefined}
-                >
-                  {visited ? (
-                    <Check size={14} aria-hidden="true" />
-                  ) : (
-                    <Circle size={14} aria-hidden="true" />
-                  )}
-                  {tl(`scenes.${scene}`)}
-                  <span className="sr-only">
-                    {visited ? t("scenes.visited") : t("scenes.notVisited")}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+          {numbers.quizAttempts > 0 && (
+            <section className="review-card" data-testid="review-confidence">
+              <h3>{t("confidence.title")}</h3>
+              {confidenceRows.length ? (
+                <ul className="review-confidence">
+                  {confidenceRows.map((level) => (
+                    <li key={level} data-level={level}>
+                      <b>{tq(`confidence.${level}`)}</b>
+                      {t("confidence.row", numbers.confidence[level])}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>{t("confidence.none")}</p>
+              )}
+              <p className="review-muted">
+                {t("quiz.attempts", { count: numbers.quizAttempts })}
+                {numbers.hasLegacyQuiz && ` ${t("quiz.legacy")}`}
+              </p>
+            </section>
+          )}
 
-        {numbers.quizAttempts > 0 && (
-          <section className="review-card" data-testid="review-confidence">
-            <h3>{t("confidence.title")}</h3>
-            {confidenceRows.length ? (
-              <ul className="review-confidence">
-                {confidenceRows.map((level) => (
-                  <li key={level} data-level={level}>
-                    <b>{tq(`confidence.${level}`)}</b>
-                    {t("confidence.row", numbers.confidence[level])}
+          <section className="review-card" data-testid="review-capabilities">
+            <h3>{t("capabilities.title")}</h3>
+            {capabilities.length ? (
+              <ul className="lesson-capabilities">
+                {capabilities.map((capability) => (
+                  <li key={capability} data-capability={capability}>
+                    {tl(`capabilities.${capability}`)}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p>{t("confidence.none")}</p>
+              <p className="review-muted">{t("capabilities.none")}</p>
             )}
-            <p className="review-muted">
-              {t("quiz.attempts", { count: numbers.quizAttempts })}
-              {numbers.hasLegacyQuiz && ` ${t("quiz.legacy")}`}
-            </p>
           </section>
-        )}
 
-        <section className="review-card" data-testid="review-capabilities">
-          <h3>{t("capabilities.title")}</h3>
-          {capabilities.length ? (
-            <ul className="lesson-capabilities">
-              {capabilities.map((capability) => (
-                <li key={capability} data-capability={capability}>
-                  {tl(`capabilities.${capability}`)}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="review-muted">{t("capabilities.none")}</p>
-          )}
-        </section>
-
-        <section className="review-card" data-testid="review-next">
-          <h3>{t("next.title")}</h3>
-          {curriculum === null && (
-            <p className="review-muted" role="status">
-              {t("next.loading")}
-            </p>
-          )}
-          {curriculum === "error" && (
-            <p className="review-muted">{t("next.unavailable")}</p>
-          )}
-          {curriculum && curriculum !== "error" && !next && (
-            <p className="review-muted">{t("next.last")}</p>
-          )}
-          {next && (
-            <>
-              <p className="review-next-title" data-lesson={next.id}>
-                <span className="review-next-number">
-                  {formatLessonNumber(next.number)}
-                </span>
-                {next.title}
+          <section className="review-card" data-testid="review-next">
+            <h3>{t("next.title")}</h3>
+            {curriculum === null && (
+              <p className="review-muted" role="status">
+                {t("next.loading")}
               </p>
-              <h4>{t("next.prerequisites")}</h4>
-              {next.prerequisites.length ? (
-                <ul className="review-prerequisites">
-                  {next.prerequisites.map((id) => {
-                    const runs = progress.lessons[id]?.runs.count ?? 0;
-                    return (
-                      <li key={id} data-lesson={id}>
-                        <span>{titleOf(id)}</span>
-                        <small>
-                          {runs
-                            ? t("next.runs", { count: runs })
-                            : t("next.noRuns")}
-                        </small>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="review-muted">{t("next.none")}</p>
-              )}
-              {next.status === "available" ? (
-                <Button
-                  type="button"
-                  data-testid="review-next-open"
-                  disabled={studio.running}
-                  onClick={() => studio.selectLesson(next.id)}
-                >
-                  {t("next.open")}
-                  <ArrowRight size={15} aria-hidden="true" />
-                </Button>
-              ) : (
-                <p className="review-muted">{t("next.planned")}</p>
-              )}
-            </>
-          )}
-        </section>
-      </div>
+            )}
+            {curriculum === "error" && (
+              <p className="review-muted">{t("next.unavailable")}</p>
+            )}
+            {curriculum && curriculum !== "error" && !next && (
+              <p className="review-muted">{t("next.last")}</p>
+            )}
+            {next && (
+              <>
+                <p className="review-next-title" data-lesson={next.id}>
+                  <span className="review-next-number">
+                    {formatLessonNumber(next.number)}
+                  </span>
+                  {next.title}
+                </p>
+                <h4>{t("next.prerequisites")}</h4>
+                {next.prerequisites.length ? (
+                  <ul className="review-prerequisites">
+                    {next.prerequisites.map((id) => {
+                      const runs = progress.lessons[id]?.runs.count ?? 0;
+                      return (
+                        <li key={id} data-lesson={id}>
+                          <span>{titleOf(id)}</span>
+                          <small>
+                            {runs
+                              ? t("next.runs", { count: runs })
+                              : t("next.noRuns")}
+                          </small>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="review-muted">{t("next.none")}</p>
+                )}
+                {next.status === "available" ? (
+                  <Button
+                    type="button"
+                    data-testid="review-next-open"
+                    disabled={studio.running}
+                    onClick={() => studio.selectLesson(next.id)}
+                  >
+                    {t("next.open")}
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </Button>
+                ) : (
+                  <p className="review-muted">{t("next.planned")}</p>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      </LearningBadge>
     </section>
   );
 }
