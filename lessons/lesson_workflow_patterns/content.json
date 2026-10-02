@@ -13,7 +13,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "REASONING / LESSON 17",
+          "eyebrow": "REASONING / WORKFLOWS",
           "headline": "不是每件事都要 Agent 自己决定。",
           "highlight": "流程固定时，就让程序来排。",
           "takeaway": "提示链、路由、并行是三种由程序决定流程、由模型完成每一步的工作流。它们比 Agent 循环更容易预测，也更容易测量。"
@@ -69,6 +69,16 @@
             "提示链（Prompt Chaining）把任务拆成固定顺序的几步。本课的提示链有三步：从一段笔记里提取 3 个要点，把要点改写成问答，再给问答起标题。上一步的输出原样成为下一步的输入。问题在于，任何一步格式出错，后面每一步都会在错误的基础上继续。",
             "所以每一步之后有一道检查门（Gate）：第一步必须恰好 3 行、都以“- ”开头；第二步必须是 3 组 Q/A；第三步必须是 3 个不超过 8 字的 JSON 字符串。检查门由程序执行，不通过就停在这一步，记成 gate_passed 为 false 的 lesson.chain_step 事件。"
           ]
+        },
+        {
+          "id": "predict-fallback",
+          "type": "predict",
+          "prompt": "运行“路由：20 张人工标注工单”之前先猜：这次运行会出现几个 lesson.route 事件？",
+          "experiment": "routing",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.route"
+          }
         },
         {
           "id": "mq-gate",
@@ -247,16 +257,6 @@
               "evidence": "lesson.report"
             }
           ]
-        },
-        {
-          "id": "predict-fallback",
-          "type": "predict",
-          "prompt": "运行“路由：20 张人工标注工单”之前先猜：这次运行会出现几个 lesson.route 事件？",
-          "experiment": "routing",
-          "rule": {
-            "kind": "count_events",
-            "event": "lesson.route"
-          }
         }
       ]
     },
@@ -271,30 +271,60 @@
           "id": "code-chain",
           "type": "annotated-source",
           "path": "lessons/lesson_workflow_patterns/runtime.py",
-          "start": 34,
-          "end": 136,
+          "start": 41,
+          "end": 78,
           "notes": [
             {
-              "id": "n37",
-              "line": 37,
-              "anchor": "if step == 0:",
-              "text": "每一步有自己的格式要求，检查完全由程序执行。"
+              "id": "n41",
+              "line": 41,
+              "anchor": "def gate(step: int, output: str)",
+              "text": "每一步有自己的格式要求，检查完全由程序执行，不请模型判断。"
             },
             {
-              "id": "n121",
-              "line": 121,
+              "id": "n44",
+              "line": 44,
+              "anchor": "if step == 0:",
+              "text": "第 1 步要恰好 3 行要点，都以“- ”开头。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "anchor": "if step == 1:",
+              "text": "第 2 步要 3 组问答：Q、A 各 3 行，共 6 行。"
+            },
+            {
+              "id": "n53",
+              "line": 53,
+              "anchor": "titles = json.loads(output.strip())",
+              "text": "第 3 步的输出必须能解析成 JSON 数组，每个标题不超过 8 字。"
+            },
+            {
+              "id": "n63",
+              "line": 63,
+              "anchor": "for index, (name, instruction) in enumerate(CHAIN):",
+              "text": "三步的顺序写死在 CHAIN 里：下一步做什么由程序决定，不由模型决定。"
+            },
+            {
+              "id": "n65",
+              "line": 65,
+              "anchor": "response = context.complete({\"messages\": [{\"role\": \"user\", \"content\": f\"{instruction}",
+              "text": "每一步是一次独立请求，只带这一步的指令和上一步的输出。"
+            },
+            {
+              "id": "n70",
+              "line": 70,
               "anchor": "context.emit(\"lesson.chain_step\", {\"step\": index",
               "text": "每一步都记录输出和检查结果。"
             },
             {
-              "id": "n124",
-              "line": 124,
+              "id": "n74",
+              "line": 74,
               "anchor": "if not passed:",
               "text": "检查门不通过就停，不把不合格的输出传下去。"
             },
             {
-              "id": "n127",
-              "line": 127,
+              "id": "n77",
+              "line": 77,
               "anchor": "current = output",
               "text": "通过之后，这一步的输出成为下一步的输入。"
             }
@@ -304,32 +334,76 @@
           "id": "code-route",
           "type": "annotated-source",
           "path": "lessons/lesson_workflow_patterns/runtime.py",
-          "start": 57,
-          "end": 168,
+          "start": 83,
+          "end": 137,
           "notes": [
             {
-              "id": "n57",
-              "line": 57,
+              "id": "n83",
+              "line": 83,
+              "anchor": "LABELS = {\"course\"",
+              "text": "四个标签就是四条分支，路由只能从这几个里选。"
+            },
+            {
+              "id": "n84",
+              "line": 84,
+              "anchor": "FALLBACK = \"other\"",
+              "text": "兜底标签：模型输出不在列表里时走这里，不让一张工单拖垮整批。"
+            },
+            {
+              "id": "n86",
+              "line": 86,
               "anchor": "TICKETS = [",
               "text": "20 张工单都带人工标注，准确率就是和它对照算出来的。"
             },
             {
-              "id": "n87",
-              "line": 87,
+              "id": "n108",
+              "line": 108,
+              "anchor": "ROUTER_SYSTEM = (",
+              "text": "提示词列出全部标签，只要求输出一个标签，不要解释。"
+            },
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "first = lines[0].strip().strip(",
+              "text": "只取第一行，去掉引号、反引号和句号再比较，不区分大小写。"
+            },
+            {
+              "id": "n116",
+              "line": 116,
               "anchor": "return (first, False) if first in LABELS else (F",
               "text": "不在列表里的标签一律走兜底，返回值里同时标出 fallback。"
             },
             {
-              "id": "n90",
-              "line": 90,
-              "anchor": "def confusion(rows: list[tuple[str, str]]) -> li",
-              "text": "混淆矩阵的行是人工标注、列是预测，对角线以外就是分错的数量。"
+              "id": "n122",
+              "line": 122,
+              "anchor": "for index, (ticket_id, text, gold) in enumerate(TICKETS, 1):",
+              "text": "每张工单一次请求，20 张就是 20 次模型调用。"
             },
             {
-              "id": "n148",
-              "line": 148,
+              "id": "n130",
+              "line": 130,
               "anchor": "context.emit(\"lesson.route\", {\"ticket\": ticket_i",
               "text": "每张工单记录人工标注、预测、原文和是否走了兜底。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "if predicted != gold or fallback:",
+              "text": "分错的和走了兜底的工单列进报告，供人复核。"
+            },
+            {
+              "id": "n136",
+              "line": 136,
+              "anchor": "correct = sum(g == p for g, p in pairs)",
+              "text": "准确率只和人工标注比；混淆矩阵在报告里由 confusion 计算。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 89,
+              "end": 106,
+              "label": "数据：其余 18 张人工标注工单（t03–t20）"
             }
           ]
         },
@@ -337,30 +411,54 @@
           "id": "code-fanout",
           "type": "annotated-source",
           "path": "lessons/lesson_workflow_patterns/runtime.py",
-          "start": 171,
-          "end": 210,
+          "start": 142,
+          "end": 180,
           "notes": [
             {
-              "id": "n181",
-              "line": 181,
-              "anchor": "1 if parallel else int(lesson) - 6, branch=f\"les",
+              "id": "n143",
+              "line": 143,
+              "anchor": "TOPICS = {",
+              "text": "三个子任务互不依赖，谁先完成都不影响别的，这是能并行的前提。"
+            },
+            {
+              "id": "n156",
+              "line": 156,
+              "anchor": "def one(index: int, lesson: str) -> str:",
+              "text": "一个子任务就是一次独立请求；并行和串行跑的是同一个函数。"
+            },
+            {
+              "id": "n157",
+              "line": 157,
+              "anchor": "started = time.perf_counter()",
+              "text": "每个分支的开始和结束时间都在后端测量，不依赖浏览器时钟。"
+            },
+            {
+              "id": "n161",
+              "line": 161,
+              "anchor": "1 if parallel else index, branch=lesson if parallel else None)",
               "text": "并行请求带 branch 标记，响应按它配对；串行不带。"
             },
             {
-              "id": "n188",
-              "line": 188,
+              "id": "n169",
+              "line": 169,
               "anchor": "with ThreadPoolExecutor(max_workers=len(TOPICS))",
               "text": "三个请求在线程里同时发出，共用同一个调用预算。"
             },
             {
-              "id": "n193",
-              "line": 193,
-              "anchor": "wall = round((time.perf_counter() - origin) * 10",
-              "text": "墙钟时间由后端的 perf_counter 测量，不依赖浏览器时钟。"
+              "id": "n173",
+              "line": 173,
+              "anchor": "outputs = {lesson: one(index, lesson) for index",
+              "text": "串行组一个接一个发出，墙钟时间约等于三段耗时之和。"
             },
             {
-              "id": "n196",
-              "line": 196,
+              "id": "n175",
+              "line": 175,
+              "anchor": "wall = round((time.perf_counter() - origin) * 10",
+              "text": "墙钟时间从第一个请求发出前，算到最后一个响应返回。"
+            },
+            {
+              "id": "n178",
+              "line": 178,
               "anchor": "context.emit(\"lesson.parallel\", {\"mode\": \"parall",
               "text": "同时记录墙钟时间和各分支耗时之和，两者的差就是重叠的部分。"
             }
@@ -886,7 +984,7 @@
     },
     {
       "name": "branch",
-      "note": "并行请求与其响应共用的配对标签，值如 lesson-7；只写在平台事件里，不发给服务商。串行请求不带。"
+      "note": "并行请求与响应的配对标签，值如 messages-context；只记在平台事件里，不发给服务商，串行请求不带。"
     },
     {
       "name": "perf_counter",

@@ -1,4 +1,4 @@
-"""第 17 课行为测试：确定性模型数据；检查门、路由统计和计时在 Python 中真实执行。"""
+"""工作流模式课行为测试：确定性模型数据；检查门、路由统计和计时在 Python 中真实执行。"""
 import unittest
 
 from pydantic import ValidationError
@@ -90,7 +90,7 @@ class FanoutTests(unittest.TestCase):
         self.assertGreaterEqual(s["wall_ms"], 140)
         self.assertLess(p["wall_ms"], s["wall_ms"])
         self.assertGreater(p["sum_of_branches_ms"], p["wall_ms"], "并行时各分支耗时之和大于墙钟时间")
-        self.assertEqual({d.get("branch") for d in of(parallel, "request")}, {"lesson-7", "lesson-8", "lesson-9"})
+        self.assertEqual({d.get("branch") for d in of(parallel, "request")}, {"messages-context", "application-state", "context-budget"})
         self.assertTrue(all("branch" not in d for d in of(serial, "request")))
         self.assertEqual(sorted(n for k, _, n in serial if k == "request"), [1, 2, 3])
 
