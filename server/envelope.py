@@ -23,8 +23,11 @@ DEFAULT_ACTOR = "agent"
 SPAN_EVENTS = {
     "run_start": {"phase": "start", "span_kind": "run", "closed_by": "done"},
     "done": {"phase": "end", "span_kind": "run", "opened_by": "run_start"},
-    "request": {"phase": "start", "span_kind": "llm", "closed_by": "response", "model_payload": True},
-    "response": {"phase": "end", "span_kind": "llm", "opened_by": "request", "model_payload": True},
+    # 并行分支的请求与响应带同一个 branch，按它配对；没有 branch 时关闭最近一个未关闭的 llm span。
+    "request": {"phase": "start", "span_kind": "llm", "closed_by": "response", "model_payload": True,
+                "pair_field": "branch"},
+    "response": {"phase": "end", "span_kind": "llm", "opened_by": "request", "model_payload": True,
+                 "pair_field": "branch"},
     "tool_call": {"phase": "start", "span_kind": "tool", "closed_by": "tool_result",
                   "pair_field": "id"},
     "tool_result": {"phase": "end", "span_kind": "tool", "opened_by": "tool_call",
@@ -75,7 +78,8 @@ class SpanTracker:
     - 带 round 的事件属于该轮的 step span，round 变化时开始新 step，上一 step 中未关闭的
       llm/tool span 保持未关闭（表示没有结果，例如被停止）；
     - request/tool_call 打开 llm/tool span，父级是当前 step（无 round 时是 run）；
-    - response 关闭最近一个未关闭的 llm span；tool_result 按 tool_call_id 关闭对应 tool span；
+    - response 按 branch 关闭同一分支的 llm span（没有 branch 时关闭最近一个未关闭的）；
+      tool_result 按 tool_call_id 关闭对应 tool span；
     - 找不到可关闭的 span 时按瞬时事件处理，不凭空制造配对；
     - 瞬时事件挂在最内层未关闭的 llm/tool span 下；没有时挂在当前 step（无 round 时挂在 run）。
     """

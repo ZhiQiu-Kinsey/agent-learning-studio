@@ -66,13 +66,13 @@
 | 事件 | 阶段 | span |
 | --- | --- | --- |
 | `run_start` → `done` | 开始 / 结束 | `run` 根 span，`parent_span_id = null` |
-| `request` → `response` | 开始 / 结束 | `llm` |
+| `request` → `response` | 开始 / 结束；并行分支按 `data.branch` 配对 | `llm` |
 | `tool_call` → `tool_result` | 开始 / 结束，按 `id` ↔ `tool_call_id` 配对 | `tool` |
 | `answer`、`error`、`lesson.*` 及其他未声明类型 | 瞬时 | 挂在当前 span |
 
 - **step**：没有独立事件。同一 `round` 的事件属于同一个 step span，`round` 变化即开始新 step，父级是 run。`agent` 层预留给多 Agent 课程，当前单 Agent 运行不生成。
 - `llm`/`tool` span 的父级是当前 step；事件没有 `round` 时父级是 run。
-- `response` 关闭最近一个未关闭的 `llm` span；`tool_result` 关闭 `id` 相同的 `tool` span。找不到可关闭的 span 时按瞬时事件处理，不凭空配对。
+- `response` 带 `branch` 时关闭同一 `branch` 的 `llm` span，不带时关闭最近一个未关闭的 `llm` span（课程用 `context.complete(..., branch=...)` 发起并行请求）；`tool_result` 关闭 `id` 相同的 `tool` span。找不到可关闭的 span 时按瞬时事件处理，不凭空配对。
 - 瞬时事件挂在最内层未关闭的 `llm`/`tool` span；没有时，有 `round` 挂在该轮 step，无 `round` 挂在 run。
 - 新 step 开始或运行结束时，仍未关闭的 `llm`/`tool` span 保持未关闭，表示“没有结果”（例如被停止），不补造结束事件。
 - 开始/结束事件的 `span_id` 就是它打开/关闭的 span；瞬时事件的 `span_id` 是所在 span。span id 形如 `run-1`、`step-2`、`llm-3`、`tool-1`，只在单次运行内唯一。

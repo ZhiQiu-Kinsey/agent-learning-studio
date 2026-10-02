@@ -37,13 +37,15 @@ export const TRACE_CONTRACT = {
       "phase": "start",
       "span_kind": "llm",
       "closed_by": "response",
-      "model_payload": true
+      "model_payload": true,
+      "pair_field": "branch"
     },
     "response": {
       "phase": "end",
       "span_kind": "llm",
       "opened_by": "request",
-      "model_payload": true
+      "model_payload": true,
+      "pair_field": "branch"
     },
     "tool_call": {
       "phase": "start",

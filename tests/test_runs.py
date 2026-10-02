@@ -159,6 +159,23 @@ class EnvelopeAndSpanTests(RunApiTestCase):
         self.assertEqual(placed[9], ("llm-1", "step-2", "llm"), "瞬时事件挂在当前未关闭的 span 下")
         self.assertEqual(placed[10], ("run-1", None, "run"))
 
+    def test_parallel_branches_pair_responses_by_branch_not_by_order(self):
+        tracker = SpanTracker()
+        placed = [tracker.place(kind, data, number) for kind, data, number in [
+            ("run_start", {}, None),
+            ("request", {"branch": "a"}, 1),
+            ("request", {"branch": "b"}, 1),
+            ("response", {"branch": "a"}, 1),
+            ("response", {"branch": "b"}, 1),
+            ("request", {}, 2),
+            ("response", {}, 2),
+        ]]
+        self.assertEqual(placed[1][0], "llm-1")
+        self.assertEqual(placed[2][0], "llm-2")
+        self.assertEqual(placed[3][0], "llm-1", "先返回的分支 a 关闭自己的 span，而不是最近打开的 b")
+        self.assertEqual(placed[4][0], "llm-2")
+        self.assertEqual((placed[5][0], placed[6][0]), ("llm-3", "llm-3"), "没有 branch 时行为不变")
+
     def test_span_table_declares_consistent_pairs_and_frontend_mirror_is_generated(self):
         for kind, rule in SPAN_EVENTS.items():
             if rule["phase"] == "start":

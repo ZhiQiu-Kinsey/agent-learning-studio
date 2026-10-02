@@ -9,6 +9,7 @@ import copy
 import inspect
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -43,6 +44,7 @@ class RunContext:
     _answered: bool = field(default=False, init=False)
     _tool_count: int = field(default=0, init=False)
     _model_count: int = field(default=0, init=False)
+    _budget_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def check_cancelled(self):
         if self.cancelled():
@@ -65,8 +67,11 @@ class RunContext:
         if kind == "answer":
             self._answered = True
 
-    def complete(self, body: dict, round_number: int = 1) -> dict:
-        """Use the configured provider with immutable request/response evidence."""
+    def complete(self, body: dict, round_number: int = 1, *, branch: str | None = None) -> dict:
+        """Use the configured provider with immutable request/response evidence.
+
+        Parallel callers pass a distinct ``branch`` so each response closes its own request span.
+        """
         self.check_cancelled()
         if self.completion is None:
             raise ValueError("本课未配置模型调用能力。")
@@ -75,12 +80,13 @@ class RunContext:
         if request.get("model", self.model) != self.model:
             raise ValueError("课程模型请求必须使用当前配置的模型。")
         request["model"] = self.model
-        self.emit("request", {"body": request, "representation": self.representation}, round_number)
+        tag = {} if branch is None else {"branch": branch}
+        self.emit("request", {"body": request, "representation": self.representation, **tag}, round_number)
         started = time.perf_counter()
         response = self._invoke_completion(request, self.api_key)
         self.emit("response", {
             "body": response, "representation": self.representation,
-            "duration_ms": round((time.perf_counter() - started) * 1000),
+            "duration_ms": round((time.perf_counter() - started) * 1000), **tag,
         }, round_number)
         self.check_cancelled()
         return response
@@ -91,10 +97,11 @@ class RunContext:
 
     def _invoke_completion(self, body, api_key):
         self.check_cancelled()
-        self._check_model_budget()
         if self.completion is None:
             raise ValueError("本课未配置模型调用能力。")
-        self._model_count += 1
+        with self._budget_lock:  # parallel branches share one budget
+            self._check_model_budget()
+            self._model_count += 1
         return self.completion(body, api_key)
 
     def call_tool(self, name: str, arguments: dict, available_tools: dict,
