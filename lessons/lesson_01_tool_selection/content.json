@@ -26,21 +26,21 @@
               "id": "01-interface",
               "label": "01 / INTERFACE",
               "title": "先声明能力",
-              "description": "工具定义描述名称、用途和参数。模型看到的是接口说明，具体执行留在 Python。",
+              "description": "工具描述（Tool Description）写明名称、用途和参数。模型只看到这些说明，具体执行留在 Python。",
               "token": "tools · JSON Schema"
             },
             {
               "id": "02-execution",
               "label": "02 / EXECUTION",
               "title": "再执行行动",
-              "description": "tool_calls 是模型的调用提议。运行器解析参数，在登记的函数中找到并执行工具。",
+              "description": "模型在 tool_calls 里写下要调用什么，自己并不执行。模型外面的程序叫运行层（Harness），本课的运行器解析参数，在登记的函数中找到并执行工具。",
               "token": "AVAILABLE_TOOLS"
             },
             {
               "id": "03-evidence",
               "label": "03 / EVIDENCE",
               "title": "让结果有出处",
-              "description": "通过 tool_call_id 连接调用与返回值。下一轮模型收到结果，才有依据组织回答。",
+              "description": "通过 tool_call_id 连接调用与工具结果（Tool Result）。下一轮模型收到它，才有依据组织回答。",
               "token": "role=tool · tool_call_id"
             }
           ]
@@ -58,7 +58,7 @@
           "type": "prose",
           "title": "提出调用、执行、观察是三个步骤",
           "paragraphs": [
-            "模型返回 tool_calls 时，只是在提出行动：function.name 说明工具，arguments 是待解析的 JSON 字符串。运行器解析参数、查找已登记函数并执行，然后把结果包装为 ok=true 或 ok=false。比如模型提出 add_numbers(19, 23)，此时尚不能证明已经算出了 42；应继续找 Python 返回的工具结果（Tool Result），也就是 tool_result 事件。\n工具结果通过 role=tool 的消息回传，tool_call_id 与原调用 id 配对。下一轮模型才能在请求中看到结果并组织回答。每次请求携带的消息序列就是消息历史（Message History）。模型选择行动，Python 执行动作，消息历史让两者接成循环，这就是最小的 Agent 循环（Agent Loop）。"
+            "模型返回 tool_calls 时，只是在提出行动：function.name 说明工具，arguments 是待解析的 JSON 字符串。运行器解析参数、查找已登记函数并执行，然后把结果包装为 ok=true 或 ok=false。比如模型提出 add_numbers(19, 23)，此时尚不能证明已经算出了 42；应继续找 Python 返回的工具结果，也就是 tool_result 事件。\n工具结果通过 role=tool 的消息回传，tool_call_id 与原调用 id 配对。下一轮模型才能在请求中看到结果并组织回答。每次请求携带的消息序列就是消息历史（Message History）。模型选择行动，Python 执行动作，消息历史让两者接成循环，这就是最小的 Agent 循环（Agent Loop）。围绕这个循环搭起来、由模型决定下一步行动的整个系统，就是 Agent。"
           ]
         },
         {
@@ -71,7 +71,7 @@
               {
                 "id": "a",
                 "text": "工具名称、用途说明和参数的 JSON Schema",
-                "feedback": "对。tools 是接口说明，模型据此决定是否提出调用。"
+                "feedback": "对。tools 里是工具定义，模型据此决定是否提出调用。"
               },
               {
                 "id": "b",
@@ -81,7 +81,7 @@
               {
                 "id": "c",
                 "text": "AVAILABLE_TOOLS 里登记的函数对象",
-                "feedback": "不对。AVAILABLE_TOOLS 是运行器查找并执行函数的本地登记表，不会发给模型。"
+                "feedback": "不对。AVAILABLE_TOOLS 是本机字典，登记了运行器能执行的函数，不会发给模型。"
               }
             ],
             "correct": "a",
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "相同一轮不等于同时执行",
           "paragraphs": [
-            "“计算 19 加 23，并告诉我现在几点”有两个独立任务，计算的参数已经由用户给出，不需要等时间结果。模型可以在同一个响应中提出两个调用；当前运行器仍按列表逐个执行，并将各自的结果回传。\n网页接入真实模型，Python 在本机执行工具。比较不同模型或不同输入时，应以实际请求和结果为准，不假定每次调用顺序完全相同。回放只查看这次运行已记录的轨迹（Trace），不重新查时间或运行工具。"
+            "“计算 19 加 23，并告诉我现在几点”有两个独立任务，计算的参数已经由用户给出，不需要等时间结果。模型可以在同一个响应中提出两个调用；当前运行器仍按列表逐个执行，并将各自的结果回传。\n网页接入真实模型，Python 在本机执行工具。比较不同模型或不同输入时，应以实际请求和结果为准，不假定每次调用顺序完全相同。回放（Replay）只查看这次运行已记录的轨迹（Trace），不重新查时间或运行工具。\n自动化测试用的是离线测试模式（Offline Test Mode）：模型响应由课程脚本生成，工具仍真实执行，结果不代表真实模型。"
           ]
         },
         {
@@ -133,8 +133,8 @@
               "id": "step-1",
               "label": "理解任务",
               "actor": "用户 → 模型",
-              "title": "工具说明进入模型上下文",
-              "body": "问题和 tools 一起发给模型。名称、用途与参数 Schema 帮助它判断是否需要加法工具；此时还没有执行 Python。",
+              "title": "工具定义进入模型上下文",
+              "body": "问题和 tools 一起进入这一轮的上下文（Context），也就是模型能看到的全部内容。名称、用途与参数 Schema 帮助它判断是否需要加法工具；此时还没有执行 Python。",
               "code": "{\n  \"role\": \"user\",\n  \"content\": \"帮我计算 19 加 23\"\n}\n\n// tools 中声明可用能力\n{ \"name\": \"add_numbers\" }",
               "evidence": "展开第一轮 request，确认 tools 包含 add_numbers 及数字参数 a、b。"
             },
@@ -203,7 +203,7 @@
             {
               "id": "n20",
               "line": 20,
-              "text": "additionalProperties=False 告诉模型不要传 schema 之外的参数。即使模型仍然多传，Python 调用 add_numbers(**arguments) 也会触发 TypeError，被运行器包装为 ok=false。"
+              "text": "additionalProperties=False 告诉模型不要传 Schema 之外的参数。即使模型仍然多传，Python 调用 add_numbers(**arguments) 也会触发 TypeError，被运行器包装为 ok=false。"
             },
             {
               "id": "n30",
@@ -237,7 +237,7 @@
             {
               "id": "n66",
               "line": 66,
-              "text": "AVAILABLE_TOOLS 是可执行白名单：运行器只按名称在这个字典里查找函数，模型提出别的名字不会被执行。"
+              "text": "AVAILABLE_TOOLS 登记了可以执行的函数：运行器只按名称在这个字典里查找，模型提出别的名字不会被执行。"
             }
           ]
         },
@@ -256,7 +256,7 @@
             {
               "id": "n87",
               "line": 87,
-              "text": "只有响应里没有 tool_calls 时，content 才被当作最终回答。有 tool_calls 时，这一轮只是“提议行动”。"
+              "text": "只有响应里没有 tool_calls 时，content 才被当作最终回答。有 tool_calls 时，这一轮只是调用提议。"
             },
             {
               "id": "n95",
@@ -273,7 +273,7 @@
         {
           "id": "code-decision",
           "type": "decision",
-          "title": "工具由 Python 按白名单执行，模型只提出调用",
+          "title": "只执行登记过的工具，模型只提出调用",
           "chosen": "模型返回的 tool_calls 只是提议。execute_tool 解析参数后，只在 AVAILABLE_TOOLS 中按名称查找函数并执行，再把结果包装为 ok=true 的 result 或 ok=false 的错误，通过 role=tool 消息交回模型。",
           "alternatives": [
             {
@@ -283,7 +283,7 @@
             },
             {
               "id": "dynamic-dispatch",
-              "title": "按模型给出的名字用 getattr 或 eval 动态调用",
+              "title": "按模型给出的名字，动态查找任意 Python 函数来调用",
               "why_not": "模型生成的名字不可信，可能指向未登记甚至危险的函数。显式字典把可执行范围限定在本课登记的两个函数。"
             }
           ]
@@ -594,12 +594,12 @@
                 {
                   "id": "a",
                   "text": "Python 已经执行加法，结果一定是 42。",
-                  "feedback": "还不能确定。tool_calls 只是模型提出的行动请求；Python 是否执行、结果是多少，要看随后的 tool_result。"
+                  "feedback": "还不能确定。tool_calls 只是模型的调用提议；Python 是否执行、结果是多少，要看随后的 tool_result。"
                 },
                 {
                   "id": "b",
                   "text": "模型提出了调用；需要继续查看 Python 执行结果才能确认。",
-                  "feedback": "对。响应里的调用只是提议；运行器解析参数、执行登记的函数之后，tool_result 才是这次执行的收据。"
+                  "feedback": "对。响应里的调用只是提议；运行器解析参数、执行登记的函数之后，tool_result 才记录了这次执行的结果。"
                 },
                 {
                   "id": "c",
@@ -608,7 +608,7 @@
                 }
               ],
               "correct": "b",
-              "explanation": "tool_calls 是行动请求，不是执行收据。当前平台由本机运行器解析参数、选择登记函数并执行；tool_result 才记录这次实际执行的结果。"
+              "explanation": "tool_calls 是调用提议，不是执行结果。当前平台由本机运行器解析参数、选择登记函数并执行；tool_result 才记录这次实际执行的结果。"
             },
             {
               "id": "clock-source",
@@ -690,5 +690,43 @@
         }
       ]
     }
-  }
+  },
+  "code_notes": [
+    {
+      "name": "tools",
+      "note": "请求体里的工具定义列表（tools.py 的 TOOLS），只有名称、描述和参数 Schema，不含函数实现。"
+    },
+    {
+      "name": "tool_calls",
+      "note": "模型响应里的调用提议列表，每项有 id、function.name 和 arguments；没有它才算最终回答。"
+    },
+    {
+      "name": "arguments",
+      "note": "模型写出的参数，是 JSON 字符串；execute_tool 用 json.loads 解析成字典后才传给函数。"
+    },
+    {
+      "name": "tool_call_id",
+      "note": "role=tool 消息里的字段，值等于对应调用的 id；服务商靠它把结果配回调用。"
+    },
+    {
+      "name": "tool_call",
+      "note": "运行器开始执行某个调用时记录的事件，一次调用一条；不同于响应里的 tool_calls 列表。"
+    },
+    {
+      "name": "tool_result",
+      "note": "运行器执行完一个调用后记录的事件，含 tool_call_id、工具名和包装后的结果。"
+    },
+    {
+      "name": "ok",
+      "note": "工具结果的成败标记：true 时带 result，false 时带 error_type 和 error。"
+    },
+    {
+      "name": "AVAILABLE_TOOLS",
+      "note": "工具名到 Python 函数的字典；运行器只在这里按名称查找，没登记的名字不会执行。"
+    },
+    {
+      "name": "execute_tool",
+      "note": "运行器里执行工具的函数：解析 arguments，按名称查 AVAILABLE_TOOLS，执行后包装成 ok 结果。"
+    }
+  ]
 }

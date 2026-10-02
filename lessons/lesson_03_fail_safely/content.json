@@ -16,7 +16,7 @@
           "eyebrow": "CHAPTER 03 / FAIL SAFELY",
           "headline": "让失败被看见，",
           "highlight": "让边界被守住。",
-          "takeaway": "循环结束，不等于工具成功。错误也应该成为可理解、可核对的观察。"
+          "takeaway": "循环结束，不等于工具成功。错误也应该成为可理解、可核对的工具结果。"
         },
         {
           "id": "concepts",
@@ -40,7 +40,7 @@
               "id": "03-lifecycle",
               "label": "03 / LIFECYCLE",
               "title": "区分两种状态",
-              "description": "done=completed 表示循环结束。除法是否成功仍看工具 ok，正确解释错误也有价值。",
+              "description": "done 事件记下运行的终态（Terminal State），completed 只表示循环正常结束。除法是否成功仍看工具 ok，正确解释错误也有价值。",
               "token": "done ≠ tool success"
             }
           ]
@@ -50,15 +50,15 @@
           "type": "prose",
           "title": "Schema 说明接口，Python 负责守住边界",
           "paragraphs": [
-            "除法工具说明 a、b 应为数字，b 不能为 0。这能帮助模型生成合适的调用，但工具说明不是执行权限，也不能保证模型永远给对参数。Python 函数仍检查数字类型、有限范围和非零除数，运行器只查找 AVAILABLE_TOOLS 中明确登记的名称，这份登记表就是白名单（Allowlist）。\n这课没有让模型返回的任意代码直接执行。未知名称、损坏的 JSON、参数不匹配或除零，会在分派或工具检查中被拒绝。判断安全边界是否成立，要看实际执行路径，不能只看 Prompt 写了什么。"
+            "除法的工具定义写明 a、b 应为数字，b 不能为 0。这能帮助模型生成合适的调用，但工具定义不是执行权限，也不能保证模型永远给对参数。Python 函数仍检查数字类型、是否为有限值（排除 NaN 和无穷大）以及除数是否为零；运行器只查找 AVAILABLE_TOOLS 中明确登记的名称，这些名称构成白名单（Allowlist）。\n这课没有让模型返回的任意代码直接执行。未知名称、损坏的 JSON、参数不匹配或除零，会在运行器查找函数或工具校验时被拒绝。判断安全边界是否成立，要看实际执行路径，不能只看提示词写了什么。"
           ]
         },
         {
           "id": "section-2",
           "type": "prose",
-          "title": "失败也可以作为结构化观察",
+          "title": "失败也要作为结构化错误回传",
           "paragraphs": [
-            "正常除法被包装为 ok=true 与 result；失败则返回 ok=false、error_type 和 error。运行器仍生成与原调用配对的 role=tool 消息，让下一轮模型读到具体原因，而不是让这次工具错误直接丢失。\n因此，tool_result 这个事件出现只说明有结果回传，不说明运算成功。要展开内容检查 ok，再决定能否报告 quotient。对于 12 除以 0，正确后续是如实说明错误并请求有效输入，不能编造商。"
+            "正常除法被包装为 ok=true 与 result；失败则返回 ok=false、error_type 和 error，这叫结构化错误（Structured Error）。运行器仍生成与原调用配对的 role=tool 消息，让下一轮模型读到具体原因，而不是让这次工具错误直接丢失。\n因此，tool_result 这个事件出现只说明有结果回传，不说明运算成功。要展开内容检查 ok，再决定能否报告 quotient。对于 12 除以 0，正确后续是如实说明错误并请求有效输入，不能编造商。"
           ]
         },
         {
@@ -93,7 +93,7 @@
           "type": "prose",
           "title": "循环结束与计算成功分开判断",
           "paragraphs": [
-            "工具失败后，模型可以给出说明错误的最终回答，整个请求因此正常结束。界面的 done=completed 表示运行循环结束；除法是否成功，仍取决于工具结果（Tool Result）中的 ok。对错误进行了正确处理，也可能是这道边界练习的合格表现。\n原样重试（Retry）同一个除零参数，不会让数学规则改变。Prompt 要求修正输入，运行器还用有限轮数作为停止条件（Stop Condition），避免持续调用。未知工具和损坏参数可以通过内部程序测试验证拒绝路径；这些人为构造的输入不能冒充真实模型曾经提出的调用。"
+            "工具失败后，模型可以给出说明错误的最终回答，整个请求因此正常结束。界面的 done=completed 表示运行循环结束；除法是否成功，仍取决于工具结果中的 ok。对错误进行了正确处理，也可能是这道边界练习的合格表现。\n原样重试同一个除零参数，不会让数学规则改变。提示词要求模型请用户修正输入；运行器还设了轮数上限，作为停止条件（Stop Condition），避免一直调用。\n未知工具和损坏参数用故障注入检验：由测试脚本构造这类模型响应，看运行器怎样拒绝。这些人为构造的调用不能冒充真实模型提出过的调用。"
           ]
         },
         {
@@ -127,7 +127,7 @@
           "id": "walkthrough",
           "type": "walkthrough",
           "title": "当除数为零，Agent 该怎么继续？",
-          "description": "沿着“12 除以 0”的拒绝路径，观察输入校验、结构化失败与后续解释。所有片段均是教学示意。",
+          "description": "沿着“12 除以 0”的拒绝路径，观察输入校验、结构化错误与后续解释。所有片段均是教学示意。",
           "steps": [
             {
               "id": "step-1",
@@ -137,14 +137,14 @@
               "body": "模型可能提出 a=12、b=0。参数能被解析，不代表满足数学规则，也不代表工具一定能够成功执行。",
               "code": "{\n  \"function\": {\n    \"name\": \"divide_numbers\",\n    \"arguments\": \"{\\\"a\\\":12,\\\"b\\\":0}\"\n  }\n}",
               "language": "json",
-              "evidence": "检查 tool_call 的名称及参数；区分 JSON 格式正确与领域规则允许。"
+              "evidence": "检查 tool_call 的名称及参数；区分 JSON 格式正确与业务规则允许。"
             },
             {
               "id": "step-2",
               "label": "守住边界",
               "actor": "Python 工具",
               "title": "Python 明确拒绝除零",
-              "body": "工具检查数字类型、有限范围和非零除数。模型提出调用不会绕过这些检查，执行名称也必须在白名单中。",
+              "body": "工具检查数字类型、有限值和非零除数。模型提出调用不会绕过这些检查，执行名称也必须在白名单中。",
               "code": "# divide_numbers 中的实际校验\nif b == 0:\n    raise ValueError(\n        \"除数不能为 0；请提供非零除数。\"\n    )",
               "language": "python",
               "evidence": "对照工具源码和实际结果，确认错误来自执行路径中的校验。"
@@ -214,7 +214,7 @@
             {
               "id": "n49",
               "line": 49,
-              "text": "浮点运算溢出可能得到 inf 而不抛错，所以对结果也再检查一次。"
+              "text": "浮点运算溢出可能得到无穷大而不抛错，所以对结果也再检查一次。"
             }
           ]
         },
@@ -251,7 +251,7 @@
           "id": "code-decision",
           "type": "decision",
           "title": "可预期的工具失败作为结构化结果回传，而不是中断运行",
-          "chosen": "execute_tool 把参数和领域错误包装为 {ok: false, error_type, error}，仍以 role=tool 消息回传；SYSTEM_PROMPT 要求只有 ok=true 才能报告结果，ok=false 时如实说明并请用户修正。",
+          "chosen": "execute_tool 把参数错误和业务规则错误包装为 {ok: false, error_type, error}，仍以 role=tool 消息回传；SYSTEM_PROMPT 要求只有 ok=true 才能报告结果，ok=false 时如实说明并请用户修正。",
           "alternatives": [
             {
               "id": "abort-on-error",
@@ -332,7 +332,7 @@
             },
             {
               "id": "run-status",
-              "text": "done 的 status：运行循环是否正常结束，这与工具是否成功是两回事。",
+              "text": "done 事件记录的终态：运行循环是否正常结束，这与工具是否成功是两回事。",
               "selector": {
                 "event": "done",
                 "path": "data.status"
@@ -442,18 +442,18 @@
         },
         {
           "id": "injected-faults",
-          "title": "离线注入：未登记的工具与损坏的参数",
+          "title": "故障注入：未登记的工具与损坏的参数",
           "hypothesis": "模型响应里出现未登记的工具名或无法解析的参数时，运行器在调用任何函数之前就拒绝，并把 error_type 与 error 作为失败结果配对回传。",
           "arms": [
             {
               "id": "unknown",
               "exercise": "unknown",
-              "label": "离线注入：调用未登记的 unregistered_tool"
+              "label": "故障注入：调用未登记的 unregistered_tool"
             },
             {
               "id": "malformed",
               "exercise": "malformed",
-              "label": "离线注入：divide_numbers 的参数不是合法 JSON"
+              "label": "故障注入：divide_numbers 的参数不是合法 JSON"
             }
           ],
           "observe": [
@@ -496,7 +496,7 @@
           "guide": [
             {
               "action": "narrate",
-              "text": "这两组是离线故障注入：模型响应由测试脚本故意构造，用来检验运行器的拒绝路径。"
+              "text": "这两组是故障注入：模型响应由测试脚本故意构造，用来检验运行器的拒绝路径。"
             },
             {
               "action": "spotlight",
@@ -584,7 +584,7 @@
                 {
                   "id": "a",
                   "text": "除法已成功，completed 可以覆盖 ok=false。",
-                  "feedback": "completed 只说明运行生命周期结束；工具结果的 ok=false 仍是这次除法失败的事实，不会被覆盖。"
+                  "feedback": "completed 只说明运行已进入终态；工具结果的 ok=false 仍是这次除法失败的事实，不会被覆盖。"
                 },
                 {
                   "id": "b",
@@ -598,7 +598,7 @@
                 }
               ],
               "correct": "c",
-              "explanation": "done 描述运行生命周期，ok 描述工具执行结果。正常结束的错误说明不会把失败变成成功；这道练习要求识别错误并正确回传、解释。"
+              "explanation": "done 记录运行的终态，ok 描述工具执行结果。正常结束的错误说明不会把失败变成成功；这道练习要求识别错误并正确回传、解释。"
             },
             {
               "id": "invalid-retry",
@@ -607,7 +607,7 @@
                 {
                   "id": "a",
                   "text": "说明除数不能为零，请用户提供非零除数。",
-                  "feedback": "对。除数为零违反领域规则，应保留失败原因，并请用户给出有效输入。"
+                  "feedback": "对。除数为零违反业务规则，应保留失败原因，并请用户给出有效输入。"
                 },
                 {
                   "id": "b",
@@ -621,7 +621,7 @@
                 }
               ],
               "correct": "a",
-              "explanation": "这是输入不满足领域规则，不是暂时的网络故障。原样重试无法解决，擅自改数会改变用户任务；应保留失败原因并请求有效输入。"
+              "explanation": "这是输入不满足业务规则，不是暂时的网络故障。原样重试无法解决，擅自改数会改变用户任务；应保留失败原因并请求有效输入。"
             },
             {
               "id": "allowlist-boundary",
@@ -681,5 +681,39 @@
         }
       ]
     }
-  }
+  },
+  "code_notes": [
+    {
+      "name": "ok",
+      "note": "工具结果的成败标记：true 时带 result，false 时带 error_type 和 error。"
+    },
+    {
+      "name": "error_type",
+      "note": "失败类别，取异常类名：ValueError、TypeError 或 JSONDecodeError。"
+    },
+    {
+      "name": "error",
+      "note": "异常消息原文，例如“除数不能为 0；请提供非零除数。”，原样回传给模型。"
+    },
+    {
+      "name": "quotient",
+      "note": "divide_numbers 成功时返回的商，只在 ok=true 的结果里出现。"
+    },
+    {
+      "name": "AVAILABLE_TOOLS",
+      "note": "工具名到函数的字典，也就是本课的白名单；这里只登记了 divide_numbers。"
+    },
+    {
+      "name": "execute_tool",
+      "note": "运行器里执行工具的函数：只把参数与校验类异常包装为 ok=false，其他异常继续上抛。"
+    },
+    {
+      "name": "done",
+      "note": "运行结束事件，记录这次运行的终态（completed、error 等），不反映工具是否成功。"
+    },
+    {
+      "name": "completed",
+      "note": "运行正常结束时的终态：模型给出了最终回答。工具失败后如实说明，也会是 completed。"
+    }
+  ]
 }
