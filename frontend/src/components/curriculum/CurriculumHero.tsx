@@ -86,7 +86,7 @@ export function CurriculumHero({
       className="curriculum-map-header curriculum-hero"
       aria-labelledby="curriculum-title"
     >
-      <Backdrop name="topography" className="curriculum-hero-backdrop" />
+      <Backdrop name="grainient" className="curriculum-hero-backdrop" />
       <div className="curriculum-hero-scrim" aria-hidden="true" />
       <div className="curriculum-map-copy">
         <HeroReveal step={0}>
