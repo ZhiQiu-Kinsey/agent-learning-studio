@@ -113,11 +113,9 @@ export function isLabShortcutTarget(target: unknown, key: string): boolean {
 /**
  * Maps a keydown to a lab action, or null when it is not ours. Ctrl, ⌘ and
  * Alt combinations always belong to the browser or the command palette.
- * While the guide bar runs, ← / → (with or without Shift) belong to it.
  */
 export function resolveLabShortcut(
   event: ShortcutKeyEvent,
-  { guideActive = false }: { guideActive?: boolean } = {},
 ): LabShortcut | null {
   if (event.defaultPrevented || event.isComposing) return null;
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
@@ -126,10 +124,8 @@ export function resolveLabShortcut(
     case " ":
       return event.shiftKey ? null : "toggle-play";
     case "ArrowLeft":
-      if (guideActive) return null;
       return event.shiftKey ? "jump-back" : "step-back";
     case "ArrowRight":
-      if (guideActive) return null;
       return event.shiftKey ? "jump-forward" : "step-forward";
     case "[":
       return "slower";

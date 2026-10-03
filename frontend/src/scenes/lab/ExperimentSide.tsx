@@ -1,9 +1,19 @@
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { CircleCheck, CircleMinus, Compass, Lock, Play } from "lucide-react";
+import {
+  CircleCheck,
+  CircleMinus,
+  Compass,
+  Lock,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import type { ObserveStatus } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { GlossaryText } from "../../content/glossary/Glossary";
 import { Button } from "../../components/ui/button";
+import SparkBurst from "../../components/react-bits/SparkBurst";
+import StarBorder from "../../components/react-bits/StarBorder";
 
 /**
  * Beside the experiment card: how many observe points the learner's own run
@@ -16,6 +26,7 @@ export function ExperimentSide({
   finished,
   running,
   guiding,
+  guidesDone,
   onStartGuide,
 }: {
   experiment: Experiment;
@@ -25,10 +36,21 @@ export function ExperimentSide({
   finished: boolean;
   running: boolean;
   guiding: boolean;
+  /** Guides finished on the current run. */
+  guidesDone: number;
   onStartGuide: () => void;
 }) {
   const { t } = useTranslation("lesson", { keyPrefix: "lab" });
   const { conclusion } = experiment;
+  // When a guide ends, keyboard focus comes back to its button (without
+  // scrolling: the learner stays on the evidence the guide left them at).
+  const startButton = useRef<HTMLButtonElement>(null);
+  const wasGuiding = useRef(guiding);
+  useEffect(() => {
+    if (wasGuiding.current && !guiding)
+      startButton.current?.focus({ preventScroll: true });
+    wasGuiding.current = guiding;
+  }, [guiding]);
   const checkable = statuses.filter((point) => point.status !== "manual");
   const found = checkable.filter((point) => point.status === "found").length;
   const ran = checkable.some((point) => point.status !== "no-run");
@@ -56,27 +78,59 @@ export function ExperimentSide({
         </div>
       )}
       {experiment.guide.length > 0 && (
-        <div className="experiment-guide-start">
+        <div
+          className="experiment-guide-start"
+          data-ready={(finished && !running) || undefined}
+        >
           <span className="experiment-side-icon" aria-hidden="true">
             <Compass size={18} />
+            {/* Celebrates a guide the learner just finished on this run. */}
+            {guidesDone > 0 && <SparkBurst key={guidesDone} />}
           </span>
           <div>
             <h4>{t("guide.title")}</h4>
             <p>
-              {finished
-                ? t("guide.ready", { count: experiment.guide.length })
-                : t("guide.needRun")}
+              {!finished
+                ? t("guide.needRun")
+                : guidesDone > 0
+                  ? t("guide.done")
+                  : t("guide.ready", { count: experiment.guide.length })}
             </p>
           </div>
-          <Button
-            size="sm"
-            disabled={!finished || running || guiding}
-            data-testid="guide-start"
-            onClick={onStartGuide}
-          >
-            <Play size={14} aria-hidden="true" />
-            {t("guide.start")}
-          </Button>
+          {finished && !running && !guiding && guidesDone === 0 ? (
+            // First guide on a fresh run: a slow star trail invites it.
+            <StarBorder
+              className="experiment-guide-invite"
+              color="var(--role-runtime)"
+              speed="6s"
+            >
+              <Button
+                ref={startButton}
+                size="sm"
+                data-testid="guide-start"
+                onClick={onStartGuide}
+              >
+                <Play size={14} aria-hidden="true" />
+                {t("guide.start")}
+              </Button>
+            </StarBorder>
+          ) : (
+            <Button
+              ref={startButton}
+              size="sm"
+              variant={guidesDone > 0 ? "outline" : "default"}
+              disabled={!finished || running || guiding}
+              data-testid="guide-start"
+              onClick={onStartGuide}
+            >
+              {guidesDone > 0 ? (
+                <RotateCcw size={14} aria-hidden="true" />
+              ) : (
+                <Play size={14} aria-hidden="true" />
+              )}
+              {guidesDone > 0 ? t("guide.again") : t("guide.start")}
+            </Button>
+          )}
         </div>
       )}
       {conclusion && (

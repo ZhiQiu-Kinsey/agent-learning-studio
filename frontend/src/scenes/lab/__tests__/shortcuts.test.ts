@@ -112,16 +112,6 @@ describe("resolveLabShortcut", () => {
     expect(resolveLabShortcut(key("]", { isComposing: true }))).toBeNull();
     expect(resolveLabShortcut(key(" ", { defaultPrevented: true }))).toBeNull();
   });
-
-  it("yields arrows to an active guide bar, keeps the rest", () => {
-    const guide = { guideActive: true };
-    expect(resolveLabShortcut(key("ArrowLeft"), guide)).toBeNull();
-    expect(
-      resolveLabShortcut(key("ArrowRight", { shiftKey: true }), guide),
-    ).toBeNull();
-    expect(resolveLabShortcut(key(" "), guide)).toBe("toggle-play");
-    expect(resolveLabShortcut(key("?"), guide)).toBe("help");
-  });
 });
 
 describe("jumpByTime", () => {

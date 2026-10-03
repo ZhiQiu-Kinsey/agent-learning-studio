@@ -52,7 +52,11 @@ export default function EvidenceBoard({
   return (
     <>
       {children}
-      <section className="evidence-board" aria-label={t("region")}>
+      <section
+        className="evidence-board"
+        aria-label={t("region")}
+        data-evidence-board=""
+      >
         <header className="evidence-board-heading">
           <span>
             <ClipboardCheck size={17} />
@@ -61,9 +65,7 @@ export default function EvidenceBoard({
           <small>{t("sync")}</small>
         </header>
         {!selected || !report ? (
-          <p className="evidence-board-empty">
-            {t("empty")}
-          </p>
+          <p className="evidence-board-empty">{t("empty")}</p>
         ) : (
           <>
             {reports.length > 1 && (
@@ -109,7 +111,9 @@ export default function EvidenceBoard({
                   <dl className="evidence-metrics">
                     {metrics.slice(0, 12).map((metric, index) => (
                       <div key={index}>
-                        <dt>{text(metric.label, t("metricN", { n: index + 1 }))}</dt>
+                        <dt>
+                          {text(metric.label, t("metricN", { n: index + 1 }))}
+                        </dt>
                         <dd>{text(metric.value, t("notProvided"))}</dd>
                       </div>
                     ))}
@@ -185,9 +189,7 @@ export default function EvidenceBoard({
                 {(rows.length > 40 ||
                   metrics.length > 12 ||
                   checks.length > 24) && (
-                  <p className="evidence-report-note">
-                    {t("truncated")}
-                  </p>
+                  <p className="evidence-report-note">{t("truncated")}</p>
                 )}
               </motion.div>
             </AnimatePresence>

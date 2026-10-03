@@ -14,25 +14,25 @@ import {
 export function useLabShortcuts({
   studio,
   enabled,
-  guideActive,
   onHelp,
 }: {
   studio: StudioState;
-  /** Lab scene visible, nothing running, the learner's own run on screen. */
+  /**
+   * Lab scene visible, nothing running, the learner's own run on screen, and
+   * no guide open (the guide owns the keyboard and the replay position).
+   */
   enabled: boolean;
-  /** The guide bar owns ← / → while it is open. */
-  guideActive: boolean;
   onHelp: () => void;
 }) {
   // Latest values without re-binding the listener on every cursor change.
-  const latest = useRef({ studio, guideActive, onHelp });
-  latest.current = { studio, guideActive, onHelp };
+  const latest = useRef({ studio, onHelp });
+  latest.current = { studio, onHelp };
 
   useEffect(() => {
     if (!enabled) return;
     const onKey = (event: KeyboardEvent) => {
-      const { studio: s, guideActive: guide, onHelp: help } = latest.current;
-      const action = resolveLabShortcut(event, { guideActive: guide });
+      const { studio: s, onHelp: help } = latest.current;
+      const action = resolveLabShortcut(event);
       if (!action || s.running) return;
       if (action !== "help" && !s.events.length) return;
       event.preventDefault();

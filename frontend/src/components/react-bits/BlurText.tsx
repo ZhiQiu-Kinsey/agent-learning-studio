@@ -1,8 +1,13 @@
 // React Bits BlurText, adapted from https://reactbits.dev/r/BlurText-TS-CSS.json.
-// Copyright (c) 2026 David Haz. See LICENSE.md. Adds semantic text and reduced motion.
+// Copyright (c) 2026 David Haz. See LICENSE.md. Adds semantic text and reduced motion;
+// Latin words, numbers and code-like runs animate as one piece so they never break mid-word.
 import { motion, useInView } from "motion/react";
 import { useReducedMotion } from "../../motion";
 import { useRef } from "react";
+
+/** One animated piece per CJK character or mark, one per Latin word or space run. */
+const pieces = (text: string) =>
+  text.match(/[\w.:/'-]+|\s+|[^\w.:/'\s-]/gu) ?? [];
 
 export default function BlurText({
   text,
@@ -20,7 +25,7 @@ export default function BlurText({
     <span ref={ref} className={`rb-blur-text ${className}`} aria-label={text}>
       {reduced
         ? text
-        : Array.from(text).map((letter, index) => (
+        : pieces(text).map((letter, index) => (
             <motion.span
               key={index}
               aria-hidden="true"
@@ -41,7 +46,7 @@ export default function BlurText({
                 times: [0, 0.5, 1],
               }}
             >
-              {letter === " " ? "\u00a0" : letter}
+              {/^\s+$/.test(letter) ? "\u00a0" : letter}
             </motion.span>
           ))}
     </span>

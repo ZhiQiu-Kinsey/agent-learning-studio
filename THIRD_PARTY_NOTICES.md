@@ -47,3 +47,4 @@ SOFTWARE.
 - elkjs（EPL-2.0）：课程地图路线图布局，懒加载。
 - three、@react-three/fiber、@react-three/drei、meshline、@react-three/rapier（MIT）与 @dimforge/rapier3d-compat（Apache-2.0）：回顾页 3D 学习徽章（Lanyard），懒加载。
 - @xyflow/react（MIT）、cmdk（MIT）、i18next / react-i18next（MIT）、motion（MIT）、@axe-core/playwright（MPL-2.0，仅测试使用）。
+- react-joyride（MIT）：实验导览的遮罩与定位，随导览懒加载。
