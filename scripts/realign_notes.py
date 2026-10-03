@@ -5,9 +5,10 @@
 --base 指定批注当时对应的源码版本（默认 HEAD）。
 
 对准方法：
-1. 源码和 --base 版本不同、且块的行号还停在 --base 那一版时，按两版源码的逐行对比得到
-   旧行号到新行号的映射，块的起止行、折叠区间和批注都按它移动：在块中间插入几行，只有
-   后面的行号跟着变。块已经对准过或手改过时不再套映射，所以连跑两次结果不变。
+1. 源码和 --base 版本不同时，按两版源码的逐行对比得到旧行号到新行号的映射。块里每个行号
+   （起止、批注、折叠）只要还等于 --base 那一版 content.json 里的值，就按映射移动：在块中间
+   插入几行，只有后面的行号跟着变。已经动过的行号（跑过一次或手改过）保持原样，所以连跑
+   两次结果不变。
 2. 源码和 --base 版本相同（已经提交，或文件是新的）时没有对比可用，退回按锚点：
    批注移到最近的、包含锚点的行；起止行和折叠按相邻批注的位移推算，结果要人工复核。
 无论哪种，批注最终都以锚点为准：映射后的行不含锚点时，改找最近的匹配行；找不到或
@@ -15,6 +16,7 @@
 validate_lessons 复核批注密度。
 """
 import argparse
+import copy
 import difflib
 import json
 import subprocess
@@ -78,13 +80,24 @@ class LineMap:
         return max(1, j1)  # 删掉的行：往前找上一行
 
 
-def realign_block(block, lines, mapping=None):
-    """把一个读码块对准到新源码 lines；返回 [(位置, 旧行, 新行)]。无法确定时抛 ValueError。"""
+def realign_block(block, lines, mapping=None, base=None):
+    """把一个读码块对准到新源码 lines；返回 [(位置, 旧行, 新行)]。无法确定时抛 ValueError。
+
+    mapping 是两版源码的行号映射，base 是 --base 那一版 content.json 里的同一个块。
+    有映射时逐个字段判断：行号还等于 base 里的值，说明还没动过，按映射移动；已经不同的
+    （跑过一次或作者手改过）保持原样，所以连跑两次结果不变。没有映射时按锚点和相邻批注推算。
+    """
     moves = []
     notes = block.get("notes", [])
     old_lines = {note["id"]: note["line"] for note in notes}
+    base_notes = {note["id"]: note["line"] for note in (base or {}).get("notes", [])}
+    base_folds = {fold["id"]: fold for fold in (base or {}).get("folds", [])}
+
+    def untouched(value, base_value):
+        return mapping is not None and base is not None and value == base_value
+
     for note in notes:
-        guess = mapping.start(note["line"]) if mapping else note["line"]
+        guess = mapping.start(note["line"]) if untouched(note["line"], base_notes.get(note["id"])) else note["line"]
         if 1 <= guess <= len(lines) and note["anchor"] in lines[guess - 1]:
             target = guess
         else:
@@ -95,46 +108,39 @@ def realign_block(block, lines, mapping=None):
             moves.append((note["id"], note["line"], target))
             note["line"] = target
 
-    if mapping:
-        start_of, end_of = mapping.start, mapping.end
-    else:
-        # 没有两版源码可比：按相邻批注的位移推算。起点跟后面最近的批注走（多半是上方插入了行），
-        # 折叠的起点跟前面最近的批注、终点跟后面最近的批注（折叠里没有批注）。
-        points = sorted((old_lines[note["id"]], note["line"] - old_lines[note["id"]]) for note in notes)
+    # 没有两版源码可比：按相邻批注的位移推算。起点跟后面最近的批注走（多半是上方插入了行），
+    # 折叠的起点跟前面最近的批注、终点跟后面最近的批注（折叠里没有批注）。
+    points = sorted((old_lines[note["id"]], note["line"] - old_lines[note["id"]]) for note in notes)
 
-        def shift_before(line):
-            before = [shift for old, shift in points if old <= line]
-            return before[-1] if before else (points[0][1] if points else 0)
+    def shift_before(line):
+        before = [shift for old, shift in points if old <= line]
+        return before[-1] if before else (points[0][1] if points else 0)
 
-        def shift_after(line):
-            after = [shift for old, shift in points if old >= line]
-            return after[0] if after else (points[-1][1] if points else 0)
+    def shift_after(line):
+        after = [shift for old, shift in points if old >= line]
+        return after[0] if after else (points[-1][1] if points else 0)
 
-        def start_of(line):
-            return line + shift_after(line)
+    def place(value, base_value, kind, inside_fold=False):
+        if mapping is not None and base is not None:
+            if value != base_value:
+                return value  # 已经动过：保持原样
+            return mapping.start(value) if kind == "start" else mapping.end(value)
+        if inside_fold:
+            if kind == "start":
+                return value + (shift_before(value) if any(old < value for old, _ in points) else shift_after(value))
+            return value + (shift_after(value) if any(old > value for old, _ in points) else shift_before(value))
+        return value + (shift_after(value) if kind == "start" else shift_before(value))
 
-        def end_of(line):
-            return line + shift_before(line)
-
-    def fold_start(line):
-        if mapping:
-            return mapping.start(line)
-        return line + (shift_before(line) if any(old < line for old, _ in points) else shift_after(line))
-
-    def fold_end(line):
-        if mapping:
-            return mapping.end(line)
-        return line + (shift_after(line) if any(old > line for old, _ in points) else shift_before(line))
-
-    for key, place in (("start", start_of), ("end", end_of)):
+    for key in ("start", "end"):
         if block.get(key):
-            new = max(1, min(len(lines), place(block[key])))
+            new = max(1, min(len(lines), place(block[key], (base or {}).get(key), key)))
             if new != block[key]:
                 moves.append((key, block[key], new))
                 block[key] = new
     for fold in block.get("folds", []):
-        for key, place in (("start", fold_start), ("end", fold_end)):
-            new = max(1, min(len(lines), place(fold[key])))
+        base_fold = base_folds.get(fold["id"], {})
+        for key in ("start", "end"):
+            new = max(1, min(len(lines), place(fold[key], base_fold.get(key), key, inside_fold=True)))
             if new != fold[key]:
                 moves.append((f"{fold['id']}.{key}", fold[key], new))
                 fold[key] = new
@@ -157,22 +163,9 @@ def git_show(path, base):
         return None
 
 
-def line_fields(block):
-    """块里所有行号：起止、批注、折叠。用来判断这个块是否已经动过。"""
-    return (block.get("start"), block.get("end"),
-            sorted((note["id"], note["line"]) for note in block.get("notes", [])),
-            sorted((fold["id"], fold["start"], fold["end"]) for fold in block.get("folds", [])))
-
-
-def mapping_for(block, base_block, old_lines, new_lines):
-    """只有块的行号还停在 --base 那一版时，两版源码的映射才适用于它。
-
-    已经对准过（例如连跑两次）或作者手改过行号时返回 None：再套一次映射会把起止行和折叠
-    又移一遍。这时退回按锚点检查，没有批注移动就什么都不改。
-    """
+def mapping_for(old_lines, new_lines):
+    """源码和 --base 版本不同时返回两版的行号映射，否则返回 None。"""
     if old_lines is None or old_lines == new_lines:
-        return None
-    if base_block is None or line_fields(base_block) != line_fields(block):
         return None
     return LineMap(old_lines, new_lines)
 
@@ -201,24 +194,30 @@ def main(argv=None):
             base_data = json.loads(base_text)
             base_blocks = {block["id"]: block for block in (base_data.get("scenes", {}).get("code") or {})
                            .get("blocks", []) if block.get("type") == "annotated-source"}
-        changed = False
-        for block in (data.get("scenes", {}).get("code") or {}).get("blocks", []):
+        changed, broken = False, False
+        blocks = (data.get("scenes", {}).get("code") or {}).get("blocks", [])
+        for index, block in enumerate(blocks):
             if block.get("type") != "annotated-source":
                 continue
             lines = split_lines((ROOT / block["path"]).read_text(encoding="utf-8"))
             old_text = git_show(block["path"], args.base)
-            old = split_lines(old_text) if old_text is not None else None
-            mapping = mapping_for(block, base_blocks.get(block["id"]), old, lines)
+            mapping = mapping_for(split_lines(old_text) if old_text is not None else None, lines)
+            # 在副本上对准，整块成功才替换：一条批注找不到锚点时，不留下移了一半的块。
+            candidate = copy.deepcopy(block)
             try:
-                moves = realign_block(block, lines, mapping)
+                moves = realign_block(candidate, lines, mapping, base_blocks.get(block["id"]))
             except ValueError as error:
                 print(f"{path.parent.name}：{error}", file=sys.stderr)
-                failed = True
+                failed = broken = True
                 continue
-            how = "按两版源码对比" if mapping else "按锚点推算，请复核起止行与折叠"
+            blocks[index] = candidate
+            how = "按两版源码对比" if mapping and block["id"] in base_blocks else "按锚点推算，请复核起止行与折叠"
             for where, old_line, new_line in moves:
                 print(f"{path.parent.name} {block['id']}.{where}：{old_line} → {new_line}（{how}）")
             changed = changed or bool(moves)
+        if broken:
+            print(f"{path.parent.name}：有块无法对准，这个文件没有写入。", file=sys.stderr)
+            continue
         if changed and args.check:
             failed = True  # --check：有要移动的也算没通过，留给作者去跑一次不带 --check 的命令
         elif changed:
