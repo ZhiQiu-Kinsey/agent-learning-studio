@@ -180,7 +180,7 @@ test("an interrupted event stream resumes from the last received seq without dup
   );
 });
 
-test("zero division returns an error result and live mode excludes fault injection presets", async ({
+test("zero division returns an error result; fault injection runs locally without a model", async ({
   page,
   request,
 }) => {
@@ -188,9 +188,10 @@ test("zero division returns an error result and live mode excludes fault injecti
     await request.get("/api/lessons/fail-safely")
   ).json();
   const zero = detail.exercises.find((item) => item.id === "zero")!;
-  const live = detail.exercises.filter((item) => !item.offline_only);
-  const injected = detail.exercises.filter((item) => item.offline_only);
-  expect(injected.length).toBeGreaterThan(0);
+  const injected = detail.exercises.filter(
+    (item) => item.requires_model === false,
+  );
+  expect(injected.map((item) => item.id)).toEqual(["unknown", "malformed"]);
   await page.goto("/");
   await page
     .getByTestId("course-nav")
@@ -205,25 +206,33 @@ test("zero division returns an error result and live mode excludes fault injecti
     page.getByTestId("lab-event-detail").locator("pre"),
   ).toContainText('"ok": false');
   await expect(page.getByTestId("lab-answer")).toContainText("0");
-  await page
-    .getByRole("button", { name: t("lab:bench.composer.openCommands") })
-    .click();
-  const menu = page.getByRole("listbox", {
-    name: t("lab:bench.composer.commands"),
-  });
-  await expect(menu.getByRole("option")).toHaveCount(live.length);
-  for (const item of injected)
-    await expect(menu.locator(`[data-key="${item.id}"]`)).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("lab-question-input")).toBeEditable();
-  // The fault-injection experiment shows its arms but cannot run them from the page.
+
+  // The fault-injection experiment: the course program builds the faulty call,
+  // the runner rejects it before any function runs, and no model is called.
   await page
     .getByRole("radio", { name: t("lesson:lab.experimentTab", { number: 2 }) })
     .click();
   for (const item of injected) {
-    const arm = page.getByTestId(`experiment-arm-${item.id}`);
-    await expect(arm).toBeDisabled();
-    await expect(arm).toContainText(t("lesson:lab.armOffline"));
+    await page.getByTestId(`experiment-arm-${item.id}`).click();
+    await expect(page.getByTestId("lab-composer-mode")).toHaveText(
+      t("lab:bench.composer.modeLocal"),
+    );
+    await page.getByTestId("lab-run-button").click();
+    await expect(page.getByTestId("lab-trace-status")).toHaveText(
+      t("lab:bench.status.completed"),
+    );
+    await expect(page.getByTestId("stage-node-model")).toHaveCount(0);
+    await expect(page.getByTestId("lab-event-request")).toHaveCount(0);
+    await expect(
+      page
+        .getByTestId("lab-timeline")
+        .getByRole("button")
+        .filter({ hasText: t("lab:bench.event.programCall") }),
+    ).toHaveCount(1);
+    await page.getByTestId("lab-event-tool-result").click();
+    await expect(
+      page.getByTestId("lab-event-detail").locator("pre"),
+    ).toContainText('"ok": false');
   }
 });
 

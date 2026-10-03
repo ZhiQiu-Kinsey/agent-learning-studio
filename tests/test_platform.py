@@ -7,7 +7,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from course.api_client import send_bailian
-from course.execution import RunContext
+from course.execution import RunContext, execute_lesson
 from course.runner import RunCancelled
 from server.catalog import lesson_runtime, lesson_spec
 from server.offline import completion_for
@@ -65,14 +65,49 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([m["tool_call_id"] for m in requests[1]["messages"] if m["role"] == "tool"], ids)
         self.assertEqual(events[-1]["type"], "answer")
 
-    def test_zero_and_injected_failures_are_returned_not_retried(self):
-        for case in ("zero", "unknown", "malformed"):
+    def test_zero_failure_is_returned_not_retried(self):
+        events = execute("fail-safely", "zero")
+        results = [e for e in events if e["type"] == "tool_result"]
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0]["data"]["result"]["ok"])
+        self.assertIn("请修正", events[-1]["data"]["content"])
+
+    def test_injected_faults_run_without_a_model_and_stop_before_any_function(self):
+        """故障注入不调用模型：课程程序构造的调用走同一个 execute_tool，事件标为程序发起。"""
+        spec = lesson_spec("fail-safely")
+        module = lesson_runtime(spec)
+        tools = importlib.import_module("lessons.lesson_03_fail_safely.tools")
+        for case, error_type in (("unknown", "ValueError"), ("malformed", "JSONDecodeError")):
             with self.subTest(case=case):
-                events = execute("fail-safely", case)
-                results = [e for e in events if e["type"] == "tool_result"]
-                self.assertEqual(len(results), 1)
-                self.assertFalse(results[0]["data"]["result"]["ok"])
-                self.assertIn("请修正", events[-1]["data"]["content"])
+                events = []
+                context = RunContext(
+                    lesson_id="fail-safely", exercise_id=case, question="q", mode="live", model="local-python",
+                    representation="local", inputs={}, api_key="", completion=None,
+                    emit_event=lambda kind, data, number: events.append({"type": kind, "data": data}))
+                with patch.dict(tools.AVAILABLE_TOOLS, {"divide_numbers": lambda **_: self.fail("函数被执行了")}):
+                    execute_lesson(spec, module, context)
+                self.assertEqual([e["type"] for e in events], ["tool_call", "tool_result", "answer"])
+                call, outcome, answer = (e["data"] for e in events)
+                self.assertEqual(call["origin"], "course_program")
+                self.assertEqual((outcome["result"]["ok"], outcome["result"]["error_type"]), (False, error_type))
+                self.assertEqual(outcome["tool_call_id"], call["id"])
+                self.assertIn(error_type, answer["content"])
+
+    def test_exercise_without_model_needs_no_connection(self):
+        plan = web.prepare_run(web.RunInput(lesson_id="fail-safely", exercise_id="unknown", mode="live",
+                                            question="q"))
+        self.assertIsNone(plan.completion)
+        self.assertEqual((plan.provider_id, plan.model, plan.representation), ("local", "local-python", "local"))
+        # 同一课需要模型的练习照旧要求连接配置。
+        self.assertEqual(lesson_spec("fail-safely")["runtime"]["requires_model"], True)
+
+    def test_submit_call_passes_raw_arguments_to_the_same_checks(self):
+        events = []
+        context = native_context(events, None)
+        result = context.submit_call("divide_numbers", "{bad json", {"divide_numbers": lambda **_: self.fail("ran")})
+        self.assertEqual(result["error_type"], "JSONDecodeError")
+        self.assertEqual(events[0]["data"]["function"]["arguments"], "{bad json")
+        self.assertEqual(events[0]["data"]["origin"], "course_program")
 
     def test_offline_does_not_import_local_config(self):
         with patch.dict("sys.modules", {"local_config": None}):

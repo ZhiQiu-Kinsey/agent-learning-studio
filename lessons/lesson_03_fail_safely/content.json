@@ -108,7 +108,7 @@
           "paragraphs": [
             "工具失败后，模型可以给出说明错误的最终回答，整个请求因此正常结束。界面的 done=completed 表示运行循环结束；除法是否成功，仍取决于工具结果中的 ok。对错误进行了正确处理，也可能是这道边界练习的合格表现。",
             "原样重试同一个除零参数，不会让数学规则改变。提示词要求模型请用户修正输入；运行器还设了轮数上限，作为停止条件（Stop Condition），避免一直调用。",
-            "未知工具和损坏参数用故障注入检验：由测试脚本构造这类模型响应，看运行器怎样拒绝。这些人为构造的调用不能冒充真实模型提出过的调用。"
+            "未知工具和损坏参数用故障注入检验：实验里由课程程序直接构造这类调用，交给运行器检查，不经过模型。这些调用在事件里标为程序发起，不能冒充真实模型提出过的调用。"
           ]
         },
         {
@@ -260,6 +260,45 @@
           ]
         },
         {
+          "id": "code-fault-injection",
+          "type": "annotated-source",
+          "path": "lessons/lesson_03_fail_safely/runtime.py",
+          "start": 13,
+          "end": 28,
+          "notes": [
+            {
+              "id": "n-unknown-name",
+              "line": 14,
+              "anchor": "\"unknown\": (\"unregistered_tool\", \"{}\")",
+              "text": "未登记的工具名：AVAILABLE_TOOLS 里没有它，模型也不一定会提出它，所以由程序直接构造。"
+            },
+            {
+              "id": "n-broken-json",
+              "line": 15,
+              "anchor": "\"{bad json\"",
+              "text": "名字是登记过的 divide_numbers，但参数文本不是合法 JSON，拒绝发生在解析这一步。"
+            },
+            {
+              "id": "n-native-loop",
+              "line": 23,
+              "anchor": "context.run_native(main",
+              "text": "两道除法练习照旧走原生工具循环，最多两轮模型请求。"
+            },
+            {
+              "id": "n-submit",
+              "line": 25,
+              "anchor": "AVAILABLE_TOOLS)",
+              "text": "原样交给运行器：与模型提出的调用走同一个 execute_tool，事件标为程序发起。"
+            },
+            {
+              "id": "n-program-answer",
+              "line": 27,
+              "anchor": "本组没有调用模型",
+              "text": "没有模型，回答由程序按真实的检查结果写出，不冒充模型的回答。"
+            }
+          ]
+        },
+        {
           "id": "code-decision",
           "type": "decision",
           "title": "可预期的工具失败作为结构化结果回传，而不是中断运行",
@@ -397,23 +436,31 @@
         {
           "id": "injected-faults",
           "title": "故障注入：未登记的工具与损坏的参数",
-          "hypothesis": "模型响应里出现未登记的工具名或无法解析的参数时，运行器在调用任何函数之前就拒绝，并把 error_type 与 error 作为失败结果配对回传。",
+          "hypothesis": "课程程序直接交给运行器一个未登记的工具名，或一段无法解析的参数时，运行器在调用任何函数之前就拒绝，把 error_type 与 error 包成 ok=false 的结果，并与这条调用的 id 配对。",
           "arms": [
             {
               "id": "unknown",
               "exercise": "unknown",
-              "label": "故障注入：调用未登记的 unregistered_tool"
+              "label": "程序构造：调用未登记的 unregistered_tool"
             },
             {
               "id": "malformed",
               "exercise": "malformed",
-              "label": "故障注入：divide_numbers 的参数不是合法 JSON"
+              "label": "程序构造：divide_numbers 的参数不是合法 JSON"
             }
           ],
           "observe": [
             {
+              "id": "program-origin",
+              "text": "这条 tool_call 由课程程序构造：事件里标为程序发起，不来自模型响应。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.origin"
+              }
+            },
+            {
               "id": "unknown-name",
-              "text": "注入的工具名 unregistered_tool：它不在 AVAILABLE_TOOLS 里。",
+              "text": "未登记的工具名 unregistered_tool：它不在 AVAILABLE_TOOLS 里。",
               "selector": {
                 "event": "tool_call",
                 "path": "data.function.name",
@@ -422,7 +469,7 @@
             },
             {
               "id": "broken-arguments",
-              "text": "注入的 arguments：一段无法解析的 JSON 文本。",
+              "text": "divide_numbers 的 arguments：一段无法解析的 JSON 文本。",
               "selector": {
                 "event": "tool_call",
                 "path": "data.function.arguments",
@@ -438,23 +485,27 @@
               }
             },
             {
-              "id": "rejection-returned",
-              "text": "第二轮 request 的 role=tool 消息：拒绝原因同样配对回传。",
+              "id": "paired-result",
+              "text": "失败结果的 tool_call_id：与这条调用的 id 相同，拒绝结果照样配对。",
               "selector": {
-                "event": "request",
-                "round": 2,
-                "path": "data.body.messages[3].content"
+                "event": "tool_result",
+                "path": "data.tool_call_id"
               }
             }
           ],
           "guide": [
             {
-              "text": "这两组是故障注入：模型响应由测试脚本故意构造，用来检验运行器的拒绝路径。"
+              "text": "这两组不调用模型：课程程序直接构造一条有问题的调用，交给运行器检查。"
             },
             {
-              "text": "如果你运行的是未登记工具组，这里是被注入的名称。运行器只在白名单里查找函数，找不到就不执行。",
+              "text": "先看来源：这条调用由课程程序构造，界面上标为“程序调用工具”，不是模型提出的。",
+              "observe": "program-origin",
+              "stage": "runtime"
+            },
+            {
+              "text": "如果你运行的是未登记工具组，这里是那个名称。运行器只在白名单里查找函数，找不到就不执行。",
               "observe": "unknown-name",
-              "stage": "model"
+              "stage": "tool"
             },
             {
               "text": "如果你运行的是损坏参数组，这里是无法解析的参数文本。解析失败时同样不会调用除法函数。",
@@ -466,17 +517,18 @@
               "stage": "tool"
             },
             {
-              "text": "拒绝原因仍然通过 tool_call_id 配对回传，下一轮模型能读到它。",
-              "observe": "rejection-returned",
+              "text": "结果带着与调用相同的 id：拒绝也成对记下，不会和别的调用混在一起。",
+              "observe": "paired-result",
               "stage": "runtime"
             }
           ],
           "conclusion": {
             "proves": [
-              "白名单与参数解析在调用函数之前生效：本次注入的调用以 ok=false 结束，并保持与原调用 id 的配对。"
+              "白名单与参数解析在调用函数之前生效：程序构造的这条调用以 ok=false 结束，error_type 说明失败类别，结果与调用 id 配对。"
             ],
             "does_not_prove": [
-              "这些调用由离线脚本注入，不能当作真实模型曾经提出过的调用。",
+              "这条调用由课程程序构造，不能当作真实模型曾经提出过的调用。",
+              "本组没有调用模型，看不到模型读到拒绝原因后怎么回答；失败结果怎样回到下一轮请求，在“只改除数：失败也要配对回传”的除零组里可以看到。",
               "只覆盖了未登记名称与损坏 JSON 两种情况，不能证明所有异常输入都会被挡住。"
             ]
           }
