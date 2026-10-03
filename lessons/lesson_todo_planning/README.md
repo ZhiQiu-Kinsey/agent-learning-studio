@@ -14,7 +14,7 @@
 
 每组只跑一次，不足以比较完成率。`fixtures.py` 只服务自动化测试，里面“无 TODO 组漏掉 context-budget 一课”是脚本写的，不代表任何真实模型。
 
-`todo_write` 的约束和“连续几轮没更新就提醒”的做法参考 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)（MIT）s05，工具、提醒文本、验收器与实验由本项目编写。
+`todo_write` 的约束和“连续几轮没更新就提醒”的做法参考 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)（MIT）s03（TodoWrite），工具、提醒文本、验收器与实验由本项目编写。
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_todo_planning.test_lesson -v

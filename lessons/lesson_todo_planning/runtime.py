@@ -1,7 +1,7 @@
 """TODO 清单与运行层提醒：同一个多步任务在三种条件下运行，由独立验收器判定是否完成。
 
 todo_write 的约束（每项有内容、同一时间最多一项 in_progress）和“连续几轮没更新就提醒”的做法
-参考 learn-claude-code s05（MIT）；本课的工具、提醒文本、验收器与实验由本项目编写。
+参考 learn-claude-code s03（TodoWrite，MIT）；本课的工具、提醒文本、验收器与实验由本项目编写。
 """
 import json
 from typing import Literal

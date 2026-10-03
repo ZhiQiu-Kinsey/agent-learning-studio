@@ -15,7 +15,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from server.catalog import CATALOG_INDEX, LESSONS, ROOT, lesson_code_names  # noqa: E402
 from server.content import lesson_content_model  # noqa: E402
 from server.glossary import load_glossary  # noqa: E402
+from server.lesson_refs import resolve_refs  # noqa: E402
 from server.vocabulary import TermMatcher, lesson_problems, marked_texts  # noqa: E402
+
+
+def term_groups(texts, terms, numbers, lesson_id):
+    """本课标注的术语，分成“本课引入 / 回顾 / 背景”三组（只含中文名）。
+
+    先把 ``{{lesson:<slug>}}`` 换成“第 N 课”再匹配：网页显示的是换成后的文字，
+    不换的话 slug 里的英文词（reflection、memory 等）会被当成术语。
+    """
+    matcher = TermMatcher(terms)
+    hits = matcher.first_hits("\n".join(resolve_refs(texts, numbers)))
+    by_id = {term["id"]: term for term in terms}
+    groups = {"本课引入": [], "回顾": [], "背景": []}
+    for term_id in hits:
+        term = by_id[term_id]
+        key = ("背景" if term.get("kind") == "background"
+               else "本课引入" if term.get("first_lesson") == lesson_id else "回顾")
+        groups[key].append(term["zh"])
+    return groups
 
 
 def main():
@@ -39,15 +58,7 @@ def main():
             continue
         print(f"\n第 {numbers[spec['id']]} 课 {spec['id']}：{len(problems)} 个问题")
         if args.full:
-            matcher = TermMatcher(terms)
-            hits = matcher.first_hits("\n".join(marked_texts(model)))
-            by_id = {term["id"]: term for term in terms}
-            groups = {"本课引入": [], "回顾": [], "背景": []}
-            for term_id in hits:
-                term = by_id[term_id]
-                key = ("背景" if term.get("kind") == "background"
-                       else "本课引入" if term.get("first_lesson") == spec["id"] else "回顾")
-                groups[key].append(term["zh"])
+            groups = term_groups(marked_texts(model), terms, numbers, spec["id"])
             for key, values in groups.items():
                 print(f"  {key}：{'、'.join(values) or '无'}")
             notes = "、".join(item.name for item in model.code_notes) or "无"
