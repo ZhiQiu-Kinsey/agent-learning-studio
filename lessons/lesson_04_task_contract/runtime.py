@@ -75,7 +75,7 @@ def _attempt(context: RunContext, scenario: str, attempt: int, evidence: dict[st
 
 
 def run(context: RunContext) -> str:
-    """按任务卡执行并验收；goal_loop 未通过时带着原因重试，通过或到达上限就停。"""
+    """按任务卡执行并验收；goal_loop 未通过就再试，通过或到达上限就停。本课的重试是固定脚本，原因只记录。"""
     scenario = context.inputs["scenario"]
     # 只有目标循环允许多次尝试；其他场景只做一次，每种故障单独可见。
     limit = context.inputs["max_attempts"] if scenario == "goal_loop" else 1
@@ -93,7 +93,7 @@ def run(context: RunContext) -> str:
         checks = verify(claim, evidence)
         passed = accepted(checks)
         reasons = [item["label"] + "：" + item["detail"] for item in checks[1:] if not item["passed"]]
-        # 3. 决定下一步并记录：未通过的原因就是下一次尝试要交回给执行者的信息。
+        # 3. 决定下一步并记录原因：本课的执行者是固定脚本，不读这些原因；真实的目标循环要把它们交回执行者。
         if scenario == "goal_loop":
             context.emit("lesson.goal_check", {
                 "attempt": attempt, "max_attempts": limit, "passed": passed, "reasons": reasons,
