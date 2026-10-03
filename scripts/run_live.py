@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -55,11 +56,24 @@ def main(argv=None):
         raise SystemExit("没有匹配的练习。")
     failed = False
     for exercise in exercises:
+        if exercise.get("offline_only") and not args.offline:
+            # 故障注入练习只在离线模式运行，服务端会拒绝真实运行；跳过并写明，不中断其余练习。
+            print(json.dumps({"lesson": detail["id"], "exercise": exercise["id"], "status": "skipped",
+                              "reason": "offline_only：故障注入练习只在离线模式运行"}, ensure_ascii=False, indent=2))
+            continue
         payload = {"lesson_id": detail["id"], "mode": "offline" if args.offline else "live",
                    "question": exercise["question"], "exercise_id": exercise["id"]}
         if exercise.get("inputs"):
             payload["inputs"] = exercise["inputs"]
-        created = json.loads(call(base, "/api/runs", payload))
+        try:
+            created = json.loads(call(base, "/api/runs", payload))
+        except urllib.error.HTTPError as error:
+            # 服务端拒绝创建运行（如配置不全）：记为失败，继续下一个练习。
+            failed = True
+            print(json.dumps({"lesson": detail["id"], "exercise": exercise["id"], "status": "rejected",
+                              "http_status": error.code, "body": error.read().decode("utf-8", "replace")[:300]},
+                             ensure_ascii=False, indent=2))
+            continue
         stream = call(base, f"/api/runs/{created['run_id']}/events")
         events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
         summary = {"lesson": detail["id"], "exercise": exercise["id"], "run_id": created["run_id"], **summarize(events)}
