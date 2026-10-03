@@ -65,6 +65,8 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(len(routes), 20)
         fallback = [r for r in routes if r["fallback"]]
         self.assertEqual([(r["ticket"], r["raw"], r["predicted"]) for r in fallback], [("t12", "billing", "other")])
+        # 只有走了兜底的记录带 fallback_reason，导览靠它找到兜底的那一张。
+        self.assertEqual([r["ticket"] for r in routes if "fallback_reason" in r], ["t12"])
         self.assertEqual(sum(r["correct"] for r in routes), 18)
         reports = of(events, "lesson.report")
         self.assertEqual(reports[0]["metrics"][0], {"label": "准确率", "value": "18/20"})
