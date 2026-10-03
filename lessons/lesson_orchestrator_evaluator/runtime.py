@@ -26,7 +26,7 @@ NOTES = {
     "context-budget": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。",
 }
 EVALUATED = "context-budget"  # 评估者-优化者只为这一课出题
-TASK = ("为 messages-context（消息与上下文）、application-state（应用状态与运行生命周期）、"
+TASK = ("为 messages-context（上下文组成与消息协议）、application-state（应用状态与运行生命周期）、"
         "context-budget（上下文预算与截取窗口）三课各出一道四选一的选择题，题目要考到该课要点。")
 QUESTION_FORMAT = ('只输出一个 JSON 对象：{"question": "题干", "options": ["A", "B", "C", "D"], '
                    '"answer": 正确选项的下标 0-3, "explanation": "为什么这个选项对"}')
