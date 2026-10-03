@@ -25,10 +25,27 @@ export type GuideFrame = {
 };
 
 /**
- * Resolves the state of a guided replay at `step` over the learner's real run.
- * Jumping straight to a step re-applies the most recent narration, spotlight and
- * evidence before it, so the view is the same as reaching it step by step.
- * Missing evidence is reported as such; the guide never points elsewhere.
+ * Where each learner-facing step ends in the authored action list. A step is
+ * one sentence: the spotlight / seek / highlight actions before a narration
+ * set up the evidence that sentence talks about, so a step stops at each
+ * narration. Actions after the last narration form one more step.
+ */
+export function guideStops(experiment: Experiment): number[] {
+  const actions = experiment.guide;
+  const stops = actions.flatMap((action, index) =>
+    action.action === "narrate" ? [index] : [],
+  );
+  if (actions.length && stops.at(-1) !== actions.length - 1)
+    stops.push(actions.length - 1);
+  return stops;
+}
+
+/**
+ * Resolves the state of a guided replay at `step` (one sentence each) over the
+ * learner's real run. Jumping straight to a step re-applies the most recent
+ * narration, spotlight and evidence before it, so the view is the same as
+ * reaching it step by step. Missing evidence is reported as such; the guide
+ * never points elsewhere.
  */
 export function resolveGuide(
   experiment: Experiment,
@@ -36,10 +53,12 @@ export function resolveGuide(
   step: number,
 ): GuideFrame {
   const actions = experiment.guide;
-  const at = Math.max(0, Math.min(step, actions.length - 1));
+  const stops = guideStops(experiment);
+  const current = Math.max(0, Math.min(step, stops.length - 1));
+  const at = stops[current] ?? -1;
   const frame: GuideFrame = {
-    step: at,
-    total: actions.length,
+    step: current,
+    total: stops.length,
     narration: null,
     spotlight: null,
     evidence: null,

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { CircleCheck, CircleMinus, Compass, Lock, Play } from "lucide-react";
-import type { ObserveStatus } from "../../content/guide";
+import { guideStops, type ObserveStatus } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { GlossaryText } from "../../content/glossary/Glossary";
 import { Button } from "../../components/ui/button";
@@ -64,7 +64,7 @@ export function ExperimentSide({
             <h4>{t("guide.title")}</h4>
             <p>
               {finished
-                ? t("guide.ready", { count: experiment.guide.length })
+                ? t("guide.ready", { count: guideStops(experiment).length })
                 : t("guide.needRun")}
             </p>
           </div>
