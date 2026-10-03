@@ -44,7 +44,18 @@ export function Onboarding({
   }).length;
   function navigate(index: number) {
     onChapterChange(index);
-    window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
+    const behavior = reduced ? "instant" : "smooth";
+    // While the tabs are frozen over the chapter, a new chapter opens at its
+    // start under them; otherwise (page top, phones) the page goes to the top.
+    const chapter = document.getElementById("onboarding-chapter");
+    const tabs = document.querySelector(".onboarding-chapter-tabs");
+    if (
+      chapter &&
+      tabs &&
+      chapter.getBoundingClientRect().top < tabs.getBoundingClientRect().bottom
+    )
+      chapter.scrollIntoView({ behavior });
+    else window.scrollTo({ top: 0, behavior });
   }
 
   return (
