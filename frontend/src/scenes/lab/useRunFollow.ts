@@ -15,6 +15,9 @@ const SCROLL_KEYS = new Set([
 const MIN_STAY_MS = 1200;
 /** Pause on the finished stage before going back. */
 const SETTLE_MS = 400;
+/** The stage paces a final burst of events (usePacedCursor); wait for it, but not forever. */
+const STAGE_POLL_MS = 200;
+const STAGE_WAIT_MAX_MS = 10_000;
 
 const editable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -24,8 +27,9 @@ const editable = (target: EventTarget | null) =>
 /**
  * The view follows a run. When it starts, the run observatory (the element
  * marked `data-run-focus` inside `frame`) scrolls in under the sticky toolbar;
- * when it ends, the page returns to where the learner started it. Scrolling by
- * hand at any point hands the view back to the learner for that run.
+ * when it ends and the stage has played its last steps, the page returns to
+ * where the learner started it. Scrolling by hand at any point hands the view
+ * back to the learner for that run.
  */
 export function useRunFollow(
   running: boolean,
@@ -70,15 +74,28 @@ export function useRunFollow(
     }
     const current = trip.current;
     if (!current) return;
-    const wait =
-      Math.max(0, MIN_STAY_MS - (performance.now() - current.since)) +
-      SETTLE_MS;
-    const timer = window.setTimeout(() => {
+    const ended = performance.now();
+    let timer = 0;
+    const back = () => {
       // Released meanwhile: the learner scrolled, leave the page where it is.
       if (trip.current !== current) return;
+      const stage = frame.current?.querySelector(
+        "[data-run-focus] [data-testid='agent-stage']",
+      );
+      if (
+        stage?.getAttribute("data-status") === "running" &&
+        performance.now() - ended < STAGE_WAIT_MAX_MS
+      ) {
+        timer = window.setTimeout(back, STAGE_POLL_MS);
+        return;
+      }
       trip.current = null;
       window.scrollTo({ top: current.origin, behavior: behavior.current });
-    }, wait);
+    };
+    timer = window.setTimeout(
+      back,
+      Math.max(0, MIN_STAY_MS - (ended - current.since)) + SETTLE_MS,
+    );
     return () => window.clearTimeout(timer);
   }, [running, enabled, frame]);
 }

@@ -8,6 +8,7 @@ import LatticeLoader from "../components/react-bits/LatticeLoader";
 import type { StageNode, StageSpan } from "./derive";
 import { openLlmSpan } from "./spans";
 import { useElapsedMs } from "./useElapsed";
+import { usePacedCursor } from "./usePacedCursor";
 import { useStageProjection } from "./useStageProjection";
 import "../styles/stage.css";
 
@@ -116,7 +117,12 @@ export function AgentStage({
 }) {
   const { t, i18n } = useTranslation(["stage", "common"]);
   const { reduced } = useMotion();
-  const { stage, final } = useStageProjection(events, cursor);
+  // A live burst of events is shown one step at a time (usePacedCursor).
+  const shown = usePacedCursor(cursor, live);
+  // While the stage catches up, the response is already in: nothing waits live,
+  // and a wait it shows takes its real duration from the recorded events.
+  const liveNow = live && shown === cursor;
+  const { stage, final } = useStageProjection(events, shown);
   const places = layout(stage.nodes);
   const seconds = new Intl.NumberFormat(i18n.language, {
     minimumFractionDigits: 1,
@@ -125,7 +131,7 @@ export function AgentStage({
 
   const openLlm = openLlmSpan(stage.spans);
   const liveSeconds =
-    (useElapsedMs(live && openLlm ? openLlm.startAt : null) ?? 0) / 1000;
+    (useElapsedMs(liveNow && openLlm ? openLlm.startAt : null) ?? 0) / 1000;
   const finalOf = (span: StageSpan | undefined) =>
     span &&
     final.spans.find(
@@ -219,14 +225,15 @@ export function AgentStage({
         {stage.nodes.map((node) => {
           const place = places.get(node.id)!;
           const waiting = node.id === "model" && node.state === "waiting";
-          const waited = waiting && !live ? finalOf(openLlm)?.durationMs : null;
+          const waited =
+            waiting && !liveNow ? finalOf(openLlm)?.durationMs : null;
           return (
             <div
               key={node.id}
               className="stage-node"
               data-role={node.role}
               data-state={node.state}
-              data-live-wait={waiting && live ? "" : undefined}
+              data-live-wait={waiting && liveNow ? "" : undefined}
               data-spotlit={
                 spotlight && node.role === spotlight ? true : undefined
               }
@@ -243,7 +250,7 @@ export function AgentStage({
                 <span className="stage-waiting">
                   {/* Lattice moves only while the real wait is ongoing. */}
                   <LatticeLoader
-                    paused={!live}
+                    paused={!liveNow}
                     cellSize={3}
                     gap={1.5}
                     step={80}
@@ -251,7 +258,7 @@ export function AgentStage({
                     className="stage-waiting-lattice"
                   />
                   <span>
-                    {live
+                    {liveNow
                       ? t("waiting", { seconds: seconds.format(liveSeconds) })
                       : waited != null
                         ? t("waited", {

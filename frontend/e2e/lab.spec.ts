@@ -200,6 +200,40 @@ test("a finished run opens on the first observe point's evidence and the conclus
     .click();
   await expect(observe(page).nth(3)).toHaveAttribute("data-current", "true");
   await expect(observe(page).first()).not.toHaveAttribute("data-current");
+  // The event list scrolls itself to the located event, also the last one.
+  const last = observe(page).last();
+  await last
+    .getByRole("button", { name: new RegExp(t("lesson:lab.locate")) })
+    .click();
+  await expect(last).toHaveAttribute("data-current", "true");
+  const list = page.getByTestId("lab-timeline");
+  await expect
+    .poll(() =>
+      list.evaluate((box) => {
+        const row = box.querySelector("[aria-pressed='true']");
+        if (!row) return false;
+        const outer = box.getBoundingClientRect();
+        const inner = row.getBoundingClientRect();
+        return inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
+      }),
+    )
+    .toBe(true);
+});
+
+test("a burst of events plays on the stage one step at a time", async ({
+  page,
+  request,
+}) => {
+  await openDependentCalls(page, request);
+  await page.getByTestId("lab-run-button").click();
+  // The offline run arrives at once; the run itself is already finished...
+  await expect(page.getByTestId("lab-trace-status")).toHaveText(
+    t("lab:bench.status.completed"),
+  );
+  // ...while the stage is still stepping through its last events.
+  const stage = page.locator("[data-run-focus]").getByTestId("agent-stage");
+  await expect(stage).toHaveAttribute("data-status", "running");
+  await expect(stage).toHaveAttribute("data-status", "completed");
 });
 
 test("wide screens keep the experiment beside the observatory while it scrolls", async ({
