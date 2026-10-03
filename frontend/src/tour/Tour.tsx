@@ -13,6 +13,7 @@ import {
 import { useReducedMotion } from "../motion";
 import SpotlightCard from "../components/react-bits/SpotlightCard";
 import { Button } from "../components/ui/button";
+import { arrowShape } from "./arrow";
 import { reveal } from "./reveal";
 import type { TourStep } from "./types";
 import "./tour.css";
@@ -32,31 +33,18 @@ const isEditable = (target: EventTarget | null) =>
     "input, textarea, select, [contenteditable='true'], [role='slider']",
   );
 
-/**
- * Joyride sizes the arrow's box per side but does not rotate a custom arrow,
- * so each side gets its own triangle (same geometry as Joyride's built-in one):
- * the tip always points at the framed element.
- */
 function TourArrow({ base, size, placement }: ArrowRenderProps) {
-  const side = placement.split("-")[0];
-  const vertical = side === "left" || side === "right";
-  const [width, height] = vertical ? [size, base] : [base, size];
-  const points = {
-    top: `0,0 ${base / 2},${size} ${base},0`,
-    bottom: `${base},${size} ${base / 2},0 0,${size}`,
-    left: `0,0 ${size},${base / 2} 0,${base}`,
-    right: `${size},${base} ${size},0 0,${base / 2}`,
-  }[side];
-  if (!points) return null;
+  const shape = arrowShape(placement, base, size);
+  if (!shape) return null;
   return (
     <svg
       className="tour-arrow"
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
+      width={shape.width}
+      height={shape.height}
+      viewBox={`0 0 ${shape.width} ${shape.height}`}
       aria-hidden="true"
     >
-      <polygon points={points} fill="currentColor" />
+      <polygon points={shape.points} fill="currentColor" />
     </svg>
   );
 }
