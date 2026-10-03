@@ -127,14 +127,24 @@ def run(context: RunContext) -> str:
             "请对照报告表格和每次 request 的 messages。")
 
 
+def rejection_status(error: Exception) -> int | None:
+    """服务商拒绝了这组消息时返回 HTTP 状态码；别的失败返回 None，由调用方照常抛出。"""
+    status = getattr(error, "status_code", None)
+    # 只有 4xx 是服务商对请求本身的判断。鉴权失败（401、403）、找不到模型（404）、
+    # 超时（408）和限流（429）说的是配置或服务商当时的状态；5xx 是服务端故障。它们都不是这组消息的问题。
+    if isinstance(status, int) and 400 <= status < 500 and status not in {401, 403, 404, 408, 429}:
+        return status
+    return None
+
+
 def _send(context: RunContext, messages: list[dict], round_number: int) -> str | None:
     """发一次请求，返回回答文本；服务商拒绝时如实记录并返回 None，不重试、不改写请求。"""
     try:
         response = context.complete({"messages": messages, "temperature": 0}, round_number=round_number)
     except Exception as error:
-        status = getattr(error, "status_code", None)
-        if not isinstance(status, int):
-            raise  # 停止、网络失败、超出调用上限都不是服务商对这组消息的判断，照常报错。
+        status = rejection_status(error)
+        if status is None:
+            raise  # 停止、网络失败、超时、限流、超出调用上限都不是服务商对这组消息的判断，照常报错。
         context.emit("lesson.provider_error", {"status": status, "error_type": type(error).__name__,
                                                "message": str(error)[:800]}, round_number)
         return None

@@ -8,8 +8,7 @@ import json
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
-from course.runner import RunCancelled
-from lessons.lesson_07_messages_context.runtime import validate_tool_history
+from lessons.lesson_07_messages_context.runtime import rejection_status, validate_tool_history
 
 
 class Inputs(LessonInputs):
@@ -169,11 +168,11 @@ def run_broken_pair(context: RunContext, values: Inputs) -> str:
         checks.append({"label": f"{name}：本地协议检查", "passed": local == "合法", "detail": local})
         try:
             response = context.complete({"messages": messages, "temperature": 0}, round_number=index)
-        except RunCancelled:
-            raise
         except Exception as error:  # 3. 服务商拒绝时如实记录，不重试，也不改写请求
+            status = rejection_status(error)
+            if status is None:
+                raise  # 停止、超时、限流、网络失败都不是服务商对这组消息的判断，照常报错
             source = "offline_fixture" if context.mode == "offline" else "provider"
-            status = _status(error)
             context.emit("lesson.provider_error", {
                 "status": status, "error_type": type(error).__name__, "message": str(error)[:800],
                 "source": source, "layout": name}, index)
@@ -184,14 +183,8 @@ def run_broken_pair(context: RunContext, values: Inputs) -> str:
     return "两种截断的请求都已原样发送，服务商的回应见报告与 lesson.provider_error 事件。"
 
 
-def _status(error: Exception):
-    status = getattr(error, "status_code", None)
-    return status if isinstance(status, int) else None
-
-
-def _refusal(status, source: str) -> str:
-    outcome = f"被拒绝（HTTP {status}）" if status else "请求失败（没有 HTTP 状态码，可能是网络问题）"
-    return outcome + ("，离线夹具模拟" if source == "offline_fixture" else "")
+def _refusal(status: int, source: str) -> str:
+    return f"被拒绝（HTTP {status}）" + ("，离线夹具模拟" if source == "offline_fixture" else "")
 
 
 def _pair_report(context: RunContext, history: list[dict], checks: list[dict], rows: list) -> dict:

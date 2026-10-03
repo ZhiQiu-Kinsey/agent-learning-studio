@@ -128,6 +128,32 @@ class BudgetTests(unittest.TestCase):
         error = next(data for kind, data, _ in events if kind == "lesson.provider_error")
         self.assertEqual((error["status"], error["source"], error["error_type"]), (400, "provider", "ProviderHTTPError"))
 
+    def test_timeout_rate_limit_and_connection_errors_are_raised_not_recorded(self):
+        # LiteLLM 的超时（408）、连接失败（500）、限流（429）都带整数 status_code，
+        # 但它们不是服务商对孤立 tool 消息的判断，不能记成“被拒绝”。
+        from course.api_client import ProviderHTTPError
+        from course.providers import load_sdk
+        exceptions = load_sdk().exceptions
+        failures = [
+            exceptions.Timeout(message="请求超时", model="m", llm_provider="openai"),
+            exceptions.APIConnectionError(message="连接失败", llm_provider="openai", model="m"),
+            exceptions.RateLimitError(message="请求过多", llm_provider="openai", model="m"),
+            ProviderHTTPError("HTTP 429", 429),
+            RuntimeError("连接百炼失败"),
+        ]
+        for failure in failures:
+            def provider(body, key, failure=failure):
+                raise failure
+
+            with self.subTest(error=type(failure).__name__):
+                values = validate_inputs(budget_runtime, {"experiment": "broken_pair"})
+                run, events = context("context-budget", "broken-pair", values, provider, mode="live", budget=2)
+                with self.assertRaises(type(failure)):
+                    budget_runtime.run(run)
+                kinds = [kind for kind, _, _ in events]
+                self.assertNotIn("lesson.provider_error", kinds)
+                self.assertNotIn("lesson.report", kinds)
+
     def test_pair_aware_tail_never_starts_with_tool(self):
         result = {"ok": True, "result": budget_runtime.lookup_lesson("messages-context")}
         history = [{"role": "system", "content": "s"}, *budget_runtime.tool_pair("x", "messages-context", result),
