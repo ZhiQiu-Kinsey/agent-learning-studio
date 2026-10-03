@@ -99,8 +99,6 @@ class RealignTests(unittest.TestCase):
             realign(new)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class RealignScriptTests(unittest.TestCase):
@@ -155,9 +153,24 @@ class RealignScriptTests(unittest.TestCase):
         self.assertEqual(self.content.read_bytes(), before)
 
     def test_a_block_that_cannot_be_aligned_is_not_written_half_moved(self):
-        source = self.root / "lessons" / "lesson_x" / "src.py"
-        lines = ["import x", "import y"] + [text for text in OLD if text != "line 8"]
-        source.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # 同一份 content.json 里两块：A 块能对准、会移动，B 块的锚点被删掉。整份文件都不写入，
+        # 否则 A 块的移动会和 B 块对不准的状态一起写出去。
+        lesson = self.root / "lessons" / "lesson_x"
+        (lesson / "other.py").write_text("\n".join(OLD) + "\n", encoding="utf-8")
+        data = self.json.loads(self.content.read_text(encoding="utf-8"))
+        second = {**copy.deepcopy(data["scenes"]["code"]["blocks"][0]), "id": "code-y",
+                  "path": "lessons/lesson_x/other.py"}
+        data["scenes"]["code"]["blocks"].append(second)
+        self.content.write_text(self.json.dumps(data), encoding="utf-8")
+        self.git("-c", "user.email=t@example.com", "-c", "user.name=t", "add", ".")
+        self.git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "two blocks")
+        (lesson / "src.py").write_text("\n".join(["import x", "import y"] + OLD) + "\n", encoding="utf-8")
+        (lesson / "other.py").write_text("\n".join(text for text in OLD if text != "line 8") + "\n",
+                                         encoding="utf-8")
         before = self.content.read_bytes()
         self.assertEqual(self.run_main(), 1)
         self.assertEqual(self.content.read_bytes(), before)
+
+
+if __name__ == "__main__":
+    unittest.main()
