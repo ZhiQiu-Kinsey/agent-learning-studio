@@ -79,7 +79,9 @@ def main(argv=None):
             for note_id, old, new in moves:
                 print(f"{path.parent.name} {block['id']}.{note_id}：{old} → {new}")
             changed = changed or bool(moves)
-        if changed and not args.check:
+        if changed and args.check:
+            failed = True  # --check：有批注需要移动也算没通过，留给作者去跑一次不带 --check 的命令
+        elif changed:
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     return 1 if failed else 0
 
