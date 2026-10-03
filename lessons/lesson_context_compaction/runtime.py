@@ -116,7 +116,11 @@ def run(context: RunContext) -> str:
     # 4. 清理旧工具结果：消息条数不变，较早那次工具结果的内容换成说明。
     rows.append(ask_probe(context, "清理旧工具结果", clear_old_tool_results([system, *older, *recent, probe]), 3))
     # 5. 摘要压缩：先多发一次请求拿到摘要，再用摘要替换较早部分。
-    summary_response = context.complete(summary_body(older, values.summary_style), round_number=4)
+    body = summary_body(older, values.summary_style)
+    context.emit("lesson.compaction", {"kind": "summary_request", "style": values.summary_style,
+                                       "messages": len(body["messages"]),
+                                       "instruction": body["messages"][-1]["content"]}, 4)
+    summary_response = context.complete(body, round_number=4)
     summary = {"role": "user", "content": "此前对话的摘要：" + answer_text(summary_response)}
     rows.append(ask_probe(context, "摘要压缩", [system, summary, *recent, probe], 5))
     context.emit("lesson.report", _report(context, values, rows, refused, summary_response))
