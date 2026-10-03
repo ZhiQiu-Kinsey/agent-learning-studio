@@ -47,8 +47,13 @@ def add_numbers(a, b):
         raise ValueError("参数 a 必须是数字。")
     if isinstance(b, bool) or not isinstance(b, (int, float)):
         raise ValueError("参数 b 必须是数字。")
-    if not math.isfinite(a) or not math.isfinite(b):
-        raise ValueError("参数必须是有限数字。")
+    try:
+        finite = math.isfinite(a) and math.isfinite(b)
+    except OverflowError:
+        # 10**400 这样的超大整数转不成浮点数；不拦下来，异常会越过 execute_tool 让运行崩溃。
+        finite = False
+    if not finite:
+        raise ValueError("参数必须是有限数字，且不超出浮点数范围。")
     return a + b
 
 
