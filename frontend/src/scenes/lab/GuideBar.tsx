@@ -41,10 +41,10 @@ export function GuideBar({
   const evidence = frame.evidence;
 
   useEffect(() => {
-    onSpotlight(frame.spotlight);
+    onSpotlight(frame.stage);
     if (evidence?.found && !studio.running) locateEvent(studio, evidence.index);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame.step, frame.spotlight, evidence?.found ? evidence.index : -1]);
+  }, [frame.step, frame.stage, evidence?.found ? evidence.index : -1]);
 
   useEffect(() => () => onSpotlight(null), [onSpotlight]);
 
@@ -85,9 +85,9 @@ export function GuideBar({
         borderRadius={13}
       />
       <div className="guide-bubble" aria-live="polite">
-        {frame.narration && (
+        {frame.text && (
           <p key={frame.step} data-testid="guide-narration">
-            {frame.narration}
+            {frame.text}
           </p>
         )}
         {evidence &&

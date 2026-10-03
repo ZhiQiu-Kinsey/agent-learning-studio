@@ -43,7 +43,7 @@
 - **回顾**：只用本机真实记录：运行次数、实验、找到的证据、自测得分、能力进度、下一课先修。
 - **导航**：侧栏收为图标栏 + 抽屉；⌘K 命令面板（cmdk）；快捷键：空格播放/暂停、←/→ 单步、Shift+←/→ 按时间跳、`[` `]` 调速、`?` 帮助；输入框聚焦或按修饰键时不响应。
 
-导览回放：作者写的脚本是带类型的动作列表（`narrate`、`spotlight` 舞台节点、`highlight` JSON 路径、`seek` 事件），在学习者自己那次真实运行上逐步讲解；与观察点共用一套声明式选择器（事件类型、轮次、JSON 路径、span 角色），跳转用 `seq`。目标在本次运行中不存在时如实显示“本次运行没有出现这条证据”。构建时用测试数据校验所有目标存在。跳到某句讲解时重新触发它前面紧挨的视觉提示。
+导览回放：作者写的脚本是逐步列表，每步一句讲解加一个要看的地方（`observe` 观察点、`stage` 舞台节点；2026-10-03 起取代早期的 `narrate`/`spotlight`/`highlight`/`seek` 动作列表），在学习者自己那次真实运行上用遮罩逐步框住证据；与观察点共用一套声明式选择器（事件类型、轮次、JSON 路径、span 角色），跳转用 `seq`。目标在本次运行中不存在时如实显示“本次运行没有出现这条证据”。构建时用测试数据校验所有目标存在。每一步只依赖自己的字段，可以直接跳到任意一步。
 
 ## 4. 数据与接口
 
@@ -66,7 +66,7 @@
                            compare, micro-quiz, predict(experiment_ref), callout] },
     code:       { blocks: [whats-new(自动计算), annotated-source(path + 行号 + 批注), decision(alternatives)] },
     lab:        { experiments: [{ id, title, hypothesis, predict, arms: [{ id, exercise_ref, inputs }],
-                                  observe: [selector + 讲解], guide: [observe_ref + narrate/spotlight/seek],
+                                  observe: [selector + 讲解], guide: [{ text, observe?, stage? }],
                                   conclusion: { proves, does_not_prove } }] },
     check:      { blocks: [quiz(选项级反馈 + 信心), trace-hunt(rule), checkpoint] } },
   illustrations: { "<id>": { provenance: "illustration", events: [...] } } }

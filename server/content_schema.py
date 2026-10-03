@@ -344,28 +344,16 @@ class ObservePoint(Strict):
     selector: Selector | None = None  # 迁移来的旧提示暂无选择器
 
 
-class Narrate(Strict):
-    action: Literal["narrate"]
+class GuideStep(Strict):
+    """导览的一步：一句讲解，和这句话要学习者看的地方。
+
+    observe 指本实验的观察点：前端在学习者自己的运行里找到证据，跳到对应事件并框住它；
+    找不到就直说没找到，不改指别处。stage 是舞台节点角色（user / runtime / model / tool / memory），
+    标明这一步讲的是谁；没有 observe 时框住该节点。两者都不填的一步居中显示，用于开场。
+    """
     text: Text
-
-
-class Spotlight(Strict):
-    action: Literal["spotlight"]
-    target: Fact  # 舞台节点角色，如 model / runtime / tool / memory
-
-
-class Highlight(Strict):
-    action: Literal["highlight"]
-    observe: Id
-
-
-class Seek(Strict):
-    action: Literal["seek"]
-    observe: Id
-
-
-GuideAction = Annotated[Union[Narrate, Spotlight, Highlight, Seek],
-                        Field(discriminator="action")]
+    observe: Id | None = None
+    stage: Fact | None = None
 
 
 class Arm(Strict):
@@ -387,7 +375,7 @@ class Experiment(Strict):
     predict: Id | None = None
     arms: list[Arm] = Field(min_length=1)
     observe: list[ObservePoint] = []
-    guide: list[GuideAction] = []
+    guide: list[GuideStep] = []
     conclusion: Conclusion | None = None
 
     @model_validator(mode="after")
@@ -395,9 +383,9 @@ class Experiment(Strict):
         _unique([arm.id for arm in self.arms], "experiment.arms")
         _unique([point.id for point in self.observe], "experiment.observe")
         observe_ids = {point.id for point in self.observe}
-        for action in self.guide:
-            if isinstance(action, (Highlight, Seek)) and action.observe not in observe_ids:
-                raise ValueError(f"实验 {self.id} 的导览引用了不存在的观察点 {action.observe}")
+        for step in self.guide:
+            if step.observe is not None and step.observe not in observe_ids:
+                raise ValueError(f"实验 {self.id} 的导览引用了不存在的观察点 {step.observe}")
         return self
 
 

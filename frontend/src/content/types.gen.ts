@@ -359,7 +359,7 @@ export interface Experiment {
    */
   arms: [Arm, ...Arm[]];
   observe: ObservePoint[];
-  guide: (Narrate | Spotlight | Highlight | Seek)[];
+  guide: GuideStep[];
   conclusion: Conclusion | null;
 }
 export interface Arm {
@@ -375,21 +375,17 @@ export interface ObservePoint {
   text: string;
   selector: Selector | null;
 }
-export interface Narrate {
-  action: "narrate";
+/**
+ * 导览的一步：一句讲解，和这句话要学习者看的地方。
+ *
+ * observe 指本实验的观察点：前端在学习者自己的运行里找到证据，跳到对应事件并框住它；
+ * 找不到就直说没找到，不改指别处。stage 是舞台节点角色（user / runtime / model / tool / memory），
+ * 标明这一步讲的是谁；没有 observe 时框住该节点。两者都不填的一步居中显示，用于开场。
+ */
+export interface GuideStep {
   text: string;
-}
-export interface Spotlight {
-  action: "spotlight";
-  target: string;
-}
-export interface Highlight {
-  action: "highlight";
-  observe: string;
-}
-export interface Seek {
-  action: "seek";
-  observe: string;
+  observe: string | null;
+  stage: string | null;
 }
 export interface Conclusion {
   proves: string[];

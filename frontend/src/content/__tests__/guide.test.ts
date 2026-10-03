@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Trace } from "../../types";
-import { guideStops, observeStatus, resolveGuide } from "../guide";
+import { observeStatus, resolveGuide } from "../guide";
 import type { Experiment } from "../types.gen";
 import both from "../../stage/__fixtures__/lesson-1-both.json";
 
@@ -38,62 +38,41 @@ const experiment: Experiment = {
     },
     { id: "legacy", text: "旧的文字观察点", selector: null },
   ],
-  // Authored like the lessons: the actions before a narration locate the
-  // evidence that sentence talks about.
   guide: [
-    { action: "narrate", text: "先看模型" },
-    { action: "spotlight", target: "model" },
-    { action: "seek", observe: "call" },
-    { action: "narrate", text: "这是模型提出的调用" },
-    { action: "spotlight", target: "tool" },
-    { action: "highlight", observe: "result" },
-    { action: "narrate", text: "这是 Python 的结果" },
-    { action: "seek", observe: "never" },
+    { text: "先看模型", observe: null, stage: null },
+    { text: "这是模型提出的调用", observe: "call", stage: "model" },
+    { text: "这是 Python 的结果", observe: "result", stage: "tool" },
+    { text: "这一条这次没出现", observe: "never", stage: null },
   ],
   conclusion: null,
 };
 
-describe("guideStops", () => {
-  it("makes one step per sentence, plus one for trailing actions", () => {
-    expect(guideStops(experiment)).toEqual([0, 3, 6, 7]);
-    expect(guideStops({ ...experiment, guide: [] })).toEqual([]);
-  });
-});
-
 describe("resolveGuide", () => {
-  it("pairs each sentence with the evidence located just before it", () => {
+  it("gives each step its own sentence, stage role and evidence", () => {
     expect(resolveGuide(experiment, run, 0)).toMatchObject({
       step: 0,
       total: 4,
-      narration: "先看模型",
-      spotlight: null,
+      text: "先看模型",
+      stage: null,
       evidence: null,
     });
     expect(resolveGuide(experiment, run, 1)).toMatchObject({
       step: 1,
-      narration: "这是模型提出的调用",
-      spotlight: "model",
-      evidence: { observe: "call", found: true, index: 3, highlight: false },
+      text: "这是模型提出的调用",
+      stage: "model",
+      evidence: { observe: "call", found: true, index: 3 },
     });
   });
 
-  it("never shows the same sentence on two consecutive steps", () => {
-    const sentences = [0, 1, 2].map(
-      (step) => resolveGuide(experiment, run, step).narration,
-    );
-    expect(new Set(sentences).size).toBe(sentences.length);
-  });
-
-  it("highlights the value at the selector path from the real run", () => {
+  it("points at the value at the selector path from the real run", () => {
     expect(resolveGuide(experiment, run, 2)).toMatchObject({
-      narration: "这是 Python 的结果",
-      spotlight: "tool",
+      text: "这是 Python 的结果",
+      stage: "tool",
       evidence: {
         observe: "result",
         found: true,
         index: 4,
         value: 42,
-        highlight: true,
         path: "data.result.result",
       },
     });

@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from run_support import run_and_read, web
 from server.catalog import CATALOG_INDEX, LESSONS, ROOT
 from server.content import lesson_content_model
-from server.content_schema import Highlight, MicroQuiz, Narrate, Predict, Prose, Seek, Spotlight
+from server.content_schema import MicroQuiz, Predict, Prose
 from server.envelope import INSTANT_PREFIXES, SPAN_EVENTS
 from server.run_store import RunStore
 from server.selectors import count_events, select_events
@@ -90,16 +90,17 @@ class LessonExperimentTests(unittest.TestCase):
             with self.subTest(lesson=spec["id"], experiment=experiment.id):
                 roles = set().union(*(stage_roles(self.run_arm(spec, arm)) for arm in experiment.arms))
                 observe_ids = {point.id for point in experiment.observe}
-                targeted = set()
-                self.assertTrue(any(isinstance(action, Narrate) for action in experiment.guide))
-                for action in experiment.guide:
-                    if isinstance(action, (Highlight, Seek)):
-                        self.assertIn(action.observe, observe_ids)
-                        targeted.add(action.observe)
-                    elif isinstance(action, Spotlight):
-                        self.assertIn(action.target, STAGE_ROLES)
-                        self.assertIn(action.target, roles, f"舞台上没有 {action.target} 节点")
+                self.assertTrue(experiment.guide, "每个实验都要有导览")
+                for step in experiment.guide:
+                    if step.observe is not None:
+                        self.assertIn(step.observe, observe_ids)
+                    if step.stage is not None:
+                        self.assertIn(step.stage, STAGE_ROLES)
+                        self.assertIn(step.stage, roles, f"舞台上没有 {step.stage} 节点")
+                targeted = {step.observe for step in experiment.guide if step.observe}
                 self.assertEqual(targeted, observe_ids, "导览应逐一讲到每个观察点")
+                texts = [step.text for step in experiment.guide]
+                self.assertEqual(len(texts), len(set(texts)), "导览每一步说一句不同的话")
 
     def test_experiments_state_hypothesis_and_honest_conclusion(self):
         for spec, _, experiment in self.experiments():

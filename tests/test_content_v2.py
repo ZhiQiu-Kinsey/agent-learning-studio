@@ -62,7 +62,7 @@ class SchemaTests(unittest.TestCase):
                 {"type": "predict", "id": "guess", "prompt": "几次？", "experiment": "nope",
                  "rule": {"kind": "count_events", "event": "tool_call"}}),
             "guide to missing observe": lambda d: d["scenes"]["lab"]["experiments"][0].update(
-                guide=[{"action": "seek", "observe": "observe-99"}]),
+                guide=[{"text": "看这里。", "observe": "observe-99"}]),
             "empty selector": lambda d: d["scenes"]["lab"]["experiments"][0]["observe"][0].update(selector={}),
             "ragged table": lambda d: d["scenes"]["understand"]["blocks"].append(
                 {"type": "compare", "id": "table", "columns": ["a", "b"], "rows": [["1"]]}),
