@@ -14,7 +14,6 @@ import type { Experiment } from "../../content/types.gen";
 import { GlossaryText } from "../../content/glossary/Glossary";
 import RubberSegment from "../../components/react-bits/RubberSegment";
 import { segmentColors } from "../../components/lab/controlColors";
-import { locateEvent } from "./locate";
 
 const statusIcon = {
   "no-run": Clock3,
@@ -47,11 +46,14 @@ export function ExperimentPanel({
   experiments,
   selected,
   onSelect,
+  onLocate,
   studio,
 }: {
   experiments: Experiment[];
   selected: Experiment;
   onSelect: (id: string) => void;
+  /** Point the lab at an observe point's evidence: the event and its field. */
+  onLocate: (index: number, path: string | null) => void;
   studio: StudioState;
 }) {
   const { t } = useTranslation("lesson", { keyPrefix: "lab" });
@@ -164,7 +166,13 @@ export function ExperimentPanel({
                       type="button"
                       className="experiment-locate"
                       aria-label={`${t("locate")} ${point.text}`}
-                      onClick={() => locateEvent(studio, point.index)}
+                      onClick={() =>
+                        onLocate(
+                          point.index,
+                          selected.observe.find((item) => item.id === point.id)
+                            ?.selector?.path ?? null,
+                        )
+                      }
                     >
                       <Crosshair size={13} aria-hidden="true" />
                       {t("locate")}

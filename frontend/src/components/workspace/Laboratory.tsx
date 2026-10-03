@@ -4,6 +4,7 @@ import { useReducedMotion } from "../../motion";
 import type { StudioState } from "../../hooks/useStudio";
 import BorderGlow from "../react-bits/BorderGlow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { useEvidenceFocus } from "./lab/evidenceFocus";
 import { InspectorHeading } from "./lab/InspectorHeading";
 import { PromptPane, SourcePane } from "./lab/LessonFiles";
 import { RunObservatory } from "./lab/RunObservatory";
@@ -35,6 +36,11 @@ export function Laboratory({
   useEffect(() => {
     if (s.running) setTab("trace");
   }, [s.running]);
+  // Pointing at evidence (guided replay, "locate") always shows the execution record.
+  const focus = useEvidenceFocus();
+  useEffect(() => {
+    if (focus) setTab("trace");
+  }, [focus]);
   useEffect(() => {
     setCopied(false);
   }, [s.active]);

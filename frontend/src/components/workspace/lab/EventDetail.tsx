@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Check, Code2, Copy } from "lucide-react";
 import { useReducedMotion } from "../../../motion";
@@ -6,13 +7,11 @@ import type { Trace } from "../../../types";
 import TextType from "../../react-bits/TextType";
 import { Code } from "../../Code";
 import { Button } from "../../ui/button";
+import { useEvidenceFocus } from "./evidenceFocus";
+import { printJson, shownPath, shownValue } from "./jsonLines";
 import { useEventText } from "./useEventText";
 
 const isExchange = (e: Trace) => e.type === "request" || e.type === "response";
-
-/** Request / response events show their body; other events show all their data. */
-const bodyOf = (e: Trace | null | undefined) =>
-  e ? (isExchange(e) ? e.data.body : e.data) : null;
 
 function EmptyDetail({ active }: { active: boolean }) {
   const { t } = useTranslation("lab", { keyPrefix: "bench.detail" });
@@ -54,7 +53,8 @@ function EmptyDetail({ active }: { active: boolean }) {
 
 /**
  * Inspector for the selected event: its complete JSON, labelled honestly as
- * SDK-standardised data or HTTP data, with a copy button.
+ * SDK-standardised data or HTTP data, with a copy button. When the lab points
+ * at a field of this event (guided replay, "locate"), those lines are framed.
  */
 export function EventDetail({
   studio: s,
@@ -70,9 +70,27 @@ export function EventDetail({
 }) {
   const { t } = useTranslation("lab", { keyPrefix: "bench.detail" });
   const { label } = useEventText();
+  const reducedMotion = useReducedMotion();
+  const focus = useEvidenceFocus();
+  const markRef = useRef<HTMLElement>(null);
   const event = s.active;
-  const body = bodyOf(event);
+  const body = event ? shownValue(event) : null;
   const activeIndex = event ? s.visible.indexOf(event) : -1;
+  const printed = useMemo(() => printJson(body), [body]);
+  const field =
+    event && focus?.index === activeIndex && focus.path !== null
+      ? shownPath(event, focus.path)
+      : null;
+  const mark = field !== null ? (printed.ranges.get(field) ?? null) : null;
+  useEffect(() => {
+    if (focus?.reveal && mark)
+      markRef.current?.scrollIntoView({
+        block: "center",
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+    // Only a new focus scrolls; re-renders of the same one leave the page alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, mark?.from]);
   return (
     <div className="event-detail" data-testid="lab-event-detail">
       <div className="subpane-label">
@@ -106,7 +124,7 @@ export function EventDetail({
                 ? t("http")
                 : t("generic")}
           </p>
-          <Code content={JSON.stringify(body, null, 2) || "null"} />
+          <Code content={printed.text} mark={mark} markRef={markRef} />
         </div>
       ) : (
         <EmptyDetail active={active} />

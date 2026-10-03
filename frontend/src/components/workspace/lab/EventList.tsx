@@ -41,6 +41,7 @@ export function EventList({ studio: s }: { studio: StudioState }) {
               variant="ghost"
               className={`event event-${event.type} ${selected ? "is-selected" : ""}`}
               data-testid={`lab-event-${event.type.replace(/[._]/g, "-")}`}
+              data-event-index={index}
               aria-pressed={selected}
               onClick={() => s.selectEvent(index)}
             >
