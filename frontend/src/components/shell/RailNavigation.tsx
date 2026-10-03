@@ -15,7 +15,16 @@ import { Button } from "../ui/button";
 import { BrandMark } from "./BrandMark";
 import { RailGroup, RailItem } from "./Rail";
 
-const preludeKeys = ["preface", "agent", "route", "workbench"] as const;
+// Same order as the chapters in curriculum/onboarding.json.
+const preludeKeys = [
+  "preface",
+  "origins",
+  "llm",
+  "limits",
+  "agent",
+  "workflow",
+  "route",
+] as const;
 
 export interface RailNavigationProps {
   /** LayoutGroup id: the desktop rail and the mobile sheet animate separately. */
@@ -92,7 +101,7 @@ export function RailNavigation({
         <span className="course-tree-heading">
           {t("shell.prelude.title")} <small>{t("shell.prelude.eyebrow")}</small>
         </span>
-        {/* The four ordered chapters use the same rail items and sliding pills
+        {/* The ordered chapters use the same rail items and sliding pills
             as home / full curriculum, with a numbered badge on the icon column. */}
         <ol className="nav-prelude-list">
           {preludeKeys.map((key, index) => {

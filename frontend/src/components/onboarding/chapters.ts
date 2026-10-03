@@ -46,9 +46,12 @@ export function chapterChecks(chapter: Chapter, checked: CheckedPoints) {
 /** Every chapter has its own sky (distinct hues, so the tabs differ); unknown chapters cycle. */
 const chapterSkies: Record<string, BackdropName> = {
   intro: "galaxy",
+  "agent-origins": "topography",
+  "how-llm-works": "terminal",
+  "llm-limits": "ripple",
   "what-is-agent": "web",
-  "learning-path": "rays",
-  "lab-evidence": "radar",
+  "workflow-or-agent": "rays",
+  "learning-path-lab": "radar",
 };
 const skyCycle: BackdropName[] = ["aurora", "web", "rays", "radar", "veil"];
 export const skyFor = (id: string, index: number): BackdropName =>

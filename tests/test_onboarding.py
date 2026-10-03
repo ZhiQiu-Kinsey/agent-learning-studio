@@ -22,7 +22,8 @@ class OnboardingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual([chapter["id"] for chapter in data["chapters"]],
-                         ["intro", "what-is-agent", "learning-path", "lab-evidence"])
+                         ["intro", "agent-origins", "how-llm-works", "llm-limits", "what-is-agent",
+                          "workflow-or-agent", "learning-path-lab"])
         source_projects = set()
         for chapter in data["chapters"]:
             with self.subTest(chapter=chapter["id"]):
@@ -35,18 +36,28 @@ class OnboardingTests(unittest.TestCase):
                 self.assertTrue(exercise["items"])
                 sections = [block for block in chapter["scenes"]["understand"]["blocks"]
                             if block["type"] in {"prose", "compare", "steps", "callout"}]
-                self.assertGreaterEqual(len(sections), 3)
+                self.assertGreaterEqual(len(sections), 4)
                 for section in sections:
                     self.assertTrue(section["paragraphs"])
                     for row in section.get("rows", []):
                         self.assertEqual(len(row), len(section["columns"]))
+                # 讲解深度规范（docs/architecture/content-depth.md）：导学每章至少 1 道微测、1 个误区、1–2 个深入块。
+                understand = chapter["scenes"]["understand"]["blocks"]
+                quizzes = [block for block in understand if block["type"] == "micro-quiz"]
+                self.assertTrue(quizzes)
+                for quiz in quizzes:
+                    self.assertTrue(all(option["feedback"] for option in quiz["question"]["options"]))
+                self.assertTrue(any(block["type"] == "misconception" for block in understand))
+                self.assertIn(sum(block["type"] == "deep-dive" for block in understand), (1, 2))
                 for reference in blocks["references"]["items"]:
                     parsed = urlparse(reference["url"])
                     self.assertEqual(parsed.scheme, "https")
                     self.assertEqual(parsed.hostname, "github.com")
+                    self.assertEqual(parsed.path.split("/")[3], "blob")  # 固定到 commit 的文件链接
                     source_projects.add(parsed.path.split("/")[2])
         self.assertEqual(source_projects,
-                         {"ai-agents-for-beginners", "agents-course", "ai-agent-book"})
+                         {"ai-agents-for-beginners", "agents-course", "ai-agent-book", "claude-cookbooks",
+                          "learn-claude-code", "hello-agents"})
         self.assertNotIn("local_path", response.text)
         self.assertNotIn(str(web.ROOT), response.text)
 

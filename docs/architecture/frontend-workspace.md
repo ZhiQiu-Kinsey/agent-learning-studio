@@ -7,7 +7,7 @@
 | 页面 | 入口 | 内容 |
 | --- | --- | --- |
 | 首页 | `components/home/Home.tsx` | Agent 循环示意（可逐步查看或点击播放，加载后不会自己开始）、学习旅程（本机真实进度）、继续上次 |
-| 导学（第 0 章） | `components/Onboarding.tsx`（子组件在 `components/onboarding/`） | 四个前置章节，示意块按原位渲染，检查点自报并存在本机 |
+| 导学（第 0 章） | `components/Onboarding.tsx`（子组件在 `components/onboarding/`） | 七个前置章节，示意、微测、误区和深入块按原位渲染，检查点自报并存在本机 |
 | 课程地图 | `components/Curriculum.tsx`（子组件与数据 hooks 在 `components/curriculum/`） | 领域卡片（MagicBento）、先修路线图（@xyflow/react + elkjs，懒加载）、列表与搜索 |
 | 课程页 | `scenes/LessonScenes.tsx` | 课程条与五个场景：理解 / 读码 / 实验 / 自检 / 回顾 |
 

@@ -1,18 +1,20 @@
 # 前置学习章节：来源、取舍与内容边界
 
-编写与核查日期：2026-09-30；课程来源调整日期：2026-10-01。内容文件为 [onboarding.json](../../curriculum/onboarding.json)，接口为只读 `GET /api/onboarding`。四个章节独立于可执行课程注册表，不占用现有课号，不把规划课程升级为可执行状态。
+编写与核查日期：2026-09-30；课程来源调整日期：2026-10-01；扩写为七章：2026-10-04。内容文件为 [onboarding.json](../../curriculum/onboarding.json)，接口为只读 `GET /api/onboarding`。七个章节独立于可执行课程注册表，不占用现有课号，不把规划课程升级为可执行状态。
 
 ## 内容约定
 
-固定章节：`intro`（学习前言）、`what-is-agent`（认识 Agent）、`learning-path`（学习路线与准备）、`lab-evidence`（使用实验工作台）。
+固定章节：`intro`（学习前言）、`agent-origins`（Agent 从哪来）、`how-llm-works`（LLM 怎样工作）、`llm-limits`（模型做不到什么）、`what-is-agent`（认识 Agent）、`workflow-or-agent`（工作流还是 Agent）、`learning-path-lab`（路线与工作台）。原 `learning-path` 与 `lab-evidence` 两章已合并进 `learning-path-lab`。
+
+每章按 [讲解深度规范](content-depth.md) 编写：至少 4 节、1 道微测、1 个误区、1–2 个深入块，章末有参考资料和检查点；全章用同一个“学习助手”例子从单次问答长成 Agent。
 
 数据包含标题、摘要、预计阅读分钟数、学习目标、分节正文、可选列表/对照表、一个带检查点的思考练习和固定版本参考链接。预计分钟数是编辑估计，不是实测学习耗时。章节自检记录准备程度，不声称自动证明能力掌握。
 
 分节 kind 为 explanation、comparison、steps 或 warning；纯文本结构不含任意 HTML、远程脚本或源码执行内容。前置阅读与自检不调用模型。课程可用性、模块和课程数量继续来自现有 curriculum API，前置文字不硬编码可用数量或把未来课程写成已交付。
 
-## 三份课程资料的参考范围
+## 课程资料的参考范围
 
-当前课程来源仅保留 Microsoft、Hugging Face 和《深入理解 AI Agent》三份教程。下表保留其已有固定版本阅读证据。
+下表是 2026-10-01 版四章的阅读证据，保留备查。2026-10-04 扩写七章时新增的阅读范围（claude-cookbooks、learn-claude-code、Hello-Agents，以及 Hugging Face 与《深入理解 AI Agent》的更多页面）登记在 [reference-study.md](reference-study.md) 第 8 节。
 
 | 来源与固定版本 | 本次直接读取的原文 | 吸收进前置章节的方法 |
 | --- | --- | --- |
@@ -34,5 +36,5 @@
 
 `server/app.py` 从固定的本地 JSON 文件读取前置内容，不接受文件路径参数。读取或解析失败返回简短 503，不回显路径或异常内容。GET 不修改模型连接、运行状态或课程注册表。
 
-验收应覆盖：无需模型配置即可读取四章；三份课程参考都有明确来源；规划课仍不能运行；加载失败可恢复；首次进入先显示前置入口；完成/返回/继续与课程导航配合；文字、表格与自检在移动端可用。前端自检属于用户自我报告，不对未执行的 Python 实验发放“已掌握”结论。
+验收应覆盖：无需模型配置即可读取七章；每章的参考链接都固定到 commit，且只来自 reference-study.md 登记过的项目；规划课仍不能运行；加载失败可恢复；首次进入先显示前置入口；完成/返回/继续与课程导航配合；文字、表格与自检在移动端可用。前端自检属于用户自我报告，不对未执行的 Python 实验发放“已掌握”结论。
 
