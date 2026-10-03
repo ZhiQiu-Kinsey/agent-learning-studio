@@ -2,9 +2,6 @@ import { DeepDiveBlock, MisconceptionBlock } from "../../content/blocks/basic";
 import { IllustrationFlow } from "../../content/blocks/IllustrationFlow";
 import { MicroQuizBlock } from "../../content/blocks/MicroQuizBlock";
 import { GlossaryMarkdown } from "../../content/glossary/Glossary";
-// The shared blocks (micro-quiz, misconception, deep dive) are styled in
-// scenes.css, which is otherwise only loaded with the lesson page.
-import "../../styles/scenes.css";
 import { numeral, type ChapterContent } from "./chapters";
 import { Reveal } from "./Reveal";
 

@@ -12,6 +12,7 @@ Motion is decided once by `src/motion/` (`MotionProvider`): the OS preference an
 | learning.css | Reading layout, study guide and source reference |
 | laboratory.css | Input, answer, event timeline, JSON and code highlighting |
 | effects.css | Integration styles for React Bits effects |
+| blocks.css | Generic content blocks (callout, misconception, deep dive, table, micro quiz, illustration flow); shared by lesson and onboarding pages, so keep it out of scenes.css |
 | forms.css | Quiz, model settings and mobile navigation sheet |
 | curriculum.css | Curriculum map, search and course details |
 | responsive.css | Breakpoints |
