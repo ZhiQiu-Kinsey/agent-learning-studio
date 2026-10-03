@@ -118,8 +118,8 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
         "lesson.json": _json(manifest),
         "content.json": _json(content),
         "README.md": (
-            f"# 第 {number} 课 · {lesson['title']}（待实现）\n\n"
-            f"课程 ID：`{canonical}`。课号按目录顺序计算，只用于显示；代码与链接使用课程 ID。\n\n"
+            f"# {lesson['title']}（待实现）\n\n"
+            f"课程 ID：`{canonical}`。课号按目录顺序计算，只在网页上显示；文件里提到课程一律写课名或课程 ID。\n\n"
             "这是作者脚手架，课程仍为 `planned`，网页继续置灰。\n\n"
             "1. 以 `curriculum/catalog.json` 的目标与验收为准，替换占位实验和示例运行器。\n"
             "2. 完成 `content.json` 的引言、机制解释、观察点、自测，并替换 presentation 动效占位内容。\n"

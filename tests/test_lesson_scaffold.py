@@ -107,7 +107,11 @@ class LessonScaffoldTests(unittest.TestCase):
         self.assertEqual(by_slug, by_alias)
         self.assertEqual(by_slug.name, "lesson_task_contract")
         self.assertEqual(json.loads(files["lesson.json"])["id"], "task-contract")
-        self.assertIn("第 2 课", files["README.md"])
+        # 课号随目录顺序变化，生成的文件里不写死（否则新课一生成，“不写死课号”的测试就失败）。
+        for name, text in files.items():
+            with self.subTest(file=name):
+                self.assertNotRegex(text, r"第 ?\d+ ?课")
+        self.assertIn("`task-contract`", files["README.md"])
         with self.assertRaisesRegex(ValueError, "task-contract"):
             build_scaffold(self.root, "task-contract", "other_name")
         target, files = build_scaffold(self.root, "task-contract")
