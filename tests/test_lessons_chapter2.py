@@ -125,6 +125,9 @@ class StructuredOutputTests(unittest.TestCase):
                 self.assertTrue(all(c["passed"] for c in report(events)["checks"]))
                 self.assertEqual(len([e for e in events if e[0] == "request"]), calls)
                 self.assertEqual(len(reports(events)), calls)
+                # 每份报告记在对应稿件的轮次上，导览才能指定“初稿的报告”。
+                self.assertEqual([number for kind, _, number in events if kind == "lesson.report"],
+                                 list(range(1, calls + 1)))
                 if scenario == "missing_field":
                     self.assertEqual([c["passed"] for c in reports(events)[0]["checks"]], [True, False])
                 elif scenario == "wrong_fact":

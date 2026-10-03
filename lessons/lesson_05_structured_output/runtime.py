@@ -75,7 +75,7 @@ def _report(context: RunContext, checks: list[dict], attempt: int) -> None:
                     {"label": "学习者备注", "value": context.question or "（空）"}],
         "table": {"columns": ["阶段", "结果"],
                   "rows": [[c["label"], "通过" if c["passed"] else c["detail"]] for c in checks]},
-    })
+    }, attempt)
 
 
 def run(context: RunContext) -> str:

@@ -10,4 +10,4 @@ runtime.py 中 TaskCard 用 Pydantic 校验字段；inspect_output 依次检查�
 
 ## 限制与参考
 
-本课没有读取外部任意路径，也没有长期状态。“任务目标与验收”一课仅证明固定本地案例的验收逻辑；第 5、6 课的实际模型表现依赖当前服务商，报告只依据本次响应。来源范围与固定 commit 见 [第二章来源记录](../../docs/architecture/chapter2-sources.md)。
+本课没有读取外部任意路径，也没有长期状态。“任务目标与验收”一课仅证明固定本地案例的验收逻辑；本课和“提示词与工具描述”一课的实际模型表现依赖当前服务商，报告只依据本次响应。来源范围与固定 commit 见 [来源记录](../../docs/architecture/chapter2-sources.md)。
