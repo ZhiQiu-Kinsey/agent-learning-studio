@@ -1,6 +1,6 @@
 # AgentStart：当前课程来源与教学取舍
 
-更新日期：2026-10-01。课程参考来源为以下三份正式教程。固定版本与阅读范围用于核对实际借鉴内容，课程讲解和 Python 实验由本项目编写。
+更新日期：2026-10-04。课程参考来源为第 1 节表中的正式教程。固定版本与阅读范围用于核对实际借鉴内容，课程讲解和 Python 实验由本项目编写。
 
 ## 1. 固定参考快照
 
@@ -9,6 +9,8 @@
 | [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners) | `25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595` | MIT | 借鉴学习目标、主题模块、连续课程助教项目和按新增能力验收的学习方式。 |
 | [Hugging Face Agents Course](https://github.com/huggingface/agents-course) | `b3946b1d09d29c65736e219d48a8a736a2c52154` | Apache-2.0 | 借鉴基础到框架、场景实践、评估的分层结构，框架选修分支，以及 State/Node/Edge 和 RAG 流程的拆分。 |
 | [深入理解 AI Agent：设计原理与工程实践](https://github.com/bojieli/ai-agent-book) | `b789c97a8f3de5b405a6f6dfa8289208d679d0b8` | Apache-2.0 | 补足任务验收、上下文实验、工具契约、独立验证器、运行生命周期、成本和多 Agent 工程取舍。 |
+| [Hello-Agents](https://github.com/datawhalechina/hello-agents) | `4b014ad47e2658af24b59f21e7bdb3f89a66205e` | CC BY-NC-SA 4.0 | 只借鉴章节组织和讲解顺序，不复制正文、代码和配图（见第 8 节）。 |
+| [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) | `04d809ceab9df28f9adaed044884180159172930` | MIT（仓库 `LICENSE.md`，Copyright (c) 2025 Kilian A. Lieret and Carlos E. Jimenez） | 借鉴“文本动作 + 严格解析 + 最小 Agent 循环”的做法，用于文本动作课与第 8 节的“工作流还是 Agent”讲解；只借鉴结构，没有复制代码（见第 8 节）。 |
 
 参考教程不参与平台运行。未读取的文件不计入阅读范围；复用源码或正文时应保留相应许可与版权信息。
 
@@ -59,7 +61,7 @@
 | 课程 | 来源与固定版本 | 实际阅读 | 借鉴了什么 |
 | --- | --- | --- | --- |
 | 13 `text-actions` | Hugging Face Agents Course `b3946b1`（Apache-2.0） | `units/en/unit1/actions.mdx`、`units/en/unit1/dummy-agent-library.mdx` | stop-and-parse 的讲法；“不加 stop 时模型自己写出 Observation”这一现象。本课改为本地成绩表、严格解析和编造内容的并列记录 |
-| 14 `todo-planning` | learn-claude-code 2026-10 浅克隆 `ce8f9f1`（MIT） | `s05_todo_write/README.zh.md`、`s05_todo_write/code.py` | todo_write 整体替换清单、同一时间一项进行中、连续几轮未更新就由运行层提醒。本课把提醒改为 OpenAI 兼容格式下 tool 消息之后的单独 user 消息，并加上独立验收器 |
+| 14 `todo-planning` | learn-claude-code 2026-10 浅克隆 `ce8f9f1`（MIT） | `docs/zh/s03-todo-write.md`、`agents/s03_todo_write.py`（TodoWrite 在这套编号里是 s03，s05 是技能加载；同一 commit 另有按目录组织的 `s05_todo_write/`，章节编号不同，两套编号不要混用） | todo_write 整体替换清单、同一时间一项进行中、连续几轮未更新就由运行层提醒。本课把提醒改为 OpenAI 兼容格式下 tool 消息之后的单独 user 消息，并加上独立验收器 |
 | 15 `plan-and-replan` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `07-planning-design/README.md`（按固定 commit 的 raw URL 读取） | 任务分解、用结构化输出表示计划、子任务结果影响后续步骤时迭代规划。本课改为单 Agent 的规划器 / 执行器分工，加入固定故障、修订上限和版本差异 |
 | 16 `reflection-revision` | Microsoft AI Agents for Beginners `25b7985`（MIT） | `09-metacognition/README.md`（按固定 commit 的 raw URL 读取） | 自我评估与纠正、外部反馈的作用。本课把“外部反馈”落实为真实执行的测试用例，并加上迭代上限与停止原因 |
 | 17 `workflow-patterns` | claude-cookbooks 2026-10 稀疏克隆 `d7265d6`（MIT） | `patterns/agents/basic_workflows.ipynb` | 提示链、并行、路由三种工作流的划分。原示例路由遇到未知标签会出错、没有步骤间检查；本课加入检查门、兜底记录、标注对照与服务端计时 |
@@ -75,4 +77,27 @@
 | `skills-disclosure` | — | — | 4 个技能文件与对照实验均为本项目编写；“目录加按需加载”的思路是业界通用做法，没有复用任何上游文本 |
 | `context-compaction`、`memory-lifecycle` | 沿用拆分前第 9、10 课的来源，见 [上下文预算、压缩与持久记忆的参考范围](budget-memory-sources.md) | — | 拆课没有新增外部材料 |
 
-另外参考了 [Hello-Agents](https://github.com/datawhalechina/hello-agents)（`4b014ad`，CC BY-NC-SA 4.0）的课程组织方式：每种范式固定讲法、代码按职责分块、自检分层。该许可证不允许商业使用并要求相同方式共享，所以只借鉴组织思路，没有复用正文或代码。
+另外参考了 [Hello-Agents](https://github.com/datawhalechina/hello-agents)（`4b014ad`，CC BY-NC-SA 4.0）的课程组织方式：每种范式固定讲法、代码按职责分块、自检分层。该许可证不允许商业使用并要求相同方式共享，所以只借鉴组织思路，没有复用正文或代码。第 8 节登记了扩写导学时的具体阅读范围。
+
+## 8. “开始之前”导学与全部课程讲解扩写的来源（2026-10-04）
+
+这一节登记扩写前的阅读范围：导学要讲 Agent 的由来、LLM 怎样工作、模型的局限、Agent 的组成、工作流还是 Agent；各课要加深概念讲解。固定版本见下表，与第 1 节一致。导学自身此前的来源见 [前置学习章节：来源与取舍](onboarding-sources.md)，不重复登记。
+
+- 这里登记的是各写作环节实际用到的范围；某个文件最终没读，就从表里删掉，不计入借鉴。固定版本均已用 `git rev-parse` 与 `git cat-file -e <commit>:<path>` 核对过。
+- 讲解、示意、代码、夹具与实验均由本项目重新编写，没有复制参考项目的正文、代码或配图。
+- 两种借鉴方式：
+  - **借鉴结构**：只取章节顺序、提问方式、例子的安排和概念划分，用自己的话与自己的运行证据重写。
+  - **改写复用并署名**：许可证为 MIT 或 Apache-2.0 才允许，改写的段落在此登记来源，并在 `THIRD_PARTY_NOTICES.md` 补登版权声明与许可证文本。目前没有这类段落。
+- `THIRD_PARTY_NOTICES.md` 只登记复制或改编的上游代码与资源。下表所有来源都属“借鉴结构”，不进入该清单。
+
+| 资料 | 固定版本 | 许可证 | 登记的阅读范围 | 借鉴方式与用途 |
+| --- | --- | --- | --- | --- |
+| [Hello-Agents](https://github.com/datawhalechina/hello-agents) | `4b014ad47e2658af24b59f21e7bdb3f89a66205e` | CC BY-NC-SA 4.0（仓库 `LICENSE.txt`） | `docs/前言.md`；`docs/chapter1/第一章 初识智能体.md`、`docs/chapter2/第二章 智能体发展史.md`、`docs/chapter3/第三章 大语言模型基础.md`、`docs/chapter4/第四章 智能体经典范式构建.md`（中文版） | 借鉴结构：章节组织和讲解顺序，即问题驱动、贯穿全章的例子、能力逐级上升的阶梯。许可证禁止商业使用并要求相同方式共享，所以不复制正文、代码和配图，也不翻译或近似改写其段落 |
+| [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners) | `25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595` | MIT | `01-intro-to-ai-agents/README.md`、`04-tool-use/README.md`、`07-planning-design/README.md`、`08-multi-agent/README.md`、`09-metacognition/README.md`、`13-agent-memory/README.md`、`STUDY_GUIDE.md`（各课的 `code_samples/` 与 `images/` 不读不用）。本地是稀疏克隆，这些目录未必检出，按固定 commit 用 `git show` 或 raw URL 读取，已用 `git cat-file -e` 核对文件存在 | 借鉴结构：“什么是 Agent、哪些场景适合用 Agent”的概念划分和组成部分的列法，以及工具、规划、多 Agent、元认知、记忆各主题的讲解范围；说法与例子重写 |
+| [Hugging Face Agents Course](https://github.com/huggingface/agents-course) | `b3946b1d09d29c65736e219d48a8a736a2c52154` | Apache-2.0 | `units/en/unit1/` 下的 `what-are-llms.mdx`、`messages-and-special-tokens.mdx`、`tools.mdx`、`actions.mdx`、`observations.mdx`、`dummy-agent-library.mdx`。同名中文页在 `units/zh-CN/unit1/`，本地未检出，需要时用 `git show` 读取 | 借鉴结构：“LLM 与消息 → 工具 → 行动 / 观察循环”的顺序，以及 stop-and-parse 的演示思路。`actions.mdx` 与 `dummy-agent-library.mdx` 在第 6 节、`messages-and-special-tokens.mdx` 与 `what-are-llms.mdx` 在第 7 节已登记过，这里补足范围 |
+| [深入理解 AI Agent](https://github.com/bojieli/ai-agent-book) | `b789c97a8f3de5b405a6f6dfa8289208d679d0b8` | Apache-2.0 | `book/introduction.md`；`book/chapter1.md`、`chapter2.md`、`chapter3.md`、`chapter4.md`、`chapter5.md`、`chapter6.md`、`chapter7.md`、`chapter10.md`（中文版；各章配套实验目录不在范围内） | 借鉴结构：Agent 由来、模型与运行层的分工、模型局限、上下文与工具、记忆、规划与多 Agent 的归纳。每个结论仍以本项目自己的真实运行为准 |
+| [claude-cookbooks](https://github.com/anthropics/claude-cookbooks) | `d7265d6ae994ccd8429db0594b000073b2f9ad43` | MIT（Copyright (c) 2023 Anthropic） | `tool_use/`：`calculator_tool.ipynb`、`parallel_tools.ipynb`、`extracting_structured_json.ipynb`、`tool_use_with_pydantic.ipynb`、`context_engineering/context_engineering_tools.ipynb`；`misc/`：`how_to_enable_json_mode.ipynb`、`prompt_caching.ipynb`、`speculative_prompt_caching.ipynb`；`patterns/agents/`：`README.md`、`basic_workflows.ipynb`、`orchestrator_workers.ipynb`、`evaluator_optimizer.ipynb`；`extended_thinking/extended_thinking.ipynb`、`capabilities/classification/guide.ipynb`、`skills/README.md` | 借鉴结构：工具调用、结构化输出、提示缓存、工作流模式、扩展思考、分类与技能各主题的讲法和对照安排。`patterns/agents/` 下的三个 notebook 在第 6 节已登记过。示例、工具与数据由本项目重写 |
+| [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) | `ce8f9f186058939da54c9d6fead78dfb5d0fd6c3` | MIT（Copyright (c) 2024 shareAI Lab） | `README-zh.md`（开篇“Agency 来自模型，Agent 产品 = 模型 + Harness”一节对应 Agent 由来与运行层）；`s01_agent_loop/README.zh.md`、`s02_tool_use/README.zh.md`、`s08_context_compact/README.zh.md`、`s09_memory/README.zh.md`；`docs/zh/s03-todo-write.md`、`docs/zh/s05-skill-loading.md`、`agents/s03_todo_write.py` | 借鉴结构：“模型负责决策、运行层负责环境”的划分，以及循环、工具、待办、技能、压缩、记忆各讲一件事的拆法。该仓库同一 commit 有两套编号：`docs/zh/`、`agents/` 下 TodoWrite 是 s03、技能加载是 s05；按目录组织的 `s0N_*/` 里待办是 `s05_todo_write`、技能加载是 `s07_skill_loading`，引用时写完整路径。文中的历史案例与论断需另行核对出处，不直接引用 |
+| [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) | `04d809ceab9df28f9adaed044884180159172930` | MIT（仓库 `LICENSE.md`，Copyright (c) 2025 Kilian A. Lieret and Carlos E. Jimenez） | `src/minisweagent/agents/default.py`、`src/minisweagent/config/default.yaml`、`src/minisweagent/config/mini_textbased.yaml`、`src/minisweagent/models/utils/actions_text.py` | 借鉴结构：最小 Agent 循环的写法，以及文本动作（从回复里解析动作、解析失败时回传格式错误）与原生工具调用并存的做法。不复制代码或配置；它会把 `os.environ` 原样传给子进程，本项目不沿用这一点（见 `curriculum-research.md`） |
+
+参考仓库在本机多是稀疏克隆，`ls` 看不到的文件不代表仓库没有。核对阅读范围以 `git ls-tree -r --name-only <commit>` 为准。
