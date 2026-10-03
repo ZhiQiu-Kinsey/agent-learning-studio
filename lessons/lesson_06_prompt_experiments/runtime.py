@@ -212,7 +212,7 @@ def _report_pair(context: RunContext, scenario: str, rows: list[dict]) -> None:
                     {"label": "调用预算", "value": context.max_model_calls}, {"label": "采样温度", "value": 0},
                     {"label": "样本标签", "value": context.inputs["sample_label"]},
                     {"label": "学习者备注", "value": context.question or "（空）"},
-                    {"label": "唯一改动", "value": "function.description" if scenario == "tool_description" else "system 提示中的流程规则"}],
+                    {"label": "唯一改动", "value": "function.description" if scenario == "tool_description" else "系统提示词中的流程规则"}],
         "table": {"columns": ["版本", "变更变量的文本", "模型输出或工具提议", "初筛"],
                   "rows": [[row["label"], row["prompt"], row["answer"], "命中" if row["passed"] else "未命中"] for row in rows]},
     })
