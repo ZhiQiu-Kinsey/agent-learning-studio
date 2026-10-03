@@ -202,6 +202,15 @@ export default function Tour({
       open.current = false;
     };
   }, []);
+  // Which way the learner is moving, so a step that cannot be shown is skipped
+  // in that direction (stepping back past it must not bounce forward again).
+  const previous = useRef(index);
+  const direction = useRef<1 | -1>(1);
+  useEffect(() => {
+    if (index !== previous.current)
+      direction.current = index > previous.current ? 1 : -1;
+    previous.current = index;
+  }, [index]);
   const joySteps = useMemo<Step[]>(
     () =>
       steps.map((step) => {
@@ -268,10 +277,17 @@ export default function Tour({
         loaderComponent={null}
         onEvent={(data: EventData) => {
           // Targets fall back to a container that always exists; if one is still
-          // missing, move on rather than leave a dimmed page with no card.
+          // missing, skip it in the direction of travel rather than leave a
+          // dimmed page with no card.
           if (data.type !== EVENTS.TARGET_NOT_FOUND) return;
-          if (data.index < steps.length - 1) onIndex(data.index + 1);
-          else onExit(false);
+          const next = data.index + direction.current;
+          if (next >= steps.length) onExit(false);
+          else
+            onIndex(
+              Math.max(0, next) === data.index
+                ? data.index + 1
+                : Math.max(0, next),
+            );
         }}
         options={{
           // Strong mask: the dimmed page ignores clicks; Esc is handled above.
@@ -286,6 +302,9 @@ export default function Tour({
           offset: 14,
           arrowBase: 22,
           arrowSize: 10,
+          // Joyride writes this as the arrow's inline colour, which the SVG fills
+          // with; the variable lives on the floater, beside the card.
+          arrowColor: "var(--tour-surface)",
           beforeTimeout: 4000,
           zIndex: 70,
         }}
