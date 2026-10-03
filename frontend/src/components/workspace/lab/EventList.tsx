@@ -27,6 +27,30 @@ export function EventList({ studio: s }: { studio: StudioState }) {
     if (s.running && list.current)
       list.current.scrollTop = list.current.scrollHeight;
   }, [s.events.length, s.running]);
+  // Otherwise keep the selected event in view (locate, guide, replay steps).
+  // Only the list scrolls, never the page.
+  const selectedIndex = s.active ? s.visible.indexOf(s.active) : -1;
+  useEffect(() => {
+    const box = list.current;
+    if (s.running || selectedIndex < 0 || !box) return;
+    const row = box.querySelector<HTMLElement>(
+      `[data-event-index="${selectedIndex}"]`,
+    );
+    if (!row) return;
+    const outer = box.getBoundingClientRect();
+    const inner = row.getBoundingClientRect();
+    const offset =
+      inner.top < outer.top
+        ? inner.top - outer.top - 8
+        : inner.bottom > outer.bottom
+          ? inner.bottom - outer.bottom + 8
+          : 0;
+    if (offset)
+      box.scrollBy({
+        top: offset,
+        behavior: reducedMotion ? "instant" : "smooth",
+      });
+  }, [selectedIndex, s.running, reducedMotion]);
   return (
     <div className="trace-list-pane" data-testid="lab-trace-list">
       <div className="subpane-label">
