@@ -27,7 +27,8 @@ class MemoryStore:
     def __init__(self, path: Path, *, read_only: bool = False):
         if read_only:
             # mode=ro：这条连接在数据库层面就写不进去；文件不存在时直接报错，不会新建。
-            self.connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+            # as_uri 会转义路径里的 # 和 %，否则路径会在 # 处被截断，连到另一个文件上。
+            self.connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
         else:
             self.connection = sqlite3.connect(path)
         self.connection.row_factory = sqlite3.Row
@@ -38,6 +39,10 @@ class MemoryStore:
                 value TEXT NOT NULL, source TEXT NOT NULL,
                 version INTEGER NOT NULL, updated_at REAL NOT NULL,
                 expires_at REAL, scope TEXT NOT NULL DEFAULT 'persistent', task_id TEXT,
+                PRIMARY KEY (namespace, key))""")
+            # 每个键写到了第几版另记一张表：删除记忆时不删它，同一个键重新写入时版本接着往上加。
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS versions (
+                namespace TEXT NOT NULL, key TEXT NOT NULL, version INTEGER NOT NULL,
                 PRIMARY KEY (namespace, key))""")
             self.connection.commit()
 
@@ -82,14 +87,20 @@ class MemoryStore:
             revive = row is not None and expected_version is None and self.expired(dict(row))
             if current != expected_version and not revive:
                 raise VersionConflict(f"版本冲突：写入方读到的是 {expected_version}，库里现在是 {current}。")
-            # 3. 版本只增不减：重写过期行也接着往上加，旧的时间线不会被抹掉。
+            # 3. 版本只增不减：接着这个键写到过的最大版本往上加。重写过期行、删除后重建都不会回到 1，
+            #    手里还拿着删除前旧版本的写入方，也就对不上了。
+            last = self.connection.execute("SELECT version FROM versions WHERE namespace=? AND key=?",
+                                           (namespace, key)).fetchone()
+            version = max(current or 0, last["version"] if last else 0) + 1
             record = {"namespace": namespace, "key": key, "value": value, "source": source,
-                      "version": (current or 0) + 1, "updated_at": time.time(),
+                      "version": version, "updated_at": time.time(),
                       "expires_at": expires_at, "scope": scope, "task_id": task_id}
             self.connection.execute(
                 "INSERT OR REPLACE INTO memories (namespace, key, value, source, version, updated_at,"
                 " expires_at, scope, task_id) VALUES (:namespace, :key, :value, :source, :version,"
                 " :updated_at, :expires_at, :scope, :task_id)", record)
+            self.connection.execute("INSERT OR REPLACE INTO versions (namespace, key, version)"
+                                    " VALUES (:namespace, :key, :version)", record)
             self.connection.commit()
         except BaseException:
             self.connection.rollback()
@@ -116,7 +127,7 @@ class MemoryStore:
                                        (check_id(namespace), check_id(key))).fetchone() is not None
 
     def delete(self, namespace: str, key: str) -> bool:
-        # 删除是存储操作：这一行从表里移除，之后换哪条连接都读不回来。
+        # 删除是存储操作：这一行从表里移除，之后换哪条连接都读不回来。versions 里的版本计数留着。
         with self.connection:
             cursor = self.connection.execute("DELETE FROM memories WHERE namespace=? AND key=?",
                                              (check_id(namespace), check_id(key)))

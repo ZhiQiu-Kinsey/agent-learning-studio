@@ -206,7 +206,8 @@ def _report_recall_answer(context, values, records, messages, cited, writes):
     system, user = messages[0]["content"], messages[1]["content"]
     keys = {item["key"] for item in records}
     sent = [item["value"] for item in memory_block(user)]
-    placed = sent == [item["value"] for item in records] and not any(item["value"] in system for item in records)
+    # system 必须和写好的规则一字不差：比的是整段文本，短的记忆值碰巧是规则里的词也不会误判。
+    placed = sent == [item["value"] for item in records] and system == SYSTEM
     if records:
         grounded = {"label": "回答引用的 key 都在本次请求的数据块里", "passed": bool(cited) and set(cited) <= keys,
                     "detail": "回答引用：" + ("、".join(cited) if cited else "无")}

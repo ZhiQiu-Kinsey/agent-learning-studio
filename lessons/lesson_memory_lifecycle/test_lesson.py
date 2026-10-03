@@ -98,6 +98,52 @@ class VersionTests(unittest.TestCase):
             self.assertEqual(final.get("a", "plan")["version"], 2)
             final.close()
 
+    def test_stale_writer_cannot_overwrite_a_key_recreated_after_delete(self):
+        # ABA：A 读到版本 1 → 键被删除 → C 重建这个键 → A 带着版本 1 写入。版本不回到 1，A 必须被拒绝。
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            writer_a, other = MemoryStore(path), MemoryStore(path)
+            try:
+                other.put("a", "plan", "原值", "输入", None)
+                seen_a = writer_a.get("a", "plan")["version"]
+                self.assertTrue(other.delete("a", "plan"))
+                recreated = other.put("a", "plan", "重建后的值", "C 的输入", None)
+                self.assertEqual(recreated["version"], 2, "删除后重建，版本接着往上加")
+                with self.assertRaises(VersionConflict):
+                    writer_a.put("a", "plan", "A 的过时值", "旧资料", seen_a)
+                kept = writer_a.get("a", "plan")
+                self.assertEqual((kept["value"], kept["version"]), ("重建后的值", 2))
+            finally:
+                writer_a.close()
+                other.close()
+
+    def test_end_task_keeps_the_version_counter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore(Path(directory) / "memory.sqlite3")
+            store.put("a", "step", "第一步", "输入", None, scope="current_task", task_id="t1")
+            self.assertEqual(store.end_task("a", "t1"), 1)
+            self.assertFalse(store.stored("a", "step"))
+            again = store.put("a", "step", "第一步", "输入", None, scope="current_task", task_id="t2")
+            self.assertEqual(again["version"], 2)
+            store.close()
+
+    def test_store_without_a_version_table_continues_from_the_row_version(self):
+        # 早先建的库只有 memories 表：重开时补建版本表，版本照样从现有行接着加。
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            legacy = sqlite3.connect(path)
+            legacy.execute("""CREATE TABLE memories (namespace TEXT NOT NULL, key TEXT NOT NULL,
+                value TEXT NOT NULL, source TEXT NOT NULL, version INTEGER NOT NULL, updated_at REAL NOT NULL,
+                expires_at REAL, scope TEXT NOT NULL DEFAULT 'persistent', task_id TEXT,
+                PRIMARY KEY (namespace, key))""")
+            legacy.execute("INSERT INTO memories VALUES ('a', 'plan', '旧值', '输入', 3, 0, NULL, 'persistent', NULL)")
+            legacy.commit()
+            legacy.close()
+            store = MemoryStore(path)
+            self.assertEqual(store.put("a", "plan", "新值", "更新", 3)["version"], 4)
+            store.close()
+
 
 class ExpiryTests(unittest.TestCase):
     def test_expired_row_is_hidden_but_stored_until_delete(self):

@@ -11,7 +11,7 @@
 
 历史消息由运行器组装：assistant 工具调用和旁支回复不是模型之前生成的，工具结果来自本次真实的 Python 读取。资料键用课程 slug（`messages-context`、`application-state`）。
 
-拆开配对实验故意绕过“消息与上下文”一课的本地协议检查，把孤立的 tool 消息原样发出。服务商拒绝时记为 `lesson.provider_error`（状态码、错误类型、原文、`source`），不重试也不改写。离线测试里的 400 由 `fixtures.py` 模拟，`source` 为 `offline_fixture`；要看服务商真实的回应，需要用真实模型运行。`fixtures.py` 只服务自动化测试。
+拆开配对实验故意绕过“上下文组成与消息协议”一课的本地协议检查，把孤立的 tool 消息原样发出。服务商拒绝时记为 `lesson.provider_error`（状态码、错误类型、原文、`source`），不重试也不改写。只有请求级的 4xx 算拒绝（由“上下文组成与消息协议”一课的 `rejection_status` 判断）；超时、限流、鉴权失败、连接失败和 5xx 不是服务商对这组消息的判断，照常报错。离线测试里的 400 由 `fixtures.py` 模拟，`source` 为 `offline_fixture`；要看服务商真实的回应，需要用真实模型运行。`fixtures.py` 只服务自动化测试。
 
 规则压缩、清理旧工具结果和模型摘要放在下一课“上下文压缩与探针问题”（`lessons/lesson_context_compaction/`）；它从本课 `runtime.py` 导入字符数、本地字符串检查、组装工具配对与旁支讨论等小工具。
 

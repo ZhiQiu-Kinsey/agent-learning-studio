@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from course.api_client import ProviderHTTPError
 from course.execution import RunContext, execute_lesson, validate_inputs
+from course.providers import load_sdk
 from course.runner import RunCancelled
 from lessons.lesson_07_messages_context import fixtures as context_fixtures
 from lessons.lesson_07_messages_context import runtime as context_runtime
@@ -116,6 +117,37 @@ class MessagesContextTests(unittest.TestCase):
         with self.assertRaises(RunCancelled):
             context_runtime.run(context)
 
+    def test_timeout_rate_limit_and_server_errors_are_not_recorded_as_rejections(self):
+        # LiteLLM 的异常都带整数 status_code（超时 408、连接失败 500、限流 429）；它们不是服务商对消息的判断。
+        exceptions = load_sdk().exceptions
+        failures = [
+            exceptions.Timeout(message="请求超时", model="m", llm_provider="openai"),
+            exceptions.APIConnectionError(message="连接失败", llm_provider="openai", model="m"),
+            exceptions.RateLimitError(message="请求过多", llm_provider="openai", model="m"),
+            exceptions.ServiceUnavailableError(message="暂不可用", llm_provider="openai", model="m"),
+            ProviderHTTPError("HTTP 429", 429),
+            ProviderHTTPError("HTTP 502", 502),
+            ProviderHTTPError("HTTP 401", 401),
+        ]
+        for failure in failures:
+            def completion(body, api_key, failure=failure):
+                raise failure
+
+            with self.subTest(error=type(failure).__name__, status=failure.status_code):
+                values = validate_inputs(context_runtime, {})
+                context, events = make_context("messages-context", "ablate", values, completion)
+                with self.assertRaises(type(failure)):
+                    context_runtime.run(context)
+                self.assertEqual(of(events, "lesson.provider_error"), [])
+                self.assertEqual(of(events, "lesson.report"), [])
+
+    def test_rejection_status_counts_only_request_level_4xx(self):
+        for status, expected in ((400, 400), (413, 413), (422, 422), (401, None), (404, None),
+                                 (408, None), (429, None), (500, None), (503, None)):
+            with self.subTest(status=status):
+                self.assertEqual(context_runtime.rejection_status(ProviderHTTPError("x", status)), expected)
+        self.assertIsNone(context_runtime.rejection_status(RuntimeError("没有状态码")))
+
     def test_protocol_rejects_orphan_tool_result_and_unfinished_call(self):
         with self.assertRaises(ValueError):
             context_runtime.validate_tool_history([{"role": "tool", "tool_call_id": "x", "content": "3"}])
@@ -150,8 +182,11 @@ class ApplicationStateTests(unittest.TestCase):
         self.assertIn("messages-context", answer)
 
     def test_missing_and_budget_are_distinct_failures(self):
-        for scenario in ("missing", "budget"):
-            values = validate_inputs(state_runtime, {"scenario": scenario, "step_budget": 2 if scenario == "budget" else 3})
+        # 结局只由资料来源和步骤预算决定，和 lesson.json 里两组练习的输入一致。
+        presets = {"missing": {"source_key": "missing"},
+                   "budget": {"source_key": "application-state", "step_budget": 2}}
+        for scenario, inputs in presets.items():
+            values = validate_inputs(state_runtime, inputs)
             context, events = make_context("application-state", scenario, values)
             state_runtime.run(context)
             states = [data["state"] for data in of(events, "lesson.state")]
@@ -192,8 +227,9 @@ class ApplicationStateTests(unittest.TestCase):
             state_runtime.run(context)
 
     def test_input_contract(self):
+        # 没有 scenario 字段：结局不能靠预设标签指定，只能由资料和预算推出来。
         for invalid in ({"step_budget": 0}, {"source_key": "../../private"}, {"source_key": "lesson-07"},
-                        {"scenario": "unknown"}):
+                        {"scenario": "budget"}):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 validate_inputs(state_runtime, invalid)
 

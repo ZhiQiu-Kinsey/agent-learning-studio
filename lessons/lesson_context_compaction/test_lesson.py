@@ -45,7 +45,6 @@ class CompactionRunTests(unittest.TestCase):
         for messages in (full, rule, cleared, summary_request, summarized):
             validate_tool_history(messages)
         self.assertEqual(summary_request[-1]["content"], runtime.SUMMARY_INSTRUCTIONS["keep_sources"])
-        self.assertEqual(len(summary_request), 21, "实验观察点按 messages[20] 取摘要指令")
         for messages in (full, rule, cleared, summarized):
             self.assertEqual(messages[-1]["content"], runtime.PROBE)
             self.assertEqual(messages[-5:], full[-5:], "最近部分在每一组里都原样保留")
@@ -85,6 +84,23 @@ class CompactionRunTests(unittest.TestCase):
         self.assertEqual(summary_request[-1]["content"], runtime.SUMMARY_INSTRUCTIONS["brief"])
         summarized = next(data for data in of(events, "lesson.compaction") if data.get("name") == "摘要压缩")
         self.assertFalse(summarized["phrase_in_context"], "离线夹具的简短摘要不含原话")
+
+    def test_summary_instruction_is_recorded_whatever_the_history_length(self):
+        # 观察点读 lesson.compaction 的 instruction 字段；摘要请求的消息条数随 noise_repeats 变（2n+5）。
+        for repeats, style in ((2, "keep_sources"), (8, "brief"), (25, "brief")):
+            with self.subTest(noise_repeats=repeats, summary_style=style):
+                _, events = run_case("compare", {"noise_repeats": repeats, "summary_style": style})
+                tagged = [(data, number) for data, number in zip(of(events, "lesson.compaction"),
+                                                                 rounds(events, "lesson.compaction"))
+                          if data["kind"] == "summary_request"]
+                self.assertEqual(len(tagged), 1)
+                data, number = tagged[0]
+                summary_request = of(events, "request")[3]["body"]["messages"]
+                self.assertEqual(number, 4)
+                self.assertEqual(len(summary_request), 2 * repeats + 5)
+                self.assertEqual((data["instruction"], data["style"], data["messages"]),
+                                 (summary_request[-1]["content"], style, len(summary_request)))
+                self.assertEqual(data["instruction"], runtime.SUMMARY_INSTRUCTIONS[style])
 
     def test_missing_usage_is_reported_not_zero(self):
         def provider(body, key):
