@@ -153,7 +153,7 @@ def public_curriculum():
 
 
 def roadmap():
-    catalog = load_curriculum()
+    catalog = public_curriculum()  # 已换好课号
     planned_categories = {lesson["category_id"] for lesson in catalog["lessons"]
                           if lesson["status"] == "planned"}
     return [{"id": category["id"], "title": category["title"],

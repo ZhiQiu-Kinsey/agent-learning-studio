@@ -1,6 +1,7 @@
 """声明式课程注册：课程规划决定可用性，各课声明自己的实现与教学资源。"""
 import json
 import keyword
+import logging
 import re
 from importlib import import_module
 from pathlib import Path, PurePosixPath
@@ -165,8 +166,11 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
     root = Path(root).resolve()
     curriculum = _object(curriculum if curriculum is not None else _json(root / "curriculum" / "catalog.json"), "curriculum")
     index = index_catalog(curriculum)
-    # 目录正文里提到其他课一律写 {{lesson:<slug>}}，课号在读取时计算。
+    # 目录、导学和课程文件里提到其他课一律写 {{lesson:<slug>}}，课号在读取时计算。
     check_refs(curriculum, index.numbers, "curriculum")
+    onboarding = root / "curriculum" / "onboarding.json"
+    if onboarding.is_file():
+        check_refs(_json(onboarding), index.numbers, str(onboarding))
     catalog = {}
     for identifier in index.order:
         entry = index.entries[identifier]
@@ -189,6 +193,7 @@ def load_lessons(root=ROOT, curriculum=None, *, include_planned=False):
         _require(identifier in catalog, path, "课程 id 未登记在 curriculum/catalog.json")
         _require(identifier not in found, path, "课程实现 id 重复")
         found[identifier] = _manifest(root, path, catalog[identifier])
+        check_refs(declaration, index.numbers, str(path))
         check_refs(_json(found[identifier]["content_path"]), index.numbers, str(found[identifier]["content_path"]))
     for identifier, entry in catalog.items():
         _require(entry["status"] != "available" or identifier in found,
@@ -268,6 +273,7 @@ def lesson_detail(spec, locale=None):
     input_model = getattr(module, "INPUT_MODEL", None)
     input_schema = input_model.model_json_schema() if spec["capabilities"]["supports_inputs"] and input_model else None
     learning = resolve_refs(learning, CATALOG_INDEX.numbers, learning_i18n["locale"])
+    exercises = resolve_refs(exercises, CATALOG_INDEX.numbers, learning_i18n["locale"])
     return {**public_lesson(spec, learning_i18n["locale"]), "exercises": exercises, "input_schema": input_schema,
             "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
             "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
@@ -290,13 +296,20 @@ def _learning(spec):
     return _learning_cache[key]
 
 
-def curriculum_outline():
-    """/api/curriculum 与课程表文档：在 catalog 之上补小节、是否调用模型与本课术语（见 server/outline.py）。"""
+def curriculum_outline(*, strict: bool = False):
+    """/api/curriculum 与课程表文档：在 catalog 之上补小节、是否调用模型与本课术语（见 server/outline.py）。
+
+    strict（导出文档时用）：术语表有错直接抛出，不生成缺了“本课术语”的文档。
+    """
     from server.curriculum import public_curriculum
     from server.glossary import load_glossary
     try:
         terms = load_glossary(ROOT, CATALOG_INDEX)["terms"]
-    except (LessonValidationError, OSError):
+    except (LessonValidationError, OSError) as error:
+        if strict:
+            raise
+        # 网页照常显示课程表，只是没有“本课术语”；原因写进服务端日志，不悄悄吞掉。
+        logging.getLogger(__name__).warning("术语表加载失败，课程表暂不显示本课术语：%s", error)
         terms = []
     return enrich(public_curriculum(), LESSONS, _learning, terms)
 
