@@ -376,7 +376,7 @@ export interface ObservePoint {
   selector: Selector | null;
 }
 /**
- * 导览的一步：一句讲解，和这句话要学习者看的地方。
+ * 导览的一步：一小段讲解（一两句），和这段话要学习者看的地方。
  *
  * observe 指本实验的观察点：前端在学习者自己的运行里找到证据，跳到对应事件并框住它；
  * 找不到就直说没找到，不改指别处。stage 是舞台节点角色（user / runtime / model / tool / memory），

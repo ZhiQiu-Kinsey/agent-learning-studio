@@ -70,7 +70,7 @@ npm.cmd --prefix frontend run dev               # Vite 开发服务器，/api �
 .\.venv\Scripts\python.exe scripts/term_report.py --lesson <slug> --full   # 一课的术语、代码说明与用词问题
 .\.venv\Scripts\python.exe scripts/realign_notes.py              # 源码移动后按锚点重新对准读码批注（--check 只检查）
 .\.venv\Scripts\python.exe scripts/run_live.py <slug> [练习] --url http://127.0.0.1:8765   # 真实运行练习并打印事件摘要（会产生模型用量）
-.\.venv\Scripts\python.exe scripts/export_curriculum.py            # 改了 catalog.json、正文小节标题、lesson.json 或术语表后重新生成 docs/course-plan.md（--check 只检查）
+.\.venv\Scripts\python.exe scripts/export_curriculum.py            # 改了 catalog.json、正文小节的标题或第一句、lesson.json 或术语表后重新生成 docs/course-plan.md（--check 只检查）
 .\.venv\Scripts\python.exe scripts/export_trace_contract.py        # 改了 server/envelope.py 后生成前端镜像（--check 只检查）
 .\.venv\Scripts\python.exe scripts/migrate_content.py --check      # 内容 v2 迁移与格式规范
 .\.venv\Scripts\python.exe scripts/export_content_schema.py        # 改了 server/content_schema.py 后导出 schema

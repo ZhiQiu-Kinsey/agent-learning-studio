@@ -12,4 +12,4 @@
 | Microsoft AI Agents for Beginners | `25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595` | `STUDY_GUIDE.md` 的 Context、Memory、Evaluation and Observability 及 15-Minute Review Routine 小节；`13-agent-memory/README.md` 的记忆范围 | 借鉴每课目标、风险、验证问题的组织；`application-state` 不提前声称已实现跨运行记忆。 |
 | 《深入理解 AI Agent》 | `b789c97a8f3de5b405a6f6dfa8289208d679d0b8` | `book/chapter1.md` 的“现代 Agent = LLM + 上下文 + 工具”及 Model–Harness–Environment；`chapter1/context/agent.py` 的 `_prepare_messages_for_api`、`_build_context` 和上下文消融 | 借鉴观察经 Harness 构造成可见上下文、对照应改变输入信息的实验方法；本课只删除完整可移除消息，不留下失配的工具结果。 |
 
-本课的流程示意（`flow` 块）仅为教学示意。模型请求、响应以及状态快照须从本次事件查看；离线 fixture 只用于自动测试。
+本课的分步讲解（`walkthrough` 块）仅为教学示意。模型请求、响应以及状态快照须从本次事件查看；离线 fixture 只用于自动测试。
