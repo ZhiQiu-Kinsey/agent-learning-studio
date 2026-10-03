@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { Detail } from "../src/types";
-import { runOffline } from "./runs";
+import { isRunCreation, runOffline } from "./runs";
 import { t } from "./i18n";
 import { openLessonById } from "./navigation";
 
@@ -226,4 +226,45 @@ test("wide screens keep the experiment beside the observatory while it scrolls",
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   ).toBe(true);
+});
+
+test("coming back with the same question shows the last run without calling the model", async ({
+  page,
+  request,
+}) => {
+  const created: string[] = [];
+  page.on("request", (req) => {
+    if (isRunCreation(req)) created.push(req.url());
+  });
+  const status = page.getByTestId("lab-trace-status");
+  const restored = page.getByTestId("lab-restored");
+  await openDependentCalls(page, request);
+  await page.getByTestId("lab-run-button").click();
+  await expect(status).toHaveText(t("lab:bench.status.completed"));
+  await expect(restored).toHaveCount(0);
+
+  // Another lesson and back: the finished run is read back from the run store.
+  await openLessonById(page, request, "chat-request");
+  await openLessonById(page, request, "dependent-calls");
+  await page.getByTestId("scene-tab-lab").click();
+  await expect(restored).toBeVisible();
+  await expect(status).toHaveText(t("lab:bench.status.completed"));
+  for (const point of await observe(page).all())
+    await expect(point).toHaveAttribute("data-status", "found");
+
+  // A reload too: the browser keeps only the run id.
+  await page.reload();
+  await openLessonById(page, request, "dependent-calls");
+  await page.getByTestId("scene-tab-lab").click();
+  await expect(restored).toBeVisible();
+  expect(created).toHaveLength(1);
+
+  // A changed question no longer matches the run on screen.
+  await page.getByTestId("lab-question-input").fill("What is 2 + 3?");
+  await expect(restored).toHaveCount(0);
+  // Running again really creates a run (the offline fixture has no answer
+  // for this question, so only the request itself is checked).
+  await page.getByTestId("lab-run-button").click();
+  await expect.poll(() => created.length).toBe(2);
+  await expect(page.getByTestId("lab-run-button")).toBeVisible();
 });

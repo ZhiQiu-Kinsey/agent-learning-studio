@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, History } from "lucide-react";
 import type { StudioState } from "../../../hooks/useStudio";
 import PromptBar from "../../react-bits/PromptBar";
 import { Button } from "../../ui/button";
@@ -18,7 +18,7 @@ export function Composer({
   onConfigure: () => void;
   onRun: () => void;
 }) {
-  const { t } = useTranslation("lab", { keyPrefix: "bench.composer" });
+  const { t, i18n } = useTranslation("lab", { keyPrefix: "bench.composer" });
   const exercises = useMemo(
     () => s.detail?.exercises.filter((e) => !e.offline_only) ?? [],
     [s.detail],
@@ -86,6 +86,24 @@ export function Composer({
         {help && (
           <p id="lab-question-help" className="composer-note">
             {help}
+          </p>
+        )}
+        {s.restored && (
+          <p
+            className="composer-restored"
+            role="status"
+            data-testid="lab-restored"
+          >
+            <History size={14} aria-hidden="true" />
+            <span>
+              {t("restored", {
+                time: new Date(s.restored.at).toLocaleString(i18n.language, {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                }),
+                model: s.restored.model,
+              })}
+            </span>
           </p>
         )}
       </div>

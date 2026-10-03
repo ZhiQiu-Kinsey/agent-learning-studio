@@ -230,8 +230,13 @@ test("trace hunt uses the learner's own run, and review shows exactly the local 
   await expect(
     page.getByTestId("checkpoint-block").getByRole("checkbox").first(),
   ).toBeChecked();
-  // After a reload there is no run in memory: the hunt says so, but keeps the local record.
-  await expect(page.getByTestId("trace-hunt-no-run")).toBeVisible();
+  // After a reload the latest run is read back from the run store (same
+  // question, no new model request): the hunt uses it again and keeps the record.
+  await expect(page.getByTestId("trace-hunt-no-run")).toHaveCount(0);
+  await expect(page.getByTestId("trace-hunt-event")).toHaveCount(events.length);
+  await expect(page.getByTestId("trace-hunt")).toContainText(
+    t("lesson:check.hunt.source", { run: runId.slice(0, 8) }),
+  );
   await expect(page.getByTestId("trace-hunt-recorded")).toContainText(
     t("lesson:check.hunt.recorded", { run: runId.slice(0, 8) }),
   );

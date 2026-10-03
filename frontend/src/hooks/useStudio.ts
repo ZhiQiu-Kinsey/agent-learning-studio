@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cancelRun, createRun, followRunEvents, jsonFetch } from "../api";
+import {
+  ApiError,
+  cancelRun,
+  createRun,
+  followRunEvents,
+  jsonFetch,
+} from "../api";
 import { resolveLessonId } from "../lib/lessonIds";
 import { clientError } from "../i18n/errors";
 import { track } from "../progress";
@@ -9,6 +15,17 @@ import {
   type ReplayOptions,
 } from "../stage/replay";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
+import { runCache, runKey } from "./runCache";
+
+/** A finished run read back from the run store instead of calling the model again. */
+export type RestoredRun = { runId: string; at: string; model: string };
+type StoredRun = {
+  exercise_id: string;
+  status: string;
+  model: string;
+  created_at: string;
+  finished_at: string | null;
+};
 
 const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -46,6 +63,10 @@ export function useStudio() {
   const [runId, setRunId] = useState("");
   // 当前这份事件属于哪个练习：实验只拿自己对照组的运行核对证据。
   const [runExerciseId, setRunExerciseId] = useState("");
+  // Set while the events on screen were read back from an earlier run (runCache).
+  const [restored, setRestored] = useState<RestoredRun | null>(null);
+  // Bumped by every run, lesson or exercise change: a slower restore then gives up.
+  const restoreToken = useRef(0);
   const eventCount = useRef(0);
   const statusRequest = useRef(0);
 
@@ -119,9 +140,12 @@ export function useStudio() {
         if (abort.signal.aborted) return;
         setDetail(value);
         const exercise = value.exercises.find((item) => !item.offline_only);
+        const defaults = { ...value.input_defaults, ...exercise?.inputs };
         setExerciseId(exercise?.id || "");
         setQuestion(exercise?.question || "");
-        setInputs({ ...value.input_defaults, ...exercise?.inputs });
+        setInputs(defaults);
+        if (exercise)
+          void restore(value, exercise.id, exercise.question, defaults);
       })
       .catch((reason) => {
         if (!abort.signal.aborted) setLessonError(messageOf(reason));
@@ -167,6 +191,8 @@ export function useStudio() {
       !lessons.some((lesson) => lesson.id === id && lesson.available)
     )
       return;
+    restoreToken.current++;
+    setRestored(null);
     setLessonId(id);
     setDetail(null);
     setExerciseId("");
@@ -183,12 +209,70 @@ export function useStudio() {
   }
 
   function selectExercise(id: string) {
-    if (runController.current) return;
-    const exercise = detail?.exercises.find((item) => item.id === id);
+    if (runController.current || !detail) return;
+    const exercise = detail.exercises.find((item) => item.id === id);
     if (!exercise) return;
+    const defaults = { ...detail.input_defaults, ...exercise.inputs };
     setExerciseId(id);
     setQuestion(exercise.question);
-    setInputs({ ...detail?.input_defaults, ...exercise.inputs });
+    setInputs(defaults);
+    void restore(detail, id, exercise.question, defaults);
+  }
+
+  /**
+   * Shows the learner's last finished run of this exercise when nothing that
+   * shapes it has changed (runKey), read back from the run store; the model is
+   * not called. Without such a run the screen keeps whatever it showed.
+   */
+  async function restore(
+    lesson: Detail,
+    exercise: string,
+    text: string,
+    values: Record<string, unknown>,
+  ) {
+    const token = ++restoreToken.current;
+    const key = runKey(lesson, exercise, text, values);
+    const id = runCache.get(key);
+    if (!id) return;
+    const stale = () =>
+      token !== restoreToken.current ||
+      !!runController.current ||
+      !mounted.current;
+    try {
+      const run = await jsonFetch<StoredRun>(
+        `/api/runs/${encodeURIComponent(id)}`,
+      );
+      if (run.status !== "completed" || run.exercise_id !== exercise) {
+        runCache.forget(key);
+        return;
+      }
+      const stored: Trace[] = [];
+      await followRunEvents(id, (event) => stored.push(event));
+      if (stale() || stored.at(-1)?.type !== "done") return;
+      setPlaying(false);
+      setEvents(stored);
+      setCursor(stored.length);
+      setSelected(stored.length - 1);
+      setRunId(id);
+      setRunExerciseId(exercise);
+      setError("");
+      setRestored({
+        runId: id,
+        at: run.finished_at ?? run.created_at,
+        model: run.model,
+      });
+    } catch (reason) {
+      // The learner cleared the run records: forget the id. Other failures
+      // just leave the screen as it was; running again always works.
+      if (reason instanceof ApiError && reason.status === 404)
+        runCache.forget(key);
+    }
+  }
+
+  function changeQuestion(value: string) {
+    setQuestion(value);
+    // The run on screen no longer answers this question.
+    setRestored(null);
   }
 
   function setInputs(value: Record<string, unknown>) {
@@ -199,6 +283,7 @@ export function useStudio() {
 
   function editInputs(text: string) {
     if (runController.current) return;
+    setRestored(null);
     setInputText(text);
     try {
       const value: unknown = JSON.parse(text);
@@ -224,6 +309,10 @@ export function useStudio() {
     if (!question.trim() && !detail.capabilities?.supports_inputs) return;
     const abort = new AbortController();
     runController.current = abort;
+    restoreToken.current++;
+    setRestored(null);
+    const key = runKey(detail, exerciseId, question, runInputs);
+    let last: Trace | null = null;
     eventCount.current = 0;
     setRunning(true);
     setPlaying(false);
@@ -241,6 +330,7 @@ export function useStudio() {
       )
         return;
       const index = eventCount.current++;
+      last = event;
       setEvents((previous) => [...previous, event]);
       setCursor(index + 1);
       setSelected(index);
@@ -266,6 +356,10 @@ export function useStudio() {
       await followRunEvents(id, addEvent, { signal: abort.signal });
       // Reached the server's done event: one real run, counted once per run_id.
       track.runCompleted(lessonId, id);
+      // A completed run answers this question until something that shapes it changes.
+      const final = last as Trace | null;
+      if (final?.type === "done" && final.data.status === "completed")
+        runCache.remember(key, id);
     } catch (reason) {
       if (!mounted.current) return;
       if (abort.signal.aborted) {
@@ -361,11 +455,14 @@ export function useStudio() {
     selectLesson,
     exerciseId,
     question,
-    setQuestion,
+    setQuestion: changeQuestion,
     inputs,
     inputText,
     inputError,
-    setInputs,
+    setInputs: (value: Record<string, unknown>) => {
+      setInputs(value);
+      setRestored(null);
+    },
     editInputs,
     selectExercise,
     run,
@@ -375,6 +472,7 @@ export function useStudio() {
     running,
     runId,
     runExerciseId,
+    restored,
     events,
     visible,
     active,
