@@ -167,7 +167,7 @@ class CompactionFunctionTests(unittest.TestCase):
         self.assertTrue(runtime.probe_hit("来自 messages-context，原话：模型只看到本次请求里的消息；历史由应用程序重发。"))
         self.assertFalse(runtime.probe_hit("历史由应用程序重发"))
         self.assertFalse(runtime.probe_hit("来自 messages-context"))
-        self.assertTrue(runtime.probe_hit("来自“消息与上下文”，原话：模型只看到本次请求里的消息，历史由应用程序重发"))
+        self.assertTrue(runtime.probe_hit("来自“上下文组成与消息协议”，原话：模型只看到本次请求里的消息，历史由应用程序重发"))
 
     def test_inputs_are_bounded(self):
         for bad in ({"char_budget": 50}, {"noise_repeats": 30}, {"summary_style": "long"}, {"extra": 1}):

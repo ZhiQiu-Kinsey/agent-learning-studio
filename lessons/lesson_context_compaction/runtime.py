@@ -21,10 +21,10 @@ class Inputs(LessonInputs):
 
 INPUT_MODEL = Inputs
 SOURCES = ("messages-context", "application-state")  # 先后读取的两份资料
-GOAL = "目标：先后查阅“消息与上下文”和“应用状态”两份资料，再回答问题；约束：不能把无来源的猜测当事实。"
+GOAL = "目标：先后查阅“上下文组成与消息协议”和“应用状态与运行生命周期”两份资料，再回答问题；约束：不能把无来源的猜测当事实。"
 # 探针问题只能靠最早那次工具结果回答：压缩之后还答得出，才说明这条信息没丢。
 PROBE = "最早读取的那份资料来自哪一项？它的原话是什么？"
-PROBE_SOURCES = ("messages-context", "消息与上下文")  # 那一项的键或名称，答出任一个都算
+PROBE_SOURCES = ("messages-context", "上下文组成与消息协议")  # 那一项的键或名称，答出任一个都算
 PROBE_PHRASE = "历史由应用程序重发"
 # 这些请求都不带工具定义，提示词说清楚只回答、不调用工具。
 SYSTEM = "只根据本次消息回答，不调用工具。缺少依据时明确说明，不要猜测。"
