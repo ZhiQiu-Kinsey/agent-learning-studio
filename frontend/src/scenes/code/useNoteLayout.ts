@@ -27,9 +27,19 @@ export function useNoteLayout(
     const column = notesRef.current;
     if (!frame || !column) return;
     const base = column.getBoundingClientRect().top;
+    // A line folded into a collapsed gap is measured at that gap's row, so its
+    // note or tool button sits next to the fold instead of piling up elsewhere.
+    const rowOf = (line: number) =>
+      frame.querySelector(`[data-line="${line}"]`) ??
+      Array.from(
+        frame.querySelectorAll<HTMLElement>("[data-start][data-end]"),
+      ).find(
+        (gap) =>
+          Number(gap.dataset.start) <= line && line <= Number(gap.dataset.end),
+      );
     const desired = items.map((item) => {
-      const line = frame.querySelector(`[data-line="${item.line}"]`);
-      return line ? line.getBoundingClientRect().top - base : 0;
+      const row = rowOf(item.line);
+      return row ? row.getBoundingClientRect().top - base : 0;
     });
     const heights = items.map(
       (item) => itemRefs.current.get(item.key)?.offsetHeight ?? 0,
