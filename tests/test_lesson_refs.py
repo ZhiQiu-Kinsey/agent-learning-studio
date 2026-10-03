@@ -86,6 +86,18 @@ class LessonRefTests(unittest.TestCase):
                 with self.subTest(path=f"{directory.name}/{path.name}"):
                     self.assertEqual(HARDCODED.findall(path.read_text(encoding="utf-8")), [])
 
+    def test_translation_overlays_are_checked_for_refs(self):
+        import sys
+        import tempfile
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import validate_lessons
+        spec = next(item for item in LESSONS if item["id"] == "chat-request")
+        with tempfile.TemporaryDirectory() as temp:
+            overlay = Path(temp) / "content.en-US.json"
+            overlay.write_text(json.dumps({"x": "see {{lesson:nope}}"}), encoding="utf-8")
+            with patch("server.content.overlay_locales", return_value=["en-US"]),                     patch("server.content.overlay_path", return_value=overlay),                     self.assertRaisesRegex(LessonValidationError, "未登记"):
+                validate_lessons.validate_overlays(ROOT, [spec])
+
     def test_api_serves_resolved_text(self):
         client = TestClient(web.app, base_url="http://localhost")
         detail = client.get("/api/lessons/structured-output").json()
