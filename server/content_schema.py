@@ -353,7 +353,7 @@ class GuideStep(Strict):
     """
     text: Text
     observe: Id | None = None
-    stage: Fact | None = None
+    stage: Literal["user", "runtime", "model", "tool", "memory"] | None = None
 
 
 class Arm(Strict):

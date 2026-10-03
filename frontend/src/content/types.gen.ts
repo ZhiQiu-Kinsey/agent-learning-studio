@@ -385,7 +385,7 @@ export interface ObservePoint {
 export interface GuideStep {
   text: string;
   observe: string | null;
-  stage: string | null;
+  stage: ("user" | "runtime" | "model" | "tool" | "memory") | null;
 }
 export interface Conclusion {
   proves: string[];

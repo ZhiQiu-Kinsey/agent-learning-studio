@@ -63,6 +63,8 @@ class SchemaTests(unittest.TestCase):
                  "rule": {"kind": "count_events", "event": "tool_call"}}),
             "guide to missing observe": lambda d: d["scenes"]["lab"]["experiments"][0].update(
                 guide=[{"text": "看这里。", "observe": "observe-99"}]),
+            "guide to an unknown stage role": lambda d: d["scenes"]["lab"]["experiments"][0].update(
+                guide=[{"text": "看这里。", "stage": "tools"}]),
             "empty selector": lambda d: d["scenes"]["lab"]["experiments"][0]["observe"][0].update(selector={}),
             "ragged table": lambda d: d["scenes"]["understand"]["blocks"].append(
                 {"type": "compare", "id": "table", "columns": ["a", "b"], "rows": [["1"]]}),
