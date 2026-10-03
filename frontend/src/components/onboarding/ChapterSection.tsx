@@ -1,5 +1,10 @@
+import { DeepDiveBlock, MisconceptionBlock } from "../../content/blocks/basic";
 import { IllustrationFlow } from "../../content/blocks/IllustrationFlow";
+import { MicroQuizBlock } from "../../content/blocks/MicroQuizBlock";
 import { GlossaryMarkdown } from "../../content/glossary/Glossary";
+// The shared blocks (micro-quiz, misconception, deep dive) are styled in
+// scenes.css, which is otherwise only loaded with the lesson page.
+import "../../styles/scenes.css";
 import { numeral, type ChapterContent } from "./chapters";
 import { Reveal } from "./Reveal";
 
@@ -73,18 +78,58 @@ export function ChapterSection({
         )}
         {section.table && <SectionTable table={section.table} />}
       </Reveal>
-      {chapter.flows
-        .filter((flow) => flow.after === section.id)
-        .map(({ block }) =>
-          chapter.illustrations[block.illustration] ? (
-            <Reveal key={block.id} className="onboarding-flow">
-              <IllustrationFlow
-                block={block}
-                illustration={chapter.illustrations[block.illustration]}
-              />
-            </Reveal>
-          ) : null,
-        )}
+      <ChapterAttachments chapter={chapter} after={section.id} />
+    </>
+  );
+}
+
+/**
+ * Blocks authored between sections (illustrations, micro-quizzes,
+ * misconceptions, deep dives), rendered after the section they follow;
+ * `after` null means they come before the first section.
+ */
+export function ChapterAttachments({
+  chapter,
+  after,
+}: {
+  chapter: ChapterContent;
+  after: string | null;
+}) {
+  return (
+    <>
+      {chapter.attachments
+        .filter((attachment) => attachment.after === after)
+        .map(({ block }) => {
+          switch (block.type) {
+            case "flow":
+              return chapter.illustrations[block.illustration] ? (
+                <Reveal key={block.id} className="onboarding-flow">
+                  <IllustrationFlow
+                    block={block}
+                    illustration={chapter.illustrations[block.illustration]}
+                  />
+                </Reveal>
+              ) : null;
+            case "micro-quiz":
+              return (
+                <Reveal key={block.id} className="onboarding-attachment">
+                  <MicroQuizBlock block={block} />
+                </Reveal>
+              );
+            case "misconception":
+              return (
+                <Reveal key={block.id} className="onboarding-attachment">
+                  <MisconceptionBlock block={block} />
+                </Reveal>
+              );
+            case "deep-dive":
+              return (
+                <Reveal key={block.id} className="onboarding-attachment">
+                  <DeepDiveBlock block={block} />
+                </Reveal>
+              );
+          }
+        })}
     </>
   );
 }

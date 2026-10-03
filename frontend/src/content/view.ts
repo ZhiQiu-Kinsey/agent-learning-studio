@@ -52,6 +52,20 @@ const sectionKinds = {
   callout: "warning",
 } as const;
 
+/** Blocks that are not reading sections but still render in their authored place. */
+const attachmentTypes = [
+  "flow",
+  "micro-quiz",
+  "misconception",
+  "deep-dive",
+] as const;
+export type ChapterAttachment = {
+  block: BlockOf<(typeof attachmentTypes)[number]>;
+  after: string | null;
+};
+const isAttachment = (block: Block): block is ChapterAttachment["block"] =>
+  (attachmentTypes as readonly string[]).includes(block.type);
+
 /** What the current onboarding page renders for one v2 chapter. */
 export function chapterView(chapter: Chapter) {
   const understand = sceneBlocks(chapter, "understand");
@@ -76,15 +90,16 @@ export function chapterView(chapter: Chapter) {
       },
     ];
   });
-  // Illustrations keep their authored place: each follows the section before it.
-  const flows: { block: BlockOf<"flow">; after: string | null }[] = [];
+  // Attachments keep their authored place: each follows the section before it
+  // (`after` is null when nothing precedes it, so it opens the chapter).
+  const attachments: ChapterAttachment[] = [];
   let previous: string | null = null;
   for (const block of understand) {
     if (block.type in sectionKinds) previous = block.id;
-    if (block.type === "flow") flows.push({ block, after: previous });
+    else if (isAttachment(block)) attachments.push({ block, after: previous });
   }
   return {
-    flows,
+    attachments,
     objectives: blocksOfType(understand, "objectives").flatMap((block) =>
       block.items.map((item) => item.text),
     ),

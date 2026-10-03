@@ -31,6 +31,7 @@ export interface BlockScene {
       | Compare
       | Callout
       | Misconception
+      | DeepDive
       | Objectives
       | References
       | Walkthrough
@@ -52,6 +53,7 @@ export interface BlockScene {
       | Compare
       | Callout
       | Misconception
+      | DeepDive
       | Objectives
       | References
       | Walkthrough
@@ -146,6 +148,19 @@ export interface Misconception {
   type: "misconception";
   claim: string;
   correction: string;
+}
+/**
+ * 深入一层：主线之外的背景、机制与手算例子，默认折叠，不计入节奏规则里的“节”。
+ */
+export interface DeepDive {
+  id: string;
+  type: "deep-dive";
+  title: string;
+  summary: string | null;
+  /**
+   * @minItems 1
+   */
+  paragraphs: [string, ...string[]];
 }
 export interface Objectives {
   id: string;
@@ -339,6 +354,7 @@ export interface LabScene {
     | Compare
     | Callout
     | Misconception
+    | DeepDive
     | Objectives
     | References
     | Walkthrough

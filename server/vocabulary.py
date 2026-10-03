@@ -110,6 +110,8 @@ def marked_texts(model):
             values += [item.description for item in block.items]
         elif kind in ("prose", "callout"):
             values += block.paragraphs
+        elif kind == "deep-dive":
+            values += [*([block.summary] if block.summary else []), *block.paragraphs]
         elif kind == "walkthrough":
             values += [step.body for step in block.steps]
         elif kind == "steps":

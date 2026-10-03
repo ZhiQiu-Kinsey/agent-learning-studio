@@ -1,5 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ExternalLink, Info, ShieldAlert } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../../components/ui/accordion";
 import type { BlockOf } from "../view";
 import { GlossaryMarkdown, GlossaryText } from "../glossary/Glossary";
 
@@ -114,6 +120,44 @@ export function MisconceptionBlock({
         </span>
       </p>
     </section>
+  );
+}
+
+/**
+ * Material beyond the main line (background, mechanism, a worked example),
+ * folded by default. The summary sits beside the trigger rather than inside
+ * it: glossary terms are focusable and must not nest in a button.
+ */
+export function DeepDiveBlock({ block }: { block: BlockOf<"deep-dive"> }) {
+  const { t } = useTranslation("blocks", { keyPrefix: "deepDive" });
+  return (
+    <Accordion
+      type="single"
+      collapsible
+      className="content-block content-deep-dive"
+      data-testid="block-deep-dive"
+    >
+      <AccordionItem value={block.id}>
+        <AccordionTrigger className="deep-dive-trigger hover:no-underline">
+          <span className="deep-dive-heading">
+            <span className="deep-dive-label">{t("label")}</span>
+            <strong>{block.title}</strong>
+          </span>
+        </AccordionTrigger>
+        {block.summary && (
+          <p className="deep-dive-summary">
+            <GlossaryText text={block.summary} />
+          </p>
+        )}
+        <AccordionContent className="deep-dive-body">
+          {block.paragraphs.map((paragraph, index) => (
+            <div className="reading-prose" key={index}>
+              <GlossaryMarkdown>{paragraph}</GlossaryMarkdown>
+            </div>
+          ))}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
 

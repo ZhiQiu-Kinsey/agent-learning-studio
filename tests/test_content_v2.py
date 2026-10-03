@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from server.content_migrations import (LESSON_STEPS, ONBOARDING_STEPS, ContentVersionError,
                                        lesson_v1_to_v2, migrate, onboarding_v1_to_v2)
 from server.content_schema import LessonContent, Onboarding, json_schemas
+from server.vocabulary import marked_texts
 
 ROOT = Path(__file__).resolve().parents[1]
 V1_LESSON = {
@@ -76,6 +77,30 @@ class SchemaTests(unittest.TestCase):
                 mutate(data)
                 with self.assertRaises(ValidationError):
                     LessonContent.model_validate(data)
+
+    def test_deep_dive_validates_and_its_texts_are_marked(self):
+        def with_block(**block):
+            data = self.valid()
+            data["scenes"]["understand"]["blocks"].append({"type": "deep-dive", "id": "dive", **block})
+            return data
+
+        model = LessonContent.model_validate(
+            with_block(title="手算一遍", summary="一句话概述", paragraphs=["第一段", "第二段"]))
+        texts = marked_texts(model)
+        start = texts.index("一句话概述")
+        self.assertEqual(texts[start:start + 3], ["一句话概述", "第一段", "第二段"])
+        self.assertNotIn("手算一遍", texts)  # 标题不加术语下划线
+
+        no_summary = LessonContent.model_validate(with_block(title="手算一遍", paragraphs=["只有正文"]))
+        self.assertIn("只有正文", marked_texts(no_summary))
+        self.assertNotIn(None, marked_texts(no_summary))
+
+        for name, block in {"no title": {"paragraphs": ["正文"]},
+                            "no paragraphs": {"title": "标题", "paragraphs": []},
+                            "unknown field": {"title": "标题", "paragraphs": ["正文"], "open": True}}.items():
+            with self.subTest(name):
+                with self.assertRaises(ValidationError):
+                    LessonContent.model_validate(with_block(**block))
 
     def test_onboarding_chapters_only_use_understand_and_check(self):
         data = migrate(json.loads((ROOT / "curriculum" / "onboarding.json").read_text(encoding="utf-8")),

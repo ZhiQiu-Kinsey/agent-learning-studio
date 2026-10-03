@@ -126,6 +126,14 @@ class Misconception(Block):
     correction: Text
 
 
+class DeepDive(Block):
+    """深入一层：主线之外的背景、机制与手算例子，默认折叠，不计入节奏规则里的“节”。"""
+    type: Literal["deep-dive"]
+    title: Text
+    summary: Text | None = None  # 折叠时显示的一句话
+    paragraphs: list[Text] = Field(min_length=1)
+
+
 class Objectives(Block):
     type: Literal["objectives"]
     items: list[Item] = Field(min_length=1)
@@ -334,7 +342,7 @@ class Decision(Block):
 
 
 AnyBlock = Annotated[
-    Union[Hero, Prose, Concepts, Steps, Compare, Callout, Misconception, Objectives,
+    Union[Hero, Prose, Concepts, Steps, Compare, Callout, Misconception, DeepDive, Objectives,
           References, Walkthrough, Flow, MicroQuiz, Quiz, Predict, Checkpoint, TraceHunt,
           WhatsNew, AnnotatedSource, Decision],
     Field(discriminator="type"),

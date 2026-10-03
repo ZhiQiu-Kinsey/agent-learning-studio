@@ -8,9 +8,10 @@ import { useResolvedTheme } from "../../hooks/useTheme";
 import { ChapterBand } from "./ChapterBand";
 import { ChapterExercise } from "./ChapterExercise";
 import { ChapterFooter } from "./ChapterFooter";
-import { ChapterSection } from "./ChapterSection";
+import { ChapterAttachments, ChapterSection } from "./ChapterSection";
 import {
   chapterChecks,
+  chapterGlossaryTexts,
   skyFor,
   type ChapterContent,
   type CheckedPoints,
@@ -43,11 +44,7 @@ export function ChapterArticle({
   const theme = useResolvedTheme();
   const sky = skyFor(chapter.id, index);
   const checks = chapterChecks(chapter, checked);
-  const glossaryTexts = chapter.sections.flatMap((section) => [
-    ...section.paragraphs,
-    ...(section.bullets ?? []),
-    ...(section.table?.rows.flat() ?? []),
-  ]);
+  const glossaryTexts = chapterGlossaryTexts(chapter);
   const offset = 46 * direction;
   return (
     <motion.article
@@ -83,6 +80,7 @@ export function ChapterArticle({
       />
       <GlossaryScope texts={glossaryTexts}>
         <div className="onboarding-chapter-body">
+          <ChapterAttachments chapter={chapter} after={null} />
           {chapter.sections.map((section, sectionIndex) => (
             <ChapterSection
               key={section.id}

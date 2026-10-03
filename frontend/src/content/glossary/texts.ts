@@ -20,6 +20,8 @@ export function blockTexts(block: Block): string[] {
       return block.paragraphs;
     case "misconception":
       return [block.claim, block.correction];
+    case "deep-dive":
+      return [...(block.summary ? [block.summary] : []), ...block.paragraphs];
     default:
       return [];
   }

@@ -28,6 +28,7 @@ import { IllustrationFlow } from "./IllustrationFlow";
 import {
   CalloutBlock,
   CompareBlock,
+  DeepDiveBlock,
   MisconceptionBlock,
   ReferencesBlock,
   StepsBlock,
@@ -182,6 +183,8 @@ export function UnderstandBlocks({
         return reveal(block.id, <CalloutBlock block={block} />);
       case "misconception":
         return reveal(block.id, <MisconceptionBlock block={block} />);
+      case "deep-dive":
+        return reveal(block.id, <DeepDiveBlock block={block} />);
       case "references":
         return reveal(block.id, <ReferencesBlock block={block} />);
       default:

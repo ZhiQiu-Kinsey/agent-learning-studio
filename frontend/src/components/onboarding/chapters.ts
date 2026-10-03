@@ -1,8 +1,9 @@
 import { chapterView } from "../../content/view";
 import type { Chapter } from "../../content/types.gen";
+import { blockTexts } from "../../content/glossary/texts";
 import type { BackdropName } from "../backdrops/presets";
 
-/** A chapter with its rendered view (sections, flows, exercise, references). */
+/** A chapter with its rendered view (sections, attachments, exercise, references). */
 export type ChapterContent = Chapter & ReturnType<typeof chapterView>;
 
 export const readChapter = (chapter: Chapter): ChapterContent => ({
@@ -10,7 +11,28 @@ export const readChapter = (chapter: Chapter): ChapterContent => ({
   ...chapterView(chapter),
 });
 
-/** Self-reported checkpoints, keyed `<chapter>/<item>`; not a score. */
+/**
+ * Glossary-eligible texts in reading order: opening attachments, then each
+ * section followed by the attachments authored after it. Mirrors the render
+ * order so the first occurrence of a term is the one the learner meets first.
+ */
+export function chapterGlossaryTexts(chapter: ChapterContent): string[] {
+  const after = (id: string | null) =>
+    chapter.attachments
+      .filter((attachment) => attachment.after === id)
+      .flatMap(({ block }) => blockTexts(block));
+  return [
+    ...after(null),
+    ...chapter.sections.flatMap((section) => [
+      ...section.paragraphs,
+      ...(section.bullets ?? []),
+      ...(section.table?.rows.flat() ?? []),
+      ...after(section.id),
+    ]),
+  ];
+}
+
+/** Self-reported checkpoints,keyed `<chapter>/<item>`; not a score. */
 export type CheckedPoints = Record<string, string>;
 
 export function chapterChecks(chapter: Chapter, checked: CheckedPoints) {
