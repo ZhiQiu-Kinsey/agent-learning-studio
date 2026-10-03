@@ -27,7 +27,7 @@ TOOLS = [
 
 
 def divide_numbers(a, b):
-    """校验输入，并把领域错误作为 ValueError 明确报告。"""
+    """校验输入，并把业务规则错误作为 ValueError 明确报告。"""
     for name, value in (("a", a), ("b", b)):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError("参数 {} 必须是数字。".format(name))

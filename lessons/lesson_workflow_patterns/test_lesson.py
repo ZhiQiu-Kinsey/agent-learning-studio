@@ -1,5 +1,7 @@
 """工作流模式课行为测试：确定性模型数据；检查门、路由统计和计时在 Python 中真实执行。"""
+import json
 import unittest
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -8,6 +10,7 @@ from course.runner import RunCancelled
 from lessons.lesson_workflow_patterns import runtime
 from lessons.lesson_workflow_patterns.fixtures import create_completion
 from server.envelope import SpanTracker
+from server.selectors import select_events
 
 
 def run_case(exercise_id, inputs, completion=None, budget=20, cancelled=lambda: False):
@@ -67,6 +70,8 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual([(r["ticket"], r["raw"], r["predicted"]) for r in fallback], [("t12", "billing", "other")])
         # 只有走了兜底的记录带 fallback_reason，导览靠它找到兜底的那一张。
         self.assertEqual([r["ticket"] for r in routes if "fallback_reason" in r], ["t12"])
+        # 只有分错的记录带 misrouted，轨迹找错靠它只认分错的工单；t12 走了兜底但兜底类别等于标注，不算分错。
+        self.assertEqual([r["ticket"] for r in routes if "misrouted" in r], ["t18", "t20"])
         self.assertEqual(sum(r["correct"] for r in routes), 18)
         reports = of(events, "lesson.report")
         self.assertEqual(reports[0]["metrics"][0], {"label": "准确率", "value": "18/20"})
@@ -76,6 +81,15 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(diagonal, 18)
         self.assertEqual(matrix[1], ["账号与登录", 0, 4, 1, 0])
         self.assertIn("18/20", answer)
+
+    def test_trace_hunt_accepts_only_misrouted_tickets(self):
+        # 前端 judgeHunt 只认命中目标选择器的事件：目标必须只命中分错的工单，点别的工单不算对。
+        content = json.loads((Path(__file__).parent / "content.json").read_text(encoding="utf-8"))
+        hunt = next(block for block in content["scenes"]["check"]["blocks"] if block["type"] == "trace-hunt")
+        _, events = run_case("routing", {"pattern": "routing"})
+        trace = [{"type": kind, "round": number, "data": data} for kind, data, number in events]
+        self.assertEqual([trace[index]["data"]["ticket"] for index in select_events(hunt["target"], trace)],
+                         ["t18", "t20"])
 
     def test_parse_label(self):
         self.assertEqual(runtime.parse_label("Course"), ("course", False))

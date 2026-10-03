@@ -1,1 +1,1 @@
-"""Chapter 2: controlled prompt experiments."""
+"""提示词与工具描述：其他条件固定，一次只改一处文本，对照真实的调用和回答。"""

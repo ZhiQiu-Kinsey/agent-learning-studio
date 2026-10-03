@@ -124,12 +124,13 @@ def run_routing(context: RunContext) -> str:
         response = context.complete({"messages": [{"role": "system", "content": ROUTER_SYSTEM},
                                                   {"role": "user", "content": text}], "temperature": 0}, index)
         raw = _text(response)
-        # 2. 解析标签：不在列表里就走兜底，原文照记；只有兜底的记录带 fallback_reason。
+        # 2. 解析标签：不在列表里就走兜底，原文照记；只有兜底的记录带 fallback_reason，只有分错的带 misrouted。
         predicted, fallback = parse_label(raw)
         fallbacks += fallback
         context.emit("lesson.route", {"ticket": ticket_id, "gold": gold, "predicted": predicted, "raw": raw,
                                       "fallback": fallback, "correct": predicted == gold,
-                                      **({"fallback_reason": "回复第一行不是可选标签"} if fallback else {})}, index)
+                                      **({"fallback_reason": "回复第一行不是可选标签"} if fallback else {}),
+                                      **({"misrouted": True} if predicted != gold else {})}, index)
         pairs.append((gold, predicted))
         # 3. 分错或走了兜底的工单列进报告，标注本身也可能有争议，留给人复核。
         if predicted != gold or fallback:

@@ -89,6 +89,8 @@ class RunTests(unittest.TestCase):
         injected = [(data, number) for kind, data, number in events if kind == "lesson.harness_injected"]
         self.assertEqual([number for _, number in injected], [3, 6])
         self.assertTrue(all(data["source"] == "harness" for data, _ in injected))
+        # 只有第一次提醒带 first：轨迹找错要找的是“第一次插入提醒”，第二次不能算对。
+        self.assertEqual(["first" in data for data, _ in injected], [True, False])
         request = of(events, "request")[3]["body"]["messages"]
         self.assertEqual([m["role"] for m in request[-3:]], ["assistant", "tool", "user"])
         self.assertEqual(request[-1]["content"], injected[0][0]["text"])

@@ -1,7 +1,7 @@
 """编排者-工人与评估者-优化者：同一个出题任务，对照单次调用，统计多出来的调用和用量。
 
 两种模式的划分参考 claude-cookbooks patterns/agents（MIT）。原示例的编排者实际串行执行工人、
-评估循环没有上限；本课的工人并行执行，评估循环必须有 max_iters。任务、格式检查与实验由本项目编写。
+修订循环没有迭代上限；本课的工人并行执行，修订循环必须设迭代上限 max_iters。任务、格式检查与实验由本项目编写。
 """
 import json
 import time
@@ -203,8 +203,10 @@ def run_evaluator(context: RunContext, ledger: Ledger, max_iters: int) -> tuple[
             user += f"\n上一版：{previous}\n评审意见：" + json.dumps(feedback, ensure_ascii=False) + "\n请修订。"
         output = ledger.call("生成者", WORKER_SYSTEM, user, len(ledger.rows) + 1)
         question, problems = _parse_question(output)
+        # 修订稿多带一个 revises，写明改的是哪一版；第一版没有上一版，也就没有这个字段。
+        revises = {} if previous is None else {"revises": iteration - 2}
         context.emit("lesson.draft", {"version": iteration - 1, "question": question, "previous": previous,
-                                      "format_problems": problems}, len(ledger.rows))
+                                      "format_problems": problems, **revises}, len(ledger.rows))
         # 2. 评审：格式不对直接退回格式问题，省下一次评估者请求；格式对了才请评估者按量规评。
         if problems:
             verdict, feedback, source = "revise", problems, "format-check"

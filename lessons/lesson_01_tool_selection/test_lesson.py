@@ -23,6 +23,17 @@ class AddNumbersTests(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertEqual(result["error_type"], "ValueError")
 
+    def test_overflowing_sum_becomes_structured_error(self):
+        # 两个参数各自有限，和却溢出：浮点数相加得到 inf，大整数相加超出浮点数范围。
+        # 若返回 ok=true，发布 tool_result 时 allow_nan=False 会报错，tool_call 就没有配对的结果。
+        big = "1" + "0" * 308
+        for arguments in ('{"a": 1e308, "b": 1e308}', '{"a": -1e308, "b": -1e308}', '{"a": %s, "b": %s}' % (big, big)):
+            with self.subTest(arguments=arguments[:24]):
+                result = execute_tool(add_call(arguments), AVAILABLE_TOOLS)
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["error_type"], "ValueError")
+                self.assertIn("两数之和", result["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
