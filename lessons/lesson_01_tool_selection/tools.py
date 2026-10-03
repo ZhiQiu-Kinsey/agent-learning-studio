@@ -42,18 +42,18 @@ TOOLS = [
 
 
 def add_numbers(a, b):
-    """校验两个有限数字后求和。"""
+    """校验两个有限数字后求和；和也必须是有限数字。"""
     if isinstance(a, bool) or not isinstance(a, (int, float)):
         raise ValueError("参数 a 必须是数字。")
     if isinstance(b, bool) or not isinstance(b, (int, float)):
         raise ValueError("参数 b 必须是数字。")
     try:
-        finite = math.isfinite(a) and math.isfinite(b)
+        finite = math.isfinite(a) and math.isfinite(b) and math.isfinite(a + b)
     except OverflowError:
         # 10**400 这样的超大整数转不成浮点数；不拦下来，异常会越过 execute_tool 让运行崩溃。
         finite = False
     if not finite:
-        raise ValueError("参数必须是有限数字，且不超出浮点数范围。")
+        raise ValueError("参数和两数之和都必须是有限数字，且不超出浮点数范围。")
     return a + b
 
 
