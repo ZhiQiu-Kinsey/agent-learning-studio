@@ -13,7 +13,7 @@
         {
           "id": "hero",
           "type": "hero",
-          "eyebrow": "CHAPTER 02 / DEPENDENT CALLS",
+          "eyebrow": "TOOL CALLING / DEPENDENT CALLS",
           "headline": "让上一步的结果，",
           "highlight": "成为下一步的依据。",
           "takeaway": "执行顺序不能代替数据传递。先收到真实结果，再确定下一步参数。"
@@ -59,7 +59,8 @@
           "type": "prose",
           "title": "消息历史把结果送到下一次决策",
           "paragraphs": [
-            "第一轮模型提出 get_current_time；Python 执行后，把工具结果包装成与调用 id 对应的 tool 消息，追加到 messages。第二轮请求再次发送这段历史，模型才有依据提出 add_numbers，并把 hour、minute 放进 a、b。\n当前运行器按模型写下的实参执行。即使模型在参数里写“小时”这类占位文字，运行器也不会替换成另一工具的结果。因此把两个有依赖的调用塞在同一个响应里，即使 Python 按顺序执行，也不能保证后一个参数正确。执行顺序和数据传递都必须成立。"
+            "第一轮模型提出 get_current_time；Python 执行后，把工具结果包装成与调用 id 对应的 tool 消息，追加到 messages。第二轮请求再次发送这段历史，模型才有依据提出 add_numbers，并把 hour、minute 放进 a、b。",
+            "当前运行器按模型写下的实参执行。即使模型在参数里写“小时”这类占位文字，运行器也不会替换成另一工具的结果。因此把两个有依赖的调用塞在同一个响应里，即使 Python 按顺序执行，也不能保证后一个参数正确。执行顺序和数据传递都必须成立。"
           ]
         },
         {
@@ -450,29 +451,20 @@
           "observe": [
             {
               "id": "same-response",
-              "text": "第 1 轮 response 的 tool_calls[1]：第二个调用和第一个出现在同一个响应里。",
+              "text": "第 1 轮 response 的 tool_calls[1]：第二个调用提议，和第一个出现在同一个响应里。",
               "selector": {
                 "event": "response",
                 "round": 1,
-                "path": "data.body.choices[0].message.tool_calls[1].function.name"
+                "path": "data.body.choices[0].message.tool_calls[1]"
               }
             },
             {
               "id": "first-result",
-              "text": "add_numbers 的 tool_result：第一个调用的执行结果。",
+              "text": "第 1 轮的第一条 tool_result：先执行的那个调用的结果。第二个调用的 tool_call 在时间线上排在它后面。",
               "selector": {
                 "event": "tool_result",
-                "path": "data.result",
-                "name": "add_numbers"
-              }
-            },
-            {
-              "id": "second-call",
-              "text": "get_current_time 的 tool_call：在时间线上排在第一个结果之后，说明运行器是逐个执行。",
-              "selector": {
-                "event": "tool_call",
-                "path": "data.id",
-                "name": "get_current_time"
+                "round": 1,
+                "path": "data.result"
               }
             },
             {
@@ -490,18 +482,14 @@
               "text": "这组只有一个问题，却包含两个互不依赖的任务。"
             },
             {
-              "text": "如果这次模型在同一个响应里提出了两个调用，这里能看到第二个调用的工具名。若模型分两轮提出，这里会提示本次运行没有这条证据，那同样是一次合法的运行。",
+              "text": "如果这次模型在同一个响应里提出了两个调用，这里是第二个，记下它的 id。若模型分两轮提出，这里会提示本次运行没有这条证据，那同样是一次合法的运行。",
               "observe": "same-response",
               "stage": "model"
             },
             {
-              "text": "第一个工具先执行完，结果才被记录下来。",
+              "text": "列表里的第一个调用先执行完，结果先记下来。带刚才那个 id 的 tool_call 排在这条结果之后：同一轮提出不等于同时执行。",
               "observe": "first-result",
               "stage": "tool"
-            },
-            {
-              "text": "第二个调用在第一个结果之后才开始：同一轮提出不等于同时执行。",
-              "observe": "second-call"
             },
             {
               "text": "两条结果都以 role 为 tool 的消息回到下一轮，模型据此一起作答。和依赖那组对比：这里参数一开始就已知，所以不必分轮。",
