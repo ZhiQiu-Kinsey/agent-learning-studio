@@ -11,14 +11,21 @@ import {
 import type { ObserveStatus } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { GlossaryText } from "../../content/glossary/Glossary";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../../components/ui/accordion";
 import { Button } from "../../components/ui/button";
 import SparkBurst from "../../components/react-bits/SparkBurst";
 import StarBorder from "../../components/react-bits/StarBorder";
 
 /**
  * Beside the experiment card: how many observe points the learner's own run
- * has evidenced, the guided replay over that run, and the conclusion, which
- * only opens once the run exists.
+ * has evidenced, the guided replay over that run, and the conclusion. The
+ * conclusion folds (closed by default) and its statements appear only once
+ * the run exists.
  */
 export function ExperimentSide({
   experiment,
@@ -134,84 +141,118 @@ export function ExperimentSide({
         </div>
       )}
       {conclusion && (
-        <div
+        <Accordion
+          type="single"
+          collapsible
           className="experiment-conclusion"
           data-testid="experiment-conclusion"
           data-open={finished || undefined}
         >
-          <h4>{t("conclusion.title")}</h4>
-          {finished ? (
-            <>
-              {conclusion.proves.length > 0 && (
-                <div className="experiment-conclusion-group" data-kind="proves">
-                  <strong>{t("conclusion.proves")}</strong>
-                  <ul>
-                    {conclusion.proves.map((item, index) => (
-                      <li key={index}>
-                        <CircleCheck size={15} aria-hidden="true" />
-                        <span>
-                          <GlossaryText text={item} />
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {conclusion.does_not_prove.length > 0 && (
-                <div className="experiment-conclusion-group" data-kind="limits">
-                  <strong>{t("conclusion.doesNotProve")}</strong>
-                  <ul>
-                    {conclusion.does_not_prove.map((item, index) => (
-                      <li key={index}>
-                        <CircleMinus size={15} aria-hidden="true" />
-                        <span>
-                          <GlossaryText text={item} />
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Placeholder rows, one per authored statement; no text until the run exists. */}
-              <div className="experiment-conclusion-preview" aria-hidden="true">
-                {(
-                  [
-                    ["proves", conclusion.proves.length, "conclusion.proves"],
-                    [
-                      "limits",
-                      conclusion.does_not_prove.length,
-                      "conclusion.doesNotProve",
-                    ],
-                  ] as const
-                ).map(([kind, count, label]) =>
-                  count > 0 ? (
-                    <div key={kind} data-kind={kind}>
-                      <strong>{t(label)}</strong>
-                      {Array.from({ length: count }, (_, index) => (
-                        <i key={index} />
-                      ))}
-                    </div>
-                  ) : null,
-                )}
-              </div>
-              <p className="experiment-conclusion-locked">
-                <Lock size={14} aria-hidden="true" />
-                <span>
-                  {t("conclusion.needRun")}
-                  <small>
-                    {t("conclusion.waiting", {
-                      proves: conclusion.proves.length,
-                      limits: conclusion.does_not_prove.length,
-                    })}
-                  </small>
+          <AccordionItem value="conclusion" className="border-b-0">
+            <AccordionTrigger
+              className="experiment-conclusion-trigger py-0 hover:no-underline"
+              data-testid="experiment-conclusion-toggle"
+            >
+              <span>
+                <span className="experiment-conclusion-title">
+                  {t("conclusion.title")}
                 </span>
-              </p>
-            </>
-          )}
-        </div>
+                <small>
+                  {t("conclusion.summary", {
+                    proves: conclusion.proves.length,
+                    limits: conclusion.does_not_prove.length,
+                  })}
+                </small>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="experiment-conclusion-body pb-0">
+              {finished ? (
+                <>
+                  {conclusion.proves.length > 0 && (
+                    <div
+                      className="experiment-conclusion-group"
+                      data-kind="proves"
+                    >
+                      <strong>{t("conclusion.proves")}</strong>
+                      <ul>
+                        {conclusion.proves.map((item, index) => (
+                          <li key={index}>
+                            <CircleCheck size={15} aria-hidden="true" />
+                            <span>
+                              <GlossaryText text={item} />
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {conclusion.does_not_prove.length > 0 && (
+                    <div
+                      className="experiment-conclusion-group"
+                      data-kind="limits"
+                    >
+                      <strong>{t("conclusion.doesNotProve")}</strong>
+                      <ul>
+                        {conclusion.does_not_prove.map((item, index) => (
+                          <li key={index}>
+                            <CircleMinus size={15} aria-hidden="true" />
+                            <span>
+                              <GlossaryText text={item} />
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Placeholder rows, one per authored statement; no text until the run exists. */}
+                  <div
+                    className="experiment-conclusion-preview"
+                    aria-hidden="true"
+                  >
+                    {(
+                      [
+                        [
+                          "proves",
+                          conclusion.proves.length,
+                          "conclusion.proves",
+                        ],
+                        [
+                          "limits",
+                          conclusion.does_not_prove.length,
+                          "conclusion.doesNotProve",
+                        ],
+                      ] as const
+                    ).map(([kind, count, label]) =>
+                      count > 0 ? (
+                        <div key={kind} data-kind={kind}>
+                          <strong>{t(label)}</strong>
+                          {Array.from({ length: count }, (_, index) => (
+                            <i key={index} />
+                          ))}
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                  <p className="experiment-conclusion-locked">
+                    <Lock size={14} aria-hidden="true" />
+                    <span>
+                      {t("conclusion.needRun")}
+                      <small>
+                        {t("conclusion.waiting", {
+                          proves: conclusion.proves.length,
+                          limits: conclusion.does_not_prove.length,
+                        })}
+                      </small>
+                    </span>
+                  </p>
+                </>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       )}
     </section>
   );

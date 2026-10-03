@@ -66,7 +66,7 @@ function ConnectionBar({
   );
 }
 
-/** Left column of the lab: ask, read the answer, check the connection. */
+/** Top of the lab bench: ask on the left; the answer and the connection on the right. */
 export function RunPanel({
   studio,
   onConfigure,

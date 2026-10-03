@@ -135,6 +135,7 @@ export function LessonMasthead({
       ref={ref}
       className="lesson-masthead lesson-band"
       data-testid="lesson-masthead"
+      data-scene={scene}
       data-category={category}
       data-running={running || undefined}
     >

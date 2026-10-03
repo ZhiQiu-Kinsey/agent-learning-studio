@@ -4,6 +4,7 @@ import type { CurriculumData, CurriculumLesson, Detail } from "../src/types";
 import { runOffline } from "./runs";
 import { t } from "./i18n";
 import { lessonView } from "../src/content/view";
+import { chooseExercise } from "./navigation";
 
 const screenshot = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -99,13 +100,7 @@ test("chapters two and three expose complete guides and run every real preset th
     for (const exercise of detail.exercises.filter(
       (item) => !item.offline_only,
     )) {
-      await page
-        .getByTestId("lab-exercise-field")
-        .getByRole("combobox")
-        .click();
-      await page
-        .getByRole("option", { name: exercise.title, exact: true })
-        .click();
+      await chooseExercise(page, exercise.id);
       await expect(inputs).toHaveValue(
         JSON.stringify(
           { ...detail.input_defaults, ...exercise.inputs },

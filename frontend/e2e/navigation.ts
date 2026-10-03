@@ -1,5 +1,17 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import type { CurriculumData } from "../src/types";
+import { t } from "./i18n";
+
+/** Picks an exercise with the question bar's `/` menu (the experiment arms pick it too). */
+export async function chooseExercise(page: Page, id: string) {
+  await page
+    .getByRole("button", { name: t("lab:bench.composer.openCommands") })
+    .click();
+  await page
+    .getByRole("listbox", { name: t("lab:bench.composer.commands") })
+    .locator(`[data-key="${id}"]`)
+    .click();
+}
 
 /** Opens a lesson through the course navigation, expanding its category first. */
 export async function openLessonById(

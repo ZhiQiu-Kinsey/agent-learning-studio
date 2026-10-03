@@ -47,6 +47,7 @@ export function ExperimentPanel({
   experiments,
   selected,
   statuses,
+  current,
   onSelect,
   onLocate,
   studio,
@@ -55,6 +56,8 @@ export function ExperimentPanel({
   selected: Experiment;
   /** Observe points checked against this experiment's run (see evidenceEvents). */
   statuses: ObserveStatus[];
+  /** The observe point whose evidence the inspector is framing. */
+  current: string | null;
   onSelect: (id: string) => void;
   /** Point the lab at an observe point's evidence: the event and its field. */
   onLocate: (index: number, path: string | null) => void;
@@ -157,6 +160,7 @@ export function ExperimentPanel({
               <li
                 key={point.id}
                 data-status={point.status}
+                data-current={point.id === current || undefined}
                 data-testid="experiment-observe"
               >
                 <span className="experiment-observe-index" aria-hidden="true">

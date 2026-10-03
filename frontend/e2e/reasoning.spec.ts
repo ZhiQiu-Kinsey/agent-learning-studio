@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import type { Detail } from "../src/types";
 import { runOffline } from "./runs";
-import { openLessonById } from "./navigation";
+import { chooseExercise, openLessonById } from "./navigation";
 
 const screenshot = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -48,13 +48,7 @@ test("reasoning lessons run every preset through the shared lab and evidence boa
     await openLessonById(page, request, id);
     await page.getByTestId("scene-tab-lab").click();
     for (const exercise of detail.exercises) {
-      await page
-        .getByTestId("lab-exercise-field")
-        .getByRole("combobox")
-        .click();
-      await page
-        .getByRole("option", { name: exercise.title, exact: true })
-        .click();
+      await chooseExercise(page, exercise.id);
       await page.getByTestId("lab-run-button").click();
       await expect(
         page.locator("[data-testid='agent-stage'][data-status='completed']"),

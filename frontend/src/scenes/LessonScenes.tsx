@@ -81,12 +81,13 @@ function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
       )?.title
     : undefined;
 
-  const goTo = (next: SceneId) => {
+  const goTo = (next: SceneId, { scroll = true } = {}) => {
     setScene(next);
     setOpened((previous) =>
       previous.has(next) ? previous : new Set(previous).add(next),
     );
-    window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
+    if (scroll)
+      window.scrollTo({ top: 0, behavior: reduced ? "instant" : "smooth" });
   };
 
   useEffect(() => {
@@ -111,9 +112,10 @@ function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
   }, [lessonId]);
 
   // A run started from another scene (command palette) brings the learner to
-  // the lab. Already in the lab, nothing moves: goTo would scroll to the top.
+  // the lab, where the view follows the run (useRunFollow); goTo does not
+  // scroll. Already in the lab, the scene stays as it is.
   useEffect(() => {
-    if (studio.running && scene !== "lab") goTo("lab");
+    if (studio.running && scene !== "lab") goTo("lab", { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studio.running]);
 

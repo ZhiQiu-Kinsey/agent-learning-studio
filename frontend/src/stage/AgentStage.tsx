@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type CSSProperties } from "react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { EffectBoundary, useMotion, useMotionBudget } from "../motion";
@@ -170,7 +170,16 @@ export function AgentStage({
           {t(`status.${stage.status}`)}
         </span>
       </header>
-      <div className="stage-canvas">
+      <div
+        className="stage-canvas"
+        // Tool nodes share one column; a compact stage grows with their count.
+        style={
+          {
+            "--stage-tools": stage.nodes.filter((node) => node.role === "tool")
+              .length,
+          } as CSSProperties
+        }
+      >
         <svg
           className="stage-edges"
           viewBox="0 0 100 100"

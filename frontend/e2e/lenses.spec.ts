@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { runOffline } from "./runs";
-import { openLessonById } from "./navigation";
+import { chooseExercise, openLessonById } from "./navigation";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() =>
@@ -66,8 +66,7 @@ test("memory lens shows scope filtering and flags recalled instructions without 
   await page.goto("/");
   await openLessonById(page, request, "memory-lifecycle");
   await page.getByTestId("scene-tab-lab").click();
-  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
-  await page.getByRole("option", { name: scope.title, exact: true }).click();
+  await chooseExercise(page, scope.id);
   await page.getByTestId("lab-run-button").click();
   await expect(
     page.locator("[data-testid='agent-stage'][data-status='completed']"),
@@ -91,8 +90,7 @@ test("plan lens follows todo snapshots and marks harness reminders", async ({
   await openLessonById(page, request, "todo-planning");
   await page.getByTestId("scene-tab-lab").click();
   await expect(page.getByTestId("lens-plan")).toHaveCount(0);
-  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
-  await page.getByRole("option", { name: reminder.title, exact: true }).click();
+  await chooseExercise(page, reminder.id);
   await page.getByTestId("lab-run-button").click();
   await expect(
     page.locator("[data-testid='agent-stage'][data-status='completed']"),

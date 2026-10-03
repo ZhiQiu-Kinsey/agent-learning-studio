@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { CurriculumData, Detail } from "../src/types";
 import { isRunCreation, mockRunStream, runOffline } from "./runs";
 import { t } from "./i18n";
-import { openLessonById } from "./navigation";
+import { chooseExercise, openLessonById } from "./navigation";
 import { lessonView } from "../src/content/view";
 
 // 学生界面固定真实调用。自动化测试在网络边界改用后端测试适配器，
@@ -101,9 +101,9 @@ test("dependent call receives the real time result, and the full trace can be ex
     .getByRole("button", { name: detail.title })
     .click();
   await page.getByTestId("scene-tab-lab").click();
-  await expect(
-    page.getByTestId("lab-exercise-field").getByRole("combobox"),
-  ).toHaveText(detail.exercises.find((item) => !item.offline_only)!.title);
+  await expect(page.getByTestId("lab-question-input")).toHaveValue(
+    detail.exercises.find((item) => !item.offline_only)!.question,
+  );
   await page.getByTestId("scene-tab-lab").click();
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
@@ -191,16 +191,13 @@ test("zero division returns an error result and live mode excludes fault injecti
   const live = detail.exercises.filter((item) => !item.offline_only);
   const injected = detail.exercises.filter((item) => item.offline_only);
   expect(injected.length).toBeGreaterThan(0);
-  const exercise = page.getByTestId("lab-exercise-field");
   await page.goto("/");
   await page
     .getByTestId("course-nav")
     .getByRole("button", { name: detail.title })
     .click();
   await page.getByTestId("scene-tab-lab").click();
-  await exercise.getByRole("combobox").click();
-  await page.getByRole("option", { name: zero.title, exact: true }).click();
-  await page.getByTestId("scene-tab-lab").click();
+  await chooseExercise(page, zero.id);
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await page.getByTestId("lab-event-tool-result").click();
@@ -208,18 +205,26 @@ test("zero division returns an error result and live mode excludes fault injecti
     page.getByTestId("lab-event-detail").locator("pre"),
   ).toContainText('"ok": false');
   await expect(page.getByTestId("lab-answer")).toContainText("0");
-  await page.getByTestId("scene-tab-lab").click();
-  await exercise.getByRole("combobox").click();
-  await expect(exercise.getByRole("listbox").getByRole("option")).toHaveCount(
-    live.length,
-  );
+  await page
+    .getByRole("button", { name: t("lab:bench.composer.openCommands") })
+    .click();
+  const menu = page.getByRole("listbox", {
+    name: t("lab:bench.composer.commands"),
+  });
+  await expect(menu.getByRole("option")).toHaveCount(live.length);
   for (const item of injected)
-    await expect(
-      page.getByRole("option", { name: item.title, exact: true }),
-    ).toHaveCount(0);
-  await expect(page.getByRole("option", { name: /JSON/ })).toHaveCount(0);
+    await expect(menu.locator(`[data-key="${item.id}"]`)).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("lab-question-input")).toBeEditable();
+  // The fault-injection experiment shows its arms but cannot run them from the page.
+  await page
+    .getByRole("radio", { name: t("lesson:lab.experimentTab", { number: 2 }) })
+    .click();
+  for (const item of injected) {
+    const arm = page.getByTestId(`experiment-arm-${item.id}`);
+    await expect(arm).toBeDisabled();
+    await expect(arm).toContainText(t("lesson:lab.armOffline"));
+  }
 });
 
 test("small screen opens course navigation and keeps content within viewport", async ({
@@ -690,7 +695,9 @@ test("understand scene leads into the lab by keyboard and metrics settle on real
     "true",
   );
   await expect(page.getByTestId("lab-workspace")).toBeVisible();
-  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
+  await page
+    .getByRole("button", { name: t("lab:bench.composer.openCommands") })
+    .click();
   await expect(page.getByRole("option").first()).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByTestId("lab-run-button").click();

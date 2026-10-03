@@ -1,4 +1,11 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Laboratory } from "../components/workspace/Laboratory";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
@@ -22,6 +29,7 @@ import { ShortcutHelp } from "./lab/ShortcutHelp";
 import { useLabShortcuts } from "./lab/useLabShortcuts";
 import { useLessonRecordings } from "./lab/useLessonRecordings";
 import { useRunEndToast } from "./lab/useRunEndToast";
+import { useRunFollow } from "./lab/useRunFollow";
 import { observeStatus } from "../content/guide";
 import type { SceneProps } from "./types";
 
@@ -49,6 +57,18 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     : [];
   const finished = evidence.at(-1)?.type === "done";
   const statuses = experiment ? observeStatus(experiment, evidence) : [];
+  const pathOf = (id: string) =>
+    experiment?.observe.find((point) => point.id === id)?.selector?.path ??
+    null;
+  // The observe point whose evidence the inspector shows and frames (locate, guide, default).
+  const shown = studio.active ? studio.visible.indexOf(studio.active) : -1;
+  const current = statuses.find(
+    (point) =>
+      point.status === "found" &&
+      point.index === shown &&
+      focus?.index === shown &&
+      focus.path === pathOf(point.id),
+  )?.id;
 
   const resetExperiment = (id: string) => {
     setExperimentId(id);
@@ -90,6 +110,17 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     }
   }, [studio.running]);
 
+  // A finished run opens on the first observe point's evidence rather than on
+  // its last event. Selecting does not rewind the replay; nothing scrolls.
+  useEffect(() => {
+    if (!finished || studio.running || focus || !experiment) return;
+    const first = statuses.find((point) => point.status === "found");
+    if (first?.status !== "found") return;
+    setFocus({ index: first.index, path: pathOf(first.id), reveal: false });
+    studio.selectEvent(first.index);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished, studio.running, experiment?.id]);
+
   // Leaving the lab scene ends a guide; it never runs over another scene.
   useEffect(() => {
     if (!active) setGuideStep(null);
@@ -104,6 +135,9 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     if (completed) setGuidesDone((count) => count + 1);
   }, []);
   const recording = recordings.find((item) => item.name === source);
+  // The view follows a run down to the observatory and back when it ends.
+  const frame = useRef<HTMLDivElement>(null);
+  useRunFollow(studio.running, active && !recording, frame);
   const [help, setHelp] = useState(false);
   useLabShortcuts({
     studio,
@@ -143,58 +177,63 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
           <RecordingView lessonId={detail.id} recording={recording} />
         ) : (
           <>
-            {experiment && (
-              <div className="lab-experiment-row">
-                <ExperimentPanel
-                  experiments={experiments}
-                  selected={experiment}
-                  statuses={statuses}
-                  onSelect={selectExperiment}
-                  onLocate={(index, path) => {
-                    setFocus({ index, path, reveal: true });
-                    locateEvent(studio, index);
-                  }}
-                  studio={studio}
-                />
-                <ExperimentSide
-                  experiment={experiment}
-                  statuses={statuses}
-                  finished={finished}
-                  running={studio.running}
-                  guiding={guideStep !== null}
-                  guidesDone={guidesDone}
-                  onStartGuide={() => setGuideStep(0)}
-                />
-              </div>
-            )}
-            <div
-              className="lab-frame"
-              data-running={studio.running || undefined}
-            >
-              {/* Decoration only while a real run is in progress. */}
-              {studio.running && (
-                <ElectricBorder
-                  className="lab-running-border"
-                  color="#8f7dff"
-                  chaos={0.08}
-                  speed={1.2}
-                  borderRadius={18}
-                />
+            <div className="lab-layout">
+              {experiment && (
+                // Fixed beside the observatory on wide screens; scrolls inside when long.
+                <aside className="lab-rail" aria-label={t("rail")}>
+                  <ExperimentPanel
+                    experiments={experiments}
+                    selected={experiment}
+                    statuses={statuses}
+                    current={current ?? null}
+                    onSelect={selectExperiment}
+                    onLocate={(index, path) => {
+                      setFocus({ index, path, reveal: true });
+                      locateEvent(studio, index);
+                    }}
+                    studio={studio}
+                  />
+                  <ExperimentSide
+                    experiment={experiment}
+                    statuses={statuses}
+                    finished={finished}
+                    running={studio.running}
+                    guiding={guideStep !== null}
+                    guidesDone={guidesDone}
+                    onStartGuide={() => setGuideStep(0)}
+                  />
+                </aside>
               )}
-              <LessonExtension
-                slot="lab"
-                extensionKey={detail.ui?.lab}
-                studio={studio}
-                active={active}
-                onConfigure={onConfigure}
+              <div
+                ref={frame}
+                className="lab-frame"
+                data-running={studio.running || undefined}
               >
-                <Laboratory
+                {/* Decoration only while a real run is in progress. */}
+                {studio.running && (
+                  <ElectricBorder
+                    className="lab-running-border"
+                    color="#8f7dff"
+                    chaos={0.08}
+                    speed={1.2}
+                    borderRadius={18}
+                  />
+                )}
+                <LessonExtension
+                  slot="lab"
+                  extensionKey={detail.ui?.lab}
                   studio={studio}
                   active={active}
                   onConfigure={onConfigure}
-                  spotlight={guideStep !== null ? spotlight : null}
-                />
-              </LessonExtension>
+                >
+                  <Laboratory
+                    studio={studio}
+                    active={active}
+                    onConfigure={onConfigure}
+                    spotlight={guideStep !== null ? spotlight : null}
+                  />
+                </LessonExtension>
+              </div>
             </div>
             {experiment && guideStep !== null && finished && active && (
               <Suspense fallback={null}>

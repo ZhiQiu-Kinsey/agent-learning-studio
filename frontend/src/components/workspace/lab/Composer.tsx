@@ -2,12 +2,13 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { FlaskConical } from "lucide-react";
 import type { StudioState } from "../../../hooks/useStudio";
-import GlideSelect from "../../react-bits/GlideSelect";
 import PromptBar from "../../react-bits/PromptBar";
-import { pickerColors } from "../../lab/controlColors";
 import { Button } from "../../ui/button";
 
-/** Exercise picker, question bar (run / stop) and how this run is executed. */
+/**
+ * Question bar (run / stop) and how this run is executed. The experiment card's
+ * arms pick the exercise; the `/` menu in the bar is a shortcut to all of them.
+ */
 export function Composer({
   studio: s,
   onConfigure,
@@ -42,32 +43,13 @@ export function Composer({
         </span>
         <small>LIVE</small>
       </div>
-      <p className="pane-description">
-        {s.requiresModel
-          ? s.detail?.capabilities?.custom_runtime
-            ? t("descCustom")
-            : t("descModel")
-          : t("descLocal")}
-      </p>
-      <div className="form-field" data-testid="lab-exercise-field">
-        <label>{t("exercise")}</label>
-        <GlideSelect
-          {...pickerColors}
-          size="lg"
-          className="full-picker"
-          ariaLabel={t("exercise")}
-          value={s.exerciseId}
-          onChange={s.selectExercise}
-          disabled={s.running || !s.detail}
-          options={exercises.map((e) => ({ value: e.id, label: e.title }))}
-        />
-      </div>
       <div className="form-field">
         <label htmlFor="lab-question">
           {s.detail?.ui?.question_label || t("question")}
         </label>
         <PromptBar
           className="lab-prompt-bar"
+          minRows={2}
           value={s.question}
           onChange={s.setQuestion}
           disabled={s.running}

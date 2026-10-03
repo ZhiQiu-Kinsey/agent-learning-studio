@@ -16,8 +16,9 @@ import type { RunView } from "./useRunView";
 
 /**
  * The "execution record" tab: stage, metrics, live activity, tool-call chips,
- * replay controls, timeline, film and cards, lenses, then the event list beside
- * the event inspector. Rendered as siblings so the tab's layout rules apply.
+ * replay controls, timeline, then the event list beside the event inspector
+ * (where observe points and the guide point), then film and cards and lenses.
+ * Rendered as siblings so the tab's layout rules apply.
  */
 export function RunObservatory({
   studio: s,
@@ -75,6 +76,15 @@ export function RunObservatory({
           {t("compressed")}
         </p>
       )}
+      <div className="trace-split">
+        <EventList studio={s} />
+        <EventDetail
+          studio={s}
+          active={active}
+          copied={copied}
+          onCopied={onCopied}
+        />
+      </div>
       {s.events.length > 0 && (
         <div className="stage-detail-grid">
           <ContextFilm film={run.stage.film} onSelect={s.selectEvent} />
@@ -87,15 +97,6 @@ export function RunObservatory({
         </div>
       )}
       <Lenses visible={s.visible} film={run.stage.film} />
-      <div className="trace-split">
-        <EventList studio={s} />
-        <EventDetail
-          studio={s}
-          active={active}
-          copied={copied}
-          onCopied={onCopied}
-        />
-      </div>
       <p className="replay-footnote">{tb("footnote")}</p>
     </>
   );

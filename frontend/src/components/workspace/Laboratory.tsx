@@ -12,8 +12,8 @@ import { RunPanel } from "./lab/RunPanel";
 import { useRunView } from "./lab/useRunView";
 
 /**
- * The lab bench: the run panel on the left; on the right the run observatory
- * (execution record), the lesson's Python source, and its prompt and tools.
+ * The lab bench: the run panel (question, answer, connection) across the top,
+ * then the run observatory: execution record, Python source, prompt and tools.
  */
 export function Laboratory({
   studio: s,
@@ -70,7 +70,8 @@ export function Laboratory({
             void s.run();
           }}
         />
-        <section className="lab-inspector">
+        {/* A run brings the view here (useRunFollow) and back when it ends. */}
+        <section className="lab-inspector" data-run-focus>
           <InspectorHeading
             studio={s}
             active={active}

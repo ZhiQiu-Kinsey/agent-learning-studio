@@ -44,6 +44,7 @@ export function CommandMenu({
           tabIndex={-1}
           aria-selected={index === cursor}
           data-current={row.active ? "" : undefined}
+          data-key={row.key}
           className="prompt-bar__option"
           onMouseDown={(event) => event.preventDefault()}
           onPointerEnter={() => setActive(index)}

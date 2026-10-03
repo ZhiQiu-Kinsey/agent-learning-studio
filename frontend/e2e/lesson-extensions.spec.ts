@@ -7,6 +7,7 @@ import {
 import type { CurriculumData, Detail, Trace } from "../src/types";
 import { mockRunStream, runOffline } from "./runs";
 import { t, tPattern } from "./i18n";
+import { chooseExercise } from "./navigation";
 
 // Fixture courses exist only at the browser's API boundary, never in the catalog.
 async function fixtureLesson(
@@ -199,7 +200,6 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   const inputs = page.getByTestId("lab-inputs-json");
   const run = page.getByTestId("lab-run-button");
   const eventJson = page.getByTestId("lab-event-detail").locator("pre");
-  const exercise = page.getByTestId("lab-exercise-field").getByRole("combobox");
   await expect(inputs).toHaveValue(
     JSON.stringify({ strategy: "default", limit: 2 }, null, 2),
   );
@@ -247,17 +247,11 @@ test("new lesson reuses structured inputs, local execution and arbitrary event r
   await expect(customEvent).toBeVisible();
   expect(payloads).toHaveLength(1);
 
-  await exercise.click();
-  await page
-    .getByRole("option", { name: lesson.exercises[1].title, exact: true })
-    .click();
+  await chooseExercise(page, lesson.exercises[1].id);
   await expect(inputs).toHaveValue(
     JSON.stringify({ strategy: "default" }, null, 2),
   );
-  await exercise.click();
-  await page
-    .getByRole("option", { name: lesson.exercises[2].title, exact: true })
-    .click();
+  await chooseExercise(page, lesson.exercises[2].id);
   await expect(inputs).toHaveValue(
     JSON.stringify({ strategy: "default" }, null, 2),
   );
@@ -358,8 +352,7 @@ test("lesson three custom inspector follows real tool outcomes, event selection 
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await expect(inspector).toContainText(passed(1));
   await expect(inspector).toContainText(failed(0));
-  await page.getByTestId("lab-exercise-field").getByRole("combobox").click();
-  await page.getByRole("option", { name: zero.title, exact: true }).click();
+  await chooseExercise(page, zero.id);
   await page.getByTestId("lab-run-button").click();
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   await expect(inspector).toContainText(passed(0));

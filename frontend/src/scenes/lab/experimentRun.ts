@@ -7,7 +7,10 @@ type Exercise = Detail["exercises"][number];
  * Whether the learner can run this arm from the page. Fault-injection presets
  * (`offline_only`) run only in automated tests; the server refuses them live.
  */
-export function armRunnable(exerciseId: string, exercises: readonly Exercise[]) {
+export function armRunnable(
+  exerciseId: string,
+  exercises: readonly Exercise[],
+) {
   const exercise = exercises.find((item) => item.id === exerciseId);
   return !!exercise && !exercise.offline_only;
 }
