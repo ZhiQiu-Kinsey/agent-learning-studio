@@ -1,11 +1,12 @@
 """课程目录与可执行课程保持一致，未来计划不获得执行权限。"""
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from server.app import app
 from server.catalog import LESSONS
-from server.curriculum import load_curriculum
+from server.curriculum import LessonValidationError, load_curriculum
 from scripts.export_curriculum import ROOT, document
 
 
@@ -62,6 +63,17 @@ class CurriculumTests(unittest.TestCase):
         response = client.post("/api/runs", json={"lesson_id": unavailable, "mode": "offline", "question": "test", "exercise_id": "test"})
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("data:", response.text)
+
+    def test_outline_export_fails_on_a_broken_glossary_and_the_api_logs_it(self):
+        from server import catalog
+        broken = LessonValidationError("术语表损坏")
+        with patch("server.glossary.load_glossary", side_effect=broken):
+            with self.assertRaisesRegex(LessonValidationError, "术语表损坏"):
+                catalog.curriculum_outline(strict=True)
+            with self.assertLogs("server.catalog", level="WARNING") as logs:
+                outline = catalog.curriculum_outline()
+        self.assertIn("术语表损坏", " ".join(logs.output))
+        self.assertTrue(all(lesson.get("key_terms", []) == [] for lesson in outline["lessons"]))
 
     def test_readable_curriculum_matches_the_single_source(self):
         self.assertEqual((ROOT / "docs/course-plan.md").read_text(encoding="utf-8"), document(),
