@@ -70,7 +70,7 @@ def _report(context: RunContext, checks: list[dict], attempt: int) -> None:
         "title": stage + "：结构化输出三层校验",
         "summary": stage + ("通过已执行的全部检查" if accepted else "未通过；后续层级在上游失败时不作判断"),
         "checks": checks,
-        "metrics": [{"label": "模型调用次数", "value": attempt},
+        "metrics": [{"label": "模型调用数", "value": attempt},
                     {"label": "本稿验收", "value": "通过" if accepted else "失败"},
                     {"label": "学习者备注", "value": context.question or "（空）"}],
         "table": {"columns": ["阶段", "结果"],
