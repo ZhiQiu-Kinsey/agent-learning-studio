@@ -1,1 +1,1 @@
-"""Chapter 2: task contracts and acceptance."""
+"""任务目标与验收：执行前写好任务卡，再拿本次的工具证据核对完成声明。"""
