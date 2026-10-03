@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from realign_notes import LineMap, realign_block  # noqa: E402
+from realign_notes import LineMap, mapping_for, realign_block  # noqa: E402
 
 OLD = [f"line {number}" for number in range(1, 13)]
 BLOCK = {"id": "code-x", "start": 2, "end": 10,
@@ -55,6 +55,29 @@ class RealignTests(unittest.TestCase):
         # 没有两版源码可比时按锚点推算：上方插入的行让整块一起后移。
         new = ["import x", "import y"] + OLD
         self.assertEqual(shape(realign(new, mapping=False)), (4, 12, [5, 10], [(7, 8)]))
+
+    def test_rewriting_the_last_lines_keeps_the_new_code_inside_the_block(self):
+        # 块的最后一行改写成三行：终点落在新段末尾，新代码仍在块里。
+        grown = OLD[:9] + ["total = a + b", "print(total)", "return total"] + OLD[10:]
+        self.assertEqual(realign(grown)["end"], 12)
+        # 反过来，两行合成一行：终点落在合并后的那一行。
+        shrunk = OLD[:8] + ["merged"] + OLD[10:]
+        self.assertEqual(realign(shrunk)["end"], 9)
+
+    def test_running_twice_does_not_move_anything_again(self):
+        new = OLD[:3] + ["new a", "new b"] + OLD[3:]
+        first = copy.deepcopy(BLOCK)
+        realign_block(first, new, mapping_for(first, BLOCK, OLD, new))
+        self.assertEqual(shape(first), (2, 12, [3, 10], [(7, 8)]))
+        # 第二次：块已经不是 --base 那一版的行号，不再套映射；锚点都对，什么也不动。
+        second = copy.deepcopy(first)
+        self.assertIsNone(mapping_for(second, BLOCK, OLD, new))
+        self.assertEqual(realign_block(second, new, None), [])
+        self.assertEqual(shape(second), shape(first))
+
+    def test_no_mapping_when_the_source_did_not_change(self):
+        self.assertIsNone(mapping_for(copy.deepcopy(BLOCK), BLOCK, OLD, list(OLD)))
+        self.assertIsNone(mapping_for(copy.deepcopy(BLOCK), BLOCK, None, OLD))
 
     def test_missing_or_ambiguous_anchor_is_an_error(self):
         new = [text for text in OLD if text != "line 8"]
