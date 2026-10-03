@@ -49,6 +49,7 @@ const only = (condition: SelectorCondition, value: unknown): Selector => ({
   path: null,
   span_kind: null,
   name: null,
+  nth: null,
   [condition]: value,
 });
 
@@ -64,12 +65,20 @@ export function unmetConditions(
   );
 }
 
+/** `nth`：这一步满足全部条件，但不是题目要的第 nth 个。 */
+export type HuntMiss = SelectorCondition | "nth";
+
 export type HuntVerdict =
   | { correct: true }
-  | { correct: false; unmet: SelectorCondition[] };
+  | { correct: false; unmet: HuntMiss[] };
 
-export function judgeHunt(target: Selector, event: Trace): HuntVerdict {
-  return matches(target, event)
-    ? { correct: true }
-    : { correct: false, unmet: unmetConditions(target, event) };
+/** 判定学习者在 `events`（自己这次运行）里选的第 `index` 步。 */
+export function judgeHunt(
+  target: Selector,
+  events: readonly Trace[],
+  index: number,
+): HuntVerdict {
+  if (selectEvents(target, events).includes(index)) return { correct: true };
+  const unmet = unmetConditions(target, events[index]);
+  return { correct: false, unmet: unmet.length ? unmet : ["nth"] };
 }

@@ -151,8 +151,8 @@
 - **实验**：`experiments` 中每个实验由以下部分组成：
   - `hypothesis`：可检验的假设；
   - `arms`：对照组，用 `exercise` 引用 lesson.json 的练习；
-  - `observe`：观察点，带选择器（`event`、`round`、`path`、`span_kind`、`name`）；
-  - `guide`：导览，每步 `{ "text", "observe"?, "stage"? }`：一小段讲解（一两句），加上这段话要看的地方。`observe` 引用观察点，界面在学习者自己的运行里跳到证据并用遮罩框住（JSON 字段精确到行）；`stage` 写这一步讲的是哪个舞台角色（`user`、`runtime`、`model`、`tool`、`memory`），没有 `observe` 时框住该节点；两者都不填的一步居中显示，只用于开场。每个观察点都要讲到，每步的话不重复。观察点选择器匹配的是第一个符合的事件，路径只要存在就算命中（值为 null 也算）：同类事件有多个时用 `round` 或只在目标事件上出现的字段钉住，否则导览会框到别的事件；
+  - `observe`：观察点，带选择器（条件 `event`、`round`、`path`、`span_kind`、`name`，可加 `nth`）；
+  - `guide`：导览，每步 `{ "text", "observe"?, "stage"? }`：一小段讲解（一两句），加上这段话要看的地方。`observe` 引用观察点，界面在学习者自己的运行里跳到证据并用遮罩框住（JSON 字段精确到行）；`stage` 写这一步讲的是哪个舞台角色（`user`、`runtime`、`model`、`tool`、`memory`），没有 `observe` 时框住该节点；两者都不填的一步居中显示，只用于开场。每个观察点都要讲到，每步的话不重复。观察点选择器匹配的是第一个符合的事件，路径只要存在就算命中（值为 null 也算）：同类事件有多个时用 `round` 或只在目标事件上出现的字段钉住，实在没有可钉的字段（如同一轮的第二个 `tool_call`）再写 `nth`，按运行顺序取第几个命中（从 1 数），否则导览会框到别的事件。`nth` 依赖事件顺序，真实运行的顺序和次数可能与确定性运行不同，能用字段钉住时优先用字段；
   - `conclusion`：`proves` 写能证明的，`does_not_prove` 写不能证明的。
 
   选择器的语义由 `server/selectors.py` 和 `frontend/src/content/selector.ts` 共同实现，两边跑同一份共享测试向量。`tests/test_lesson_experiments.py` 会用确定性运行逐个检查观察点和导览目标都能命中；在这次运行中找不到的证据，界面会如实显示“本次运行没有出现这条证据”。

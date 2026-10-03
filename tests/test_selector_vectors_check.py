@@ -30,7 +30,7 @@ class SharedVectorTests(unittest.TestCase):
     def test_vectors_cover_every_condition(self):
         used = {key for vector in VECTORS["selectors"] for key, value in vector["selector"].items()
                 if value is not None}
-        self.assertEqual(used, {"event", "round", "path", "span_kind", "name"})
+        self.assertEqual(used, {"event", "round", "path", "span_kind", "name", "nth"})
 
 
 class PythonSpecificTests(unittest.TestCase):

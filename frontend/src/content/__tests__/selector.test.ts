@@ -11,6 +11,7 @@ const none = {
   path: null,
   span_kind: null,
   name: null,
+  nth: null,
 };
 
 describe("resolvePath", () => {

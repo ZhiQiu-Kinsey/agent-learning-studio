@@ -243,17 +243,22 @@ class Checkpoint(Block):
 
 
 class Selector(Strict):
-    """观察点、导览和轨迹找错共用的声明式选择器；至少给出一个条件。"""
+    """观察点、导览和轨迹找错共用的声明式选择器；至少给出一个条件。
+
+    nth 不是条件：它在全部命中里按运行顺序取第几个（从 1 数），不填就是第一个。
+    同类事件有多个、又没有只属于目标事件的字段可钉时用它，例如同一轮的第二个 tool_call。
+    """
     event: Fact | None = None
     round: Annotated[int, Field(ge=1)] | None = None
     path: Fact | None = None       # JSON 路径，如 data.tool_calls[0].function.name
     span_kind: Fact | None = None
     name: Fact | None = None       # 工具名
+    nth: Annotated[int, Field(ge=1)] | None = None
 
     @model_validator(mode="after")
     def _not_empty(self):
-        if not self.model_dump(exclude_none=True):
-            raise ValueError("selector 至少需要一个条件")
+        if not self.model_dump(exclude_none=True, exclude={"nth"}):
+            raise ValueError("selector 至少需要一个条件（nth 只在命中里挑第几个，不算条件）")
         return self
 
 

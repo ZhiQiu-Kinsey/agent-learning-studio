@@ -269,6 +269,9 @@ export interface TraceHunt {
 }
 /**
  * 观察点、导览和轨迹找错共用的声明式选择器；至少给出一个条件。
+ *
+ * nth 不是条件：它在全部命中里按运行顺序取第几个（从 1 数），不填就是第一个。
+ * 同类事件有多个、又没有只属于目标事件的字段可钉时用它，例如同一轮的第二个 tool_call。
  */
 export interface Selector {
   event: string | null;
@@ -276,6 +279,7 @@ export interface Selector {
   path: string | null;
   span_kind: string | null;
   name: string | null;
+  nth: number | null;
 }
 /**
  * 本课新增内容由后端从真实源码计算，这里只声明对比基准。

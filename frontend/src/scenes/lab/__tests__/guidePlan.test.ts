@@ -11,6 +11,7 @@ const selector = (patch: Record<string, unknown>) => ({
   path: null,
   span_kind: null,
   name: null,
+  nth: null,
   ...patch,
 });
 

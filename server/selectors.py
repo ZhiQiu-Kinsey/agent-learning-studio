@@ -10,6 +10,8 @@ tests/fixtures/selector_vectors.json 约束：Python 测试与 vitest 读取同�
 - 路径末端的值为 null（Python 的 None）、false、0 或空串时仍算找到；只有“不存在”才不匹配。
 - 工具名先取 ``data.function.name``（必须是字符串），否则取 ``data.name``（必须是字符串）。
 - 各条件之间是“与”关系；未给出的条件（None）不参与比较。
+- ``nth`` 不是逐条事件的条件：它在全部命中里按运行顺序取第几个（从 1 数）。所以单条事件的
+  ``selector_matches`` 不看它，``select_events`` / ``find_evidence`` 才看。
 """
 from __future__ import annotations
 
@@ -38,7 +40,9 @@ class _Missing:
 
 
 MISSING: Any = _Missing()
-SELECTOR_FIELDS = ("event", "round", "path", "span_kind", "name")
+# 逐条事件比较的条件；nth 在命中序列上取第几个，另算。
+CONDITION_FIELDS = ("event", "round", "path", "span_kind", "name")
+SELECTOR_FIELDS = (*CONDITION_FIELDS, "nth")
 
 
 def resolve_path(value: Any, path: str) -> Any:
@@ -92,10 +96,14 @@ def _as_dict(selector: Any) -> dict[str, Any]:
     unknown = set(selector) - set(SELECTOR_FIELDS)
     if unknown:
         raise ValueError(f"selector 包含未知条件：{', '.join(sorted(unknown))}")
+    nth = selector.get("nth")
+    if nth is not None and (isinstance(nth, bool) or not isinstance(nth, int) or nth < 1):
+        raise ValueError(f"selector 的 nth 必须是不小于 1 的整数：{nth!r}")
     return {key: selector.get(key) for key in SELECTOR_FIELDS}
 
 
 def selector_matches(selector: Any, event: Mapping[str, Any]) -> bool:
+    """这一条事件是否满足全部条件；不看 nth（单条事件不知道自己排第几）。"""
     condition = _as_dict(selector)
     if condition["event"] is not None and not _strict_equal(event.get("type"), condition["event"]):
         return False
@@ -111,19 +119,25 @@ def selector_matches(selector: Any, event: Mapping[str, Any]) -> bool:
 
 
 def select_events(selector: Any, events: Sequence[Mapping[str, Any]]) -> list[int]:
-    """按运行顺序返回所有命中事件的下标。"""
-    return [index for index, event in enumerate(events) if selector_matches(selector, event)]
+    """按运行顺序返回所有命中事件的下标；给了 nth 时只剩第 nth 个命中（不够 nth 个就是空）。"""
+    condition = _as_dict(selector)
+    hits = [index for index, event in enumerate(events) if selector_matches(condition, event)]
+    nth = condition["nth"]
+    if nth is None:
+        return hits
+    return hits[nth - 1:nth]
 
 
 def find_evidence(selector: Any, events: Sequence[Mapping[str, Any]], start: int = 0) -> dict[str, Any]:
-    """从 start（含）开始找第一条命中事件；有 path 时同时返回该路径的值。
+    """select_events 选中的事件里，下标不小于 start 的第一条；有 path 时同时返回该路径的值。
 
-    返回 ``{"found": True, "index": i, "value": v}`` 或 ``{"found": False}``，与 TS 的 Evidence 相同。
+    nth 按整次运行数，不从 start 开始数。返回 ``{"found": True, "index": i, "value": v}`` 或
+    ``{"found": False}``，与 TS 的 Evidence 相同。
     """
     condition = _as_dict(selector)
-    for index in range(max(0, start), len(events)):
-        event = events[index]
-        if selector_matches(condition, event):
+    for index in select_events(condition, events):
+        if index >= start:
+            event = events[index]
             value = resolve_path(event, condition["path"]) if condition["path"] is not None else event
             return {"found": True, "index": index, "value": value}
     return {"found": False}

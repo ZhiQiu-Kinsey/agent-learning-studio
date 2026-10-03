@@ -48,6 +48,7 @@ const none: Selector = {
   path: null,
   span_kind: null,
   name: null,
+  nth: null,
 };
 const full = (selector: Partial<Selector>): Selector => ({
   ...none,

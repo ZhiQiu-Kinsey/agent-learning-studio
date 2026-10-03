@@ -11,6 +11,7 @@ const none: Selector = {
   path: null,
   span_kind: null,
   name: null,
+  nth: null,
 };
 
 describe("shared selector vectors", () => {

@@ -60,6 +60,17 @@ class SelectorModelTests(unittest.TestCase):
         self.assertFalse(selector_matches({"round": 1}, {"type": "x", "round": True, "data": {}}))
         self.assertTrue(selector_matches({"round": 1}, {"type": "x", "round": 1.0, "data": {}}))
 
+    def test_nth_picks_among_hits_and_is_not_a_condition(self):
+        events = VECTORS["events"]
+        self.assertEqual(select_events(Selector(event="tool_call", nth=2), events), [5])
+        # 单条事件不知道自己排第几：第一个 tool_call 仍满足全部条件。
+        self.assertTrue(selector_matches({"event": "tool_call", "nth": 2}, events[3]))
+        with self.assertRaises(ValueError):
+            Selector(nth=2)  # 只有 nth 等于“整次运行的第 2 条事件”，不是在找证据
+        for bad in (0, -1, True, 1.5):
+            with self.subTest(nth=bad), self.assertRaises(ValueError):
+                select_events({"event": "tool_call", "nth": bad}, events)
+
 
 if __name__ == "__main__":
     unittest.main()

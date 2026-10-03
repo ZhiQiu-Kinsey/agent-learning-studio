@@ -52,7 +52,7 @@ export function TraceHuntBlock({
 
   const choose = (index: number) => {
     const event = own[index];
-    const verdict = judgeHunt(block.target, event);
+    const verdict = judgeHunt(block.target, own, index);
     setPick({ run: currentRun, count: own.length, index, verdict });
     // 只有真实运行 id 可以作为证据来源；拿不到就不写记录。
     if (verdict.correct && currentRun)
@@ -185,7 +185,9 @@ export function TraceHuntBlock({
               <p>
                 {t("unmet.title")}
                 {picked.verdict.unmet
-                  .map((condition) => t(`unmet.${condition}`))
+                  .map((condition) =>
+                    t(`unmet.${condition}`, { nth: block.target.nth }),
+                  )
                   .join(" · ")}
               </p>
             )}
