@@ -18,7 +18,9 @@
 - **实验**（`LabScene`）：
   - 实验面板：假设、对照组、观察点，观察点按学习者自己的运行核对；
   - 实验台（`components/workspace/Laboratory.tsx` 只做组装，部件在 `components/workspace/lab/`）：提问栏、舞台、等待模型状态、工具调用条、时间线、上下文胶片、工具卡片、通用视图，以及 JSON 检视器；
-  - 导览回放条、结论卡；有录制时出现来源切换。
+  - 导览回放：点“开始导览”后整页变暗，每步只框出一处证据，讲解卡片贴在旁边（`scenes/lab/GuideTour.tsx`，懒加载）。每步一句话：有观察点时跳到对应事件，在 JSON 检视器里框住那几行（`components/workspace/lab/jsonLines.ts` 按 `JSON.stringify` 原样排版并记录字段行号）；实验报告框住证据板；只写舞台角色时框住舞台节点；开场句和这次运行没有出现的证据居中显示，后者直说没找到。点暗处不响应，被框住的区域照常可滚动、可选中；← / → 换步，Esc 退出，退出后停在最后的证据上，焦点回到“开始导览”。导览期间实验快捷键关闭；
+  - 观察点的“定位”与导览共用“证据焦点”（`components/workspace/lab/evidenceFocus.ts`）：切到执行记录、选中事件、框住字段并滚到视野里；
+  - 结论卡；有录制时出现来源切换。
 - **自检**（`CheckScene`）：先评信心再作答，并给出选项级反馈；轨迹找错只使用学习者自己的运行；检查点由学习者自报。
 - **回顾**（`ReviewScene`）：只展示本机真实记录，不判定“已掌握”；本机学习徽章（3D 挂牌，懒加载）卡面只印真实数字。
 
@@ -38,7 +40,8 @@
 | `src/components/shell/` | 侧栏（品牌标、开始之前、分支式课程树）与外壳特效 |
 | `src/components/toast/` | 全局通知：`notify()` 只报告真实结果，`ToastHost` 负责显示 |
 | `src/lib/` | 小工具：课程 ID、颜色换算 `color.ts`、链接校验 `url.ts` 等 |
-| `src/scenes/lab/` | 实验面板、导览栏、录制视图、实验快捷键 |
+| `src/scenes/lab/` | 实验面板、导览（`guidePlan.ts` 决定每步框哪里，`GuideTour.tsx` 接到遮罩导览）、录制视图、实验快捷键 |
+| `src/tour/` | 通用遮罩导览（React Joyride 受控模式）：遮罩与亮框、讲解卡片（React Bits `SpotlightCard`）、进度条、键盘；`reveal.ts` 先滚动再画亮框。与课程无关，可复用于别的引导 |
 | `src/lesson-extensions/` | 构建时登记的课程插槽；扩展加载失败时回退到通用界面 |
 | `src/styles/` | 按模块组织的样式；`tokens.css` 存放设计令牌与动效级别开关 |
 

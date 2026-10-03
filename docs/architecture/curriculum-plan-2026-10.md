@@ -203,6 +203,10 @@ catalog 每课增加：`estimated_minutes`（预计时长）、`difficulty`（�
 | 5i | 原生基础：A0 三课（`chat-request`、`multi-turn-history`、`sampling-variance`）、`tool-proposals`；`tool-selection` 按新节奏重写；“同一轮两个独立调用”移到 `dependent-calls`；术语 first_lesson 重新分配 | `fc2572f`、`e2706db`（合并 `d2373b2`） | 真实运行 35 次调用；`max_tokens=16` 时推理用完上限、content 为空，正文按此说明 |
 | 5j | 任务与接口、推理与控制模式 8 门课的读码整理：18 个基线块全部达标，报告组装移入 `_report`，运行数据与源码不再写死课号 | `b738ac7`…`e183375`（合并 `44338a9`） | 真实运行 13 个练习 |
 | 5k | 收尾：密度基线清零；每课新概念不超过 5 个、predict 在第一道微测之前、源码不写死课号都改为硬性检查；枚举参数选项过长时改用下拉 | `2a89747`、`6f09f6f`、`44338a9` | 后端全部测试、vitest 181、i18n、Playwright 56 项全部通过；合并后在 main 上抽查 5 个练习真实运行 |
+| 6a | 导览修复：一句讲解算一步（原来讲解、聚光、跳转、高亮各算一步，16 步只有 5 句话，中间几步讲解和证据错位） | `98b0cb4` | vitest |
+| 6b | 导览改为逐步格式 `{text, observe?, stage?}`，46 个实验无损迁移；测试要求每个观察点都讲到、每步一句不同的话 | `4ec39ea` | 后端全部测试、validate_lessons |
+| 6c | 事件详情能框住观察点的字段（JSON 原样排版并记录字段行号）；观察点“定位”与导览共用证据焦点 | `1c5e267` | vitest |
+| 6d | 遮罩导览：React Joyride 受控模式 + React Bits（讲解卡片 SpotlightCard、句子 BlurText、开始按钮 StarBorder、看完 SparkBurst）；强遮罩，点暗处不响应，被框区域可操作；先滚动再画亮框；导览期间实验快捷键关闭 | 见下一提交 | vitest、Playwright（新增导览 3 项） |
 
 ### 8.9 执行中的决定与遗留
 
