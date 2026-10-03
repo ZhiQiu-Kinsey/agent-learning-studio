@@ -11,6 +11,11 @@ import {
 } from "../components/workspace/lab/evidenceFocus";
 import { ExperimentPanel } from "./lab/ExperimentPanel";
 import { ExperimentSide } from "./lab/ExperimentSide";
+import {
+  evidenceEvents,
+  exerciseForExperiment,
+  experimentOf,
+} from "./lab/experimentRun";
 import { locateEvent } from "./lab/locate";
 import { RecordingView, formatRecordingDate } from "./lab/RecordingView";
 import { ShortcutHelp } from "./lab/ShortcutHelp";
@@ -38,16 +43,43 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
   const [guidesDone, setGuidesDone] = useState(0);
   const recordings = useLessonRecordings(detail.id);
   const [source, setSource] = useState("mine");
-  const finished = studio.events.at(-1)?.type === "done";
+  // Only a run of one of this experiment's arms is checked against its observe points.
+  const evidence = experiment
+    ? evidenceEvents(experiment, studio.runExerciseId, studio.events)
+    : [];
+  const finished = evidence.at(-1)?.type === "done";
+  const statuses = experiment ? observeStatus(experiment, evidence) : [];
 
-  useEffect(() => {
-    setExperimentId(experiments[0]?.id ?? "");
+  const resetExperiment = (id: string) => {
+    setExperimentId(id);
     setGuideStep(null);
     setFocus(null);
     setGuidesDone(0);
+  };
+
+  useEffect(() => {
+    resetExperiment(experiments[0]?.id ?? "");
     setSource("mine");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail.id]);
+
+  // An exercise picked elsewhere (the `/` menu) brings its experiment along.
+  useEffect(() => {
+    if (experiment?.arms.some((arm) => arm.exercise === studio.exerciseId))
+      return;
+    const owner = experimentOf(experiments, studio.exerciseId);
+    if (owner) resetExperiment(owner.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studio.exerciseId]);
+
+  // Switching experiments also switches to one of its arms, so the next run belongs to it.
+  const selectExperiment = (id: string) => {
+    resetExperiment(id);
+    const next = experiments.find((item) => item.id === id);
+    const exercise =
+      next && exerciseForExperiment(next, detail.exercises, studio.exerciseId);
+    if (exercise) studio.selectExercise(exercise);
+  };
 
   // A new run invalidates the guide position and the evidence of the previous one.
   useEffect(() => {
@@ -116,12 +148,8 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
                 <ExperimentPanel
                   experiments={experiments}
                   selected={experiment}
-                  onSelect={(id) => {
-                    setExperimentId(id);
-                    setGuideStep(null);
-                    setFocus(null);
-                    setGuidesDone(0);
-                  }}
+                  statuses={statuses}
+                  onSelect={selectExperiment}
                   onLocate={(index, path) => {
                     setFocus({ index, path, reveal: true });
                     locateEvent(studio, index);
@@ -130,7 +158,7 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
                 />
                 <ExperimentSide
                   experiment={experiment}
-                  statuses={observeStatus(experiment, studio.events)}
+                  statuses={statuses}
                   finished={finished}
                   running={studio.running}
                   guiding={guideStep !== null}

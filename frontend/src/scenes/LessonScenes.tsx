@@ -110,9 +110,10 @@ function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
     setScene("understand");
   }, [lessonId]);
 
-  // A running lab keeps the learner informed even from other scenes.
+  // A run started from another scene (command palette) brings the learner to
+  // the lab. Already in the lab, nothing moves: goTo would scroll to the top.
   useEffect(() => {
-    if (studio.running) goTo("lab");
+    if (studio.running && scene !== "lab") goTo("lab");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studio.running]);
 

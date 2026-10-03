@@ -9,11 +9,12 @@ import {
   Check,
 } from "lucide-react";
 import type { StudioState } from "../../hooks/useStudio";
-import { observeStatus, type ObserveStatus } from "../../content/guide";
+import type { ObserveStatus } from "../../content/guide";
 import type { Experiment } from "../../content/types.gen";
 import { GlossaryText } from "../../content/glossary/Glossary";
 import RubberSegment from "../../components/react-bits/RubberSegment";
 import { segmentColors } from "../../components/lab/controlColors";
+import { armRunnable } from "./experimentRun";
 
 const statusIcon = {
   "no-run": Clock3,
@@ -40,24 +41,26 @@ function StatusPill({ point }: { point: ObserveStatus }) {
 
 /**
  * Experiment card: hypothesis, arms (each an exercise of this lesson) and
- * observe points checked against the learner's own run.
+ * observe points checked against the learner's own run of one of these arms.
  */
 export function ExperimentPanel({
   experiments,
   selected,
+  statuses,
   onSelect,
   onLocate,
   studio,
 }: {
   experiments: Experiment[];
   selected: Experiment;
+  /** Observe points checked against this experiment's run (see evidenceEvents). */
+  statuses: ObserveStatus[];
   onSelect: (id: string) => void;
   /** Point the lab at an observe point's evidence: the event and its field. */
   onLocate: (index: number, path: string | null) => void;
   studio: StudioState;
 }) {
   const { t } = useTranslation("lesson", { keyPrefix: "lab" });
-  const statuses = observeStatus(selected, studio.events);
   const exercises = studio.detail?.exercises ?? [];
   const position = Math.max(
     0,
@@ -118,13 +121,15 @@ export function ExperimentPanel({
               );
               if (!exercise) return null;
               const pressed = studio.exerciseId === arm.exercise;
+              // The server refuses fault-injection presets live; say so instead of failing on run.
+              const offline = !armRunnable(arm.exercise, exercises);
               return (
                 <button
                   key={arm.id}
                   type="button"
                   className="experiment-arm"
                   aria-pressed={pressed}
-                  disabled={studio.running}
+                  disabled={studio.running || offline}
                   data-testid={`experiment-arm-${arm.id}`}
                   onClick={() => studio.selectExercise(arm.exercise)}
                 >
@@ -133,6 +138,7 @@ export function ExperimentPanel({
                   </span>
                   <span className="experiment-arm-text">
                     {arm.label ?? exercise.title}
+                    {offline && <small>{t("armOffline")}</small>}
                   </span>
                   <span className="experiment-arm-check" aria-hidden="true">
                     <Check size={13} strokeWidth={3} />

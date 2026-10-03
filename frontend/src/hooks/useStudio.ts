@@ -44,6 +44,8 @@ export function useStudio() {
   // 当前运行的服务端 ID；断线续读、停止与页面关闭时的取消都作用于它。
   const activeRun = useRef<string | null>(null);
   const [runId, setRunId] = useState("");
+  // 当前这份事件属于哪个练习：实验只拿自己对照组的运行核对证据。
+  const [runExerciseId, setRunExerciseId] = useState("");
   const eventCount = useRef(0);
   const statusRequest = useRef(0);
 
@@ -171,6 +173,7 @@ export function useStudio() {
     setQuestion("");
     setInputs({});
     setEvents([]);
+    setRunExerciseId("");
     setCursor(0);
     setSelected(-1);
     setPlaying(false);
@@ -225,6 +228,7 @@ export function useStudio() {
     setRunning(true);
     setPlaying(false);
     setEvents([]);
+    setRunExerciseId(exerciseId);
     setCursor(0);
     setSelected(-1);
     setError("");
@@ -370,6 +374,7 @@ export function useStudio() {
     cancel,
     running,
     runId,
+    runExerciseId,
     events,
     visible,
     active,
