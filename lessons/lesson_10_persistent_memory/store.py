@@ -44,6 +44,8 @@ class MemoryStore:
             self.connection.execute("""CREATE TABLE IF NOT EXISTS versions (
                 namespace TEXT NOT NULL, key TEXT NOT NULL, version INTEGER NOT NULL,
                 PRIMARY KEY (namespace, key))""")
+            # 旧库里已有的记忆补记一份版本：先删除再重建同一个键时，过时写入照样被拦下。
+            self.connection.execute("INSERT OR IGNORE INTO versions SELECT namespace, key, version FROM memories")
             self.connection.commit()
 
     def close(self):

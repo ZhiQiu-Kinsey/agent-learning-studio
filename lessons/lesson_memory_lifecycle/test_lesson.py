@@ -144,6 +144,30 @@ class VersionTests(unittest.TestCase):
             self.assertEqual(store.put("a", "plan", "新值", "更新", 3)["version"], 4)
             store.close()
 
+    def test_old_store_rows_are_counted_so_delete_and_recreate_still_blocks_stale_writes(self):
+        # 早先建的库：重开时把已有记忆的版本补进版本表；删除再重建后，拿着旧版本的写入仍被拒绝。
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            legacy = sqlite3.connect(path)
+            legacy.execute("""CREATE TABLE memories (namespace TEXT NOT NULL, key TEXT NOT NULL,
+                value TEXT NOT NULL, source TEXT NOT NULL, version INTEGER NOT NULL, updated_at REAL NOT NULL,
+                expires_at REAL, scope TEXT NOT NULL DEFAULT 'persistent', task_id TEXT,
+                PRIMARY KEY (namespace, key))""")
+            legacy.execute("INSERT INTO memories VALUES ('a', 'plan', '旧值', '输入', 1, 0, NULL, 'persistent', NULL)")
+            legacy.commit()
+            legacy.close()
+            writer_a, other = MemoryStore(path), MemoryStore(path)
+            try:
+                seen_a = writer_a.get("a", "plan")["version"]
+                self.assertTrue(other.delete("a", "plan"))
+                self.assertEqual(other.put("a", "plan", "重建后的值", "C 的输入", None)["version"], 2)
+                with self.assertRaises(VersionConflict):
+                    writer_a.put("a", "plan", "A 的过时值", "旧资料", seen_a)
+            finally:
+                writer_a.close()
+                other.close()
+
 
 class ExpiryTests(unittest.TestCase):
     def test_expired_row_is_hidden_but_stored_until_delete(self):
