@@ -53,12 +53,23 @@
           ]
         },
         {
+          "id": "section-why-tools",
+          "type": "prose",
+          "title": "模型只会写字，要借程序去做事",
+          "paragraphs": [
+            "模型只会写字；要让它查时间、做计算，得让它把“想用哪个工具、参数是什么”写出来，交给程序去做。{{lesson:chat-request}}结尾提过这个问题：问模型现在几点，它没有时钟，只能按训练时见过的文字给一个说法，而且常常说得很肯定。大数相乘也一样，它是一个 Token 一个 Token 写出数字的，写错一位自己也不会察觉。",
+            "能查时间、能算数的是程序。所以分工是：模型判断要不要用工具、用哪个、参数填什么，把这个决定写下来；程序照着去执行。早期的做法是在提示词里约定一种文字格式，比如让模型写“调用 add_numbers(19, 23)”，程序再从回答里把这句话找出来。这种做法很脆：模型多写一个空格、换个说法，程序就找不到了，{{lesson:text-actions}}会专门比较它。",
+            "现在的模型大多支持工具调用：请求里带上工具清单，模型想用工具时，不把调用写进回答正文，而是写进一个专门的位置，服务商把它整理成格式固定的 JSON 交给程序。本课只看前一半，也就是模型怎样提出调用；程序怎样执行，留给{{lesson:tool-selection}}。"
+          ]
+        },
+        {
           "id": "section-1",
           "type": "prose",
           "title": "请求里多了 tools",
           "paragraphs": [
             "{{lesson:chat-request}}的请求只有 messages。本课多了两个字段：tools 是工具定义的列表；tool_choice 设为 auto，表示让模型自己决定用不用工具。这里的 TOOLS 来自{{lesson:tool-selection}}的 tools.py，一共两个工具：add_numbers 计算两数之和，get_current_time 读运行 Python 的机器的本地时间。",
-            "模型看到的只有这几段文字，看不到 Python 函数。add_numbers 的工具描述是“把两个数字相加。需要计算两个数的和时调用。”，既说了做什么，也说了什么时候该用。模型就是读这些说明来挑工具的。",
+            "模型看到的只有这几段文字，看不到 Python 函数。每条定义有三样东西：name 是工具名，description 是工具描述，parameters 描述参数。add_numbers 的工具描述是“把两个数字相加。需要计算两个数的和时调用。”，既说了它做什么，也说了什么时候该用。模型就是读这些文字来挑工具的：描述写得含糊，它就可能选错，或者该用时不用。",
+            "tool_choice 除了 auto，常见的还有 `none`（这次不许用工具）和 `required`（必须用一个工具），也可以指定某一个工具；各家支持哪些取值，以服务商文档为准。本课用 auto，才看得到模型自己的选择。",
             "工具定义也是请求的一部分，同样算进 prompt_tokens：工具越多、描述越长，每次请求越大。本课的 system 和问题都和{{lesson:chat-request}}不同，两课的提示 Token 不能直接相减，算不出这两条定义占了多少。"
           ]
         },
@@ -67,8 +78,22 @@
           "type": "prose",
           "title": "JSON Schema 描述参数",
           "paragraphs": [
-            "每条工具定义的 parameters 是一段 JSON Schema。add_numbers 是这样写的：type 为 object；properties 里有 a、b 两个字段，类型都是 number；required 写明两个都必填；additionalProperties 为 false，表示不许多传字段。",
-            "get_current_time 不需要参数，所以 properties 是空对象。JSON Schema 只是写给模型看的约定，模型照样可能写错。真正检查参数，要等程序执行之前再做。"
+            "每条工具定义的 parameters 是一段 JSON Schema：它用 JSON 写清参数有哪些字段、什么类型、哪些必填。为什么不直接写一句“传两个数”？因为模型要照着它写参数，程序要照着它检查参数，两边需要同一份精确的约定。“两个数”可以是 19 和 23，也可以是“十九”和“二十三”；Schema 写明类型是 number，就排除了后一种。",
+            "add_numbers 是这样写的：type 为 object，表示参数整体是一个 JSON 对象；properties 里有 a、b 两个字段，类型都是 number，各带一句描述；required 写明两个都必填；additionalProperties 为 false，表示不许多传字段。get_current_time 不需要参数，所以 properties 是空对象。",
+            "JSON Schema 只是写给模型看的约定，模型照样可能写错：漏掉 b、把数字写成带引号的文字，甚至写出不完整的 JSON。有的服务商提供严格模式，保证参数符合 Schema，适用范围以服务商文档为准。本课不依赖它：真正检查参数，要等程序执行之前再做，{{lesson:tool-selection}}和{{lesson:fail-safely}}会讲。",
+            "参数的描述同样写给模型看。a 的描述只写了“第一个数字”，因为加法不在乎顺序；如果工具是减法，就得写清哪个是被减数，不然模型可能把顺序填反。和工具描述一样，参数描述是模型唯一能读到的说明。"
+          ]
+        },
+        {
+          "id": "deep-dive-tools-in-prompt",
+          "type": "deep-dive",
+          "title": "模型怎样“看到”工具，又怎样写出调用",
+          "summary": "工具定义被拼进提示词；模型按训练时学会的格式写出调用，服务商再把它解析成 tool_calls。",
+          "paragraphs": [
+            "模型只会读一段文字、接着往下写，tools 这个 JSON 字段它直接读不了。请求到了服务商那边，工具定义会按模型的对话模板，变成提示词里的一段文字，通常放在 system 消息附近，大意是“你可以使用下面这些工具，每个工具的名字、用途和参数如下”。所以工具定义要算 Token，也会和你写的系统提示词互相影响。",
+            "支持工具调用的模型，训练时见过大量这样的例子：读到工具清单，该用工具时，用一种特定的格式写出工具名和参数，再写出结束标记停下。服务商在输出里认出这种格式，把它解析出来放进响应的 tool_calls，并把结束原因记成 tool_calls。各家用的格式不同：开源模型的格式写在模型说明里，商用服务多数不公开，你在响应里只看得到解析后的结果。",
+            "这也解释了 arguments 为什么是字符串：参数是模型一个 Token 一个 Token 写出来的文字，服务商不替你把它变成对象，原样交给你。既然是写出来的，就可能写错，可能少一个括号，也可能和 Schema 对不上。本课的 read_proposals 只检查它能不能解析成 JSON 对象，就是为了把这件事摆出来。",
+            "也正因为调用是模型写出来的，它和回答一样会波动：同一个问题再问一次，模型可能换个工具，或者干脆不用。{{lesson:sampling-variance}}讲的采样，在这里同样起作用。"
           ]
         },
         {
@@ -113,8 +138,10 @@
           "type": "prose",
           "title": "调用提议：tool_calls 里写了什么",
           "paragraphs": [
-            "模型决定用工具时，响应的 message 里会有 tool_calls 列表，content 往往是空的，也可能带一句说明。tool_calls 的每一项有 id、type 和 function：function.name 是工具名，function.arguments 是参数。这时 finish_reason 是 tool_calls。",
-            "注意 arguments 是一段 JSON 字符串，比如 {\"a\": 19, \"b\": 23} 这样一段文字，不是已经解析好的对象。本课的 read_proposals 用 json.loads 试着解析它，只为在实验报告里标出它是不是合法的 JSON 对象，解析结果不拿去调用任何函数。"
+            "模型决定用工具时，响应的 message 里会有 tool_calls 列表，content 往往是空的，也可能带一句“我来帮你算一下”这样写给用户的话，它不影响调用。tool_calls 的每一项有 id、type 和 function：function.name 是工具名，function.arguments 是参数。这时 finish_reason 是 tool_calls，表示模型停下来，等程序去做。",
+            "注意 arguments 是一段 JSON 字符串，比如 {\"a\": 19, \"b\": 23} 这样一段文字，不是已经解析好的对象。本课的 read_proposals 用 json.loads 试着解析它，只为在实验报告里标出它是不是合法的 JSON 对象，解析结果不拿去调用任何函数。",
+            "id 是这次调用的编号，由服务商生成。现在它看起来没什么用；到了{{lesson:tool-selection}}，程序要靠它把执行结果和这次调用对上。tool_calls 是列表，因为模型可以在一个响应里提出好几个调用，比如一句话里要算两道加法，{{lesson:dependent-calls}}会遇到这种情况。",
+            "在实验台读一个调用提议，可以按这个顺序：先看 finish_reason 是不是 tool_calls，确认这一轮是提出调用而不是回答；再看 function.name 选了哪个工具；最后看 arguments 写了什么、能不能解析。实验报告的表格把这几样排在同一行。"
           ]
         },
         {
@@ -122,9 +149,29 @@
           "type": "prose",
           "title": "提议不等于执行",
           "paragraphs": [
-            "tool_calls 只是模型写下的调用提议，像一张填好的申请单。本课到这里就停：没有登记任何可执行的函数，也不发第二次请求，所以事件里只有一对 request 和 response，没有 tool_call，也没有 tool_result。",
-            "模型提的工具名可能不存在，参数可能写错，它还可能在同一个响应里提出两个调用。这些提议要怎样执行、执行完怎样交回模型，留给{{lesson:tool-selection}}。"
+            "tool_calls 只是模型写下的调用提议，像服务员记下的点菜单：单子上写了菜名和要求，菜还没开始做。本课到这里就停：没有登记任何可执行的函数，也不发第二次请求，所以事件里只有一对 request 和 response，没有 tool_call，也没有 tool_result。",
+            "为什么要把“提出”和“执行”分开？因为单子可能写错。模型提的工具名可能不存在，参数可能写错，也可能提出一个你根本不想让它做的操作。执行的权力留在程序手里，程序就能先看一眼再决定：照做、拒绝，还是返回一个错误让模型重写。这些提议怎样执行、执行完怎样交回模型，留给{{lesson:tool-selection}}。",
+            "服务商也不会替你执行。本课的工具类型都是 function，函数在你的程序里，服务商只负责把模型写的调用交回来。有的服务商另外提供内置工具，比如联网搜索，那些在服务商那边执行，不在本课范围。",
+            "本课的证据因此很干净：时间线上只有一次 request 和一次 response。你看到的每个工具名和参数都是模型写的，程序没有改过一个字；它们对不对、能不能执行，本课不下结论。"
           ]
+        },
+        {
+          "id": "deep-dive-other-formats",
+          "type": "deep-dive",
+          "title": "同一件事，各家的字段名不同",
+          "summary": "别的接口也是“定义工具、提出调用、交回结果”三步，只是字段名和位置不同。",
+          "paragraphs": [
+            "本课用 OpenAI 兼容接口的格式：请求里是 tools 和 tool_choice，响应里是 tool_calls，参数是 JSON 字符串。别的接口做的是同一件事，只是名字不同。认清对应关系，以后读别家的文档就不会被字段名绊住。",
+            "Anthropic 的 Messages 接口里，工具定义同样有名字和描述，参数的 Schema 放在 `input_schema` 字段。模型提出调用时，`stop_reason` 是 `tool_use`；调用写在回答内容里一个类型为 `tool_use` 的块中，参数 `input` 已经是解析好的对象。执行结果放进一条 user 消息，类型是 `tool_result`，用 `tool_use_id` 指回那次调用。",
+            "OpenAI 较新的 Responses 接口里，调用是一个类型为 `function_call` 的条目，参数仍是 JSON 字符串，编号叫 `call_id`；交回结果时写一个 `function_call_output` 条目，带上同一个 `call_id`。",
+            "三套写法摆在一起，共同点很清楚：都有一份写给模型看的工具定义，都由模型提出调用、由程序执行，都靠一个编号把结果和调用对上。字段名、参数是不是字符串，以各家文档为准。本平台经 LiteLLM 接入其他服务商时，事件里记录的是转换成本课这种格式之后的请求与响应。到了{{lesson:tool-selection}}交回结果时，你会看到本课格式里的对应写法：role 为 tool 的消息，带上 tool_call_id。"
+          ]
+        },
+        {
+          "id": "misconception-called",
+          "type": "misconception",
+          "claim": "响应里出现了 tool_calls，说明模型已经调用了工具，结果马上就有。",
+          "correction": "tool_calls 只是模型写下的调用提议。工具有没有执行、执行出了什么，要看后面有没有 tool_result 事件；本课一个工具都不执行，事件里一条 tool_result 都没有。“模型调用了工具”是口语里的简称，读运行记录时要说成“模型提出了调用”。"
         },
         {
           "id": "mq-proposal-only",
@@ -159,7 +206,9 @@
           "title": "用不着工具时，直接回答",
           "paragraphs": [
             "闲聊问题用不着加法，也用不着时间。模型这时直接回答：message.content 是回答，没有 tool_calls，finish_reason 是 stop。tools 照样在请求里，只是这次没被选中。",
-            "选不选工具、选哪个，依据只有问题和工具描述。描述写得含糊，模型就可能选错或者不选。这一点{{lesson:prompt-experiments}}会用对照实验来检验。"
+            "选不选工具、选哪个，依据只有这次请求里的文字：用户的问题、系统提示词和工具描述。本课的系统提示词写明了什么问题用哪个工具、其他问题直接回答，工具描述里也写了什么时候该用，两处说法一致。描述写得含糊，或者两处互相矛盾，模型就可能选错或者不选。{{lesson:prompt-experiments}}会用对照实验检验这一点。",
+            "还有一种情况更隐蔽：该用工具时模型没用，直接编了一个回答。问“现在几点”，它可能不提出调用，而是写一个看上去很确定的时间。这样的回答格式完整，结束原因也是 stop，只看回答分不出真假。所以判断回答有没有依据，先看这次运行里有没有提出调用，再看后面有没有真的执行。",
+            "一次运行只是一条样本。三组练习各跑一次，模型都选对了，也只说明这一次；同样的问题再问一遍，选择可能不同。想知道模型平时多常选对，得像{{lesson:sampling-variance}}那样把同一个请求重复跑几次，再数一数。"
           ]
         },
         {
@@ -188,6 +237,37 @@
             "correct": "a",
             "explanation": "tools 只是可选项，用不用由模型在这一次回答里决定。"
           }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-tools",
+              "title": "什么是工具：用工具描述告诉模型有哪些工具（Hugging Face Agents Course，Unit 1）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/tools.mdx"
+            },
+            {
+              "id": "hf-actions",
+              "title": "行动：模型写出调用、停下，再由程序解析（Hugging Face Agents Course，Unit 1）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/actions.mdx"
+            },
+            {
+              "id": "ms-tool-use",
+              "title": "工具使用设计模式：工具定义与调用流程（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/04-tool-use/README.md"
+            },
+            {
+              "id": "cookbook-calculator",
+              "title": "计算器工具：另一种接口里的工具定义与调用（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/tool_use/calculator_tool.ipynb"
+            },
+            {
+              "id": "ai-agent-book-ch1",
+              "title": "AI Agent 入门：工具调用分四步（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            }
+          ]
         }
       ]
     },
@@ -215,7 +295,7 @@
               "id": "n9",
               "line": 9,
               "anchor": "\"type\": \"function\",",
-              "text": "目前工具类型只有 function 一种，真正的内容在下面的 function 对象里。"
+              "text": "本课的工具类型都是 function：函数在你的程序里，由程序执行。真正的内容在下面的 function 对象里。"
             },
             {
               "id": "n11",
@@ -509,6 +589,29 @@
               "explanation": "模型读工具定义来决定调用提议；执行与否由程序决定。"
             },
             {
+              "id": "tool-choice-auto",
+              "prompt": "请求里 tool_choice 是 auto，这表示什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "让模型自己决定这次用不用工具、用哪个",
+                  "feedback": "对。所以闲聊组可以不提出调用，直接回答。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务商会自动执行模型选中的工具",
+                  "feedback": "不对。服务商不执行你的函数，tool_choice 只管模型能不能、要不要提出调用。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型每次都必须提出一个调用",
+                  "feedback": "不对。那是 required 一类的取值；auto 允许模型直接回答。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "tool_choice 控制模型提出调用的方式；执行始终是程序的事。"
+            },
+            {
               "id": "arguments-type",
               "prompt": "调用提议里 arguments 的值是 {\"a\": 19, \"b\": 23}。它是什么？",
               "options": [
@@ -530,6 +633,29 @@
               ],
               "correct": "a",
               "explanation": "工具名和参数分开放；参数是模型写出的 JSON 文本。"
+            },
+            {
+              "id": "schema-not-guarantee",
+              "prompt": "工具定义里写了 JSON Schema。模型提出的 arguments 一定符合它吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不一定：Schema 只是写给模型的约定，参数可能缺字段、类型不对，甚至不是合法 JSON",
+                  "feedback": "对。所以程序要在执行前自己检查。"
+                },
+                {
+                  "id": "b",
+                  "text": "一定，服务商会替你拦下不合格的参数",
+                  "feedback": "不对。除非用了服务商的严格模式，否则参数照样可能写错；本课不依赖它。"
+                },
+                {
+                  "id": "c",
+                  "text": "一定，因为 additionalProperties 为 false",
+                  "feedback": "不对。这个关键字只是告诉模型不许多传字段，模型照样可能多传。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "JSON Schema 让模型知道该怎么写，但不保证它写对。"
             },
             {
               "id": "no-result",

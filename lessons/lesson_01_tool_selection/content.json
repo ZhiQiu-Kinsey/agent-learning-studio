@@ -57,8 +57,10 @@
           "type": "prose",
           "title": "从调用提议到执行",
           "paragraphs": [
-            "{{lesson:tool-proposals}}停在调用提议：模型在 tool_calls 里写下工具名和 JSON 字符串参数，没有任何东西被执行。本课接着往下走：Python 真的执行这个调用，再把结果交回模型。工具和工具定义都没变，还是 add_numbers 和 get_current_time。",
-            "执行由 course/runner.py 的 execute_tool 负责，分三步：从 function.name 取工具名；用 json.loads 把 arguments 解析成字典，确认它是参数对象；在 AVAILABLE_TOOLS 里按名字找函数，找到了才调用。AVAILABLE_TOOLS 就是本课的白名单：模型提出不在里面的名字，比如 delete_files，运行器不会执行，只返回一个 ok 为 false 的结果。"
+            "{{lesson:tool-proposals}}停在调用提议：模型在 tool_calls 里写下工具名和 JSON 字符串参数，没有任何东西被执行。如果没有程序接手，这件事只能由你来做：看出模型要算 19 加 23，自己算出 42，再把 42 贴回对话，让模型接着写。每一个来回，你都在当中间人。本课把这个中间人换成程序：Python 真的执行这个调用，再把结果交回模型。工具和工具定义都没变，还是 add_numbers 和 get_current_time。",
+            "执行由 course/runner.py 的 execute_tool 负责，分三步：从 function.name 取工具名；用 json.loads 把 arguments 解析成字典，确认它是参数对象；在 AVAILABLE_TOOLS 里按名字找函数，找到了才调用。",
+            "AVAILABLE_TOOLS 就是本课的白名单：一个字典，左边是工具名，右边是对应的 Python 函数。能执行什么由这个字典决定，不由模型写出的名字决定。模型提出不在里面的名字，比如 delete_files，运行器不会执行，只返回一个 ok 为 false 的结果。",
+            "白名单只管“这个名字能不能执行”，不管参数合不合理。19 加 23 和一万亿加一万亿，对白名单来说一样放行；参数要不要检查、怎么检查，由每个工具函数自己负责。本课的 add_numbers 会拒绝不是数字或不是有限数的参数，{{lesson:fail-safely}}会把这些检查讲全。"
           ]
         },
         {
@@ -66,8 +68,22 @@
           "type": "prose",
           "title": "工具结果用 tool 消息送回",
           "paragraphs": [
-            "函数返回后，execute_tool 把结果包成 {\"ok\": true, \"result\": 42}；出错时 ok 为 false，带 error_type 和 error。run_agent 先把带 tool_calls 的 assistant 消息追加进消息历史，再为每个调用追加一条 role 为 tool 的消息：content 是这个结果的 JSON 文本，tool_call_id 等于调用提议的 id。",
-            "调用 id 是配对的唯一依据。同一轮可能有两个调用，甚至两次调用同一个工具，只看工具名或先后顺序会配错。服务商也会检查：tool 消息的 tool_call_id 对不上前面的调用，请求通常会被拒绝。"
+            "函数返回后，execute_tool 把返回值包成工具结果：成功时是 {\"ok\": true, \"result\": 42}；出错时 ok 为 false，带 error_type 和 error。run_agent 先把带 tool_calls 的 assistant 消息追加进消息历史，再为每个调用追加一条 role 为 tool 的消息：content 是这个结果的 JSON 文本，tool_call_id 等于调用提议的 id。",
+            "为什么出错也要交回模型，而不是让程序直接崩溃？模型拿到“参数 a 必须是数字”这样的错误，可以改正参数再提一次，也可以向用户说明做不到。程序崩溃了，模型什么都不知道，运行记录里只剩一段异常，用户也只看到一句“出错了”。所以 ok 为 false 也是一种工具结果，只是内容是失败的原因。",
+            "调用 id 是配对的唯一依据。同一轮可能有两个调用，甚至两次调用同一个工具，只看工具名或先后顺序会配错。服务商也会检查：tool 消息的 tool_call_id 对不上前面的调用，或者某个调用没有对应的 tool 消息，请求通常会被拒绝。",
+            "在实验台可以把这条线串起来：第 1 轮 response 里 tool_calls[0] 的 id、tool_call 事件的 id、tool_result 的 tool_call_id、第 2 轮 request 里 tool 消息的 tool_call_id，四处应该是同一个值。"
+          ]
+        },
+        {
+          "id": "deep-dive-dispatch",
+          "type": "deep-dive",
+          "title": "为什么不按名字去找任意函数",
+          "summary": "按名字动态查找函数看起来省事，却把“能执行什么”的决定交给了模型。",
+          "paragraphs": [
+            "Python 里按名字找函数有很多办法：`globals()[name]`、`getattr(module, name)`，甚至把模型写的整段文字交给 `eval` 执行。Claude Cookbooks 的计算器示例就用了 `eval`，并在旁边注明这只是演示，正式代码不要这样写。它们都能让 add_numbers 跑起来，也都能让一个你没想到的名字跑起来。模型写出的名字来自它读到的文字，用户的问题、网页上的内容都可能诱导它写出危险的名字，{{lesson:prompt-injection}}会专门讲。",
+            "举个例子：如果运行器用 `getattr(os, name)` 找函数，模型只要提出 `remove`，参数写一个路径，就能删掉你电脑上的文件。显式的字典把范围钉死在登记过的两个函数上：名字不在字典里，就只是一个查不到的字符串。",
+            "查不到时怎么办也有讲究。有的教程直接写 `handlers[name]`，名字不存在就抛 KeyError，整个运行跟着崩溃。本课的 execute_tool 用 get 查找，查不到就返回 ok 为 false 的结果交回模型，模型还有机会换一个工具，或者如实告诉用户做不到。",
+            "加一个工具要改两处：在 TOOLS 里加一条工具定义，让模型知道它存在；在 AVAILABLE_TOOLS 里登记函数，让程序能执行它。只改前一处，模型会提出调用，程序却拒绝执行；只改后一处，模型根本不知道有这个工具。两处的名字必须一致。"
           ]
         },
         {
@@ -112,17 +128,39 @@
           "type": "prose",
           "title": "第二次请求：模型第一次看到结果",
           "paragraphs": [
-            "工具执行完，run_agent 回到循环开头，把完整的 messages 再发一次。第二次请求比第一次多了两条消息：带 tool_calls 的 assistant 消息，和 role 为 tool 的工具结果。模型直到这次请求才看到 42；在此之前的 tool_result 事件，只是 Python 这边的执行记录。",
-            "模型看到结果后通常直接回答，这时响应里没有 tool_calls，finish_reason 也不再是 tool_calls，循环结束。它也可能再提出一个调用，那就再执行、再回传。最终回答里的数字或时间，应该能在工具结果里找到出处。"
+            "工具执行完，run_agent 回到循环开头，把完整的 messages 再发一次。第二次请求比第一次多了两条消息：带 tool_calls 的 assistant 消息，和 role 为 tool 的工具结果。模型直到这次请求才看到 42。",
+            "这里有两样东西容易混。tool_result 事件是 Python 这边的执行记录，写给你看的；role 为 tool 的消息写进消息历史，是发给模型看的。两者内容相同，用途不同：前者证明程序执行过，后者让模型知道结果。只有前者没有后者，模型就像什么都没收到。",
+            "模型看到结果后通常直接回答，这时响应里没有 tool_calls，finish_reason 也不再是 tool_calls，循环结束。它也可能再提出一个调用，那就再执行、再回传。模型这次回答时手里有什么，全在第 2 轮 request 里：system、你的问题、它自己提出的调用、工具结果，一共四条消息。想知道它凭什么这样回答，就去那里看。",
+            "最终回答仍然是模型写的，不是把工具结果原样照搬。它多半会如实转述 42，但也可能写错、漏写，或者加上工具结果里没有的内容。所以核对要落到实处：回答里的数字或时间，能不能在这次的 tool_result 里找到出处。"
           ]
+        },
+        {
+          "id": "misconception-result-means-correct",
+          "type": "misconception",
+          "claim": "有了工具结果，模型的最终回答就一定正确。",
+          "correction": "工具结果只说明 Python 这一步做了什么、得到了什么。最终回答是模型看完结果后重新写的，可能转述错、漏掉时区，也可能加上结果里没有的说法。判断回答，要拿它和 tool_result 逐项对照；工具出错（ok 为 false）时，更要看回答有没有如实说明失败。"
         },
         {
           "id": "section-4",
           "type": "prose",
           "title": "最小 Agent 循环：四步与轮数上限",
           "paragraphs": [
-            "run_agent 只有四步：1. 用系统提示词和问题建立消息历史；2. 带着消息历史和 tools 请求模型；3. 响应里没有 tool_calls，就把 content 当作回答返回；4. 有就逐个执行，把工具结果写回消息历史，回到第 2 步。",
-            "第 2 步到第 4 步最多重复 max_tool_rounds 轮，本课是 3 轮。轮数用完还没有回答，就抛出错误，运行以 error 结束，不拿半截结果冒充回答。模型一直提出调用时，轮数上限保证循环会停下。"
+            "run_agent 只有四步：1. 用系统提示词和问题建立消息历史；2. 带着消息历史和 tools 请求模型；3. 响应里没有 tool_calls，就把 content 当作回答返回；4. 有就逐个执行，把工具结果写回消息历史，回到第 2 步。这就是 Agent 循环最小的样子。",
+            "为什么是循环，而不是固定的“请求、执行、再请求”？因为模型看到结果后，可能还要再做一件事。问“现在几点，再过 45 分钟是几点”，模型得先查时间，看到结果才知道要拿什么去加，{{lesson:dependent-calls}}就是这种情况。一共要做几步，事先不知道，由模型每一轮决定；程序只负责照着做，直到模型给出回答。",
+            "可模型也可能一直提出调用、迟迟不回答。所以第 2 步到第 4 步最多重复 max_tool_rounds 轮，本课是 3 轮。轮数用完还没有回答，就抛出错误，运行以 error 结束，不拿半截结果冒充回答。平台另外按 lesson.json 的 max_rounds 限制模型调用数，两道限制都保证循环一定会停。",
+            "轮数这样数：一轮是一次模型请求，加上执行它提出的全部调用。同一轮里提出两个调用，仍然只算一轮。时间线也按轮分组，把同一轮的 request、response、tool_call 和 tool_result 放在一起。"
+          ]
+        },
+        {
+          "id": "deep-dive-loop-variants",
+          "type": "deep-dive",
+          "title": "同一个循环，在别的教程里",
+          "summary": "几份教程的最小 Agent 循环几乎一样：请求、看有没有调用、执行、写回；差别在怎么停、怎么查工具。",
+          "paragraphs": [
+            "Learn Claude Code 的第一章用一个 `while True` 写这个循环：每轮请求模型，响应里没有工具调用就退出，有就执行、把结果写回、继续。它的开场把问题说得很直白：没有循环时，你就是那个把命令拿去执行、再把输出贴回对话框的中间人。",
+            "深入理解 AI Agent 的第一章用伪代码写同样的结构，多了一步：执行之前先由运行层校验调用。Hugging Face 的课程把它讲成“思考、行动、观察”的循环，工具结果在那里叫作“观察”，追加到提示词末尾，供下一步决策。",
+            "本课的 run_agent 和它们是同一个骨架，有两处不同。一是用 for 循环加轮数上限代替 `while True`，循环一定会停；二是在字典里用 get 查工具，查不到就把错误交回模型，而不是抛异常。接口格式也不同：Learn Claude Code 用 Anthropic 的格式，本课用 OpenAI 兼容接口的格式，字段名的对应关系见{{lesson:tool-proposals}}的深入块。",
+            "Microsoft 的课程把同样的流程拆成三样东西讲：一份写给模型的函数定义，模型返回的函数名和参数，程序执行函数之后发起的第二次请求。它特别提醒的一点值得记住：第一次请求返回的是一个调用，不是问题的答案。"
           ]
         },
         {
@@ -157,8 +195,10 @@
           "type": "prose",
           "title": "运行层与回放",
           "paragraphs": [
-            "模型只负责提出调用和写回答。组织请求、执行工具、维护消息历史、控制轮数，都是运行层的事。本课的运行器很小，后面的课会往里加错误处理、上下文管理和各种检查。",
-            "网页运行时，run_agent 用的 complete 和 execute 由平台传入：请求和响应记成 request、response 事件，执行记成 tool_call、tool_result 事件。回放只在这些已记录的事件之间移动，不会再请求模型，也不会再执行工具。回放里看到的时间，就是当时那次 get_current_time 读到的时间。"
+            "模型只负责提出调用和写回答；组织请求、执行工具、维护消息历史、控制轮数，都是运行层的事。可以这样记这个分工：模型决定想做什么，运行层决定能不能做、怎么做、做完留下什么记录。本课的运行器是运行层最小的版本。",
+            "运行层的分量比看上去重。同一个模型，换一个运行层，能做的事就不同：登记了哪些工具，决定它能做什么；消息历史怎么带，决定它能看到什么；轮数上限，决定它最多做几步。后面的课大多是在往运行层里加东西，比如错误处理、上下文管理、计划和检查，模型本身一直没换。",
+            "网页运行时，run_agent 用的 complete 和 execute 由平台传入：请求和响应记成 request、response 事件，执行记成 tool_call、tool_result 事件。循环本身不碰事件，记录全在这两个函数的边界上完成。",
+            "回放只在这些已记录的事件之间移动，不会再请求模型，也不会再执行工具。回放里看到的时间，就是当时那次 get_current_time 读到的时间；过一小时再回放，看到的还是那个时间。"
           ]
         },
         {
@@ -235,6 +275,52 @@
             "correct": "a",
             "explanation": "回放只移动游标，所有数据都来自当时那次运行。"
           }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "这个循环还缺什么",
+          "paragraphs": [
+            "到这里，一个最小的 Agent 就齐了：模型提出调用，程序按白名单执行，工具结果写回消息历史，再请求模型，直到它回答或者用完轮数。它能跑通“19 加 23”，也能读出本机时间，但离可靠还远：下面几件事，它都还没管。",
+            "工具函数在后端进程里直接运行，没有任何隔离，所以本课只登记两个不改动任何东西的小函数；要执行有副作用的操作或模型生成的代码，必须先有隔离方案。错误也只做了最基本的包装：名字不对、参数坏了会返回 ok 为 false，可模型拿到错误后会不会改、改几次，还没有约束。最终回答对不对，也没有任何程序检查。",
+            "后面几课一件件补上：{{lesson:dependent-calls}}让一个调用的结果成为下一个调用的参数；{{lesson:fail-safely}}系统地处理失败；{{lesson:task-contract}}先写清什么才算完成，再让程序去核对。每一课都在这个循环上加东西，循环本身的四步不变。遇到一个新需求，可以先问一句：这是该让模型决定的事，还是该由运行层来管的事？"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "lcc-agent-loop",
+              "title": "Agent 循环：一个循环就够了（Learn Claude Code，第 1 章）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s01_agent_loop/README.zh.md"
+            },
+            {
+              "id": "lcc-tool-use",
+              "title": "工具分发：多加一个工具只加一行（Learn Claude Code，第 2 章）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s02_tool_use/README.zh.md"
+            },
+            {
+              "id": "cookbook-calculator",
+              "title": "计算器工具：执行调用并把结果交回模型（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/tool_use/calculator_tool.ipynb"
+            },
+            {
+              "id": "hf-observations",
+              "title": "观察：把行动的结果追加回提示词（Hugging Face Agents Course，Unit 1）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/observations.mdx"
+            },
+            {
+              "id": "ms-tool-use",
+              "title": "工具使用设计模式：执行函数并发起第二次请求（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/04-tool-use/README.md"
+            },
+            {
+              "id": "ai-agent-book-ch1",
+              "title": "AI Agent 入门：模型、运行层与最小循环（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            }
+          ]
         }
       ]
     },
@@ -586,6 +672,29 @@
               "explanation": "能执行什么由白名单决定，不由模型提出的名字决定。"
             },
             {
+              "id": "error-goes-back",
+              "prompt": "模型提出 add_numbers，参数 a 写成了文字“十九”，函数抛出 ValueError。运行器怎样处理？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "包成 ok 为 false 的工具结果，写回消息历史交给模型",
+                  "feedback": "对。模型能看到失败原因，可以改正参数或向用户说明。"
+                },
+                {
+                  "id": "b",
+                  "text": "整个运行立即崩溃",
+                  "feedback": "不对。execute_tool 接住这类错误，不让程序崩溃。"
+                },
+                {
+                  "id": "c",
+                  "text": "跳过这个调用，不告诉模型",
+                  "feedback": "不对。每个调用都要有对应的 tool 消息，失败也要如实交回。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "失败也是一种工具结果，用同一个调用 id 交回模型。"
+            },
+            {
               "id": "clock-source",
               "prompt": "工具返回 10:08，并带本机时区。最终回答里的时间应以哪里为依据？",
               "options": [
@@ -630,6 +739,29 @@
               ],
               "correct": "a",
               "explanation": "轮数上限保证循环一定结束；没有回答时如实报错。"
+            },
+            {
+              "id": "answer-vs-result",
+              "prompt": "tool_result 里 result 是 42，模型的最终回答却写成 41。应该以哪个为准？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "以 tool_result 为准：回答是模型看完结果后重新写的，可能转述错",
+                  "feedback": "对。核对回答，要回到这次的工具结果。"
+                },
+                {
+                  "id": "b",
+                  "text": "以回答为准：模型最后看到的信息最全",
+                  "feedback": "不对。模型看到的就是那条工具结果，写错的是转述这一步。"
+                },
+                {
+                  "id": "c",
+                  "text": "两个都对：工具和模型各算了一次",
+                  "feedback": "不对。加法只由 Python 算了一次，模型只是转述。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "工具结果是 Python 的执行记录；最终回答要能在它里面找到出处。"
             }
           ]
         },

@@ -57,8 +57,9 @@
           "type": "prose",
           "title": "模型只会输出文本",
           "paragraphs": [
-            "{{lesson:tool-selection}}里，模型通过 tool_calls 字段提出工具调用，平台执行后把工具结果放进 tool 消息。早期的 Agent 没有这个字段：模型的每一步都写在普通文本里，由程序自己读懂，这就是文本动作协议。它常用来实现 ReAct（Reasoning + Acting）模式：模型交替写出推理和动作，程序执行动作后交回观察结果，模型再决定下一步。",
-            "ReAct 最常见的文本格式是：Thought 写思考，Action 写工具名，Action Input 写 JSON 参数；能回答时改写 Final Answer，后面跟给用户的回答。原生工具调用也能实现 ReAct，只是把动作放进结构化字段。学文本格式有两个用处：不少框架和开源项目还在用它，比如给不支持原生工具调用的本地模型用；它也把“模型提出动作、程序执行动作”这层分工摆在了明面上。"
+            "模型的输出只是一段文本，要让它“做事”，程序得先从文本里读出它想做什么。{{lesson:tool-selection}}里，这一步由服务商完成：模型在 tool_calls 字段里提出工具调用，平台执行后把工具结果放进 tool 消息。早期的接口没有这个字段，模型的每一步都只能写在普通文本里，由程序自己读懂。事先约定格式、再由程序解析的做法，就是文本动作协议。",
+            "最常见的格式来自 ReAct（Reasoning + Acting）模式：模型交替写出推理和动作，程序执行动作后交回观察结果，模型再决定下一步。写成文本是三行：Thought 后面写思考，Action 后面写工具名，Action Input 后面写 JSON 参数；能回答时改写 Final Answer。程序把真实结果写成一行 Observation 贴回去，下一轮模型接着写。",
+            "这像填一张固定格式的申请单，而不是写一封信：格式对了，程序才找得到“要做什么”和“参数是什么”。原生工具调用也能实现 ReAct，只是把动作放进了结构化字段。学文本格式有两个用处：不少框架、开源项目和不支持原生工具调用的本地模型还在用它；它也把“模型提出动作、程序执行动作”这层分工摆在了明面上。本课用同一个问题做对照：查学号 s-1042 最近一次练习的得分，判断是否及格。"
           ]
         },
         {
@@ -103,8 +104,9 @@
           "type": "prose",
           "title": "stop：让模型在该停的地方停下",
           "paragraphs": [
-            "模型写完 Action Input 后应该停下，等程序把真实结果贴回来。可模型自己并不知道要停，它只是按概率往下写。停止序列（Stop Sequence）解决这个问题：请求参数 stop 写成 [\"Observation:\"]，服务商在模型输出这串字符之前截断。这时响应的 finish_reason 是 stop。",
-            "带 stop 的那组实验，每次请求都带着这个参数。第 1 次响应停在 Action Input 之后；程序执行 lookup_quiz_score，把结果写成“Observation: …”追加为一条 user 消息，再发第 2 次请求。模型看到真实成绩后写出 Final Answer。"
+            "文本协议里，让模型停在动作之后，要靠请求里的停止序列（Stop Sequence）。模型写完 Action Input 后应该停下，等程序把真实结果贴回来。可模型并不知道“该轮到程序了”，它只是一个 Token 一个 Token 地往下写；系统提示词里示范过 Observation 这一行，接下来最顺的写法就是把它也写出来。",
+            "请求参数 stop 写成 [\"Observation:\"]，服务商在模型输出这串字符时截断，返回的 content 停在它前面，通常不包含这串字符本身。这时响应的 finish_reason 是 stop。截断由服务商执行，不靠模型自觉，所以比在提示词里写“写完就停下”可靠。",
+            "带 stop 的那组实验，每次请求都带着这个参数。第 1 次响应停在 Action Input 之后；程序执行 lookup_quiz_score，把结果写成“Observation: …”追加为一条 user 消息，再发第 2 次请求。模型看到真实成绩后写出 Final Answer。stop 也有边界：它只认这一串字符，模型如果写成“观察：”或者用了全角冒号，就拦不住；本课的解析器也只按 Observation: 切分，这种写法会原样留在放回上下文的 assistant 消息里。"
           ]
         },
         {
@@ -112,8 +114,20 @@
           "type": "prose",
           "title": "去掉 stop：模型替你写好 Observation",
           "paragraphs": [
-            "把 stop 去掉，模型可能一口气写下去：Action Input 之后接着写“Observation: {\"score\": …}”，再写 Final Answer。这些数字是模型猜的，它根本没看到成绩表。程序如果直接采用这个 Final Answer，用户拿到的就是编出来的成绩。",
-            "本课的运行器发现模型自己写了 Observation，会把它切下来记成 lesson.fabricated_observation 事件，然后照常执行工具，只把 Observation 之前的文本和真实结果放回上下文。事件里并列写着模型编的内容和真实结果，可以直接对比。模型会不会编、编成什么样，取决于你用的模型，同一个模型每次也可能不同，以本次记录为准。"
+            "去掉 stop，模型可能一口气写下去，连工具结果和最终回答都替你写好。Action Input 之后接着写“Observation: {\"score\": …}”，再写 Final Answer。这些数字是模型猜的，它根本没看到成绩表。程序如果直接采用这个 Final Answer，用户拿到的就是编出来的成绩。",
+            "本课特意让成绩表没有规律：s-1042 是 73 分、尝试 4 次，s-2077 是 58 分、尝试 2 次，及格线 60 分。编出来的数字和真实结果一比就能看出来。第四个练习换成不及格的 s-2077：如果模型猜了一个 80 分，它写的结论就是“及格了”，正好和事实相反。数字错一点也许看不出来，结论反过来就会误导人。",
+            "运行器发现模型自己写了 Observation，会照常执行工具，把自写的部分切下来记成 lesson.fabricated_observation 事件，只把 Observation 之前的文本和真实结果放回上下文。事件里并列写着模型编的内容、真实结果，以及模型据此写的 Final Answer，可以直接对比。模型会不会编、编成什么样，取决于你用的模型，同一个模型每次也可能不同，以本次记录为准。"
+          ]
+        },
+        {
+          "id": "deep-dive-why-fabricate",
+          "type": "deep-dive",
+          "title": "为什么模型会替程序写 Observation",
+          "summary": "模型续写的是整段格式，它分不清哪一行该由别人来写。",
+          "paragraphs": [
+            "模型做的事只有一件：根据前面的文字，接着写下一个 Token。系统提示词里示范的格式是 Thought、Action、Action Input，后面跟着 Observation，再后面是 Final Answer；训练数据里这类完整的问答记录也很多。写到 Action Input 的 JSON 结束时，最可能的下一行就是“Observation:”，再往下，最可能的就是一段看起来像查询结果的 JSON。",
+            "模型并没有在“撒谎”。它不知道这一行应该等别人来写，也没有办法真的去查成绩表；它写出的数字只是在这个位置上看起来合理的数字。Hugging Face Agents Course 第一单元演示过同一个现象：问伦敦的天气，不加 stop 时，模型一口气写出了 Observation 和最终回答，气温是它自己编的；加上 stop 之后，输出停在动作之后。",
+            "原生工具调用为什么没有这个问题？经过工具调用训练的模型，提出调用之后会结束这一轮输出，服务商把调用放进 tool_calls 返回；下一轮的输入里，工具结果放在单独的 tool 消息里，由程序提供。模型这一轮的输出里，没有留给结果的位置。"
           ]
         },
         {
@@ -148,17 +162,69 @@
           "type": "prose",
           "title": "解析失败要记下来，不要偷偷修",
           "paragraphs": [
-            "文本协议的另一个弱点是格式。模型可能漏写 Action Input，可能把 JSON 写成 {student_id: s-1042}，也可能直接用一句话作答。解析器遇到这些情况，最省事的办法是猜：补引号、补括号、从句子里抠数字。这样做会让错误变得看不见。",
-            "本课的解析器只做一件宽容的事：用 Python 标准库的 json.JSONDecoder.raw_decode 读 Action Input 开头的那个 JSON 值，允许后面跟着换行或别的文字。除此之外，任何不合格式的输出都记成 ok 为 false 的 lesson.parse 事件，带上原文和错误原因，然后停止运行。"
+            "解析器遇到不合格式的输出，应该记成失败并停下，而不是猜。文本协议的另一个弱点就是格式：模型可能漏写 Action Input，可能把 JSON 写成 {student_id: s-1042}（键和值都没加引号），也可能直接用一句话作答，既没有 Action 也没有 Final Answer。",
+            "最省事的办法是猜：补引号、补括号、从句子里抠出学号。猜对了，你看不出模型其实写错了，格式有多不稳定也就无从统计；猜错了，执行的就是程序编的参数，而不是模型提的参数。两种结果都会让错误变得看不见。",
+            "本课的解析器只做一件宽容的事：用 Python 标准库的 json.JSONDecoder.raw_decode 读 Action Input 开头的那个 JSON 值，允许后面跟着换行或别的文字。比如参数后面多了一句“我去查一下”，照样能读出参数；写成 [\"s-1042\"] 虽然是合法 JSON，但不是对象，仍然算失败。除此之外，任何不合格式的输出都记成 ok 为 false 的 lesson.parse 事件，带上原文和错误原因，然后停止运行。",
+            "还有一种情况：同一段输出里既有 Action 又有 Final Answer。解析器先执行动作、不采用这个结论，因为模型写结论时还没看到工具结果。每次输出不管成功失败都会留下一条 lesson.parse，里面有原文、解析结果、finish_reason，以及 model_wrote_observation，标明模型这次有没有自己写 Observation。"
           ]
+        },
+        {
+          "id": "deep-dive-format-errors",
+          "type": "deep-dive",
+          "title": "别的项目怎样处理格式错误",
+          "summary": "把错误交回模型重写，还是立刻停下：两种做法各自看重什么。",
+          "paragraphs": [
+            "Mini-SWE-Agent 是一个用来修代码的开源 Agent。它的文本模式要求模型每次回复恰好包含一个用三个反引号围起来的命令块，用正则表达式去找。找到零个或多个，都算格式错误：程序把错误说明连同正确的示范作为一条 user 消息交回模型，让它重写；连续出错到上限（默认 3 次）才停止。它还区分了一种情况：如果 finish_reason 表明输出被长度上限截断，提示里会说回答太长被截断了，而不是笼统地说格式错。",
+            "这和本课的选择不同，但不矛盾。交回重写能让运行继续下去，适合真正干活的 Agent；代价是格式问题被藏进重试次数里，要专门统计才看得见。本课只想让失败原样可见，所以第一次失败就停。把错误交回模型重写的做法，{{lesson:structured-output}}的有限修复已经演示过。",
+            "Mini-SWE-Agent 的文本模式是它早期版本的默认做法；新版本源码里的注释写明，更推荐改用工具调用。这也说明文本协议的问题不在于写不出来，而在于格式要靠模型每次都写对。"
+          ]
+        },
+        {
+          "id": "mq-parse",
+          "type": "micro-quiz",
+          "question": {
+            "id": "parse-trailing-text",
+            "prompt": "模型写的是 Action Input: {\"student_id\": \"s-1042\"} 我去查一下。本课的解析器会怎样处理？",
+            "options": [
+              {
+                "id": "a",
+                "text": "读出参数里的学号 s-1042，交给程序执行工具",
+                "feedback": "对。raw_decode 只读开头的一个 JSON 值，后面多出的文字不影响。"
+              },
+              {
+                "id": "b",
+                "text": "记为解析失败，因为 JSON 后面多了文字",
+                "feedback": "不对。允许 JSON 后面跟着别的文字，这是解析器唯一的宽容之处。"
+              },
+              {
+                "id": "c",
+                "text": "把整行原文当成参数传给工具",
+                "feedback": "不对。参数必须是解析出来的 JSON 对象，解析器不会把原文直接交给工具。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "宽容只到“读第一个 JSON 值”为止；不是对象、不是合法 JSON，都记成解析失败。"
+          }
         },
         {
           "id": "section-5",
           "type": "prose",
           "title": "原生工具调用把解析交给服务商",
           "paragraphs": [
-            "原生组用同一个问题，改为在请求里提供 tools，让模型在 tool_calls 字段里返回调用。工具名是字段值，参数是一段 JSON 字符串，不用从自由文本里找。这一轮的 finish_reason 是 tool_calls，程序按 tool_call_id 把结果配回去。",
-            "原生调用也会出错：参数可能不是合法 JSON，工具名可能不在白名单里，这些{{lesson:fail-safely}}已经见过。区别在于错误出在结构化字段里，比从一段话里猜格式容易发现。原生调用也不会出现编造观察结果的问题，工具结果只能由 tool 消息带回来。"
+            "原生工具调用把“从文本里找动作”这一步交给了服务商，程序拿到的是现成的字段。原生组用同一个问题，改为在请求里提供 tools，让模型在 tool_calls 字段里返回调用。工具名是字段值，参数是一段 JSON 字符串，不用从自由文本里找。这一轮的 finish_reason 通常是 tool_calls，程序按 tool_call_id 把结果配回去，结果用 role 为 tool 的消息带回。",
+            "原生调用也会出错：参数可能不是合法 JSON，工具名可能不在白名单里，这些{{lesson:fail-safely}}已经见过。区别在于错误出在结构化字段里，程序一眼就能定位，不用从一段话里猜。原生调用也不会出现编造观察结果的问题：模型这一轮的输出到调用为止，工具结果只能由程序用 tool 消息带回来。",
+            "对照第 2 次请求的消息就能看出差别。文本协议是四条：system、user、assistant 里是 Observation 之前的那段文字，最后一条 user 消息以“Observation:”开头，装着真实结果，看上去像用户说的话。原生调用也是四条：system、user、带 tool_calls 的 assistant，最后一条是 role 为 tool 的消息，用 tool_call_id 指明它回答的是哪一次调用。工具结果有了自己的消息角色，不必再伪装成用户的话。",
+            "两种协议的分工其实一样：模型提出动作，程序执行动作，再把真实结果交回。改变的只是动作写在哪、谁负责把它读出来、结果用什么消息交回。实验“文本协议与原生工具调用”把两组的第 1 次响应并排：一组的动作在 content 里，一组在 tool_calls 里。"
+          ]
+        },
+        {
+          "id": "deep-dive-under-the-hood",
+          "type": "deep-dive",
+          "title": "原生调用在底层也是文本",
+          "summary": "模型写出的仍是一串 Token，只是由服务商按约定的格式解析成字段。",
+          "paragraphs": [
+            "模型只会生成 Token，原生工具调用也不例外。服务商先把 messages 和 tools 按模型训练时用的对话模板拼成一段长文本，里面用特殊标记隔开系统提示词、用户消息、工具定义和工具结果。模型提出调用时，写出的是一段带特殊标记的文本，服务商在返回前把它解析成 tool_calls 字段。Hugging Face Agents Course 第一单元展示过消息被拼成模板文本后的样子。",
+            "所以原生调用更可靠，不是因为模型换了一种输出方式，而是因为两件事：模型经过专门训练，知道提出调用后就结束这一轮；解析由服务商按固定格式完成，有的推理引擎还会在采样时限制输出，让参数一定符合格式。具体怎么做，各家实现不同，以服务商文档为准。对程序来说，结果就是一个现成的字段，不用自己写正则表达式。"
           ]
         },
         {
@@ -189,6 +255,22 @@
           }
         },
         {
+          "id": "section-6",
+          "type": "prose",
+          "title": "两种协议怎么选",
+          "paragraphs": [
+            "能用原生工具调用时优先用它，文本协议留给没有这个字段的场合。本课之后的课程都用原生工具调用。文本协议仍有它的位置：模型或接口不支持 tools 参数；想让模型一次写出一段能直接运行的代码，而不是一个 JSON 动作；或者想把整个轨迹保存成人能直接读的纯文本。",
+            "代码动作是另一种文本协议。Hugging Face Agents Course 把动作分成三类：JSON 动作、代码动作和函数调用。代码动作让模型写一段 Python，由程序在隔离的环境里执行，循环、条件和多次调用都能写在一段代码里，表达能力最强；代价是要执行模型写的代码，必须先有隔离方案。本平台的课程目前不执行模型生成的代码。",
+            "不管用哪种协议，有三条不变：工具结果只能来自真实执行；格式错误要记录下来，不能被悄悄修掉；采用模型的结论之前，要先确认它看到的是真实结果。下一课{{lesson:todo-planning}}回到原生工具调用，处理一个要查三次资料、再存一次卡片的多步任务。"
+          ]
+        },
+        {
+          "id": "misconception-no-stop",
+          "type": "misconception",
+          "claim": "系统提示词里已经写了“写完 Action Input 就停下”，模型会照做，请求里不用再加 stop。",
+          "correction": "提示词只是请求，模型按概率往下写，常常会顺着示范的格式写出 Observation。stop 由服务商执行，模型写到那串字符就被截断，不靠模型自觉。即使加了 stop，运行器也要检查输出里有没有自写的观察结果，因为模型可能换一种写法绕过它。"
+        },
+        {
           "id": "compare-protocols",
           "type": "compare",
           "title": "三组实验的差别",
@@ -209,7 +291,7 @@
               "谁让模型停下",
               "服务商按 stop 截断",
               "没人，模型可能继续写",
-              "服务商在提出调用后结束本轮"
+              "提出调用后这一轮就结束"
             ],
             [
               "谁解析动作",
@@ -267,7 +349,7 @@
               "actor": "工具",
               "title": "执行登记过的工具",
               "body": "lookup_quiz_score 在 Python 里查本地成绩表。",
-              "code": "result = context.call_tool(name, arguments, TOOLS)",
+              "code": "result = context.call_tool(name, arguments, AVAILABLE_TOOLS)",
               "language": "python",
               "evidence": "tool_call 与 tool_result"
             },
@@ -280,6 +362,37 @@
               "code": "messages.append({\"role\": \"user\", \"content\": \"Observation: \" + json.dumps(result)})",
               "language": "python",
               "evidence": "下一次 request 的 messages"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-actions",
+              "title": "动作：JSON 动作、代码动作与“停止并解析”（Hugging Face Agents Course，第一单元）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/actions.mdx"
+            },
+            {
+              "id": "hf-dummy-agent",
+              "title": "手写最小 Agent：不加 stop 时模型自己写出观察结果（Hugging Face Agents Course，第一单元）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/dummy-agent-library.mdx"
+            },
+            {
+              "id": "mswe-actions-text",
+              "title": "用正则表达式解析文本动作，格式错误交回模型重写（Mini-SWE-Agent）",
+              "url": "https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/actions_text.py"
+            },
+            {
+              "id": "book-ch4-tools",
+              "title": "第四章 工具：原生工具的 JSON 格式与参数复杂度（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "hello-agents-ch4",
+              "title": "第四章 智能体经典范式构建：ReAct 的特点与局限（Hello-Agents，CC BY-NC-SA 4.0）",
+              "url": "https://github.com/datawhalechina/hello-agents/blob/4b014ad47e2658af24b59f21e7bdb3f89a66205e/docs/chapter4/%E7%AC%AC%E5%9B%9B%E7%AB%A0%20%E6%99%BA%E8%83%BD%E4%BD%93%E7%BB%8F%E5%85%B8%E8%8C%83%E5%BC%8F%E6%9E%84%E5%BB%BA.md"
             }
           ]
         }
@@ -800,6 +913,29 @@
               ],
               "correct": "a",
               "explanation": "判断答案能不能用，要看它依据的证据从哪里来。"
+            },
+            {
+              "id": "q5",
+              "prompt": "去掉 stop 后，模型在 Action Input 后面接着写出了 Observation。最直接的原因是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "模型顺着示范的格式往下续写，不知道这一行该等程序来写",
+                  "feedback": "对。模型只是在写最可能的下一段文字，它没有办法真的查成绩表。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型偷偷调用了 lookup_quiz_score",
+                  "feedback": "不对。模型只能输出文字，工具只有程序能执行；这次的数字是猜的。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务商把工具结果插进了模型的输出",
+                  "feedback": "不对。服务商不认识这个文本格式，也不会执行工具。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "让模型停下要靠 stop 这类由服务商执行的机制，不能靠模型自觉。"
             },
             {
               "id": "q3",

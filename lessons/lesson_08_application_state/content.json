@@ -57,9 +57,10 @@
           "type": "prose",
           "title": "消息和状态各管什么",
           "paragraphs": [
-            "本课不调用模型。所有状态变化都由本地 Python 写入，免得把程序写死的状态转换说成模型的行为。",
-            "messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课的 messages 从头到尾只有一条 user 消息，内容就是任务目标“说明消息与应用状态的区别”。读取资料、更新进度、写入终态，都发生在另一个对象 TaskState 里。",
-            "所以界面上消息再多，也推不出任务完成了没有，要看 TaskState 里的 status。{{lesson:messages-context}}拆的是一次请求里装了什么；这一课看的是请求之外、程序自己记下的东西。"
+            "任务做到哪一步、哪些事实核对过，要由程序记在自己的状态里，不能指望从消息里读出来。本课不调用模型，所有状态变化都由本地 Python 写入，免得把程序写死的状态转换说成模型的行为。",
+            "先看只靠消息会坏在哪。{{lesson:messages-context}}里，回答需要的事实都放在一次请求的消息里。可一个任务要走好几步：查资料、核对来源、生成结论。如果“核对过哪份资料”“还剩几步”只写在对话里，程序要知道进度，就得回头读对话、自己猜；模型要知道，就得每次从长长的历史里重新数一遍。《深入理解 AI Agent》举过一个例子：规定每个商家最多打 3 次电话，模型却常常数不清已经打了几次，又打了第 4 次。",
+            "所以要分开放。messages 是发给模型的对话资料；应用状态（Application State）是程序用来协调任务的结构化记录，代码里简称 state。本课的 messages 从头到尾只有一条 user 消息，内容就是任务目标“说明消息与应用状态的区别”。读取资料、更新进度、写入终态，都发生在另一个对象 TaskState 里。",
+            "打个比方：消息像你和客服的聊天记录，应用状态像订单系统里的物流状态。客服在聊天里说“已经发货了”，并不会改变物流状态；物流状态变成“已签收”，要靠快递员扫码这样的事件。同样，界面上消息再多，也推不出任务完成了没有，要看 TaskState 里的 status。"
           ]
         },
         {
@@ -67,8 +68,9 @@
           "type": "prose",
           "title": "一份状态长什么样",
           "paragraphs": [
-            "TaskState 有八个字段。run_id 和 goal 在创建时写入：run_id 每次运行新生成，goal 来自通过校验的输入。status 从 ready 开始，记录当前走到哪一步。",
-            "evidence 是核对过的资料，每条写成 source 和 excerpt 两项，例如 source 为 messages-context、excerpt 为那份资料的原文。result 是第三步生成的课内要点；进入终态时，原因写进 terminal_reason。"
+            "TaskState 用八个字段回答几个基本问题：这是哪一次运行、要做什么、走到哪了、凭什么、用了多少、交了什么、为什么停。run_id 和 goal 在创建时写入：run_id 每次运行新生成，goal 来自通过校验的输入。status 从 ready 开始，记录当前走到哪一步。",
+            "evidence 是核对过的资料，每条写成 source 和 excerpt 两项，例如 source 为 messages-context、excerpt 为那份资料的原文。steps 按顺序记下执行过的步骤名，used_steps 是已经用掉的步数。result 是第三步生成的课内要点；进入终态时，原因写进 terminal_reason。",
+            "为什么用一个字段固定的数据类，而不是随手往字典里塞？字段固定，构造时写错一个字段名，Python 会直接报错，而不是悄悄多出一个没人读的键；每个字段的含义写在一处，报告、快照和测试都按同一套字段读。{{lesson:task-contract}}的任务卡把“什么算完成”写成字段，这里把“现在做到哪了”也写成字段。"
           ]
         },
         {
@@ -76,8 +78,9 @@
           "type": "prose",
           "title": "步骤预算与状态快照",
           "paragraphs": [
-            "本课一次运行最多三步：读取本地资料索引、核对资料来源、生成课内资料要点。每一步执行前先调用 consume_step 扣步骤预算，used_steps 记下已经执行了几步。step_budget 为 3 时三步都够；为 2 时，第三步执行前预算就用完了。",
-            "每到关键变化，运行器就发布一条 lesson.state，里面是当时完整状态的一份副本，也就是状态快照。回放时按顺序看这些快照，就能看到 status、evidence、used_steps 怎样随实际步骤变化。"
+            "每一步先扣预算再执行，预算用完时，越界的那一步根本不会开始。本课一次运行最多三步：读取本地资料索引、核对资料来源、生成课内资料要点。每一步执行前先调用 consume_step：used_steps 还没到 step_budget，就加一并记下步骤名，返回 True；到了就返回 False，由调用方决定怎样收尾。",
+            "为什么不先执行、后扣减？先执行的话，预算只剩 0 时也会多跑一步，而多出的这一步可能已经有了副作用，比如发出一封邮件、改了一个文件。先扣再做，预算才是一道真正的闸门。step_budget 为 3 时三步都够；为 2 时，第三步执行前预算就用完了。它和{{lesson:structured-output}}的调用预算是同一个想法，只是数的是步骤，不是模型调用。",
+            "每到关键变化，运行器就发布一条 lesson.state，里面是当时完整状态的一份副本，也就是状态快照。存完整副本而不只存“改了什么”，回放时就能直接跳到任何一刻查看，不必从头把变化重算一遍；回放只读这些记录，不会重新执行。按顺序看这些快照，就能看到 status、evidence、used_steps 怎样随实际步骤变化。"
           ]
         },
         {
@@ -122,19 +125,59 @@
           "type": "prose",
           "title": "转换规则守住边界",
           "paragraphs": [
-            "status 只能沿转换表 TRANSITIONS 走：ready 只能进入 running 或 cancelled；running 可以进入 waiting、completed、failed 或 cancelled；waiting 可以回到 running，也可以进入 failed 或 cancelled。completed、failed、cancelled 是终态，进入后不能再转出。一组状态加上这样的转换规则，就是状态机。",
-            "transition 每次转换都先查这张表。比如在 ready 时直接调用 transition(\"completed\")，会抛出“非法状态转换：ready → completed”。",
-            "进入 completed 还要求已有证据和实际的 result，任何终态都必须写原因。这里的 completed 只表示“课内资料归纳”这个流程走完了，不说明你输入的任意目标都达成了。如果把模型一句“我已经完成”直接映射成 completed，就绕过了这些检查，所以本课没有这条转换。"
+            "status 只能沿转换表 TRANSITIONS 走，表里没有的转换一律拒绝。ready 只能进入 running 或 cancelled；running 可以进入 waiting、completed、failed 或 cancelled；waiting 可以回到 running，也可以进入 failed 或 cancelled。completed、failed、cancelled 是终态，出口是空集合，进入后不能再转出。一组状态加上这样的转换规则，就是状态机。",
+            "transition 每次转换都先查这张表。比如在 ready 时直接调用 transition(\"completed\")，会抛出“非法状态转换：ready → completed”。所有状态变化都只走这一个入口，规则就只写一处、只测一处，不会散落在各处的条件分支里。",
+            "进入 completed 还要再过一道条件：已有证据，也有实际的 result；任何终态都必须写原因。这里的 completed 只表示“课内资料归纳”这个流程走完了，不说明你输入的任意目标都达成了。{{lesson:task-contract}}讲过，完成声明不等于验收通过；如果把模型一句“我已经完成”直接映射成 completed，就绕过了这些检查，所以本课没有这条路。"
           ]
+        },
+        {
+          "id": "deep-dive-state-machine",
+          "type": "deep-dive",
+          "title": "为什么用转换表，而不是几个布尔标志",
+          "summary": "三个布尔标志能拼出八种组合，大半是矛盾的；转换表只列合法的路，其余一律拒绝。",
+          "paragraphs": [
+            "最直接的写法是几个标志：`is_running`、`is_done`、`is_failed`。三个布尔值有 `2×2×2=8` 种组合，其中“既完成又失败”“已失败却还在运行”这类组合毫无意义，代码却允许它们出现。每个改标志的地方都要记得同时改别的标志，漏一处就出矛盾，而且这种错误往往要到很久以后才暴露。",
+            "status 只有一个值，天然排除了“同时处于两个状态”。转换表再进一步，把“能从哪到哪”写成数据：6 个状态、9 条合法的转换，一眼看得完，测试也能逐条枚举：每条合法转换都走得通，表外的转换都被拒绝。本课的测试检查了其中几条：ready 不能直接进入 completed，缺证据或缺产物不能进入 completed，进入终态后不能再回到 running。",
+            "Learn Claude Code 的任务系统也这样区分状态和动作：`pending`、`in_progress`、`completed` 是状态，认领和完成是让状态前进的动作，每个动作只能从特定的状态出发。本课的 waiting 多了一条回头路：等到资料就回到 running，等不到就进入 failed。",
+            "终态不能转出，也有它的道理。一次运行结束后，事件和报告都已经按这个终态写好；如果还能改，回放看到的就和当时不一样了。要重试，就新开一次运行，换一个 run_id。"
+          ]
+        },
+        {
+          "id": "mq-illegal-transition",
+          "type": "micro-quiz",
+          "question": {
+            "id": "illegal-transition",
+            "prompt": "状态已经是 failed，程序又调用 transition(\"running\") 想接着做。会发生什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "抛出“非法状态转换：failed → running”，状态不变",
+                "feedback": "对。failed 是终态，出口是空集合，任何转出都会被拒绝。"
+              },
+              {
+                "id": "b",
+                "text": "状态回到 running，从失败的地方接着做",
+                "feedback": "不对。终态不能转出；要重试，就新开一次运行。"
+              },
+              {
+                "id": "c",
+                "text": "状态先变成 waiting，等待补充资料",
+                "feedback": "不对。转换表里没有 failed → waiting 这条路。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "所有状态变化都要过转换表；终态进入后不能再转出。"
+          }
         },
         {
           "id": "section-5",
           "type": "prose",
           "title": "等待、失败和预算结束",
           "paragraphs": [
-            "缺少资料时先进入 waiting，随后以“本次预设没有可核验的资料，无法完成目标。”转为 failed。生命周期是 ready → running → waiting → failed，evidence 一直为空。",
-            "预算预设的 step_budget 为 2：读取和核对各用一步，used_steps 到 2；第三步执行前 consume_step 返回 False，状态转为 failed，原因是“步骤预算在生成资料要点前耗尽。”。这时 evidence 里那条资料仍然保留。",
-            "这两种结局和 completed 一样都是明确的终态，只是原因和验收结果不同。报告里的检查项由运行器按状态逐项计算，不看消息内容。"
+            "资料缺失和预算耗尽都以 failed 收尾，原因不同，已经拿到的证据都保留。缺少资料时先进入 waiting，表示“缺了外部的东西，暂时走不下去”。真实系统里，waiting 可以等人补一份文件、等一次审批，等到了就回到 running。本课的预设里没有人会补资料，所以随后以“本次预设没有可核验的资料，无法完成目标。”转为 failed。生命周期是 ready → running → waiting → failed，evidence 一直为空。",
+            "预算预设的 step_budget 为 2：读取和核对各用一步，used_steps 到 2；第三步执行前 consume_step 返回 False，状态转为 failed，原因是“步骤预算在生成资料要点前耗尽。”。这时 evidence 里那条资料仍然保留。预算设为 1 时更早停下：第二步核对资料来源就被拒绝，evidence 为空，原因写的是“步骤预算在核对资料来源前耗尽。”。",
+            "失败也要留下证据和原因，下一次才知道缺的是什么、从哪里接着做。如果失败时把 evidence 清空，或者只写一句“失败”，排查时就只能从头再来。",
+            "还要分清两种“结束”。平台给每次运行的终态（done 事件里的 completed、error、cancelled）说的是流程有没有跑完；TaskState 的 status 说的是任务本身的结局。资料缺失那组，运行正常跑完，done 事件的状态是 completed，任务状态却是 failed。报告里的检查项由运行器按 TaskState 逐项计算，不看消息内容。"
           ]
         },
         {
@@ -169,9 +212,65 @@
           "type": "prose",
           "title": "会话隔离与取消",
           "paragraphs": [
-            "每次运行都新建 TaskState 和 run_id，不用全局的可变状态，两次运行的状态不会互相覆盖。",
-            "取消由平台在步骤之间检查：你点停止时，context.check_cancelled 会抛出 RunCancelled，平台把这次运行记为 cancelled，不会冒充 completed。内存里的状态随运行结束消失，跨运行保存放在{{lesson:persistent-memory}}讲。"
+            "每次运行都新建自己的 TaskState 和 run_id，两次运行的状态互不干扰。如果把状态放在模块里的全局变量里，上一次运行留下的 evidence 就会带进下一次：资料缺失那组可能“继承”成功那组的证据，被误判为可以完成。run_id 用 uuid4 随机生成，事件和报告都带着它，回放时也按它区分。",
+            "取消由平台在步骤之间检查。你点停止时，context.check_cancelled 会抛出 RunCancelled，平台把这次运行记为 cancelled，不会冒充 completed。本课在进入 running 之前和记下证据之后各检查一次，发布事件时平台也会检查；所以停止不会打断某一步的中间，而是在下一次检查时生效。",
+            "TaskState 自己不会因为停止变成 cancelled：转换表里的 cancelled 留给需要自己处理取消的程序，本课把取消交给平台记录。内存里的状态随运行结束消失，事件回放仍保留每一份快照；跨运行保存放在{{lesson:persistent-memory}}讲。"
           ]
+        },
+        {
+          "id": "section-state-to-model",
+          "type": "prose",
+          "title": "状态怎样回到模型面前",
+          "paragraphs": [
+            "本课里模型看不到这份状态；真实的 Agent 里，运行器会把状态整理成一小段文字放进请求，让模型不必自己从历史里数。比如每轮请求末尾附上一行：“已执行 2/3 步；已核对来源 messages-context；还差：生成要点”。模型看一眼就知道进度，不用把前面几十条消息重新读一遍。",
+            "这段文字由程序从 TaskState 算出来，而不是让模型自己总结。原因有两个：程序数数不会错；而模型往往照单全收地相信这类状态说明，写错了它也不会去核对。所以状态要由代码维护，放进请求时还要标明这是运行器写的，不是用户说的。{{lesson:todo-planning}}会让运行层把提醒作为一条单独的消息插入。",
+            "状态放在消息之外，还有一个好处：消息可以删减，进度不会跟着丢。{{lesson:context-budget}}会看到，上下文装不下时，早先的消息要被舍掉；如果目标和证据只写在那些消息里，舍掉它们就等于忘了做过什么。状态单独保存，消息怎么截，任务进度都还在。"
+          ]
+        },
+        {
+          "id": "deep-dive-status-bar",
+          "type": "deep-dive",
+          "title": "状态栏：把算好的结论递给模型",
+          "summary": "《深入理解 AI Agent》把注入请求末尾的状态摘要叫作状态栏，讲了它为什么有效、要注意什么。",
+          "paragraphs": [
+            "书里的解释是：模型擅长从上下文里找出某段原文，却不擅长在一次回答里把散落各处的记录数一遍、汇总成结论。“已经打了几次电话”原本以三条通话记录的形式散在历史里，模型每次都要现数；在工具结果里直接写明“本次是第 3 次呼叫该商家”，模型就能立刻看出已到上限。",
+            "书中把这类摘要叫作状态栏，像手机屏幕顶上的电量和时间：不是主要内容，但随时瞥一眼就知道当前状况。它通常作为一条消息追加在请求末尾，而不是改写开头的系统提示词；内容用标签包起来，表明这是程序生成的状态，不是用户的话。",
+            "书里也提醒了两点。第一，状态栏尽量由代码维护：模型几乎无条件地相信它，写错一个数，模型就跟着错。第二，状态栏只算了事先想到的那几项，是原始记录的有损摘要；只留状态栏、删掉原始记录，遇到状态栏没算到的问题就答不上来。本课的 TaskState 就是这份摘要的来源，只是这里不往请求里放。",
+            "状态栏和本课的实验报告，其实是同一份数据的两种用法：报告给人看，状态栏给模型看。两者都应该从 TaskState 现算，而不是各自另记一份，这样给人看的和给模型看的才不会互相矛盾。"
+          ]
+        },
+        {
+          "id": "mq-state-to-model",
+          "type": "micro-quiz",
+          "question": {
+            "id": "state-to-model",
+            "prompt": "运行器要让模型知道“已执行 2 步，预算 3 步”。哪种做法最可靠？",
+            "options": [
+              {
+                "id": "a",
+                "text": "程序从 TaskState 算出这句话，标明由运行器写入，再放进请求",
+                "feedback": "对。程序维护的数不会数错；标明来源，模型才不会把它当成用户的话。"
+              },
+              {
+                "id": "b",
+                "text": "在系统提示词里要求模型自己数已经做了几步",
+                "feedback": "不对。模型要从历史里现数，容易数错；早先的消息被截掉后，更是数不出来。"
+              },
+              {
+                "id": "c",
+                "text": "不告诉模型，让它自己判断",
+                "feedback": "不对。模型看不到程序的状态，只能猜。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "状态由代码维护，需要时再由程序整理成文字交给模型。"
+          }
+        },
+        {
+          "id": "misconception-state-in-messages",
+          "type": "misconception",
+          "claim": "消息历史里什么都有，任务进度让模型从对话里读出来就行，不必另存一份状态。",
+          "correction": "消息是给模型读的文本，程序没法在上面强制“没有证据不能完成”这类规则；模型从长历史里数进度也容易出错，早先的消息一旦被截掉，进度就跟着丢了。进度、证据和终态应由程序写进应用状态，需要时再由程序整理成文字交给模型。"
         },
         {
           "id": "walkthrough",
@@ -228,6 +327,27 @@
               "code": "_report(context, state, messages, values)",
               "language": "python",
               "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch2-status-bar",
+              "title": "上下文工程：Agent 状态栏（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter2.md"
+            },
+            {
+              "id": "lcc-task-system",
+              "title": "任务系统：任务状态、动作与依赖（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s10_task_system/README.zh.md"
+            },
+            {
+              "id": "book-ch1-harness",
+              "title": "AI Agent 入门：模型负责决策，运行层负责组装上下文与执行（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
             }
           ]
         }
@@ -616,6 +736,52 @@
               ],
               "correct": "b",
               "explanation": "证据存在不等于目标已完成；预算终止应保留已有事实与原因。"
+            },
+            {
+              "id": "run-vs-task",
+              "prompt": "“资料缺失”那组运行结束后，done 事件的状态是 completed，TaskState 的 status 是 failed。怎么理解？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "运行流程正常跑完了，任务本身失败了；两者说的是不同的事",
+                  "feedback": "对。运行终态说流程有没有跑完，TaskState 说任务的结局。"
+                },
+                {
+                  "id": "b",
+                  "text": "平台记错了，两者应该一致",
+                  "feedback": "不对。流程正常结束和任务完成是两回事，本来就可能不同。"
+                },
+                {
+                  "id": "c",
+                  "text": "任务其实完成了，failed 只是提示",
+                  "feedback": "不对。没有证据和产物，transition 不允许进入 completed。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "区分“流程结束”和“任务完成”：前者看 done 事件，后者看应用状态。"
+            },
+            {
+              "id": "budget-before-step",
+              "prompt": "consume_step 为什么在执行一步之前扣预算，而不是执行完再扣？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "预算用完时，越界的那一步根本不会开始，也就不会产生副作用",
+                  "feedback": "对。先扣再做，预算才是一道真正的闸门。"
+                },
+                {
+                  "id": "b",
+                  "text": "执行前扣减速度更快",
+                  "feedback": "不对。差别不在速度，而在越界的那一步会不会被执行。"
+                },
+                {
+                  "id": "c",
+                  "text": "执行后才知道这一步成功没有，所以只能先扣",
+                  "feedback": "不对。是否成功不影响这条规则；关键是预算不够时不开始。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "预算是执行前的检查，用完了就不再开始新的一步。"
             }
           ]
         },

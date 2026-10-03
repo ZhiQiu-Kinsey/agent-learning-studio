@@ -56,8 +56,10 @@
           "type": "prose",
           "title": "一次请求就是一个 JSON 对象",
           "paragraphs": [
-            "Agent 是由模型决定下一步、由程序去执行的系统。它每走一步，都要先问一次模型。本课把这一步单独拿出来：不带工具，只发一次请求，看清发出去什么、收回来什么。",
-            "请求体是一个 JSON 对象。本课的 build_request 只写 messages：一个列表，按顺序放消息，每条消息有 role 和 content。model 不用自己写，平台会按当前连接补上。所以在实验台 request 事件的 body 里，你会看到 model 和 messages 两个字段；设了输出上限时，还会多一个 max_tokens。"
+            "Agent 的每一步都从一次模型请求开始，而一次请求就是程序发出去的一个 JSON 对象。导学里说过，Agent 由模型决定下一步、由程序去执行。那“问一次模型”到底发生了什么？在聊天网页里，你打一句话，回答一段一段冒出来，看上去像在和一个人对话。换到程序这边，它只是一次普通的 HTTP 请求：程序把一个 JSON 对象发给服务商，服务商算完，再返回一个 JSON 对象。",
+            "本课把这一步单独拿出来看：不带工具，只发一次请求，看清发出去什么、收回来什么。后面每一课的请求，都是在这个对象上加字段。先把它读懂，以后看到 tools、tool_calls 这些新字段，你就知道它们加在哪里、为什么加。",
+            "请求体是一个 JSON 对象。本课的 build_request 只写 messages：一个列表，按顺序放消息，每条消息有 role 和 content。model 不用自己写，平台会按当前连接补上。所以在实验台 request 事件的 body 里，你会看到 model 和 messages 两个字段；设了输出上限时，还会多一个 max_tokens。",
+            "请求体就是模型这一次能拿到的全部材料。你在网页别处写的说明、上一次运行的回答、你电脑上的文件，只要没写进这个对象，模型就看不到。所以读一次运行，先问一句：这次模型被告诉了什么？答案全在 request 事件里。"
           ]
         },
         {
@@ -65,8 +67,23 @@
           "type": "prose",
           "title": "消息角色：每条消息是谁说的",
           "paragraphs": [
-            "messages 里每条消息的 role 就是它的消息角色。system 消息是写给模型的规则，本课默认是“你是编程课的助教。回答简短、具体，不超过两句话。”；user 消息是这次的问题；assistant 消息是模型说的话。本课只发一次请求，assistant 只出现在响应里，{{lesson:multi-turn-history}}会把它放回下一次请求。",
-            "system 消息没有特殊权限，它只是排在最前面的一条消息。练习“去掉系统提示词”把 system_prompt 留空，build_request 就不放 system 消息，请求里只剩 user 一条。模型照样会回答，只是少了这条规则。"
+            "messages 里每条消息都用 role 标明是谁说的，这就是消息角色。为什么要标？模型最后读到的是一串文字。规则、用户的问题和模型自己说过的话如果混在一起，它分不清哪句是要遵守的要求，哪句是要回答的问题。role 把这几种话分开。",
+            "常用的有三种。system 消息是写给模型的规则，本课默认是“你是编程课的助教。回答简短、具体，不超过两句话。”；user 消息是这次的问题；assistant 消息是模型说的话。本课只发一次请求，assistant 只出现在响应里，{{lesson:multi-turn-history}}会把它放回下一次请求。讲工具的课还会用到第四种角色 tool。",
+            "system 消息没有特殊权限，它只是排在最前面的一条消息。模型在训练时见过大量“先给规则、再提问题”的对话，所以通常会照着 system 的要求做；但这是倾向，不是程序层面的强制。规则写得含糊，或者和用户的要求冲突，模型都可能不照做。",
+            "练习“去掉系统提示词”把 system_prompt 留空，build_request 就不放 system 消息，请求里只剩 user 一条。模型照样会回答，只是少了这条规则：回答可能变长，语气也可能不同。具体差多少，看你自己的两次运行。"
+          ]
+        },
+        {
+          "id": "deep-dive-chat-template",
+          "type": "deep-dive",
+          "title": "messages 最后变成了什么：对话模板",
+          "summary": "模型读的不是 JSON 列表，而是一整段文字。服务商按对话模板，用特殊标记把几条消息拼成这段文字。",
+          "paragraphs": [
+            "模型本身只会读一串 Token，再接着往下写。messages 这个列表，是服务商为了方便程序使用而设计的格式。请求到了服务商那边，先按这个模型的对话模板，把几条消息拼成一整段文字，再交给模型。",
+            "拼的时候，每条消息前后都加上特殊标记，标出它从哪里开始、是什么角色、到哪里结束。举一个开源模型用过的写法：`<|im_start|>system` 开头，接着是规则，以 `<|im_end|>` 结尾；user 消息也这样包一层；最后再放一个 `<|im_start|>assistant`，意思是轮到助手说话了。模型从这里接着往下写，写出来的就是回答。",
+            "这些标记在分词器里是专门的 Token，普通文字拼不出来。不同模型用的标记不同，同一组 messages 拼出来的文字也不同；服务商替你做了这一步，所以你只管按 role 排好消息。这也说明了两件事：role 的作用是模型在训练中学会的，不是程序强制的；提示 Token 会比你看得见的文字多一些，因为这些标记也要算。",
+            "只做过续写训练的模型没学过这种模板。给它同样一段文字，它可能接着编出下一条 user 消息，而不是回答。服务商提供的聊天模型都经过对话训练，学会了在 assistant 标记之后写回答，写完就输出结束标记。",
+            "模型写完回答时，会写出一个表示结束的特殊 Token，服务商看到它就停止生成，这是结束原因为 stop 最常见的来源。各家的模板和标记以模型说明为准，本课不需要你记住它们。"
           ]
         },
         {
@@ -111,18 +128,39 @@
           "type": "prose",
           "title": "响应：回答和结束原因",
           "paragraphs": [
-            "响应也是一个 JSON 对象。回答在 choices[0].message.content：choices 是候选回答的列表，通常只有一个；其中 message 的 role 是 assistant。本课的 read_reply 就从这里取回答。",
-            "和 message 并列的是 finish_reason，也就是结束原因。stop 表示模型自己写完了；length 表示写到了 max_tokens 设定的输出上限，被截断了。练习“把输出上限设得很小”把 max_tokens 设成 16，运行后看 response 里的 finish_reason 是不是 length，再看 content 剩下多少。"
+            "响应也是一个 JSON 对象：回答在 choices[0].message.content，旁边的 finish_reason 说明输出为什么停下。choices 是候选回答的列表。有的服务商允许一次要几个候选，默认只有一个，所以本课的 read_reply 只读第一个。其中 message 的 role 是 assistant，content 是回答的文字。",
+            "只读 content，你分不出一句话是写完了还是被截断了。举个编的例子：content 是“Agent 是一种能根据目标自己决定”，读起来像没说完，可也说不定模型就这么写。finish_reason 把这件事说清楚：stop 表示模型自己写完了；length 表示写到了 max_tokens 设定的输出上限，被截断了。",
+            "练习“把输出上限设得很小”把 max_tokens 设成 16，运行后看 response 里的 finish_reason 是不是 length，再看 content 剩下多少。到了{{lesson:tool-proposals}}，你还会看到第三个值 tool_calls，表示模型提出了调用。有的服务商还有别的值，比如内容被安全策略拦下，以服务商文档为准；实验报告遇到不认识的值，会照原样显示，并标为“其他”。",
+            "结束原因只说明输出为什么停下，不评价内容。stop 不代表回答正确，length 也不代表请求失败：这两种情况下，请求都成功返回了。读响应时可以按这个顺序：先看 finish_reason，确认输出是否完整；再读 content；最后看和 choices 并列的 usage，知道这次花了多少。"
           ]
+        },
+        {
+          "id": "misconception-stop",
+          "type": "misconception",
+          "claim": "finish_reason 是 stop，说明模型答对了，这次任务完成了。",
+          "correction": "stop 只说明模型自己停下了，没有被输出上限截断。这里有三件互不保证的事：请求成功（拿到了响应）、输出完整（结束原因是 stop）、回答正确（内容经得起核对）。前两件看 response 就能确认，第三件要你对照问题和事实另外检查。"
         },
         {
           "id": "section-4",
           "type": "prose",
           "title": "用量：这次花了多少 Token",
           "paragraphs": [
-            "Token 是模型切分文本的单位，由分词器决定怎么切，一个汉字不一定正好是一个 Token。响应里的 usage 报告这次的用量：prompt_tokens 是请求里全部消息算出的提示 Token，completion_tokens 是模型写出的完成 Token，total_tokens 是两者之和。",
+            "响应里的 usage 报告这次花了多少 Token，服务商按它计费，也按它限制一次请求能有多大。Token 是模型切分文本的单位，由分词器决定怎么切。它不是字，也不是词：常见的词可能是一个 Token，少见的词会被拆成几段；一个汉字可能正好一个 Token，也可能几个字合成一个，各家分词器不同。所以同一句话，换个模型算出的 Token 数也不同。",
+            "usage 里有三个数。prompt_tokens 是提示 Token，按请求里的全部消息算；completion_tokens 是完成 Token，按模型写出的内容算；total_tokens 是两者之和。提示 Token 通常比你看得见的文字多一点，因为服务商拼消息时加的标记也要算。很多服务商的输出单价高于输入单价，所以这两个数要分开看。",
             "有的模型先推理再回答：推理写在 message 的 reasoning_content 字段，用掉的 Token 记在 completion_tokens_details.reasoning_tokens，也算进 completion_tokens。部分服务商让推理同样受 max_tokens 限制，各家规则以服务商文档为准。在这样的服务商上，上限很小时，content 可能只剩半句，也可能是空的，因为推理还没写完就被截断了。对照 reasoning_tokens 和 completion_tokens，就能分清是哪一种。",
-            "服务商没有报告某项用量时，实验报告写“未报告”，不写 0，也不用本地估算冒充。去掉系统提示词后提示 Token 少了多少，对照两次 response 的 prompt_tokens 就知道。"
+            "服务商没有报告某项用量时，实验报告写“未报告”，不写 0，也不用本地估算冒充。0 是一个测量值，意思是一个 Token 都没花；没有报告的意思是不知道。去掉系统提示词后提示 Token 少了多少，对照两次 response 的 prompt_tokens 就知道。"
+          ]
+        },
+        {
+          "id": "deep-dive-token-cost",
+          "type": "deep-dive",
+          "title": "手算：一次请求花多少钱",
+          "summary": "用一组编的单价和用量算一遍，看提示 Token、完成 Token 和推理 Token 各占多少。",
+          "paragraphs": [
+            "举个编的例子。假设某个模型的价目表写着：输入每百万 Token 2 元，输出每百万 Token 8 元。一次请求的 usage 是 prompt_tokens 60、completion_tokens 40。输入花 `60 × 2 ÷ 1000000 = 0.00012` 元，输出花 `40 × 8 ÷ 1000000 = 0.00032` 元，合计 0.00044 元。这次输出 Token 比输入少，花的钱却更多。",
+            "单看一次很便宜，可 Agent 做一个任务要请求很多次。还用这组编的数：一个任务请求 10 次，每次用量都一样，就是 0.0044 元；一天跑一万个任务，就是 44 元。实际上后面的课里，每次请求会一次比一次大，账要按每次 usage 逐条相加，不能拿第一次乘以次数。",
+            "再看推理。同一个问题换成先推理的模型，假设 usage 报告 completion_tokens 400，其中 reasoning_tokens 360。回答本身只有 40 个 Token，按输出计费的却是 400 个，输出这部分的花费变成原来的 10 倍。多数服务商把推理 Token 按输出计费，以各家价目表为准。推理内容不在回答里，却照样花钱，这是要单独读它的原因。",
+            "为什么不在本地按字数估算？分词器各家不同，同一段中文，在两个模型上算出的 Token 数可能差出不少；服务商拼消息时加的标记，你在本地也看不到。估出来的数既对不上账单，又会冒充服务商的数据。本课只记服务商报告的数。"
           ]
         },
         {
@@ -157,8 +195,10 @@
           "type": "prose",
           "title": "密钥只在后端",
           "paragraphs": [
-            "request 事件记录的是请求体，里面没有 API Key。密钥在发送那一刻才加上：send_bailian 把它放进 HTTP 请求头的 Authorization 字段，请求体里只有 model、messages 这些给模型看的字段。浏览器拿不到密钥，运行记录里也没有。",
-            "接百炼时，request 事件就是发出去的 HTTP 请求体；经 LiteLLM 接入的其他服务商，事件里是标准化后的请求与响应，不是原始 HTTP 报文。两种情况下，密钥都只在后端。"
+            "request 事件记录的是请求体，里面没有 API Key。密钥是你的身份和付费凭证：谁拿到它，谁就能用你的额度调用模型。所以它不能出现在任何会被记录、显示或存进浏览器的地方。",
+            "密钥在发送那一刻才加上：send_bailian 把它放进 HTTP 请求头的 Authorization 字段，写成 Bearer 加密钥；请求体里只有 model、messages 这些给模型看的字段。请求头只在后端和服务商之间传递，浏览器拿不到，运行记录里也没有。你在网页上填的密钥只存在后端内存里，后端重启就没了。",
+            "接百炼时，request 事件就是发出去的 HTTP 请求体；经 LiteLLM 接入的其他服务商，事件里是标准化后的请求与响应，不是原始 HTTP 报文。两种情况下，密钥都只在后端。",
+            "密钥错了或额度用完，服务商会返回 HTTP 错误，而不是一个正常的响应。这时时间线上只有 request，没有 response，运行以 error 结束，错误信息里写着原因。平台不会自动重发，免得重复计费；确认原因后，再手动运行一次。"
           ]
         },
         {
@@ -225,6 +265,38 @@
             "correct": "a",
             "explanation": "send_bailian 在发送时才把密钥写进 Authorization 请求头，记录的请求体里没有它。"
           }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "一次请求做不到的事",
+          "paragraphs": [
+            "一次请求只回答一次，还有很多事做不到，后面几课一件一件补上。下面三个现象，你在本课的实验里可能已经碰到。",
+            "第一，模型不会记得你。本课每次运行都是一次全新的请求：上一次运行问过什么，这一次的请求里没有，模型就不知道。想连着聊，要由程序把之前的消息再发一遍，{{lesson:multi-turn-history}}讲这件事。第二，同一个请求再发一次，回答可能不同。两组练习各跑一次就下结论并不可靠，{{lesson:sampling-variance}}会把同一个请求连发几次来看。",
+            "第三，模型只会写字。问它现在几点，它没有办法知道，只能按训练时见过的文字给一个说法，而且常常说得很肯定。要让它借程序去查、去算，请求里要多带一份工具清单，{{lesson:tool-proposals}}从这里开始。",
+            "这三件事补齐，就是一个最小的 Agent：程序记着之前的消息，把工具清单随请求发出去，模型提出要做什么，程序去做，再把结果交回模型。每一步仍然是本课这样的一次请求，你在本课学会读的 request 和 response，到后面一直用得上。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-messages",
+              "title": "消息与特殊 Token：对话模板怎样把消息拼成一段文字（Hugging Face Agents Course，Unit 1）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/messages-and-special-tokens.mdx"
+            },
+            {
+              "id": "hf-what-are-llms",
+              "title": "什么是大语言模型：特殊 Token 与结束标记（Hugging Face Agents Course，Unit 1）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/what-are-llms.mdx"
+            },
+            {
+              "id": "ai-agent-book-ch1",
+              "title": "AI Agent 入门：一次模型调用由哪几部分组成（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            }
+          ]
         }
       ]
     },
@@ -670,6 +742,52 @@
               ],
               "correct": "b",
               "explanation": "用量只记服务商报告的数；没有报告就写“未报告”。"
+            },
+            {
+              "id": "stop-not-correct",
+              "prompt": "一次响应的 finish_reason 是 stop，content 里有一句完整的回答。能确定什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "输出没有被上限截断；回答对不对还要另外核对",
+                  "feedback": "对。stop 只说明模型自己停下了，不评价内容。"
+                },
+                {
+                  "id": "b",
+                  "text": "回答一定正确，任务完成了",
+                  "feedback": "不对。结束原因不评价内容，请求成功和回答正确是两回事。"
+                },
+                {
+                  "id": "c",
+                  "text": "这次输出正好用完了 max_tokens 设定的上限",
+                  "feedback": "不对。用完上限被截断时是 length，不是 stop。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "结束原因只说明输出为什么停下；回答是否正确要另外检查。"
+            },
+            {
+              "id": "prompt-tokens-overhead",
+              "prompt": "编的例子：请求里 system 和 user 两条消息加起来 30 个字，usage 报告 prompt_tokens 是 45。最合理的解释是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "Token 不等于字，服务商拼消息时加的标记也算在提示 Token 里",
+                  "feedback": "对。Token 由分词器切分，拼消息用的标记也要计数。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务商多算了，应该按 30 计",
+                  "feedback": "不对。计费以服务商报告的 Token 为准，字数和 Token 数本来就对不上。"
+                },
+                {
+                  "id": "c",
+                  "text": "prompt_tokens 把模型这次的回答也算进去了",
+                  "feedback": "不对。回答算在 completion_tokens 里，prompt_tokens 只算请求。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "Token 由分词器决定，提示 Token 按请求里的全部内容算，包括看不见的标记。"
             },
             {
               "id": "empty-content",
