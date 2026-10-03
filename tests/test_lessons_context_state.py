@@ -182,8 +182,11 @@ class ApplicationStateTests(unittest.TestCase):
         self.assertIn("messages-context", answer)
 
     def test_missing_and_budget_are_distinct_failures(self):
-        for scenario in ("missing", "budget"):
-            values = validate_inputs(state_runtime, {"scenario": scenario, "step_budget": 2 if scenario == "budget" else 3})
+        # 结局只由资料来源和步骤预算决定，和 lesson.json 里两组练习的输入一致。
+        presets = {"missing": {"source_key": "missing"},
+                   "budget": {"source_key": "application-state", "step_budget": 2}}
+        for scenario, inputs in presets.items():
+            values = validate_inputs(state_runtime, inputs)
             context, events = make_context("application-state", scenario, values)
             state_runtime.run(context)
             states = [data["state"] for data in of(events, "lesson.state")]
@@ -224,8 +227,9 @@ class ApplicationStateTests(unittest.TestCase):
             state_runtime.run(context)
 
     def test_input_contract(self):
+        # 没有 scenario 字段：结局不能靠预设标签指定，只能由资料和预算推出来。
         for invalid in ({"step_budget": 0}, {"source_key": "../../private"}, {"source_key": "lesson-07"},
-                        {"scenario": "unknown"}):
+                        {"scenario": "budget"}):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 validate_inputs(state_runtime, invalid)
 

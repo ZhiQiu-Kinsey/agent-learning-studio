@@ -18,7 +18,6 @@ SOURCES = {
 class Inputs(LessonInputs):
     goal: str = Field(default="说明消息与应用状态的区别", min_length=4, max_length=160)
     source_key: Literal["messages-context", "application-state", "missing"] = "messages-context"
-    scenario: Literal["success", "missing", "budget"] = "success"
     step_budget: int = Field(default=3, ge=1, le=5)
 
 
@@ -80,7 +79,7 @@ def run(context: RunContext) -> str:
     state.transition("running")
     state.consume_step("读取本地资料索引", values.step_budget)
     _publish(context, state, "开始读取")
-    source = SOURCES.get(values.source_key) if values.scenario != "missing" else None
+    source = SOURCES.get(values.source_key)
     if source is None:
         # 3a. 没有资料：先进入 waiting，确认等不到再以 failed 收尾。
         state.transition("waiting")
