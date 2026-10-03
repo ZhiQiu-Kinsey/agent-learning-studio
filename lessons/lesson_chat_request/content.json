@@ -121,7 +121,7 @@
           "title": "用量：这次花了多少 Token",
           "paragraphs": [
             "Token 是模型切分文本的单位，由分词器决定怎么切，一个汉字不一定正好是一个 Token。响应里的 usage 报告这次的用量：prompt_tokens 是请求里全部消息算出的提示 Token，completion_tokens 是模型写出的完成 Token，total_tokens 是两者之和。",
-            "有的模型先推理再回答：推理写在 message 的 reasoning_content 字段，用掉的 Token 记在 completion_tokens_details.reasoning_tokens，也算进 completion_tokens，同样受 max_tokens 限制。所以上限很小时，content 可能只剩半句，也可能是空的，因为推理还没写完就被截断了。对照 reasoning_tokens 和 completion_tokens，就能分清是哪一种。",
+            "有的模型先推理再回答：推理写在 message 的 reasoning_content 字段，用掉的 Token 记在 completion_tokens_details.reasoning_tokens，也算进 completion_tokens。部分服务商让推理同样受 max_tokens 限制，各家规则以服务商文档为准。在这样的服务商上，上限很小时，content 可能只剩半句，也可能是空的，因为推理还没写完就被截断了。对照 reasoning_tokens 和 completion_tokens，就能分清是哪一种。",
             "服务商没有报告某项用量时，实验报告写“未报告”，不写 0，也不用本地估算冒充。去掉系统提示词后提示 Token 少了多少，对照两次 response 的 prompt_tokens 就知道。"
           ]
         },
@@ -393,7 +393,7 @@
           "id": "code-decision",
           "type": "decision",
           "title": "没报告的用量写“未报告”，不写 0",
-          "chosen": "read_reply 用 get 读取 usage 里的每一项，缺失时得到 None；实验报告把 None 显示成“未报告”。所有数字都来自这次 response。",
+          "chosen": "read_reply 用 get 读取 usage 里的每一项，缺失时得到 None；实验报告把 None 显示成“未报告”。用量数字都来自这次 response。",
           "alternatives": [
             {
               "id": "zero",
@@ -481,7 +481,7 @@
               "observe": "prompt-tokens"
             },
             {
-              "text": "实验报告把这些字段放在一起。每个数字都能在上面的 response 里找到出处。",
+              "text": "实验报告把这些字段放在一起：用量来自 response 的 usage，max_tokens 和 system 消息来自 request，回答长度是数出来的。",
               "observe": "report",
               "stage": "user"
             }
@@ -532,7 +532,7 @@
             },
             {
               "id": "completion-tokens",
-              "text": "response 的 usage.completion_tokens：截断的那一组，它不会超过 max_tokens。",
+              "text": "response 的 usage.completion_tokens：截断的那一组，拿它和 max_tokens 比一比。",
               "selector": {
                 "event": "response",
                 "path": "data.body.usage.completion_tokens"
@@ -692,7 +692,7 @@
                 }
               ],
               "correct": "a",
-              "explanation": "推理和回答共用 max_tokens。上限太小时，回答可能一个字都没写。"
+              "explanation": "在把推理算进 max_tokens 的服务商上，推理和回答共用这个上限。上限太小时，回答可能一个字都没写。"
             }
           ]
         },
@@ -704,7 +704,7 @@
             "event": "response",
             "path": "data.body.choices[0].finish_reason"
           },
-          "explanation": "它在 response 事件的 choices[0].finish_reason。值是 length，说明输出写到了请求里 max_tokens 设定的上限。再看同一个事件的 usage：completion_tokens 不会超过这个上限。"
+          "explanation": "它在 response 事件的 choices[0].finish_reason。值是 length，说明输出写到了请求里 max_tokens 设定的上限。再看同一个事件的 usage，拿 completion_tokens 和这个上限对照。"
         },
         {
           "id": "check-points",
@@ -752,7 +752,7 @@
     },
     {
       "name": "max_tokens",
-      "note": "请求参数：输出最多写多少 Token。先推理的模型，推理也算在内。"
+      "note": "请求参数：输出最多写多少 Token。部分服务商把推理也算在内。"
     },
     {
       "name": "completion_tokens",
@@ -760,7 +760,7 @@
     },
     {
       "name": "reasoning_content",
-      "note": "有的模型在回答前写的推理内容。它不是回答，但占输出上限。"
+      "note": "有的模型在回答前写的推理内容。它不是回答，在部分服务商上也占输出上限。"
     },
     {
       "name": "send_bailian",

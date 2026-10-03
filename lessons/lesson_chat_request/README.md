@@ -16,7 +16,7 @@
 | `no-system` 去掉系统提示词 | `system_prompt` 留空 | messages 只剩 user，提示 Token 的变化 |
 | `short-limit` 把输出上限设得很小 | `max_tokens` 设为 16 | `finish_reason` 是否为 `length`，回答是否被截断 |
 
-先推理的模型（响应里有 `reasoning_content`）把推理也算进 `completion_tokens`，上限很小时 content 可能是空的；实验报告会列出推理 Token。
+先推理的模型（响应里有 `reasoning_content`）把推理也算进 `completion_tokens`；部分服务商让推理同样受 `max_tokens` 限制，上限很小时 content 可能是空的；实验报告会列出推理 Token。
 
 在网页课程导航中进入本课，可以查看源码、真实运行事件和回放。离线测试：
 

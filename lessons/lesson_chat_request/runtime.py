@@ -50,7 +50,7 @@ def read_reply(response: dict) -> dict:
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
-        # 推理用掉的 Token 也算在 completion_tokens 里，同样受 max_tokens 限制。
+        # 推理用掉的 Token 也算在 completion_tokens 里；部分服务商让它同样受 max_tokens 限制。
         "reasoning_tokens": details.get("reasoning_tokens"),
     }
 
@@ -90,7 +90,7 @@ def _report(context: RunContext, body: dict, reply: dict) -> None:
         metrics.append({"label": "推理内容（字符）", "value": len(reply["reasoning"])})
     context.emit("lesson.report", {
         "title": "一次请求的关键字段",
-        "summary": "数字都来自这次 response 事件里的 usage；服务商没有报告的项写“未报告”。",
+        "summary": "用量来自这次 response 事件里的 usage，服务商没有报告的项写“未报告”；max_tokens 和 system 消息取自请求。",
         "metrics": metrics,
         "table": {"columns": ["序号", "role", "content"],
                   "rows": [[index, message["role"], message["content"]]
