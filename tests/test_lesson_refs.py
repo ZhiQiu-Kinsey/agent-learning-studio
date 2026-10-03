@@ -12,7 +12,8 @@ from server.curriculum import LessonValidationError
 from server.lesson_refs import check_refs, lesson_refs, resolve_refs
 
 ROOT = Path(__file__).resolve().parents[1]
-HARDCODED = re.compile(r"第 ?\d+ ?课")
+# 也拦“第 5、6 课”“第 1–10 课”这类并列和区间写法，以及英文眉题里的 “CHAPTER 03”。
+HARDCODED = re.compile(r"第 ?\d+(?:\s*[、，,–—~-]\s*\d+)* ?课|CHAPTER\s*\d+")
 # 运行器、夹具、测试、README 与实现清单里的文档串和运行时字符串也不写死课号。
 # 2026-10-03 起所有课都已改好，过渡清单保持为空，不再往里加。
 SOURCE_LEGACY: set[str] = set()
@@ -28,6 +29,31 @@ class LessonRefTests(unittest.TestCase):
         self.assertEqual(resolve_refs("{{lesson:beta}}", numbers, "en-US"), "Lesson 7")
         with self.assertRaisesRegex(LessonValidationError, "未登记"):
             check_refs({"x": "{{lesson:gamma}}"}, numbers, "where")
+        with self.assertRaisesRegex(LessonValidationError, "未登记"):
+            resolve_refs("{{lesson:gamma}}", numbers)
+
+    def test_malformed_refs_are_rejected_instead_of_shown(self):
+        numbers = {"alpha": 1}
+        for text in ("{{ lesson:alpha }}", "{{lesson:alpha}", "{lesson:alpha}}", "见{{lesson:alpha}}和{{lesson : alpha}}"):
+            with self.subTest(text=text), self.assertRaisesRegex(LessonValidationError, "格式不对"):
+                check_refs({"x": [text]}, numbers, "where")
+        # 正文里的 JSON 示例有嵌套的 “}}”，不是引用。
+        check_refs({"x": '见{{lesson:alpha}}，结果是 {"ok": true, "result": {"hour": 11}}'}, numbers, "where")
+
+    def test_onboarding_and_manifests_are_checked_at_load(self):
+        import tempfile
+        from server.catalog import load_lessons
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "curriculum").mkdir()
+            (root / "lessons").mkdir()
+            catalog = json.loads((ROOT / "curriculum" / "catalog.json").read_text(encoding="utf-8"))
+            for lesson in catalog["lessons"]:
+                lesson["status"] = "planned"
+            (root / "curriculum" / "onboarding.json").write_text(
+                json.dumps({"x": "进入{{lesson:chat-requst}}"}, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(LessonValidationError, "onboarding.json.*未登记"):
+                load_lessons(root, catalog)
 
     def test_course_text_never_hardcodes_lesson_numbers(self):
         # 显示课号随目录顺序变化；提到另一门课要写 {{lesson:<slug>}}。
@@ -56,8 +82,10 @@ class LessonRefTests(unittest.TestCase):
         self.assertNotIn("{{lesson:", curriculum)
         self.assertNotIn("{{lesson:", json.dumps(client.get("/api/lessons").json(), ensure_ascii=False))
         self.assertNotIn("{{lesson:", json.dumps(client.get("/api/onboarding").json(), ensure_ascii=False))
-        code = json.dumps(client.get("/api/lessons/structured-output/code").json(), ensure_ascii=False)
+        # tool-selection 的读码批注引用了 fail-safely：要换成课号，而不是只看占位符不见了。
+        code = json.dumps(client.get("/api/lessons/tool-selection/code").json(), ensure_ascii=False)
         self.assertNotIn("{{lesson:", code)
+        self.assertIn(f"第 {CATALOG_INDEX.numbers['fail-safely']} 课", code)
 
 
 if __name__ == "__main__":
