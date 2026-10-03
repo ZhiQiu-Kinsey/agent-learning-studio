@@ -1,4 +1,4 @@
-"""第 9–10 课离线回归，不触发付费模型或持久教学库。"""
+"""“上下文预算与截取窗口”“持久记忆”两课的离线回归，不触发付费模型或持久教学库。"""
 import tempfile
 import threading
 import unittest

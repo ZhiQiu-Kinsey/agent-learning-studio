@@ -12,7 +12,7 @@
 
 本课使用当前配置的真实模型，每次运行发出 4 次请求（被拦下的那组不发送），运行前请注意模型开销。工具 `lookup_score` 由运行器真实执行一次；带 tool_calls 的 assistant 消息由运行器写入，不是模型提出的，事件里这次调用的 `origin` 是 `course_program`。报告里“提到分数”“提到复习日”“写了依据行”三列是关键词初筛，要对照回答原文复核。
 
-`validate_tool_history(messages)` 的名字、签名和行为保持不变，“上下文预算与截取窗口”一课会导入它。
+`validate_tool_history(messages)` 的名字、签名和行为保持不变，“上下文预算与截取窗口”一课会导入它，也导入 `rejection_status`：只有请求级的 4xx 算服务商拒绝了这组消息，记成 `lesson.provider_error`；超时、限流、鉴权失败、连接失败和 5xx 照常报错。
 
 `runtime.py` 实现消息组装、协议检查和报告；`fixtures.py` 仅供离线测试，按本次消息内容拼出确定性回答。课程不提供学生环境的模拟回退。
 
