@@ -15,6 +15,7 @@ import SpotlightCard from "../components/react-bits/SpotlightCard";
 import { Button } from "../components/ui/button";
 import { arrowShape } from "./arrow";
 import { reveal } from "./reveal";
+import { skipTarget } from "./skip";
 import type { TourStep } from "./types";
 import "./tour.css";
 
@@ -268,14 +269,9 @@ export default function Tour({
           // missing, skip it in the direction of travel rather than leave a
           // dimmed page with no card.
           if (data.type !== EVENTS.TARGET_NOT_FOUND) return;
-          const next = data.index + direction.current;
-          if (next >= steps.length) onExit(false);
-          else
-            onIndex(
-              Math.max(0, next) === data.index
-                ? data.index + 1
-                : Math.max(0, next),
-            );
+          const next = skipTarget(data.index, direction.current, steps.length);
+          if (next === null) onExit(false);
+          else onIndex(next);
         }}
         options={{
           // Strong mask: the dimmed page ignores clicks; Esc is handled above.
