@@ -162,6 +162,8 @@ class RunTests(unittest.TestCase):
         self.assertEqual(found[0]["cached_tokens"], 0)
         self.assertTrue(all(item["cached_tokens"] > 0 for item in found[1:]))
         self.assertEqual(len(of(events, "lesson.cache_hit")), 3)
+        # 只有第一次命中带 first_hit：找错题“第一次报告命中”只认它。
+        self.assertEqual([data.get("first_hit") for data in of(events, "lesson.cache_hit")], [True, None, None])
         self.assertEqual(len({item["prefix_hash"] for item in found}), 1)
         self.assertTrue(all(0 < item["ratio"] < 1 for item in found[1:]))
         data = report(events)

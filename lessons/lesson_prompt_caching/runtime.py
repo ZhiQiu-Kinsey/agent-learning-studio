@@ -101,7 +101,11 @@ def run(context: RunContext) -> str:
         # 4. 读服务商报告的缓存字段：没有报告就是 None，不当成 0。
         cache = normalize_cache_usage(response.get("usage"))
         record.update(cache, ratio=hit_ratio(cache))
-        context.emit(event_kind(cache), record, number)
+        kind = event_kind(cache)
+        # 第一次报告命中的请求带上 first_hit，找错题只认这一次，后面的命中不算。
+        if kind == "lesson.cache_hit" and not any(item.get("first_hit") for item in records):
+            record["first_hit"] = True
+        context.emit(kind, record, number)
         records.append(record)
         previous = messages
     _report(context, values, session, records)
