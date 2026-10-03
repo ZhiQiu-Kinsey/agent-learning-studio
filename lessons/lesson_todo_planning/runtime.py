@@ -158,8 +158,10 @@ def run(context: RunContext) -> str:
             # 提醒排在本轮所有 tool 消息之后：OpenAI 兼容接口要求 tool 消息紧跟带调用的 assistant 消息。
             text = reminder_text(since_update)
             messages.append({"role": "user", "content": text})
+            # 第一次提醒带 first，回放时能和之后再次触发的提醒分开。
             context.emit("lesson.harness_injected", {"kind": "todo_reminder", "source": "harness", "text": text,
-                                                     "rounds_since_update": since_update}, round_number)
+                                                     "rounds_since_update": since_update,
+                                                     **({} if reminders else {"first": True})}, round_number)
             reminders += 1
             since_update = 0
     # 5. 验收：只看复习卡和本次真实查询结果，模型的说法和清单上的 done 都不算数。
