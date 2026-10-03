@@ -17,7 +17,7 @@ def execute_tool(tool_call, available_tools):
     """执行一次调用提议；出错时返回结构化错误交还给模型，而不是让程序崩溃。"""
     name = tool_call["function"]["name"]
     try:
-        # arguments 是模型生成的 JSON 字符串，先解析，并确认是参数对象。
+        # arguments 是模型生成的 JSON 字符串，先解析并确认是参数对象；缺省或空串按没有参数处理。
         arguments = json.loads(tool_call["function"].get("arguments") or "{}")
         if not isinstance(arguments, dict):
             raise ValueError("工具参数必须是 JSON 对象。")
