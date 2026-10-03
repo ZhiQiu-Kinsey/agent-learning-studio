@@ -73,7 +73,7 @@
         {
           "id": "predict-request-count",
           "type": "predict",
-          "prompt": "先跑一次。在实验“加法与查时间：完整的一次循环”里运行“问加法”之前先猜：这次运行会发出几次模型请求（request 事件）？",
+          "prompt": "先跑一次。在实验“加法与查时间：完整的一次循环”里运行“计算加法”之前先猜：这次运行会发出几次模型请求（request 事件）？",
           "experiment": "one-loop",
           "rule": {
             "kind": "count_events",
@@ -130,7 +130,7 @@
           "type": "micro-quiz",
           "question": {
             "id": "second-request-diff",
-            "prompt": "问加法时，第二次请求比第一次多了哪两条消息？",
+            "prompt": "运行“计算加法”时，第二次请求比第一次多了哪两条消息？",
             "options": [
               {
                 "id": "a",
@@ -351,7 +351,7 @@
           "type": "annotated-source",
           "path": "lessons/lesson_01_tool_selection/tools.py",
           "start": 44,
-          "end": 69,
+          "end": 74,
           "notes": [
             {
               "id": "n46",
@@ -361,19 +361,25 @@
             },
             {
               "id": "n50",
-              "line": 50,
-              "anchor": "if not math.isfinite(a) or not math.isfinite(b):",
+              "line": 51,
+              "anchor": "finite = math.isfinite(a) and math.isfinite(b)",
               "text": "json.loads 默认接受 NaN 和 Infinity，所以模型传来的参数仍要检查是否为有限数字。"
             },
             {
+              "id": "n52",
+              "line": 52,
+              "anchor": "except OverflowError:",
+              "text": "超大整数会让 isfinite 抛 OverflowError，execute_tool 接不住它。这里把它也算作不合格的参数，下面统一抛 ValueError。"
+            },
+            {
               "id": "n57",
-              "line": 57,
+              "line": 62,
               "anchor": "local_now = datetime.now().astimezone()",
               "text": "时间来自运行 Python 的这台机器。模型自己无法知道“现在”，只能读工具结果。"
             },
             {
               "id": "n66",
-              "line": 66,
+              "line": 71,
               "anchor": "AVAILABLE_TOOLS = {",
               "text": "白名单：工具名到 Python 函数的字典。run_agent 只把它交给 execute_tool，模型提出别的名字不会被执行。"
             }
@@ -415,12 +421,12 @@
             {
               "id": "sum",
               "exercise": "sum",
-              "label": "问加法"
+              "label": "计算加法"
             },
             {
               "id": "time",
               "exercise": "time",
-              "label": "问时间"
+              "label": "查询本地时间"
             }
           ],
           "observe": [
@@ -435,7 +441,7 @@
             },
             {
               "id": "started",
-              "text": "tool_call 事件的 id：运行器开始执行这个调用，id 与调用提议相同。",
+              "text": "tool_call 事件的 id：运行器先记下要执行的调用，id 与调用提议相同。",
               "selector": {
                 "event": "tool_call",
                 "round": 1,
@@ -488,7 +494,7 @@
               "stage": "model"
             },
             {
-              "text": "运行器在白名单里找到了这个工具，开始执行。",
+              "text": "运行器先记下要执行的调用，id 与提议相同。工具在不在白名单里，要看下一步 tool_result 的 ok。",
               "observe": "started",
               "stage": "runtime"
             },
@@ -679,7 +685,7 @@
     },
     {
       "name": "tool_call",
-      "note": "运行器开始执行某个调用时记录的事件，一次调用一条；不同于响应里的 tool_calls 列表。"
+      "note": "运行器查白名单、执行调用之前记录的事件，一次调用一条；不同于响应里的 tool_calls 列表。"
     },
     {
       "name": "tool_result",

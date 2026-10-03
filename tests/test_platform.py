@@ -47,6 +47,24 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([len(r["messages"]) for r in requests], [2, 4, 6])
         self.assertEqual(requests[1]["messages"][-1]["tool_call_id"], calls[0]["id"])
 
+    def test_independent_calls_from_one_response_run_one_after_another(self):
+        events = execute("dependent-calls", "both")
+        responses = [e["data"]["body"] for e in events if e["type"] == "response"]
+        ids = [call["id"] for call in responses[0]["choices"][0]["message"]["tool_calls"]]
+        self.assertEqual(len(ids), 2)
+        # 同一轮的两个调用逐个执行：前一个的结果记下之后，后一个才开始。
+        steps = [(e["type"], e["data"].get("id") or e["data"].get("tool_call_id"))
+                 for e in events if e["type"] in ("tool_call", "tool_result")]
+        self.assertEqual(steps, [("tool_call", ids[0]), ("tool_result", ids[0]),
+                                 ("tool_call", ids[1]), ("tool_result", ids[1])])
+        results = [e["data"]["result"] for e in events if e["type"] == "tool_result"]
+        self.assertEqual(results[0], {"ok": True, "result": 42})
+        self.assertTrue(results[1]["ok"])
+        requests = [e["data"]["body"] for e in events if e["type"] == "request"]
+        self.assertEqual(len(requests), 2)
+        self.assertEqual([m["tool_call_id"] for m in requests[1]["messages"] if m["role"] == "tool"], ids)
+        self.assertEqual(events[-1]["type"], "answer")
+
     def test_zero_and_injected_failures_are_returned_not_retried(self):
         for case in ("zero", "unknown", "malformed"):
             with self.subTest(case=case):

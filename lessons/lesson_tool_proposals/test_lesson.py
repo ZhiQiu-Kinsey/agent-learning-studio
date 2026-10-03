@@ -41,7 +41,9 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual([m["role"] for m in body["messages"]], ["system", "user"])
 
     def test_sum_proposal_is_recorded_but_never_executed(self):
-        with patch.object(tools, "add_numbers", side_effect=AssertionError("不应执行工具")):
+        # 换掉白名单字典里的函数：真有地方按名字执行工具，测试就会失败。
+        never = lambda **_: self.fail("不应执行工具")
+        with patch.dict(tools.AVAILABLE_TOOLS, {"add_numbers": never, "get_current_time": never}):
             answer, events = run_case("sum")
         self.assertEqual(of(events, "tool_call"), [])
         self.assertEqual(of(events, "tool_result"), [])
