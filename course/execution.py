@@ -119,11 +119,20 @@ class RunContext:
     def call_tool(self, name: str, arguments: dict, available_tools: dict,
                   round_number: int = 1, call_id: str | None = None) -> dict:
         """由课程程序（不是模型）发起一次登记过的工具调用，同样记录调用与结果的配对。"""
+        return self.submit_call(name, json.dumps(arguments, ensure_ascii=False), available_tools,
+                                round_number, call_id)
+
+    def submit_call(self, name: str, raw_arguments: str, available_tools: dict,
+                    round_number: int = 1, call_id: str | None = None) -> dict:
+        """课程程序原样提交一条调用：名字可以未登记，参数是原样的 JSON 字符串、可以是坏的。
+
+        它走与模型提议相同的检查与执行（execute_tool），用来演示拒绝路径；
+        事件标 origin=course_program，不冒充模型提出过的调用。
+        """
         self.check_cancelled()
         self._tool_count += 1
         call = {"id": call_id or f"lesson_{self.lesson_id}_{self._tool_count}", "type": "function",
-                "origin": "course_program",
-                "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}}
+                "origin": "course_program", "function": {"name": name, "arguments": raw_arguments}}
         self.emit("tool_call", call, round_number)
         self.check_cancelled()
         result = execute_tool(call, available_tools)

@@ -130,7 +130,7 @@
 
 `main.py` 导出 `SYSTEM_PROMPT`、`TOOLS`、`AVAILABLE_TOOLS` 即可复用原生工具循环。每课可以引用已经存在的无副作用工具；源码清单应展示真实引用的实现。通用循环处理模型请求、工具调用与结果、错误和轮数上限。
 
-确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None)` 工厂，返回 `completion(body, api_key)`。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`。
+确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None)` 工厂，返回 `completion(body, api_key)`。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`（网页不能真实运行它）。要让学习者在网页上亲手检验失败路径，优先改成本地练习：在 custom 运行器里让课程程序构造有问题的调用（`context.submit_call`），并给这个练习声明 `requires_model: false`，例如 `fail-safely` 的两组故障注入。
 
 ## 教学内容（content v2）
 
@@ -197,13 +197,14 @@ def run(context: RunContext):
 
 前端把课程 `input_defaults` 与练习 `inputs` 合并后显示在可编辑 JSON 中。请求未传 `inputs` 时后端使用这份合并预设；显式提交的 `inputs`（包括 `{}`）直接交给该课 `INPUT_MODEL` 校验，不偷偷补入界面里已经删除的参数。模型需要继承 `LessonInputs`，未知字段会被拒绝，省略字段可使用 Pydantic 字段默认值。`context.inputs` 是校验后的字典。没有声明输入模型的课程默认拒绝额外输入。`question`、`exercise_id`、`lesson_id`、`mode` 可从上下文读取；原生课程问题不能为空，定制课程可只使用结构化输入，并自行校验任务所需字段。
 
-上面的纯本地课程应声明 `requires_model: false`，不要求配置密钥，也不伪造模型请求。需要模型的定制课程声明 `requires_model: true`，使用平台方法：
+上面的纯本地课程应声明 `requires_model: false`，不要求配置密钥，也不伪造模型请求。custom 课程里的单个练习也可以在 `exercises` 里声明 `requires_model: false`：这个练习不连接模型（`context.completion` 为空），界面按本地运行显示；其余练习沿用课程的声明。需要模型的定制课程声明 `requires_model: true`，使用平台方法：
 
 | 方法 | 用途 |
 | --- | --- |
 | `context.complete(body, round_number=1, branch=None)` | 使用当前模型连接并记录请求、响应与表示方式；并行发出多个请求时给每个分支一个不同的 `branch`，时间线按它配对请求与响应 |
 | `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
 | `context.call_tool(name, arguments, available_tools, round_number=1)` | 由课程程序（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
+| `context.submit_call(name, raw_arguments, available_tools, round_number=1)` | 课程程序原样提交一条调用（名字可以未登记，参数是原样的 JSON 字符串、可以是坏的），走与模型提议相同的检查；用于演示拒绝路径，事件标为程序发起（`origin: course_program`） |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |
 | `context.check_cancelled()` | 在阶段与副作用操作前响应平台停止请求 |

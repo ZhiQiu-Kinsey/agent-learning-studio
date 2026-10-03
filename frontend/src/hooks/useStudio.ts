@@ -437,7 +437,10 @@ export function useStudio() {
   const visible = events.slice(0, cursor);
   const active = selected >= 0 && selected < cursor ? events[selected] : null;
   const answer = visible.findLast((event) => event.type === "answer");
-  const requiresModel = detail?.capabilities?.requires_model !== false;
+  // An exercise may run without a model even in a lesson that otherwise needs one.
+  const requiresModel =
+    detail?.exercises.find((item) => item.id === exerciseId)?.requires_model ??
+    detail?.capabilities?.requires_model !== false;
   const canRun =
     !inputError &&
     (!requiresModel ||

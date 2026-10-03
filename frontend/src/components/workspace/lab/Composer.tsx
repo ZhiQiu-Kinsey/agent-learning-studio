@@ -117,7 +117,7 @@ export function Composer({
         </Button>
       )}
       <p className="composer-note">
-        <span className="composer-mode">
+        <span className="composer-mode" data-testid="lab-composer-mode">
           {s.requiresModel ? t("modeModel") : t("modeLocal")}
         </span>
         {s.requiresModel ? t("noteModel") : t("noteLocal")}

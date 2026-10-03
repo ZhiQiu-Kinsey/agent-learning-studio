@@ -101,7 +101,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
   - `runtime.kind: native`：复用原生工具循环，`main.py` 导出 `SYSTEM_PROMPT`、`TOOLS`、`AVAILABLE_TOOLS`。
   - `runtime.kind: custom`：`runtime.py` 的 `run(context)` 自己组织流程。只通过 `RunContext` 调模型、调工具、发事件：
     - `complete(body, round_number, branch=None)`
-    - `call_tool`、`run_native`
+    - `call_tool`、`submit_call`（原样提交一条可能有问题的调用，演示拒绝路径）、`run_native`
     - `emit("lesson.*", data)`
     - `check_cancelled`
 - **事件信封 v2。**

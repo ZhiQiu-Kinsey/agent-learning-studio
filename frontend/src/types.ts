@@ -7,6 +7,8 @@ export type Exercise = {
   title: string;
   question: string;
   offline_only?: boolean;
+  /** False for an exercise that runs without a model (e.g. a program-built fault). */
+  requires_model?: boolean;
   inputs?: Record<string, unknown>;
 };
 export type Lesson = {

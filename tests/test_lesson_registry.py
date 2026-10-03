@@ -136,6 +136,9 @@ class RegistryTests(unittest.TestCase):
             {"runtime": {"kind": "native", "entrypoint": "main", "max_rounds": True}},
             {"runtime": {"kind": "native", "entrypoint": "main", "requires_model": False}},
             {"testing": {}}, {"ui": {"unknown": "custom"}}, {"input_defaults": []},
+            # 只有 custom 运行器能让单个练习不调用模型；值必须是布尔。
+            {"exercises": [{**baseline["exercises"][0], "requires_model": False}]},
+            {"exercises": [{**baseline["exercises"][0], "requires_model": "no"}]},
         ]
         for override in cases:
             with self.subTest(override=override):

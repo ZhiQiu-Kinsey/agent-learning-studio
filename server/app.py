@@ -308,7 +308,8 @@ def prepare_run(body: RunInput) -> RunPlan:
         raise ApiError(422, "inputs_invalid", "课程输入无效，请检查本课要求的字段、类型和范围。") from None
     except (ImportError, AttributeError, TypeError):
         raise ApiError(503, "runtime_unavailable", "课程运行组件暂时不可用，请检查课程配置。") from None
-    requires_model = spec["runtime"].get("requires_model", True)
+    # 练习可以单独声明不调用模型（catalog 只允许 custom 运行器这样做），其余沿用课程的声明。
+    requires_model = exercise.get("requires_model", spec["runtime"].get("requires_model", True))
     if body.mode == "offline" and requires_model and not spec.get("testing", {}).get("completion_factory"):
         raise ApiError(400, "no_offline_fixture", "本课未提供确定性模型测试场景。")
     profile = provider_registry.resolve(bailian_key=session_key) if body.mode == "live" and requires_model else None

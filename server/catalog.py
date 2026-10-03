@@ -111,12 +111,14 @@ def _manifest(root, path, catalog_lesson):
     _require(isinstance(exercises, list) and exercises, path, "exercises 必须包含至少一个实验")
     exercise_ids = set()
     for exercise in exercises:
-        _object(exercise, str(path) + ": exercises", {"id", "title", "question", "offline_only", "inputs"})
+        _object(exercise, str(path) + ": exercises",
+                {"id", "title", "question", "offline_only", "requires_model", "inputs"})
         for key in ("id", "title", "question"):
             _text(exercise.get(key), str(path) + ": exercises." + key)
         _require(exercise["id"] not in exercise_ids, path, "同一课程的 exercise.id 不能重复")
         exercise_ids.add(exercise["id"])
         _require(type(exercise.get("offline_only", False)) is bool, path, "offline_only 必须为布尔值")
+        _require(type(exercise.get("requires_model", True)) is bool, path, "exercise.requires_model 必须为布尔值")
         _object(exercise.get("inputs", {}), str(path) + ": exercises.inputs")
     runtime = _object(data.get("runtime"), str(path) + ": runtime",
                       {"kind", "entrypoint", "max_rounds", "requires_model"})
@@ -128,6 +130,9 @@ def _manifest(root, path, catalog_lesson):
              path, "max_rounds 必须为 1 到 100 的整数")
     _require(type(runtime["requires_model"]) is bool, path, "requires_model 必须为布尔值")
     _require(kind != "native" or runtime["requires_model"], path, "native 运行器必须声明 requires_model=true")
+    # 单个练习可以不调用模型（如课程程序构造的故障注入），只在独立运行器里由课程代码分流。
+    _require(kind == "custom" or all(exercise.get("requires_model", True) for exercise in exercises),
+             path, "只有 custom 运行器的练习可以声明 requires_model=false")
     testing = _object(data.get("testing", {}), str(path) + ": testing", {"completion_factory"})
     _require(not runtime["requires_model"] or "completion_factory" in testing,
              path, "模型课程必须声明 testing.completion_factory")
