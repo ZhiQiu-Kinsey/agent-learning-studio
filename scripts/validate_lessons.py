@@ -123,8 +123,9 @@ def main(argv=None):
         available = sum(spec.get("status") == "available" for spec in specs)
         print(f"校验通过：{len(specs)} 份课程实现清单（{available} 可用，{len(specs) - available} 规划草稿）。")
         for spec in specs:
-            aliases = "、".join(spec.get("aliases", [])) or "无"
-            print(f"  第 {spec['number']} 课 {spec['id']}（别名：{aliases}）[{spec['status']}] {spec['title']}")
+            aliases = "、".join(spec.get("aliases", []))
+            note = f"（旧 slug：{aliases}）" if aliases else ""
+            print(f"  第 {spec['number']} 课 {spec['id']}{note} [{spec['status']}] {spec['title']}")
         print(f"术语表：{terms} 条。" if terms is not None else "术语表：未找到 curriculum/glossary.json，已跳过。")
         if terms is not None:
             problems = validate_vocabulary(args.root, specs)

@@ -1,6 +1,9 @@
-"""从课程 JSON 生成可阅读的大纲。更新目录后执行；--check 检查文档是否同步。"""
+"""从课程 JSON 生成可阅读的大纲。
+
+来源是 catalog.json，加上可运行课的 content.json（小节）、lesson.json（是否调用模型）和术语表（本课术语）；
+改了其中任何一个都要重新生成。--check 检查文档是否同步。
+"""
 import argparse
-import json
 from pathlib import Path
 import sys
 
@@ -16,7 +19,7 @@ def document():
     """课程表文档：catalog 加上可运行课的小节、是否调用模型与本课术语（与 /api/curriculum 相同来源）。"""
     from server.catalog import curriculum_outline
 
-    return render(curriculum_outline())
+    return render(curriculum_outline(strict=True))
 
 
 def render(catalog):
@@ -107,7 +110,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    catalog = json.loads((ROOT / "curriculum/catalog.json").read_text(encoding="utf-8"))
     output = document()
     target = ROOT / "docs/course-plan.md"
     if args.check:

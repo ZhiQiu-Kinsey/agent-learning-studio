@@ -64,7 +64,9 @@ class CurriculumTests(unittest.TestCase):
         self.assertNotIn("data:", response.text)
 
     def test_readable_curriculum_matches_the_single_source(self):
-        self.assertEqual((ROOT / "docs/course-plan.md").read_text(encoding="utf-8"), document())
+        self.assertEqual((ROOT / "docs/course-plan.md").read_text(encoding="utf-8"), document(),
+                         "课程表已过期：catalog.json、content.json 的小节、lesson.json 或术语表改过后，"
+                         "运行 scripts/export_curriculum.py")
 
     def test_every_lesson_has_time_difficulty_and_an_outline(self):
         from server.catalog import curriculum_outline

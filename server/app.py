@@ -99,7 +99,7 @@ def require_locale(lang: str | None) -> str | None:
 
 
 def require_lesson(lesson_id: str):
-    """接受 slug 或旧数字别名，统一解析为可执行课程；不回显请求中的原始 id。"""
+    """接受课程 slug（或目录里登记的旧 slug 别名），统一解析为可执行课程；不回显请求中的原始 id。"""
     spec = lesson_spec(lesson_id)
     if spec is not None:
         return spec
