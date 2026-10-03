@@ -147,7 +147,7 @@
           "paragraphs": [
             "响应里的 usage 报告这次花了多少 Token，服务商按它计费，也按它限制一次请求能有多大。Token 是模型切分文本的单位，由分词器决定怎么切。它不是字，也不是词：常见的词可能是一个 Token，少见的词会被拆成几段；一个汉字可能正好一个 Token，也可能几个字合成一个，各家分词器不同。所以同一句话，换个模型算出的 Token 数也不同。",
             "usage 里有三个数。prompt_tokens 是提示 Token，按请求里的全部消息算；completion_tokens 是完成 Token，按模型写出的内容算；total_tokens 是两者之和。提示 Token 通常比你看得见的文字多一点，因为服务商拼消息时加的标记也要算。很多服务商的输出单价高于输入单价，所以这两个数要分开看。",
-            "有的模型先推理再回答：推理写在 message 的 reasoning_content 字段，用掉的 Token 记在 completion_tokens_details.reasoning_tokens，也算进 completion_tokens。部分服务商让推理同样受 max_tokens 限制，各家规则以服务商文档为准。在这样的服务商上，上限很小时，content 可能只剩半句，也可能是空的，因为推理还没写完就被截断了。对照 reasoning_tokens 和 completion_tokens，就能分清是哪一种。",
+            "推理模型（先推理再回答的模型）会把推理写在 message 的 reasoning_content 字段，用掉的 Token 记在 completion_tokens_details.reasoning_tokens，也算进 completion_tokens。部分服务商让推理同样受 max_tokens 限制，各家规则以服务商文档为准。在这样的服务商上，上限很小时，content 可能只剩半句，也可能是空的，因为推理还没写完就被截断了。对照 reasoning_tokens 和 completion_tokens，就能分清是哪一种。",
             "服务商没有报告某项用量时，实验报告写“未报告”，不写 0，也不用本地估算冒充。0 是一个测量值，意思是一个 Token 都没花；没有报告的意思是不知道。去掉系统提示词后提示 Token 少了多少，对照两次 response 的 prompt_tokens 就知道。"
           ]
         },
@@ -159,7 +159,7 @@
           "paragraphs": [
             "举个编的例子。假设某个模型的价目表写着：输入每百万 Token 2 元，输出每百万 Token 8 元。一次请求的 usage 是 prompt_tokens 60、completion_tokens 40。输入花 `60 × 2 ÷ 1000000 = 0.00012` 元，输出花 `40 × 8 ÷ 1000000 = 0.00032` 元，合计 0.00044 元。这次输出 Token 比输入少，花的钱却更多。",
             "单看一次很便宜，可 Agent 做一个任务要请求很多次。还用这组编的数：一个任务请求 10 次，每次用量都一样，就是 0.0044 元；一天跑一万个任务，就是 44 元。实际上后面的课里，每次请求会一次比一次大，账要按每次 usage 逐条相加，不能拿第一次乘以次数。",
-            "再看推理。同一个问题换成先推理的模型，假设 usage 报告 completion_tokens 400，其中 reasoning_tokens 360。回答本身只有 40 个 Token，按输出计费的却是 400 个，输出这部分的花费变成原来的 10 倍。多数服务商把推理 Token 按输出计费，以各家价目表为准。推理内容不在回答里，却照样花钱，这是要单独读它的原因。",
+            "再看推理。同一个问题换成推理模型，假设 usage 报告 completion_tokens 400，其中 reasoning_tokens 360。回答本身只有 40 个 Token，按输出计费的却是 400 个，输出这部分的花费变成原来的 10 倍。多数服务商把推理 Token 按输出计费，以各家价目表为准。推理内容不在回答里，却照样花钱，这是要单独读它的原因。",
             "为什么不在本地按字数估算？分词器各家不同，同一段中文，在两个模型上算出的 Token 数可能差出不少；服务商拼消息时加的标记，你在本地也看不到。估出来的数既对不上账单，又会冒充服务商的数据。本课只记服务商报告的数。"
           ]
         },
@@ -634,7 +634,7 @@
               "stage": "model"
             },
             {
-              "text": "对照 completion_tokens 和 max_tokens。先推理的模型，推理也算在这个数里。",
+              "text": "对照 completion_tokens 和 max_tokens。推理模型的推理也算在这个数里。",
               "observe": "completion-tokens"
             },
             {
@@ -650,7 +650,7 @@
             ],
             "does_not_prove": [
               "length 只说明输出被截断，不说明已经写出的部分对不对。",
-              "同样设成 16，换个模型截断的位置不同：先推理的模型可能连回答都没开始写。"
+              "同样设成 16，换个模型截断的位置不同：推理模型可能连回答都没开始写。"
             ]
           }
         }
@@ -795,7 +795,7 @@
               "options": [
                 {
                   "id": "a",
-                  "text": "模型先推理，推理还没写完就到了 max_tokens",
+                  "text": "推理模型的推理还没写完，就到了 max_tokens",
                   "feedback": "对。看 usage 里的 reasoning_tokens：它等于 completion_tokens，说明输出全花在推理上了。"
                 },
                 {
