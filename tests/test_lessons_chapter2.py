@@ -220,6 +220,13 @@ class PromptExperimentTests(unittest.TestCase):
         bad_json = {"choices": [{"message": {"tool_calls": [{"function": {"name": "add_numbers", "arguments": "{"}}]}}]}
         self.assertEqual(prompts.proposed_call(bad_json), {"name": "add_numbers", "arguments": None})
 
+    def test_matrix_tool_rejects_non_integer_arguments_instead_of_concatenating(self):
+        # 参数结构写的是整数；字符串或小数要报错交回，不能把 "19" 和 "23" 拼成 1923、也不能算出 inf。
+        self.assertEqual(prompts.add_numbers(19, 23), 42)
+        for a, b in (("19", "23"), (1e308, 1e308), (True, 1)):
+            with self.subTest(a=a, b=b), self.assertRaises(ValueError):
+                prompts.add_numbers(a, b)
+
     def test_heuristic_rejects_known_false_positives(self):
         self.assertFalse(prompts.evaluate("flow_rule", "不是42而是43")[0])
         self.assertFalse(prompts.evaluate("missing_input", "需要计算1+1=2")[0])

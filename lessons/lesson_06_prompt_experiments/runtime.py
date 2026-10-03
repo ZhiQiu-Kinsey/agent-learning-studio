@@ -45,6 +45,9 @@ PARAMETERS = {"type": "object", "properties": {"a": {"type": "integer"}, "b": {"
 
 
 def add_numbers(a: int, b: int) -> int:
+    # 参数结构写的是整数：传来字符串或小数就报错交回，而不是把 "19" 和 "23" 拼成 1923。
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in (a, b)):
+        raise ValueError("a 和 b 必须是整数。")
     return a + b
 
 
