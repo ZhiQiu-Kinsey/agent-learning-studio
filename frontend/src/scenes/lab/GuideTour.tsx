@@ -21,7 +21,10 @@ const frames = (count: number) =>
 const query = (selector: string) =>
   document.querySelector<HTMLElement>(selector);
 
-/** The page element a step frames; falls back to the event row, never to unrelated UI. */
+/**
+ * The page element a step frames. Evidence falls back to its event row; a stage
+ * role this run has no node for falls back to the whole stage. Never unrelated UI.
+ */
 function targetFor(aim: GuideAim): TourTarget {
   if (aim.kind === "center") return { kind: "center" };
   if (aim.kind === "stage")
@@ -30,7 +33,7 @@ function targetFor(aim: GuideAim): TourTarget {
       find: () =>
         query(
           `[data-testid="lab-workspace"] .stage-node[data-role="${aim.role}"]`,
-        ),
+        ) ?? query('[data-testid="lab-workspace"] [data-testid="agent-stage"]'),
     };
   const row = `[data-testid="lab-workspace"] [data-event-index="${aim.index}"]`;
   const find = () =>

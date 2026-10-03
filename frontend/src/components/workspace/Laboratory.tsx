@@ -39,8 +39,8 @@ export function Laboratory({
   // Pointing at evidence (guided replay, "locate") always shows the execution record.
   const focus = useEvidenceFocus();
   useEffect(() => {
-    if (focus) setTab("trace");
-  }, [focus]);
+    if (focus || spotlight) setTab("trace");
+  }, [focus, spotlight]);
   useEffect(() => {
     setCopied(false);
   }, [s.active]);

@@ -164,7 +164,7 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
                   studio={studio}
                   active={active}
                   onConfigure={onConfigure}
-                  spotlight={spotlight}
+                  spotlight={guideStep !== null ? spotlight : null}
                 />
               </LessonExtension>
             </div>

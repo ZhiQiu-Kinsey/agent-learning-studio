@@ -3,8 +3,10 @@ import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Check, X } from "lucide-react";
 import { motion } from "motion/react";
 import {
+  EVENTS,
   Joyride,
   type ArrowRenderProps,
+  type EventData,
   type Step,
   type TooltipRenderProps,
 } from "react-joyride";
@@ -30,21 +32,31 @@ const isEditable = (target: EventTarget | null) =>
     "input, textarea, select, [contenteditable='true'], [role='slider']",
   );
 
+/**
+ * Joyride sizes the arrow's box per side but does not rotate a custom arrow,
+ * so each side gets its own triangle (same geometry as Joyride's built-in one):
+ * the tip always points at the framed element.
+ */
 function TourArrow({ base, size, placement }: ArrowRenderProps) {
-  // Joyride rotates the box per side; the tip points along +y of an upright arrow.
+  const side = placement.split("-")[0];
+  const vertical = side === "left" || side === "right";
+  const [width, height] = vertical ? [size, base] : [base, size];
+  const points = {
+    top: `0,0 ${base / 2},${size} ${base},0`,
+    bottom: `${base},${size} ${base / 2},0 0,${size}`,
+    left: `0,0 ${size},${base / 2} 0,${base}`,
+    right: `${size},${base} ${size},0 0,${base / 2}`,
+  }[side];
+  if (!points) return null;
   return (
     <svg
       className="tour-arrow"
-      data-placement={placement}
-      width={base}
-      height={size}
-      viewBox={`0 0 ${base} ${size}`}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
       aria-hidden="true"
     >
-      <polygon
-        points={`0,0 ${base / 2},${size} ${base},0`}
-        fill="currentColor"
-      />
+      <polygon points={points} fill="currentColor" />
     </svg>
   );
 }
@@ -182,6 +194,14 @@ export default function Tour({
     () => ({ label, onIndex, onExit }),
     [label, onIndex, onExit],
   );
+  // A step still preparing when the tour closes must not scroll the page afterwards.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
   const joySteps = useMemo<Step[]>(
     () =>
       steps.map((step) => {
@@ -190,7 +210,7 @@ export default function Tour({
         // frame is drawn once, where it ends up (Joyride's own scroll is off).
         const before = async () => {
           await step.prepare?.();
-          if (target.kind !== "element") return;
+          if (!open.current || target.kind !== "element") return;
           const found = target.find();
           const frame = target.frame?.() ?? found;
           if (found && frame) await reveal(found, frame, !reduced);
@@ -219,6 +239,8 @@ export default function Tour({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // A held arrow key must not race through every step (and count as finished).
+      if (event.repeat || event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditable(event.target)) return;
       if (event.key === "ArrowRight") {
@@ -244,6 +266,13 @@ export default function Tour({
         tooltipComponent={TourCard}
         arrowComponent={TourArrow}
         loaderComponent={null}
+        onEvent={(data: EventData) => {
+          // Targets fall back to a container that always exists; if one is still
+          // missing, move on rather than leave a dimmed page with no card.
+          if (data.type !== EVENTS.TARGET_NOT_FOUND) return;
+          if (data.index < steps.length - 1) onIndex(data.index + 1);
+          else onExit(false);
+        }}
         options={{
           // Strong mask: the dimmed page ignores clicks; Esc is handled above.
           overlayClickAction: false,
@@ -257,16 +286,12 @@ export default function Tour({
           offset: 14,
           arrowBase: 22,
           arrowSize: 10,
-          targetWaitTimeout: 2000,
           beforeTimeout: 4000,
-          backgroundColor: "transparent",
-          width: 400,
           zIndex: 70,
         }}
         styles={{
           overlay: { backgroundColor: "rgba(4, 7, 16, 0.74)" },
           spotlight: { className: "tour-ring" },
-          tooltip: { padding: 0, backgroundColor: "transparent" },
         }}
       />
     </TourContext.Provider>
