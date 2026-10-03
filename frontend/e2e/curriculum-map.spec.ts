@@ -180,19 +180,21 @@ test("on a phone-width screen the route becomes a list and nothing scrolls sidew
   await expect(
     items.and(page.locator('[data-status="planned"]')).first().getByRole("button"),
   ).toHaveCount(0);
+  // Polls: the view switch's pill springs into place and may overshoot for a
+  // few frames; only a layout that keeps scrolling sideways fails.
   const noSideways = () =>
     page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
-  expect(await noSideways()).toBe(true);
+  await expect.poll(noSideways).toBe(true);
   await page.getByTestId("curriculum-view-domains").click();
   await expect(page.getByTestId("curriculum-domain-card")).toHaveCount(
     catalog.categories.length,
   );
-  expect(await noSideways()).toBe(true);
+  await expect.poll(noSideways).toBe(true);
   await page.getByTestId("curriculum-view-list").click();
   await expect(page.getByTestId("curriculum-category-heading")).toHaveCount(
     catalog.categories.length,
   );
-  expect(await noSideways()).toBe(true);
+  await expect.poll(noSideways).toBe(true);
   await page.getByTestId("curriculum-view-roadmap").click();
   await items
     .and(page.locator(byLesson(first.id)))
