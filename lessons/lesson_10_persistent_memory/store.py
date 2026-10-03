@@ -27,7 +27,8 @@ class MemoryStore:
     def __init__(self, path: Path, *, read_only: bool = False):
         if read_only:
             # mode=ro：这条连接在数据库层面就写不进去；文件不存在时直接报错，不会新建。
-            self.connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+            # as_uri 会转义路径里的 # 和 %，否则路径会在 # 处被截断，连到另一个文件上。
+            self.connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
         else:
             self.connection = sqlite3.connect(path)
         self.connection.row_factory = sqlite3.Row

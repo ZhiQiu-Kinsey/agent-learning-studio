@@ -255,6 +255,29 @@ class MemoryTests(unittest.TestCase):
                 reader.put("a", "goal", "值", "输入", None)
             reader.close()
 
+    def test_read_only_path_with_hash_and_percent_stays_read_only(self):
+        # 路径里的 # 和 % 要按 URI 转义：否则路径在 # 处截断，只读连接会落到另一个新建的文件上。
+        import sqlite3
+        with tempfile.TemporaryDirectory(prefix="memory#50%-") as directory:
+            root = Path(directory)
+            stray = root.parent / root.name.split("#", 1)[0]
+            existed = stray.exists()
+            path = root / "memory.sqlite3"
+            writer = memory_runtime.MemoryStore(path)
+            writer.put("a", "goal", "原值", "输入", None)
+            writer.close()
+            reader = memory_runtime.MemoryStore(path, read_only=True)
+            try:
+                self.assertEqual(reader.get("a", "goal")["value"], "原值")
+                with self.assertRaises(sqlite3.OperationalError):
+                    reader.connection.execute("CREATE TABLE other (x)")
+            finally:
+                reader.close()
+            with self.assertRaises(sqlite3.OperationalError):
+                memory_runtime.MemoryStore(root / "missing.sqlite3", read_only=True)
+            self.assertEqual(sorted(item.name for item in root.iterdir()), ["memory.sqlite3"])
+            self.assertEqual(stray.exists(), existed, "不应在 # 之前的截断路径上新建文件")
+
     def test_recall_answer_puts_memory_only_in_the_user_data_block(self):
         run, events, _ = self.memory_context("recall_answer", {"scenario": "recall_answer"})
         answer = memory_runtime.run(run)
