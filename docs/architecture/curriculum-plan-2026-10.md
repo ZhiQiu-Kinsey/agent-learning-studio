@@ -168,7 +168,7 @@
 | --- | --- |
 | `hybrid-retrieval` | `keyword-retrieval`（关键词与 BM25）· `embedding-retrieval`（Embedding 与向量检索）· `hybrid-retrieval`（混合检索与重排） |
 | `async-concurrency` | `streaming-cancel`（流式输出与取消）· `async-concurrency`（并行、超时与并发上限） |
-| `long-running-tasks` | `background-tasks`（后台与定时任务）· `goal-loops`（目标循环与放弃条件） |
+| `long-running-tasks` | `long-running-tasks`（后台与定时任务，沿用原 slug）· `goal-loops`（目标循环与放弃条件） |
 | `local-delivery` | `local-delivery`（启动、配置与凭据）· `backup-upgrade`（备份、恢复与升级回退） |
 
 `human-in-the-loop` 去掉“幂等标识”这一主题，改为引用可靠工具课。
@@ -206,7 +206,7 @@ catalog 每课增加：`estimated_minutes`（预计时长）、`difficulty`（�
 | 6a | 导览修复：一句讲解算一步（原来讲解、聚光、跳转、高亮各算一步，16 步只有 5 句话，中间几步讲解和证据错位） | `98b0cb4` | vitest |
 | 6b | 导览改为逐步格式 `{text, observe?, stage?}`，46 个实验无损迁移；测试要求每个观察点都讲到、每步一句不同的话 | `4ec39ea` | 后端全部测试、validate_lessons |
 | 6c | 事件详情能框住观察点的字段（JSON 原样排版并记录字段行号）；观察点“定位”与导览共用证据焦点 | `1c5e267` | vitest |
-| 6d | 遮罩导览：React Joyride 受控模式 + React Bits（讲解卡片 SpotlightCard、句子 BlurText、开始按钮 StarBorder、看完 SparkBurst）；强遮罩，点暗处不响应，被框区域可操作；先滚动再画亮框；导览期间实验快捷键关闭 | 见下一提交 | vitest、Playwright（新增导览 3 项） |
+| 6d | 遮罩导览：React Joyride 受控模式 + React Bits（讲解卡片 SpotlightCard、句子 BlurText、开始按钮 StarBorder、看完 SparkBurst）；强遮罩，点暗处不响应，被框区域可操作；先滚动再画亮框；导览期间实验快捷键关闭 | `3f95481` | vitest、Playwright（新增导览 3 项） |
 
 ### 8.9 执行中的决定与遗留
 

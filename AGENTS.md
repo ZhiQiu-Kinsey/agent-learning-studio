@@ -70,7 +70,7 @@ npm.cmd --prefix frontend run dev               # Vite 开发服务器，/api �
 .\.venv\Scripts\python.exe scripts/term_report.py --lesson <slug> --full   # 一课的术语、代码说明与用词问题
 .\.venv\Scripts\python.exe scripts/realign_notes.py              # 源码移动后按锚点重新对准读码批注（--check 只检查）
 .\.venv\Scripts\python.exe scripts/run_live.py <slug> [练习] --url http://127.0.0.1:8765   # 真实运行练习并打印事件摘要（会产生模型用量）
-.\.venv\Scripts\python.exe scripts/export_curriculum.py            # 改了 catalog.json 后重新生成 docs/course-plan.md（--check 只检查）
+.\.venv\Scripts\python.exe scripts/export_curriculum.py            # 改了 catalog.json、正文小节标题、lesson.json 或术语表后重新生成 docs/course-plan.md（--check 只检查）
 .\.venv\Scripts\python.exe scripts/export_trace_contract.py        # 改了 server/envelope.py 后生成前端镜像（--check 只检查）
 .\.venv\Scripts\python.exe scripts/migrate_content.py --check      # 内容 v2 迁移与格式规范
 .\.venv\Scripts\python.exe scripts/export_content_schema.py        # 改了 server/content_schema.py 后导出 schema
@@ -216,7 +216,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 | 改了什么 | 至少运行 |
 | --- | --- |
 | 课程实现 / `lesson.json` | 该课 `test_lesson.py`、完整 Python 测试、`validate_lessons.py` |
-| `content.json` / 术语表 | `validate_lessons.py`、`term_report.py --lesson <slug>`、`migrate_content.py --check`、`tests/test_lesson_experiments.py`、`tests/test_lesson_vocabulary.py` |
+| `content.json` / 术语表 | `validate_lessons.py`、`term_report.py --lesson <slug>`、`migrate_content.py --check`、`export_curriculum.py`（课程表的小节和本课术语来自这里）、`tests/test_lesson_experiments.py`、`tests/test_lesson_vocabulary.py` |
 | `catalog.json` | `export_curriculum.py`、完整 Python 测试 |
 | 执行流程、服务商适配、事件信封 | 完整 Python 测试，并补回归测试；改了信封常量时运行 `export_trace_contract.py --check` |
 | 前端 | `run build`、`vitest run`、`i18n:check`；交互变化还要跑相关 Playwright 测试 |
@@ -225,7 +225,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 
 ## 提交与拉取请求
 
-- 提交标题用中文，带类型前缀：`feat:`、`fix:`、`docs:`、`test:`、`refactor:`。例如 `feat: 新课“文本动作与原生工具调用`。
+- 提交标题用中文，带类型前缀：`feat:`、`fix:`、`docs:`、`test:`、`refactor:`。例如 `feat: 新课“文本动作与原生工具调用”`。
 - 一次提交只做一件事。课程内容、平台代码和文档能分开就分开。
 - PR 要写清：
   - 行为变化；

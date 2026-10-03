@@ -41,12 +41,12 @@
 - 先修引用的课程必须存在，并且排在本课之前（同时排除循环）；选修的先修也必须存在。
 - 大类 → 模块 → 课程的遍历顺序必须与 `lessons` 顺序一致，每课只登记在一个模块中，使导航与显示课号不会错位。
 
-**实现目录映射规则：** `lessons/*/lesson.json` 的 `id` 必须等于 catalog 中的课程 slug（不能写别名），这是课程与实现之间唯一的映射；目录名只决定 Python 包名，不参与身份判断。已有第 1–10 课沿用 `lesson_NN_<slug 的下划线形式>`（如 `lesson_01_tool_selection` ↔ `tool-selection`），目录暂不改名；新课由生成器创建为 `lesson_<slug 的下划线形式>`（如 `lesson_document_loading`），不再带课号前缀。
+**实现目录映射规则：** `lessons/*/lesson.json` 的 `id` 必须等于 catalog 中的课程 slug（不能写别名），这是课程与实现之间唯一的映射；目录名只决定 Python 包名，不参与身份判断。最早的十门课沿用 `lesson_NN_<slug 的下划线形式>`（如 `lesson_01_tool_selection` ↔ `tool-selection`），目录名里的数字只是历史编号、不是课号，暂不改名；新课由生成器创建为 `lesson_<slug 的下划线形式>`（如 `lesson_document_loading`），不再带课号前缀。
 
 **接口行为：**
 
 - `GET /api/lessons`、`GET /api/lessons/{id}`、`GET /api/curriculum` 中每课都返回 slug `id`、`number` 与 `aliases`。
-- `GET /api/lessons/{id}` 与 `POST /api/run` 的 `lesson_id` 接受 slug 或别名，内部统一解析为 slug；`run_start` 事件与 `RunContext.lesson_id` 记录的始终是 slug。
+- `GET /api/lessons/{id}` 与 `POST /api/runs` 的 `lesson_id` 接受 slug 或别名，内部统一解析为 slug；`run_start` 事件与 `RunContext.lesson_id` 记录的始终是 slug。
 - 无法解析的 ID 返回 404，响应体为 `{"detail": "...", "code": "lesson_not_found"}`；目录中已登记但仍为 `planned` 的课程返回 404 与 `lesson_not_available`。错误信息不回显请求中的原始 ID。
 - 前端以 slug 作为 `lessonId`，课号显示使用接口返回的 `number`。来自旧链接、旧导出或本机存储的课程 ID 先经过 `frontend/src/lib/lessonIds.ts` 的 `resolveLessonId` 迁移为 slug（当前 localStorage 中没有保存课程 ID 的键，后续学习进度等新键必须走这一步）。
 
@@ -152,7 +152,7 @@
   - `hypothesis`：可检验的假设；
   - `arms`：对照组，用 `exercise` 引用 lesson.json 的练习；
   - `observe`：观察点，带选择器（`event`、`round`、`path`、`span_kind`、`name`）；
-  - `guide`：导览，每步 `{ "text", "observe"?, "stage"? }`：一句讲解，加上这句话要看的地方。`observe` 引用观察点，界面在学习者自己的运行里跳到证据并用遮罩框住（JSON 字段精确到行）；`stage` 写这一步讲的是哪个舞台角色（`user`、`runtime`、`model`、`tool`、`memory`），没有 `observe` 时框住该节点；两者都不填的一步居中显示，只用于开场。每个观察点都要讲到，每步说一句不同的话；
+  - `guide`：导览，每步 `{ "text", "observe"?, "stage"? }`：一小段讲解（一两句），加上这段话要看的地方。`observe` 引用观察点，界面在学习者自己的运行里跳到证据并用遮罩框住（JSON 字段精确到行）；`stage` 写这一步讲的是哪个舞台角色（`user`、`runtime`、`model`、`tool`、`memory`），没有 `observe` 时框住该节点；两者都不填的一步居中显示，只用于开场。每个观察点都要讲到，每步的话不重复。观察点选择器匹配的是第一个符合的事件，路径只要存在就算命中（值为 null 也算）：同类事件有多个时用 `round` 或只在目标事件上出现的字段钉住，否则导览会框到别的事件；
   - `conclusion`：`proves` 写能证明的，`does_not_prove` 写不能证明的。
 
   选择器的语义由 `server/selectors.py` 和 `frontend/src/content/selector.ts` 共同实现，两边跑同一份共享测试向量。`tests/test_lesson_experiments.py` 会用确定性运行逐个检查观察点和导览目标都能命中；在这次运行中找不到的证据，界面会如实显示“本次运行没有出现这条证据”。
@@ -202,7 +202,7 @@ def run(context: RunContext):
 | 方法 | 用途 |
 | --- | --- |
 | `context.complete(body, round_number=1, branch=None)` | 使用当前模型连接并记录请求、响应与表示方式；并行发出多个请求时给每个分支一个不同的 `branch`，时间线按它配对请求与响应 |
-| `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对 |
+| `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
 | `context.call_tool(name, arguments, available_tools, round_number=1)` | 由课程程序（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |
