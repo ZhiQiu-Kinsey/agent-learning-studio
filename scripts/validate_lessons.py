@@ -1,6 +1,7 @@
 """检查全部课程实现清单、课程 ID、术语表与随课录制，包含 planned 草稿，不调用模型。"""
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -38,8 +39,12 @@ def validate_recordings(root, specs):
 
 
 def validate_overlays(root, specs):
-    """内容译文层：结构与可译路径错误直接失败，缺失与过期只报告覆盖率。"""
-    from server.content import lesson_content_model, onboarding_model, overlay_locales, overlay_report
+    """内容译文层：结构与可译路径错误直接失败，缺失与过期只报告覆盖率；课程引用写错也直接失败。"""
+    from server.content import lesson_content_model, onboarding_model, overlay_locales, overlay_path, overlay_report
+    from server.curriculum import index_catalog
+    from server.lesson_refs import check_refs
+
+    numbers = index_catalog(json.loads((Path(root) / "curriculum" / "catalog.json").read_text(encoding="utf-8"))).numbers
 
     documents = [(spec["content_path"], lesson_content_model(spec["content_path"], spec)) for spec in specs]
     onboarding = Path(root) / "curriculum" / "onboarding.json"
@@ -48,6 +53,8 @@ def validate_overlays(root, specs):
     reports = []
     for path, model in documents:
         for locale in overlay_locales(path):
+            overlay = overlay_path(path, locale)
+            check_refs(json.loads(overlay.read_text(encoding="utf-8")), numbers, str(overlay))
             reports.append((path, overlay_report(path, model, locale)))
     return reports
 

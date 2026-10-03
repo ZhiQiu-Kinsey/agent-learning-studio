@@ -3,6 +3,7 @@ import json
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -34,7 +35,8 @@ class LessonRefTests(unittest.TestCase):
 
     def test_malformed_refs_are_rejected_instead_of_shown(self):
         numbers = {"alpha": 1}
-        for text in ("{{ lesson:alpha }}", "{{lesson:alpha}", "{lesson:alpha}}", "见{{lesson:alpha}}和{{lesson : alpha}}"):
+        for text in ("{{ lesson:alpha }}", "{{lesson:alpha}", "{lesson:alpha}}", "见{{lesson:alpha}}和{{lesson : alpha}}",
+                     "{{lesson：alpha}}", "{{Lesson:alpha}}", "{{lesson:alpha}}}", "{{{lesson:alpha}}"):
             with self.subTest(text=text), self.assertRaisesRegex(LessonValidationError, "格式不对"):
                 check_refs({"x": [text]}, numbers, "where")
         # 正文里的 JSON 示例有嵌套的 “}}”，不是引用。
@@ -53,6 +55,18 @@ class LessonRefTests(unittest.TestCase):
             (root / "curriculum" / "onboarding.json").write_text(
                 json.dumps({"x": "进入{{lesson:chat-requst}}"}, ensure_ascii=False), encoding="utf-8")
             with self.assertRaisesRegex(LessonValidationError, "onboarding.json.*未登记"):
+                load_lessons(root, catalog)
+            # 实现清单（lesson.json）里的引用同样在加载时检查。
+            (root / "curriculum" / "onboarding.json").write_text("{}", encoding="utf-8")
+            lesson_dir = root / "lessons" / "lesson_x"
+            lesson_dir.mkdir()
+            slug = catalog["lessons"][0]["id"]
+            (lesson_dir / "lesson.json").write_text(
+                json.dumps({"id": slug, "exercises": [{"title": "见{{lesson:nope}}"}]}, ensure_ascii=False),
+                encoding="utf-8")
+            (lesson_dir / "content.json").write_text("{}", encoding="utf-8")
+            fake = {"content_path": lesson_dir / "content.json", "code_compare": None, "status": "planned"}
+            with patch("server.catalog._manifest", return_value=fake),                     self.assertRaisesRegex(LessonValidationError, "lesson.json.*未登记"):
                 load_lessons(root, catalog)
 
     def test_course_text_never_hardcodes_lesson_numbers(self):

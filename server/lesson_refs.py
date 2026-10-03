@@ -13,8 +13,11 @@ from typing import Any
 from server.curriculum import LessonValidationError
 
 REF = re.compile(r"\{\{lesson:([^{}]*)\}\}")
-# 像引用却没写对的：多了空格、少了一个括号。正文里的 JSON 和代码示例本身会有 “}}” 和 {lesson: …}，不能一概拦。
-LOOSE = re.compile(r"\{\s*\{?\s*lesson\s*:\s*[a-z0-9-]+\s*\}?\s*\}")
+# 像引用却没写对的：多了空格、少了一个括号、大写 L、中文冒号。正文里的 JSON 和代码示例
+# 本身会有 “}}” 和 {lesson: …}，不能一概拦，所以要求括号里是一个 slug。
+LOOSE = re.compile(r"\{\s*\{?\s*lesson\s*[:：]\s*[a-z0-9-]+\s*\}?\s*\}", re.IGNORECASE)
+# 多了一个括号：替换后会残留一个 “{” 或 “}”。
+EXTRA = re.compile(r"\{\{\{lesson:|\{\{lesson:[^{}]*\}\}\}")
 TEMPLATES = {"zh-CN": "第 {number} 课", "en-US": "Lesson {number}"}
 
 
@@ -40,7 +43,7 @@ def check_refs(value: Any, numbers: dict[str, int], location: str) -> None:
         if slug not in numbers:
             raise LessonValidationError(f"{location}: 课程引用 {{{{lesson:{slug}}}}} 指向未登记的课程")
     for text in _strings(value):
-        if LOOSE.search(REF.sub("", text)):
+        if LOOSE.search(REF.sub("", text)) or EXTRA.search(text):
             # 写错的引用不会被替换，会原样出现在网页上；这里直接拦下。
             raise LessonValidationError(f"{location}: 课程引用格式不对（应写 {{{{lesson:<slug>}}}}）：{text[:60]}")
 
