@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 无 TODO | `lookup_note`、`save_card` | 无 |
 | 有 TODO，无提醒 | 再加 `todo_write` | 无 |
-| 有 TODO，有提醒 | 再加 `todo_write` | 连续 `reminder_after` 轮没调用 `todo_write`，就在本轮 tool 消息之后追加一条 user 提醒 |
+| 有 TODO，有提醒 | 再加 `todo_write` | 连续 `reminder_after` 轮没有 `todo_write` 成功更新清单，就在本轮 tool 消息之后追加一条 user 提醒 |
 
 - `todo_write` 整体替换清单，校验通过后版本号加一，并发布 `lesson.todo`（完整清单与差异）。
 - 运行层提醒同时发布 `lesson.harness_injected`，`source` 为 `harness`，用来和模型、用户的话区分开。

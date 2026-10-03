@@ -25,7 +25,7 @@ def _text(response: dict) -> str:
 
 
 # ---------- 提示链 ----------
-NOTE = ("“消息与上下文”一课讲：模型只看到本次请求里的消息，历史要由应用程序重发；"
+NOTE = ("“上下文组成与消息协议”一课讲：模型只看到本次请求里的消息，历史要由应用程序重发；"
         "assistant 的工具调用和 tool 消息必须成对出现；上下文越长，越要注意哪些信息真的需要。")
 CHAIN = [
     ("提取要点", "从下面的笔记里提取恰好 3 个要点。每行一个，以“- ”开头，不要写别的。"),
@@ -124,11 +124,12 @@ def run_routing(context: RunContext) -> str:
         response = context.complete({"messages": [{"role": "system", "content": ROUTER_SYSTEM},
                                                   {"role": "user", "content": text}], "temperature": 0}, index)
         raw = _text(response)
-        # 2. 解析标签：不在列表里就走兜底，原文照记。
+        # 2. 解析标签：不在列表里就走兜底，原文照记；只有兜底的记录带 fallback_reason。
         predicted, fallback = parse_label(raw)
         fallbacks += fallback
         context.emit("lesson.route", {"ticket": ticket_id, "gold": gold, "predicted": predicted, "raw": raw,
-                                      "fallback": fallback, "correct": predicted == gold}, index)
+                                      "fallback": fallback, "correct": predicted == gold,
+                                      **({"fallback_reason": "回复第一行不是可选标签"} if fallback else {})}, index)
         pairs.append((gold, predicted))
         # 3. 分错或走了兜底的工单列进报告，标注本身也可能有争议，留给人复核。
         if predicted != gold or fallback:

@@ -15,7 +15,7 @@
 ## 再看真实模型循环
 
 ```powershell
-.\.venv\Scripts\python.exe main.py --lesson 3
+.\.venv\Scripts\python.exe main.py --lesson fail-safely
 ```
 
 分别问 `12 除以 3 等于多少？` 和 `12 除以 0 等于多少？`。第二种情况下，Python 把错误作为 `role: tool` 消息回传；system prompt 要求模型承认失败、请你修正输入，并且不要编造商。

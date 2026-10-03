@@ -28,7 +28,7 @@ NOTES = {
                        "note": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。"},
 }
 REQUIRED = tuple(NOTES)
-TASK = ("帮我做一张复习卡：分别查 messages-context（消息与上下文）、application-state（应用状态与运行生命周期）、"
+TASK = ("帮我做一张复习卡：分别查 messages-context（上下文组成与消息协议）、application-state（应用状态与运行生命周期）、"
         "context-budget（上下文预算与截取窗口）三课的要点，把三条要点连同要点编号存进复习卡，然后告诉我完成了。")
 BASE_SYSTEM = "你是学习助教。需要资料时调用工具，不要猜测要点内容或编号。全部完成后用一两句话说明结果。"
 TODO_RULES = ("开始动手前，先用 todo_write 列出步骤。每完成一步就调用 todo_write 更新状态："

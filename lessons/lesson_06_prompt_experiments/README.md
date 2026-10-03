@@ -19,4 +19,4 @@
 
 ## 限制与参考
 
-每格、每对都只跑一次，不足以证明某种写法普遍更好，需要更多样本和重复运行。离线测试用的 `fixtures.py` 只服务自动化测试，不代表任何真实模型的行为。来源范围与固定 commit 见 [第二章来源记录](../../docs/architecture/chapter2-sources.md)。
+每格、每对都只跑一次，不足以证明某种写法普遍更好，需要更多样本和重复运行。离线测试用的 `fixtures.py` 只服务自动化测试，不代表任何真实模型的行为。来源范围与固定 commit 见 [来源记录](../../docs/architecture/chapter2-sources.md)。
