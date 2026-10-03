@@ -1,6 +1,6 @@
 """网页运行入口：除法练习走原生工具循环；两组故障注入不调用模型。
 
-故障注入由课程程序直接构造一条有问题的调用，交给与模型提议相同的检查（execute_tool）。
+故障注入由运行器直接构造一条有问题的调用，交给与模型提议相同的检查（execute_tool）。
 模型不一定会提出这样的调用，所以不靠模型制造；事件标为程序发起，不冒充模型提出过的调用。
 """
 from course.execution import RunContext
@@ -24,5 +24,5 @@ def run(context: RunContext) -> str:
     name, arguments = fault
     result = context.submit_call(name, arguments, AVAILABLE_TOOLS)
     # 回答由程序按真实结果写出：本组没有模型，也就没有模型的回答。
-    return (f"本组没有调用模型。课程程序构造的调用 {name}（参数 {arguments}）"
+    return (f"本组没有调用模型。运行器构造的调用 {name}（参数 {arguments}）"
             f"在执行前被拒绝：{result['error_type']}：{result['error']}。没有任何工具函数被执行。")

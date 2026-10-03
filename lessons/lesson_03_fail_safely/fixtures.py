@@ -1,6 +1,6 @@
 """错误处理与安全边界一课的除法练习样本：正常除法与除零，验证运行器回传失败结果。
 
-两组故障注入（未登记的工具、损坏的参数）不调用模型，由 runtime.py 的课程程序构造，不需要样本。
+两组故障注入（未登记的工具、损坏的参数）不调用模型，由 runtime.py 的运行器构造，不需要样本。
 """
 from server.offline import CompletionScript, result_answer, tool_call
 
