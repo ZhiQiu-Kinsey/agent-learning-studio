@@ -123,7 +123,7 @@
           "paragraphs": [
             "“过期、删除与重开核对”写一条临时提醒 temporary_note，expires_at 设成现在往前 1 秒，写入时就已经到期。get 和 store.recall 读到它时用 expired 判断：到期就当它不存在。可表里这一行还在，stored 只看行在不在，返回 true。",
             "接着显式调用 delete，这一行才从表里移除。最后换一条新连接核对：get 读不到，stored 也找不到。事件依次是 saved、expired、deleted：expired 事件里 hidden 和 stored 都是 true，deleted 事件里 absent 是 true。",
-            "已经过期的键，可以当作新键（expected_version=None）重写，版本接着往上加，不会回到 1。版本号记的是这个键被写过几次，不随过期清零。"
+            "已经过期的键，可以当作新键（expected_version=None）重写，版本接着往上加，不会回到 1。删掉的键重新写入也一样：delete 只移除记忆那一行，另一张版本表里还记着这个键写到了第几版。版本号记的是这个键被写过几次，不随过期或删除清零。所以删除前读到旧版本的写入方，在键重建以后也写不进去。"
           ]
         },
         {
@@ -306,66 +306,78 @@
           "id": "code-put-version",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/store.py",
-          "start": 67,
-          "end": 97,
+          "start": 71,
+          "end": 107,
           "notes": [
             {
               "id": "n67",
-              "line": 67,
+              "line": 71,
               "anchor": "def put(self, namespace: str, key: str, value: str, source: str, expected_version: int | None, *,",
               "text": "expected_version 是写入方上次读到的版本；写新键时传 None。"
             },
             {
               "id": "n71",
-              "line": 71,
+              "line": 75,
               "anchor": "if scope not in SCOPES or (scope == \"current_task\") != (task_id is not None):",
               "text": "范围和 task_id 必须配对：current_task 一定带 task_id，persistent 一定不带。"
             },
             {
               "id": "n76",
-              "line": 76,
+              "line": 80,
               "anchor": "self.connection.execute(\"BEGIN IMMEDIATE\")",
               "text": "先拿写锁再读版本：两条连接同时写，只有一条能进来。"
             },
             {
               "id": "n80",
-              "line": 80,
+              "line": 84,
               "anchor": "current = row[\"version\"] if row else None",
               "text": "库里现在的版本；还没有这一行就是 None。"
             },
             {
               "id": "n82",
-              "line": 82,
+              "line": 86,
               "anchor": "revive = row is not None and expected_version is None and self.expired(dict(row))",
               "text": "已经过期的行，允许当作新键重写。"
             },
             {
               "id": "n83",
-              "line": 83,
+              "line": 87,
               "anchor": "if current != expected_version and not revive:",
               "text": "乐观并发控制的核心：读到的版本和库里的对不上，就拒绝。"
             },
             {
               "id": "n84",
-              "line": 84,
+              "line": 88,
               "anchor": "raise VersionConflict(",
               "text": "抛出异常，事务回滚，现值不动；调用方从异常里知道自己读到的已经过时。"
             },
             {
+              "id": "n91",
+              "line": 91,
+              "anchor": "last = self.connection.execute(\"SELECT version FROM versions WHERE namespace=? AND key=?\",",
+              "text": "从版本表里读这个键写到过第几版；记忆那一行被删掉以后，这个数还在。"
+            },
+            {
               "id": "n87",
-              "line": 87,
-              "anchor": "\"version\": (current or 0) + 1, \"updated_at\": time.time(),",
-              "text": "版本只增不减，重写过期行也接着往上加。"
+              "line": 93,
+              "anchor": "version = max(current or 0, last[\"version\"] if last else 0) + 1",
+              "text": "版本只增不减：重写过期行、删除后重建都接着往上加，不会回到 1。"
             },
             {
               "id": "n90",
-              "line": 90,
+              "line": 98,
               "anchor": "\"INSERT OR REPLACE INTO memories",
               "text": "整行写入：同一个 (namespace, key) 只保留最新的一行。"
             },
             {
+              "id": "n101",
+              "line": 101,
+              "anchor": "self.connection.execute(\"INSERT OR REPLACE INTO versions (namespace, key, version)\"",
+              "text": "同一个事务里更新版本计数：记忆和计数要么一起写进去，要么一起回滚。"
+            },
+            {
               "id": "n95",
-              "line": 95,
+              "line": 105,
               "anchor": "self.connection.rollback()",
               "text": "任何异常都回滚，写了一半的数据不会留在库里。"
             }
@@ -375,66 +387,66 @@
           "id": "code-read-rules",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/store.py",
-          "start": 99,
-          "end": 131,
+          "start": 109,
+          "end": 141,
           "notes": [
             {
               "id": "n100",
-              "line": 100,
+              "line": 110,
               "anchor": "def expired(row: dict, now: float | None = None) -> bool:",
               "text": "到期判断：get、store.recall 和 put 都调用它。"
             },
             {
               "id": "n102",
-              "line": 102,
+              "line": 112,
               "anchor": "return row[\"expires_at\"] is not None and row[\"expires_at\"] <=",
               "text": "expires_at 不为空且已经过去，就算到期。它只决定读不读得到，不动表里的数据。"
             },
             {
               "id": "n104",
-              "line": 104,
+              "line": 114,
               "anchor": "def skip_reason(self, item: dict, task_id: str | None, now: float | None = None) -> str | None:",
               "text": "store.recall 对每条记录调用它，返回跳过的原因。"
             },
             {
               "id": "n109",
-              "line": 109,
+              "line": 119,
               "anchor": "if item[\"scope\"] == \"current_task\" and item[\"task_id\"] != task_id:",
               "text": "current_task 只在 task_id 相同时召回；别的任务的记录留在库里，但不带上。"
             },
             {
               "id": "n115",
-              "line": 115,
+              "line": 125,
               "anchor": "return self.connection.execute(\"SELECT 1 FROM memories WHERE namespace=? AND key=?\",",
               "text": "stored 不经过到期判断，只看这一行在不在。"
             },
             {
               "id": "n120",
-              "line": 120,
+              "line": 130,
               "anchor": "with self.connection:",
               "text": "with 块正常结束就提交，出错就回滚。"
             },
             {
               "id": "n121",
-              "line": 121,
+              "line": 131,
               "anchor": "cursor = self.connection.execute(\"DELETE FROM memories WHERE namespace=? AND key=?\",",
-              "text": "删除是存储操作：这一行从表里移除。"
+              "text": "删除是存储操作：记忆这一行从表里移除；版本表里的计数不动。"
             },
             {
               "id": "n123",
-              "line": 123,
+              "line": 133,
               "anchor": "return cursor.rowcount == 1",
               "text": "真的删掉了一行才返回 True；删一个不存在的键返回 False。"
             },
             {
               "id": "n125",
-              "line": 125,
+              "line": 135,
               "anchor": "def end_task(self, namespace: str, task_id: str) -> int:",
               "text": "任务结束时调用，返回清掉了几行。"
             },
             {
               "id": "n129",
-              "line": 129,
+              "line": 139,
               "anchor": "\"DELETE FROM memories WHERE namespace=? AND scope='current_task' AND task_id=?\",",
               "text": "只删这个任务的 current_task；persistent 和别的任务的记录都不动。"
             }
