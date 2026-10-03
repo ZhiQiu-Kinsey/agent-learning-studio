@@ -73,6 +73,7 @@ export function EventDetail({
   const reducedMotion = useReducedMotion();
   const focus = useEvidenceFocus();
   const markRef = useRef<HTMLElement>(null);
+  const revealed = useRef<typeof focus>(null);
   const event = s.active;
   const body = event ? shownValue(event) : null;
   const activeIndex = event ? s.visible.indexOf(event) : -1;
@@ -83,12 +84,14 @@ export function EventDetail({
       : null;
   const mark = field !== null ? (printed.ranges.get(field) ?? null) : null;
   useEffect(() => {
-    if (focus?.reveal && mark)
-      markRef.current?.scrollIntoView({
-        block: "center",
-        behavior: reducedMotion ? "auto" : "smooth",
-      });
-    // Only a new focus scrolls; re-renders of the same one leave the page alone.
+    // Each "locate" scrolls once: replay or stepping back onto this event later
+    // frames the field again but leaves the page where the learner put it.
+    if (!focus?.reveal || !mark || revealed.current === focus) return;
+    revealed.current = focus;
+    markRef.current?.scrollIntoView({
+      block: "center",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, mark?.from]);
   return (

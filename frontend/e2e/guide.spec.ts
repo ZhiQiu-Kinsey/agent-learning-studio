@@ -81,7 +81,11 @@ test("the guide frames each step's evidence under a mask that ignores clicks", a
     t("common:tour.position", { current: 2, total }),
   );
 
-  await page.keyboard.press("ArrowRight");
+  // A held key repeats; only the first press moves the guide.
+  await page.keyboard.down("ArrowRight");
+  await page.keyboard.down("ArrowRight");
+  await page.keyboard.down("ArrowRight");
+  await page.keyboard.up("ArrowRight");
   await expect(position).toHaveText(
     t("common:tour.position", { current: 3, total }),
   );
@@ -136,4 +140,24 @@ test("locating an observe point frames its field in the event inspector", async 
   const field = page.locator("[data-evidence-mark]");
   await expect(field).toContainText('"content"');
   await expect(field).toBeInViewport();
+
+  // Locating scrolls once. Stepping the replay back onto the same event later
+  // frames the field again but leaves the page where the learner scrolled it.
+  // Let locate's smooth scroll finish before scrolling away.
+  await expect
+    .poll(async () => {
+      const before = await page.evaluate(() => window.scrollY);
+      await page.waitForTimeout(150);
+      return before === (await page.evaluate(() => window.scrollY));
+    })
+    .toBe(true);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // Lab shortcuts listen on the page; take focus off the locate button first.
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowRight");
+  await expect(field).toContainText('"content"');
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
