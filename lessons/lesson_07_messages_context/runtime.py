@@ -131,7 +131,7 @@ def rejection_status(error: Exception) -> int | None:
     """服务商拒绝了这组消息时返回 HTTP 状态码；别的失败返回 None，由调用方照常抛出。"""
     status = getattr(error, "status_code", None)
     # 只有 4xx 是服务商对请求本身的判断。鉴权失败（401、403）、找不到模型（404）、
-    # 超时（408）和限流（429）说的是配置或服务商当时的状态；5xx 是服务端故障。它们都不是这组消息的问题。
+    # 超时（408）和限流（429）说的是配置或服务商当时的状态；5xx 是服务商那边的故障。它们都不是这组消息的问题。
     if isinstance(status, int) and 400 <= status < 500 and status not in {401, 403, 404, 408, 429}:
         return status
     return None

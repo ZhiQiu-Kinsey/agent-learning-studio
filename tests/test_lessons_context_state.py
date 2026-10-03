@@ -142,7 +142,7 @@ class MessagesContextTests(unittest.TestCase):
                 self.assertEqual(of(events, "lesson.report"), [])
 
     def test_rejection_status_counts_only_request_level_4xx(self):
-        for status, expected in ((400, 400), (413, 413), (422, 422), (401, None), (404, None),
+        for status, expected in ((400, 400), (413, 413), (422, 422), (401, None), (403, None), (404, None),
                                  (408, None), (429, None), (500, None), (503, None)):
             with self.subTest(status=status):
                 self.assertEqual(context_runtime.rejection_status(ProviderHTTPError("x", status)), expected)
