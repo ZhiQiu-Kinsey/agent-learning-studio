@@ -1,4 +1,4 @@
-"""编排与评估课行为测试：确定性模型数据；格式检查、并行工人与评估循环在 Python 中真实执行。"""
+"""编排与评估课行为测试：确定性模型数据；格式检查、并行工人与修订循环在 Python 中真实执行。"""
 import json
 import unittest
 
@@ -88,6 +88,9 @@ class PatternTests(unittest.TestCase):
         drafts = of(events, "lesson.draft")
         self.assertIn("修订版", drafts[1]["question"]["question"])
         self.assertIsNotNone(drafts[1]["previous"])
+        # 只有修订稿带 revises，值是被修订那一版的 version；第一版没有这个字段。
+        self.assertNotIn("revises", drafts[0])
+        self.assertEqual(drafts[1]["revises"], drafts[0]["version"])
         self.assertEqual(metric(events, "停止原因"), "评审通过")
         self.assertEqual(len(of(events, "request")), 4)
         self.assertIn("停止原因：评审通过", answer)
@@ -104,6 +107,9 @@ class PatternTests(unittest.TestCase):
         self.assertEqual({r["source"] for r in reviews}, {"format-check"}, "格式不对时不必请评估者")
         self.assertEqual(len(of(events, "request")), 2)
         self.assertEqual(metric(events, "累计 total_tokens"), "未报告")
+        # 第一版没请评估者，修订稿落在第 2 轮而不是第 3 轮；revises 仍只出现在修订稿上。
+        drafts = [(number, "revises" in data) for kind, data, number in events if kind == "lesson.draft"]
+        self.assertEqual(drafts, [(1, False), (2, True)])
 
     def test_inputs_and_cancel(self):
         with self.assertRaises(ValidationError):

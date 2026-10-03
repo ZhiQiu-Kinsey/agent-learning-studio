@@ -14,7 +14,7 @@
 
 格式检查通过不代表题出得好，题目质量需要阅读判断。`fixtures.py` 只服务自动化测试，其中评估者第一次固定要求修订、用量数字都是脚本写的。
 
-两种模式参考 [claude-cookbooks](https://github.com/anthropics/claude-cookbooks)（MIT）`patterns/agents/orchestrator_workers.ipynb` 与 `evaluator_optimizer.ipynb`。原示例的工人串行执行、评估循环没有上限；本课改为并行工人和有上限的循环。任务、格式检查与实验由本项目编写。
+两种模式参考 [claude-cookbooks](https://github.com/anthropics/claude-cookbooks)（MIT）`patterns/agents/orchestrator_workers.ipynb` 与 `evaluator_optimizer.ipynb`。原示例的工人串行执行、修订循环没有迭代上限；本课改为并行工人，修订循环设迭代上限。任务、格式检查与实验由本项目编写。
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_orchestrator_evaluator.test_lesson -v
