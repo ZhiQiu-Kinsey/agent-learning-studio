@@ -47,14 +47,14 @@ const chapter = {
 } as unknown as Chapter;
 
 describe("chapterGlossaryTexts", () => {
-  it("follows the render order: opening attachments, then each section and what follows it", () => {
+  it("follows the render order, but deep-dives come after all the main text", () => {
     expect(chapterGlossaryTexts(readChapter(chapter))).toEqual([
-      "lead summary",
-      "lead body",
       "p1",
       "c1",
       "c2",
       "p2",
+      "lead summary",
+      "lead body",
       "dive body",
     ]);
   });

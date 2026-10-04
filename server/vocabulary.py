@@ -100,9 +100,12 @@ def name_used(name, text):
 
 
 def marked_texts(model):
-    """网页会标注术语的文字，按阅读顺序；与 frontend/src/content/glossary/texts.ts 的 blockTexts 一致，
-    再加实验里的观察要点（理解页末尾的“运行时观察”）。标题、选项等不加下划线，不在其中。"""
+    """网页会标注术语的文字，按认领顺序；与 frontend/src/content/glossary/texts.ts 的
+    blockTexts / readingTexts 一致：所有“深入一层”块（默认折叠）排在其余块之后，主线正文优先认领术语；
+    只在深入块里出现的术语仍由深入块认领。再加实验里的观察要点（理解页末尾的“运行时观察”）。
+    标题、选项等不加下划线，不在其中。"""
     values = []
+    dives = []
     blocks = model.scenes.understand.blocks if model.scenes.understand else []
     for block in blocks:
         kind = block.type
@@ -111,7 +114,7 @@ def marked_texts(model):
         elif kind in ("prose", "callout"):
             values += block.paragraphs
         elif kind == "deep-dive":
-            values += [*([block.summary] if block.summary else []), *block.paragraphs]
+            dives += [*([block.summary] if block.summary else []), *block.paragraphs]
         elif kind == "walkthrough":
             values += [step.body for step in block.steps]
         elif kind == "steps":
@@ -120,6 +123,7 @@ def marked_texts(model):
             values += [*block.paragraphs, *(cell for row in block.rows for cell in row)]
         elif kind == "misconception":
             values += [block.claim, block.correction]
+    values += dives
     if model.scenes.lab:
         values += [point.text for experiment in model.scenes.lab.experiments for point in experiment.observe]
     return values

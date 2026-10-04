@@ -14,21 +14,31 @@ export const readChapter = (chapter: Chapter): ChapterContent => ({
 /**
  * Glossary-eligible texts in reading order: opening attachments, then each
  * section followed by the attachments authored after it. Mirrors the render
- * order so the first occurrence of a term is the one the learner meets first.
+ * order so the first occurrence of a term is the one the learner meets first,
+ * except that deep-dives (folded by default) come last, after all the main
+ * text, so the main text claims a term before a folded block does.
  */
 export function chapterGlossaryTexts(chapter: ChapterContent): string[] {
   const after = (id: string | null) =>
-    chapter.attachments
-      .filter((attachment) => attachment.after === id)
+    chapter.attachments.filter((attachment) => attachment.after === id);
+  const mainTexts = (id: string | null) =>
+    after(id)
+      .filter(({ block }) => block.type !== "deep-dive")
+      .flatMap(({ block }) => blockTexts(block));
+  const diveTexts = (id: string | null) =>
+    after(id)
+      .filter(({ block }) => block.type === "deep-dive")
       .flatMap(({ block }) => blockTexts(block));
   return [
-    ...after(null),
+    ...mainTexts(null),
     ...chapter.sections.flatMap((section) => [
       ...section.paragraphs,
       ...(section.bullets ?? []),
       ...(section.table?.rows.flat() ?? []),
-      ...after(section.id),
+      ...mainTexts(section.id),
     ]),
+    ...diveTexts(null),
+    ...chapter.sections.flatMap((section) => diveTexts(section.id)),
   ];
 }
 

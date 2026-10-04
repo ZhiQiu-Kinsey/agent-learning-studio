@@ -26,3 +26,18 @@ export function blockTexts(block: Block): string[] {
       return [];
   }
 }
+
+/**
+ * Glossary-eligible texts of a list of blocks in claiming order: every
+ * non-deep-dive block first, then all deep-dives. A deep-dive is folded by
+ * default, so a term that also appears in the main text is marked there; a
+ * term only a deep-dive uses is still claimed by it. Keep in step with
+ * `marked_texts` in server/vocabulary.py.
+ */
+export function readingTexts(blocks: readonly Block[]): string[] {
+  const isDive = (block: Block) => block.type === "deep-dive";
+  return [
+    ...blocks.filter((block) => !isDive(block)).flatMap(blockTexts),
+    ...blocks.filter(isDive).flatMap(blockTexts),
+  ];
+}

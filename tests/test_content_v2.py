@@ -102,6 +102,27 @@ class SchemaTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     LessonContent.model_validate(with_block(**block))
 
+    def test_deep_dive_texts_come_after_the_main_text(self):
+        # 深入块默认折叠：无论写在哪里，术语都先由主线正文认领。
+        data = self.valid()
+        blocks = data["scenes"]["understand"]["blocks"]
+        blocks.insert(0, {"type": "deep-dive", "id": "dive", "title": "手算一遍",
+                          "summary": "深入概述", "paragraphs": ["深入正文"]})
+        blocks.append({"type": "prose", "id": "late-prose", "title": "末段", "paragraphs": ["最后的正文"]})
+        texts = marked_texts(LessonContent.model_validate(data))
+        self.assertLess(texts.index("最后的正文"), texts.index("深入概述"))
+        self.assertEqual(texts.index("深入正文"), texts.index("深入概述") + 1)
+        self.assertEqual([text for text in texts if text.startswith("深入")], ["深入概述", "深入正文"])
+
+    def test_term_in_main_text_and_deep_dive_is_owned_by_main_text(self):
+        data = self.valid()
+        blocks = data["scenes"]["understand"]["blocks"]
+        blocks.insert(0, {"type": "deep-dive", "id": "dive", "title": "t", "paragraphs": ["深入里讲工具结果"]})
+        blocks.append({"type": "prose", "id": "late-prose", "title": "末段", "paragraphs": ["正文里讲工具结果"]})
+        texts = marked_texts(LessonContent.model_validate(data))
+        mentions = [text for text in texts if "工具结果" in text]
+        self.assertEqual(mentions, ["正文里讲工具结果", "深入里讲工具结果"])
+
     def test_onboarding_chapters_only_use_understand_and_check(self):
         data = migrate(json.loads((ROOT / "curriculum" / "onboarding.json").read_text(encoding="utf-8")),
                        ONBOARDING_STEPS)

@@ -20,7 +20,7 @@ import {
   GlossaryScope,
   GlossaryText,
 } from "../glossary/Glossary";
-import { blockTexts } from "../glossary/texts";
+import { readingTexts } from "../glossary/texts";
 import Shuffle from "../../components/react-bits/Shuffle";
 import { MicroQuizBlock } from "./MicroQuizBlock";
 import { PredictBlock } from "./PredictBlock";
@@ -54,7 +54,7 @@ export function UnderstandBlocks({
   const reduced = useReducedMotion();
   const content = detail.learning;
   const blocks = sceneBlocks(content, "understand");
-  const texts = useMemo(() => blocks.flatMap(blockTexts), [blocks]);
+  const texts = useMemo(() => readingTexts(blocks), [blocks]);
   const hero = blocks.find((block) => block.type === "hero");
   const observe =
     content?.scenes.lab?.experiments.flatMap((item) => item.observe) ?? [];

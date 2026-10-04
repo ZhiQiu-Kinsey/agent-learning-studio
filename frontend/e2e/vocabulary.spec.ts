@@ -18,6 +18,8 @@ test("lesson prose separates new, review and background terms and explains code 
   await expect(
     reading.locator("[data-testid='glossary-term'][data-term='task-card']"),
   ).toHaveAttribute("data-tier", "new");
+  // The main text claims a term before a folded deep-dive does, so the mark
+  // is visible without opening anything.
   await expect(
     reading
       .locator("[data-testid='glossary-term'][data-term='tool-result']")
