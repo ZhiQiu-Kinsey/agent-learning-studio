@@ -67,14 +67,21 @@ export function resolveGuide(
 export type ObserveStatus =
   | { id: string; text: string; status: "no-run" }
   | { id: string; text: string; status: "found"; index: number }
+  /** The run is still going: the evidence may simply not have arrived yet. */
+  | { id: string; text: string; status: "pending" }
   | { id: string; text: string; status: "missing" }
   /** A plain-text hint without a selector: the learner checks it by reading. */
   | { id: string; text: string; status: "manual" };
 
-/** Evidence status of every observe point against the learner's current run. */
+/**
+ * Evidence status of every observe point against the learner's current run.
+ * While the run is in progress an unmatched point is "pending", not "missing":
+ * only a finished run can prove the evidence never appeared.
+ */
 export function observeStatus(
   experiment: Experiment,
   events: readonly Trace[],
+  inProgress = false,
 ): ObserveStatus[] {
   return experiment.observe.map((point) => {
     if (!point.selector)
@@ -86,6 +93,10 @@ export function observeStatus(
       : { found: false as const };
     return result.found
       ? { id: point.id, text: point.text, status: "found", index: result.index }
-      : { id: point.id, text: point.text, status: "missing" };
+      : {
+          id: point.id,
+          text: point.text,
+          status: inProgress ? "pending" : "missing",
+        };
   });
 }

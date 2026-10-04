@@ -107,4 +107,13 @@ describe("observeStatus", () => {
       "manual",
     ]);
   });
+
+  it("keeps unmatched evidence pending while the run is still going", () => {
+    expect(
+      observeStatus(experiment, run, true).map((item) => item.status),
+    ).toEqual(["found", "found", "pending", "manual"]);
+    expect(
+      observeStatus(experiment, [], true).map((item) => item.status),
+    ).toEqual(["no-run", "no-run", "no-run", "manual"]);
+  });
 });

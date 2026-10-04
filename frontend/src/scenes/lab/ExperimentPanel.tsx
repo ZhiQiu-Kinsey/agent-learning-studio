@@ -7,6 +7,7 @@ import {
   Eye,
   FlaskConical,
   Check,
+  Hourglass,
 } from "lucide-react";
 import type { StudioState } from "../../hooks/useStudio";
 import type { ObserveStatus } from "../../content/guide";
@@ -19,6 +20,7 @@ import { armRunnable } from "./experimentRun";
 const statusIcon = {
   "no-run": Clock3,
   found: CircleCheck,
+  pending: Hourglass,
   missing: CircleAlert,
   manual: Eye,
 } as const;

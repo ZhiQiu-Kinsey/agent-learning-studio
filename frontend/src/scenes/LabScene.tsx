@@ -56,7 +56,9 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
     ? evidenceEvents(experiment, studio.runExerciseId, studio.events)
     : [];
   const finished = evidence.at(-1)?.type === "done";
-  const statuses = experiment ? observeStatus(experiment, evidence) : [];
+  const statuses = experiment
+    ? observeStatus(experiment, evidence, studio.running && !finished)
+    : [];
   const pathOf = (id: string) =>
     experiment?.observe.find((point) => point.id === id)?.selector?.path ??
     null;
