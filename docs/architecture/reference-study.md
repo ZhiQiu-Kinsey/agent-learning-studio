@@ -101,3 +101,33 @@
 | [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) | `04d809ceab9df28f9adaed044884180159172930` | MIT（仓库 `LICENSE.md`，Copyright (c) 2025 Kilian A. Lieret and Carlos E. Jimenez） | `src/minisweagent/agents/default.py`、`src/minisweagent/config/default.yaml`、`src/minisweagent/config/mini_textbased.yaml`、`src/minisweagent/models/utils/actions_text.py` | 借鉴结构：最小 Agent 循环的写法，以及文本动作（从回复里解析动作、解析失败时回传格式错误）与原生工具调用并存的做法。不复制代码或配置；它会把 `os.environ` 原样传给子进程，本项目不沿用这一点（见 `curriculum-research.md`） |
 
 参考仓库在本机多是稀疏克隆，`ls` 看不到的文件不代表仓库没有。核对阅读范围以 `git ls-tree -r --name-only <commit>` 为准。
+
+## 9. Claude Code 官方文档：课程里“对照 Claude Code 公开做法”的段落（2026-10-04）
+
+多门课加了“对照 Claude Code 的公开做法”段落，引用了官方文档。登记如下。
+
+- **资料**：[Claude Code 官方文档](https://code.claude.com/docs)，阅读日期 2026-10-04。
+- **性质**：产品文档，没有固定版本，内容会随产品更新。课程里这类段落都写了“以官方文档为准”，不当作稳定规范。
+- **借鉴方式**：只引用页面上明确写着的行为，用自己的话概括并给出链接，不复制正文、示例和配图。页面没写的行为不推测。
+- **不是**上游代码或正文的复用，不进入 `THIRD_PARTY_NOTICES.md`。
+
+引用的页面（路径均在 `https://code.claude.com/docs/en/` 之下，由 `lessons/*/content.json` 中的链接去重得到）：
+
+| 页面 | 引用它的课 |
+| --- | --- |
+| `permissions` | `tool-selection`、`fail-safely`、`tool-proposals` |
+| `tools-reference`、`tools-reference#task-tool-availability` | `dependent-calls`、`fail-safely`、`text-actions`、`todo-planning` |
+| `best-practices`（`#give-claude-a-way-to-verify-its-work`、`#explore-first-then-plan-then-code`、`#add-an-adversarial-review-step`） | `task-contract`、`reflection-revision`、`plan-and-replan`、`orchestrator-evaluator` |
+| `hooks`、`hooks-guide`（`#stop-hook-hits-the-block-cap`） | `task-contract`、`reflection-revision`、`workflow-patterns` |
+| `agent-sdk/structured-outputs` | `structured-output` |
+| `agent-sdk/todo-tracking` | `todo-planning` |
+| `memory` | `prompt-experiments`、`messages-context`、`persistent-memory`、`memory-lifecycle` |
+| `context-window` | `messages-context`、`application-state`、`context-compaction` |
+| `how-claude-code-works` | `application-state`、`context-compaction`、`multi-turn-history` |
+| `costs` | `context-budget`、`chat-request`、`multi-turn-history` |
+| `prompt-caching` | `prompt-caching` |
+| `skills` | `skills-disclosure` |
+| `sub-agents` | `orchestrator-evaluator` |
+| `permission-modes#analyze-before-you-edit-with-plan-mode` | `plan-and-replan` |
+
+课程 slug 与目录名的对应以 `curriculum/catalog.json` 为准；上表按 `lessons/lesson_*/content.json` 的目录名去掉前缀和序号写出。
