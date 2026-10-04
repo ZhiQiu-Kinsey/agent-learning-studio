@@ -19,7 +19,9 @@ test("lesson prose separates new, review and background terms and explains code 
     reading.locator("[data-testid='glossary-term'][data-term='task-card']"),
   ).toHaveAttribute("data-tier", "new");
   await expect(
-    reading.locator("[data-testid='glossary-term'][data-term='tool-result']"),
+    reading
+      .locator("[data-testid='glossary-term'][data-term='tool-result']")
+      .first(),
   ).toHaveAttribute("data-tier", "review");
 
   // A field of the task card: shown as code, with the lesson's note on hover.
