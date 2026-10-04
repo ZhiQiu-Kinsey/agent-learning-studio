@@ -1,5 +1,11 @@
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ExternalLink, Info, ShieldAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  ExternalLink,
+  Info,
+  Layers,
+  ShieldAlert,
+} from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -140,7 +146,10 @@ export function DeepDiveBlock({ block }: { block: BlockOf<"deep-dive"> }) {
       <AccordionItem value={block.id}>
         <AccordionTrigger className="deep-dive-trigger hover:no-underline">
           <span className="deep-dive-heading">
-            <span className="deep-dive-label">{t("label")}</span>
+            <span className="deep-dive-label">
+              <Layers size={12} aria-hidden="true" />
+              {t("label")}
+            </span>
             <strong>{block.title}</strong>
           </span>
         </AccordionTrigger>
@@ -161,24 +170,41 @@ export function DeepDiveBlock({ block }: { block: BlockOf<"deep-dive"> }) {
   );
 }
 
+/** Reading sources, folded by default: they are for later, not for the main line. */
 export function ReferencesBlock({ block }: { block: BlockOf<"references"> }) {
   const { t } = useTranslation("blocks", { keyPrefix: "references" });
   return (
-    <section
+    <Accordion
+      type="single"
+      collapsible
       className="content-block content-references"
       data-testid="block-references"
     >
-      <h3>{t("title")}</h3>
-      <ul>
-        {block.items.map((item) => (
-          <li key={item.id}>
-            <a href={item.url} target="_blank" rel="noreferrer">
-              {item.title}
-              <ExternalLink size={12} aria-hidden="true" />
-            </a>
-          </li>
-        ))}
-      </ul>
-    </section>
+      <AccordionItem value={block.id}>
+        <AccordionTrigger
+          className="references-trigger hover:no-underline"
+          data-testid="block-references-trigger"
+        >
+          <span className="references-heading">
+            <strong>{t("title")}</strong>
+            <span className="references-count">
+              {t("count", { n: block.items.length })}
+            </span>
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="references-body">
+          <ul>
+            {block.items.map((item) => (
+              <li key={item.id}>
+                <a href={item.url} target="_blank" rel="noreferrer">
+                  {item.title}
+                  <ExternalLink size={12} aria-hidden="true" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
