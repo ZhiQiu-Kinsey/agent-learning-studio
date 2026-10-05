@@ -135,6 +135,13 @@ class LessonExperimentTests(unittest.TestCase):
                 labels = [experiment.title] + [arm.label for arm in experiment.arms]
                 self.assertTrue(any(f"“{label}”" in block.prompt for label in labels),
                                 "预测题要写明在哪个实验或哪一组上核对")
+                # 前端只拿 arm 那一组练习的运行判定；题目点名的组必须就是 arm，不能点名别的组。
+                target = next(arm for arm in experiment.arms if arm.id == block.arm) if block.arm \
+                    else experiment.arms[0]
+                self.assertTrue(block.arm or len(experiment.arms) == 1, "多组实验的预测要写 arm")
+                others = [arm.label for arm in experiment.arms if arm is not target and arm.label]
+                self.assertFalse([label for label in others if f"“{label}”" in block.prompt],
+                                 "预测题点名的组与 arm 不一致")
                 rule = block.rule
                 self.assertTrue(rule.event in SPAN_EVENTS or rule.event.startswith(INSTANT_PREFIXES))
                 if rule.name:

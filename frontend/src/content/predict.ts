@@ -1,5 +1,33 @@
 import type { Trace } from "../types";
-import type { CountEvents } from "./types.gen";
+import type { Arm, CountEvents, Experiment, Predict } from "./types.gen";
+
+/**
+ * The arm a prediction is about: the one the block names, or the experiment's
+ * only arm. Null when the experiment is missing or the arm cannot be told
+ * (the content schema rejects a multi-arm experiment without `arm`).
+ */
+export function predictArm(
+  block: Pick<Predict, "experiment" | "arm">,
+  experiments: readonly Experiment[],
+): Arm | null {
+  const experiment = experiments.find((item) => item.id === block.experiment);
+  if (!experiment) return null;
+  if (block.arm)
+    return experiment.arms.find((arm) => arm.id === block.arm) ?? null;
+  return experiment.arms.length === 1 ? experiment.arms[0] : null;
+}
+
+/**
+ * Only a run of the predicted arm's exercise answers the prediction. Events of
+ * another exercise (the other arm, say) stay on stage but count as "not run".
+ */
+export function predictEvents(
+  exerciseId: string | null | undefined,
+  runExerciseId: string,
+  events: readonly Trace[],
+): readonly Trace[] {
+  return exerciseId && runExerciseId === exerciseId ? events : [];
+}
 
 /** Tool name as it appears on real tool events (call payload or result). */
 function toolName(event: Trace): string | undefined {

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { prefersReducedMotionNow } from "../motion";
 import { UnderstandBlocks } from "../content/blocks/UnderstandBlocks";
 import { LessonExtension } from "../lesson-extensions/LessonExtension";
+import { armRunnable } from "./lab/experimentRun";
 import Dock from "../components/react-bits/Dock";
 import type { SceneProps } from "./types";
 import "../styles/learning-experience.css";
@@ -32,7 +33,18 @@ export function UnderstandScene({ studio, active, goTo }: SceneProps) {
             <UnderstandBlocks
               detail={detail}
               events={studio.events}
-              onRun={() => goTo("lab")}
+              runExerciseId={studio.runExerciseId}
+              onRun={(exercise) => {
+                // Land on the predicted exercise; while a run is going the lab stays as is.
+                if (
+                  exercise &&
+                  exercise !== studio.exerciseId &&
+                  !studio.running &&
+                  armRunnable(exercise, detail.exercises)
+                )
+                  studio.selectExercise(exercise);
+                goTo("lab");
+              }}
             />
           </LessonExtension>
         </div>

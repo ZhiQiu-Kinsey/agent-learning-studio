@@ -231,9 +231,15 @@ class CountEvents(Strict):
 
 
 class Predict(Block):
+    """先写预测，再只拿学习者自己运行的那一组核对。
+
+    arm 指实验里被预测的那一组：前端只用这一组练习的运行判定一致与否，别的练习的运行不算。
+    实验只有一组时可以不写；有多组时必须写明。
+    """
     type: Literal["predict"]
     prompt: Text
     experiment: Id
+    arm: Id | None = None
     rule: CountEvents
 
 
@@ -474,15 +480,21 @@ def _validate_document(scenes: Scenes, illustrations: dict[str, Illustration]) -
               if scene for block in scene.blocks]
     experiments = scenes.lab.experiments if scenes.lab else []
     _unique(_block_ids(blocks) + [experiment.id for experiment in experiments], "块与实验")
-    experiment_ids = {experiment.id for experiment in experiments}
+    experiments_by_id = {experiment.id: experiment for experiment in experiments}
     predict_ids = set()
     for block in blocks:
         if isinstance(block, Flow) and block.illustration not in illustrations:
             raise ValueError(f"flow {block.id} 引用了不存在的示意 {block.illustration}")
         if isinstance(block, Predict):
             predict_ids.add(block.id)
-            if block.experiment not in experiment_ids:
+            experiment = experiments_by_id.get(block.experiment)
+            if experiment is None:
                 raise ValueError(f"predict {block.id} 引用了不存在的实验 {block.experiment}")
+            arm_ids = [arm.id for arm in experiment.arms]
+            if block.arm is None and len(arm_ids) > 1:
+                raise ValueError(f"predict {block.id} 的实验 {experiment.id} 有多组，要用 arm 写明和哪一组核对")
+            if block.arm is not None and block.arm not in arm_ids:
+                raise ValueError(f"predict {block.id} 引用了实验 {experiment.id} 中不存在的组 {block.arm}")
     for experiment in experiments:
         if experiment.predict and experiment.predict not in predict_ids:
             raise ValueError(f"实验 {experiment.id} 引用了不存在的预测块 {experiment.predict}")

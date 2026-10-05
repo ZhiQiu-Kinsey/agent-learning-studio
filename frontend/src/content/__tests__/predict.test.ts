@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Trace } from "../../types";
-import { evaluatePredict } from "../predict";
+import { evaluatePredict, predictArm, predictEvents } from "../predict";
+import type { Experiment } from "../types.gen";
 
 const event = (
   type: string,
@@ -90,6 +91,62 @@ describe("evaluatePredict", () => {
     ).toEqual({
       status: "no-run",
     });
+  });
+
+  it("checks only a run of the predicted arm's exercise", () => {
+    // multi-turn-history: the question is about "without-history"; a run of
+    // "with-history" on screen must not be called a match or a mismatch.
+    const experiments = [
+      {
+        id: "history-or-not",
+        arms: [
+          { id: "with-history", exercise: "with-history" },
+          { id: "without-history", exercise: "without-history" },
+        ],
+      },
+      { id: "growing", arms: [{ id: "three", exercise: "three-turns" }] },
+    ] as unknown as Experiment[];
+    const rule = {
+      kind: "count_events",
+      event: "request",
+      name: null,
+    } as const;
+    const arm = predictArm(
+      { experiment: "history-or-not", arm: "without-history" },
+      experiments,
+    );
+    expect(arm?.exercise).toBe("without-history");
+    expect(
+      evaluatePredict(
+        rule,
+        predictEvents(arm?.exercise, "with-history", run),
+        1,
+      ),
+    ).toEqual({ status: "no-run" });
+    expect(
+      evaluatePredict(rule, predictEvents(arm?.exercise, "", run), 1),
+    ).toEqual({ status: "no-run" });
+    expect(
+      evaluatePredict(
+        rule,
+        predictEvents(arm?.exercise, "without-history", run),
+        1,
+      ),
+    ).toEqual({ status: "computed", actual: 1, matches: true });
+    // A single-arm experiment needs no arm; an unknown arm or experiment binds nothing.
+    expect(
+      predictArm({ experiment: "growing", arm: null }, experiments)?.exercise,
+    ).toBe("three-turns");
+    expect(
+      predictArm({ experiment: "history-or-not", arm: null }, experiments),
+    ).toBeNull();
+    expect(
+      predictArm({ experiment: "history-or-not", arm: "nope" }, experiments),
+    ).toBeNull();
+    expect(
+      predictArm({ experiment: "nope", arm: null }, experiments),
+    ).toBeNull();
+    expect(predictEvents(null, "with-history", run)).toEqual([]);
   });
 
   it("treats legacy v1 events without provenance as the learner's own run", () => {

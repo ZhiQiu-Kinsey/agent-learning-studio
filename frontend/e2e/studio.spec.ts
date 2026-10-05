@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { CurriculumData, Detail } from "../src/types";
 import { isRunCreation, mockRunStream, runOffline } from "./runs";
-import { t } from "./i18n";
+import { t, tPattern } from "./i18n";
 import { chooseExercise, openLessonById } from "./navigation";
 import { lessonView } from "../src/content/view";
 
@@ -643,6 +643,52 @@ test("settings say the key is missing instead of connected, and the provider lis
     .toBe(true);
   const menu = (await page.getByRole("listbox").boundingBox())!;
   expect(menu.y + menu.height).toBeLessThanOrEqual(box.y + box.height + 1);
+});
+
+test("a prediction is checked only against a run of the exercise it asks about", async ({
+  page,
+  request,
+}) => {
+  const detail: Detail = await (
+    await request.get("/api/lessons/multi-turn-history")
+  ).json();
+  const blocks = detail.learning!.scenes.understand!.blocks;
+  const block = blocks.find((item) => item.type === "predict")!;
+  if (block.type !== "predict") throw new Error("predict block missing");
+  const experiment = detail.learning!.scenes.lab!.experiments.find(
+    (item) => item.id === block.experiment,
+  )!;
+  const arm = experiment.arms.find((item) => item.id === block.arm)!;
+  const exercises: unknown[] = [];
+  page.on("request", (req) => {
+    if (isRunCreation(req)) exercises.push(req.postDataJSON().exercise_id);
+  });
+  await page.goto("/");
+  await openLessonById(page, request, "multi-turn-history");
+  const stage = page.getByTestId("agent-stage");
+  // Run the other arm first: its events must not decide the prediction.
+  await page.getByTestId("scene-tab-lab").click();
+  await page.getByTestId("lab-run-button").click();
+  await expect.poll(() => exercises.length).toBe(1);
+  await expect(stage).toHaveAttribute("data-status", "completed");
+  expect(exercises).toEqual([experiment.arms[0].exercise]);
+  expect(experiment.arms[0].exercise).not.toBe(arm.exercise);
+  await page.getByTestId("scene-tab-understand").click();
+  const predict = page.getByTestId("predict-block");
+  const result = predict.getByTestId("predict-result");
+  await expect(result).toHaveAttribute("data-status", "no-run");
+  await expect(result).toHaveText(
+    t("blocks:predict.noRunArm", { arm: arm.label! }),
+  );
+  // "Go to the lab" lands on the predicted exercise; its run decides.
+  await predict.getByRole("button", { name: t("blocks:predict.go") }).click();
+  await page.getByTestId("lab-run-button").click();
+  await expect.poll(() => exercises.length).toBe(2);
+  await expect(stage).toHaveAttribute("data-status", "completed");
+  expect(exercises).toEqual([experiment.arms[0].exercise, arm.exercise]);
+  await page.getByTestId("scene-tab-understand").click();
+  await expect(result).not.toHaveAttribute("data-status", "no-run");
+  await expect(result).toHaveText(tPattern("blocks:predict.actual"));
 });
 
 test("settings dialog traps keyboard focus and Escape restores the opener", async ({

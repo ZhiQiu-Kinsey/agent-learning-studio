@@ -44,11 +44,15 @@ const conceptIcons = [Braces, Cpu, Network];
 export function UnderstandBlocks({
   detail,
   events,
+  runExerciseId,
   onRun,
 }: {
   detail: Detail;
   events: readonly Trace[];
-  onRun: () => void;
+  /** Which exercise `events` belong to; a prediction checks only its own. */
+  runExerciseId: string;
+  /** Open the lab, on this exercise when one is given. */
+  onRun: (exerciseId?: string | null) => void;
 }) {
   const { t } = useTranslation("blocks");
   const reduced = useReducedMotion();
@@ -171,7 +175,9 @@ export function UnderstandBlocks({
           <PredictBlock
             block={block}
             lessonId={detail.id}
+            experiments={content?.scenes.lab?.experiments ?? []}
             events={events}
+            runExerciseId={runExerciseId}
             onRun={onRun}
           />,
         );

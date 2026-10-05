@@ -78,6 +78,24 @@ class SchemaTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     LessonContent.model_validate(data)
 
+    def test_predict_names_the_arm_it_is_checked_against(self):
+        # 前端只拿被预测那一组的运行判定；多组实验不写 arm 就分不清，schema 直接拒绝。
+        data = self.valid()
+        experiment = data["scenes"]["lab"]["experiments"][0]
+        predict = {"type": "predict", "id": "guess", "prompt": "几次？", "experiment": experiment["id"],
+                   "rule": {"kind": "count_events", "event": "request"}}
+        data["scenes"]["understand"]["blocks"].append(predict)
+        self.assertEqual(len(experiment["arms"]), 1)
+        self.assertIsNone(LessonContent.model_validate(data).scenes.understand.blocks[-1].arm, "单组实验可以不写")
+        experiment["arms"].append({"id": "other", "exercise": "sum", "label": "另一组"})
+        with self.assertRaises(ValidationError):
+            LessonContent.model_validate(data)
+        predict["arm"] = "missing"
+        with self.assertRaises(ValidationError):
+            LessonContent.model_validate(data)
+        predict["arm"] = "other"
+        self.assertEqual(LessonContent.model_validate(data).scenes.understand.blocks[-1].arm, "other")
+
     def test_deep_dive_validates_and_its_texts_are_marked(self):
         def with_block(**block):
             data = self.valid()

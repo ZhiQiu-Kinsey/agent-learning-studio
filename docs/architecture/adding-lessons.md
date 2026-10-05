@@ -160,7 +160,7 @@
   - `conclusion`：`proves` 写能证明的，`does_not_prove` 写不能证明的。
 
   选择器的语义由 `server/selectors.py` 和 `frontend/src/content/selector.ts` 共同实现，两边跑同一份共享测试向量。`tests/test_lesson_experiments.py` 会用确定性运行逐个检查观察点和导览目标都能命中；在这次运行中找不到的证据，界面会如实显示“本次运行没有出现这条证据”。
-- **预测**：`predict` 只能用能从真实事件计算出的规则（`count_events`），只和学习者自己的运行对照，示意和录制都不算。
+- **预测**：`predict` 只能用能从真实事件计算出的规则（`count_events`），只和学习者自己的运行对照，示意和录制都不算。实验有多组时用 `arm` 写明预测的是哪一组，题目里用“”点名的也必须是这一组；网页只拿这一组练习的运行判定，屏幕上是别的练习的运行时显示“先运行这个练习”。
 - **示意**：`flow` 块引用 `illustrations` 中的合成事件序列。这些事件必须通过 `server/illustrations.py` 的契约：
   - 调用与结果成对；
   - 调用 id 使用示例 id（含 `example`）；

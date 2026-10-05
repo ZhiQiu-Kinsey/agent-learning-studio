@@ -247,11 +247,18 @@ export interface Quiz {
    */
   questions: [QuizQuestion, ...QuizQuestion[]];
 }
+/**
+ * 先写预测，再只拿学习者自己运行的那一组核对。
+ *
+ * arm 指实验里被预测的那一组：前端只用这一组练习的运行判定一致与否，别的练习的运行不算。
+ * 实验只有一组时可以不写；有多组时必须写明。
+ */
 export interface Predict {
   id: string;
   type: "predict";
   prompt: string;
   experiment: string;
+  arm: string | null;
   rule: CountEvents;
 }
 /**

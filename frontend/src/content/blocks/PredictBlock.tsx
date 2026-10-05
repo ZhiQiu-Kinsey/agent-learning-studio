@@ -4,8 +4,8 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import type { Trace } from "../../types";
-import { evaluatePredict } from "../predict";
-import type { Predict } from "../types.gen";
+import { evaluatePredict, predictArm, predictEvents } from "../predict";
+import type { Experiment, Predict } from "../types.gen";
 
 const storageKey = (lessonId: string, blockId: string) =>
   `agent-lab-predict:${lessonId}:${blockId}`;
@@ -21,25 +21,37 @@ function readPrediction(key: string): number | undefined {
 
 /**
  * Write a prediction first, verify it in the lab. The comparison is computed
- * only from the learner's own real events of this lesson.
+ * only from the learner's own real run of the exercise the prediction is
+ * about; a run of another exercise of the lesson does not count.
  */
 export function PredictBlock({
   block,
   lessonId,
+  experiments,
   events,
+  runExerciseId,
   onRun,
 }: {
   block: Predict;
   lessonId: string;
-  /** The current run's events; empty when this lesson has not been run. */
+  experiments: readonly Experiment[];
+  /** The run on screen; empty when this lesson has not been run. */
   events: readonly Trace[];
-  onRun: () => void;
+  /** Which exercise the run on screen belongs to. */
+  runExerciseId: string;
+  /** Open the lab, on the predicted exercise when there is one. */
+  onRun: (exerciseId: string | null) => void;
 }) {
   const { t } = useTranslation("blocks", { keyPrefix: "predict" });
   const key = storageKey(lessonId, block.id);
   const [saved, setSaved] = useState(() => readPrediction(key));
   const [draft, setDraft] = useState(saved === undefined ? "" : String(saved));
-  const outcome = evaluatePredict(block.rule, events, saved);
+  const arm = predictArm(block, experiments);
+  const outcome = evaluatePredict(
+    block.rule,
+    predictEvents(arm?.exercise, runExerciseId, events),
+    saved,
+  );
   const save = () => {
     const value = Number(draft);
     if (!Number.isInteger(value) || value < 0) return;
@@ -83,8 +95,12 @@ export function PredictBlock({
         <p className="predict-saved">{t("saved", { prediction: saved })}</p>
       )}
       {outcome.status === "no-run" ? (
-        <p className="predict-result" data-testid="predict-result">
-          {t("noRun")}
+        <p
+          className="predict-result"
+          data-testid="predict-result"
+          data-status="no-run"
+        >
+          {arm?.label ? t("noRunArm", { arm: arm.label }) : t("noRun")}
         </p>
       ) : (
         <p
@@ -97,7 +113,7 @@ export function PredictBlock({
             ` · ${outcome.matches ? t("match") : t("mismatch", { prediction: saved })}`}
         </p>
       )}
-      <Button size="sm" onClick={onRun}>
+      <Button size="sm" onClick={() => onRun(arm?.exercise ?? null)}>
         {t("go")}
         <ArrowRight size={14} />
       </Button>
