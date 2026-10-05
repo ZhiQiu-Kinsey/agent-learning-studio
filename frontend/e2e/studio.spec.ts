@@ -595,6 +595,56 @@ test("SDK events identify standardized data instead of claiming raw HTTP", async
   await expect(detail.locator("pre")).toContainText("test-model");
 });
 
+test("settings say the key is missing instead of connected, and the provider list fits inside the dialog", async ({
+  page,
+}) => {
+  // Address and model saved, no key: the server reports api_key_configured=false.
+  await page.route("**/api/status", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: {
+        ...(await response.json()),
+        config_ready: true,
+        api_key_configured: false,
+        requires_api_key: true,
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await page.goto("/");
+  const opener = page.getByTestId("app-connection-button");
+  await expect(opener).not.toHaveAttribute("data-ready");
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: t("settings:title") });
+  await expect(dialog.getByTestId("connection-missing-key")).toHaveText(
+    t("settings:keyNotConfigured"),
+  );
+  await expect(dialog.getByTestId("connection-ready")).toHaveCount(0);
+  const provider = page.getByRole("combobox", {
+    name: t("settings:provider"),
+    exact: true,
+  });
+  await expect(provider).toBeEnabled();
+  await provider.click();
+  await page.keyboard.press("End");
+  const box = (await dialog.boundingBox())!;
+  const last = page.getByRole("option").last();
+  await expect(last).toBeVisible();
+  // The last option is drawn inside the dialog, not cut off by its edge.
+  await expect
+    .poll(async () => {
+      const option = (await last.boundingBox())!;
+      return (
+        option.y >= box.y - 1 &&
+        option.y + option.height <= box.y + box.height + 1
+      );
+    })
+    .toBe(true);
+  const menu = (await page.getByRole("listbox").boundingBox())!;
+  expect(menu.y + menu.height).toBeLessThanOrEqual(box.y + box.height + 1);
+});
+
 test("settings dialog traps keyboard focus and Escape restores the opener", async ({
   page,
 }) => {

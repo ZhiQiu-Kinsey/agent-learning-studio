@@ -11,11 +11,31 @@ import {
   SIZES,
   PAD,
   GAP,
-  MENU_GAP,
+  menuPlacement,
   norm,
   typeaheadIndex,
 } from "./utils";
 import type { GlideSelectOption, GlideSelectProps } from "../GlideSelect";
+
+/** The viewport, cut down by every ancestor that scrolls or clips its content. */
+function visibleBounds(element: HTMLElement) {
+  let top = 0;
+  let bottom = window.innerHeight;
+  for (
+    let node = element.parentElement;
+    node && node !== document.documentElement;
+    node = node.parentElement
+  ) {
+    const style = getComputedStyle(node);
+    if (style.overflowY === "visible" && style.overflowX === "visible")
+      continue;
+    const rect = node.getBoundingClientRect();
+    // The padding box: content inside scrolls or is cut off there, not at the border.
+    top = Math.max(top, rect.top + node.clientTop);
+    bottom = Math.min(bottom, rect.top + node.clientTop + node.clientHeight);
+  }
+  return { top, bottom };
+}
 
 interface GlideSelectOptions {
   options: (string | GlideSelectOption)[];
@@ -67,15 +87,24 @@ export function useGlideSelect({
     const el = menuRef.current;
     const root = rootRef.current;
     if (!el || !root) return;
+    // Measure the full menu, then fit it inside what is actually visible: a
+    // dialog that scrolls clips the menu long before the window edge does.
+    el.style.maxHeight = "";
+    el.style.overflowY = "";
     const r = root.getBoundingClientRect();
-    const need = el.offsetHeight + MENU_GAP;
-    setSide(
-      placement === "bottom" && r.bottom + need > window.innerHeight
-        ? "top"
-        : placement === "top" && r.top - need < 0
-          ? "bottom"
-          : placement,
+    const fit = menuPlacement(
+      r,
+      visibleBounds(root),
+      el.offsetHeight,
+      placement,
+      S.row + PAD * 2,
     );
+    setSide(fit.side);
+    if (fit.maxHeight !== null) {
+      el.style.maxHeight = `${fit.maxHeight}px`;
+      el.style.overflowY = "auto";
+      el.scrollTop = Math.max(0, selected) * step - fit.maxHeight / 2;
+    }
     el.style.transitionDuration = instant.current ? "0ms" : "";
     el.dataset.state = "closed";
     void el.offsetHeight;
@@ -103,7 +132,15 @@ export function useGlideSelect({
     p.style.transform = `translateY(${active * step}px)`;
     p.style.opacity = "1";
     instant.current = false;
-  }, [active, phase, step]);
+    // A height-capped menu scrolls; keep the active row (keyboard) in view.
+    const menu = menuRef.current;
+    if (menu && menu.scrollHeight > menu.clientHeight) {
+      const top = PAD + active * step;
+      if (top < menu.scrollTop) menu.scrollTop = top - PAD;
+      else if (top + S.row > menu.scrollTop + menu.clientHeight)
+        menu.scrollTop = top + S.row + PAD - menu.clientHeight;
+    }
+  }, [active, phase, step, S.row]);
 
   const open = (viaKey: boolean) => {
     if (disabled) return;

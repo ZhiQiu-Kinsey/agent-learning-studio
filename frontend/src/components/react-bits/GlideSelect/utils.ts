@@ -21,6 +21,37 @@ export const DEFAULT_OPTIONS: (string | GlideSelectOption)[] = [
 ];
 export const STYLE = "@keyframes gs-swap{from{opacity:.6;filter:blur(2px)}}";
 
+type Edges = { top: number; bottom: number };
+
+/**
+ * Which side the menu opens on, and a height cap when neither side has room.
+ * `bounds` is the visible area the menu must stay inside: the viewport cut down
+ * by every scrolling or clipping ancestor (a dialog, for one), not just the
+ * window. The preferred side wins when the whole menu fits there, then the
+ * other side; otherwise the roomier side, with the menu scrolling inside.
+ */
+export function menuPlacement(
+  anchor: Edges,
+  bounds: Edges,
+  menuHeight: number,
+  preferred: "top" | "bottom",
+  minHeight = 0,
+): { side: "top" | "bottom"; maxHeight: number | null } {
+  const room = {
+    bottom: bounds.bottom - anchor.bottom - MENU_GAP,
+    top: anchor.top - bounds.top - MENU_GAP,
+  };
+  const other = preferred === "bottom" ? "top" : "bottom";
+  if (menuHeight <= room[preferred])
+    return { side: preferred, maxHeight: null };
+  if (menuHeight <= room[other]) return { side: other, maxHeight: null };
+  const side = room[other] > room[preferred] ? other : preferred;
+  return {
+    side,
+    maxHeight: Math.max(minHeight, Math.floor(room[side])),
+  };
+}
+
 export const norm = (o: string | GlideSelectOption): GlideSelectOption =>
   typeof o === "string" ? { value: o, label: o } : o;
 const textOf = (it: GlideSelectOption) =>

@@ -13,6 +13,7 @@ import { ChevronRight, Menu, Settings2, X } from "lucide-react";
 import { motionTokens, useReducedMotion } from "./motion";
 import { useStudio } from "./hooks/useStudio";
 import { ModelSettings } from "./components/workspace/ModelSettings";
+import { connectionState } from "./components/workspace/connectionState";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import {
   CommandButton,
@@ -215,7 +216,10 @@ export default function App() {
           ? "shell.breadcrumb.map"
           : "shell.breadcrumb.lesson",
   );
-  const ready = !!studio.status?.config_ready;
+  // A saved address and model are not enough: a provider that needs a key is
+  // ready only once the server reports one is set.
+  const connection = connectionState(studio.status);
+  const ready = connection === "ready";
   return (
     <div className="studio-shell experience-shell" ref={shellRef}>
       <ShellAmbient />
@@ -387,7 +391,7 @@ export default function App() {
           void studio.refreshStatus();
         }}
         triggerRef={settingsRef}
-        connected={ready}
+        connection={connection}
       />
       <CommandMenu
         studio={studio}

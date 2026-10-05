@@ -13,14 +13,15 @@ import {
 } from "../ui/dialog";
 import GlideSelect from "../react-bits/GlideSelect";
 import { notify } from "../toast/toast";
+import type { ConnectionState } from "./connectionState";
 
 type Props = {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   onSaved: () => void;
   triggerRef: RefObject<HTMLButtonElement | null>;
-  /** The saved connection is ready (server status); only then the dialog says so. */
-  connected?: boolean;
+  /** State of the saved connection (server status); the badge shows nothing else. */
+  connection?: ConnectionState;
 };
 
 export function ModelSettings({
@@ -28,8 +29,9 @@ export function ModelSettings({
   onOpenChange,
   onSaved,
   triggerRef,
-  connected = false,
+  connection = "unconfigured",
 }: Props) {
+  const connected = connection === "ready";
   const { t } = useTranslation("settings");
   const { t: tc } = useTranslation("common");
   const [providers, setProviders] = useState<ProviderProfile[]>([]);
@@ -168,11 +170,22 @@ export function ModelSettings({
       >
         <div className="connection-dialog-heading">
           <DialogTitle>{t("title")}</DialogTitle>
-          {/* Only while the saved connection is really ready (server status). */}
+          {/* "Connected" only while the saved connection is really ready; a
+              provider that still needs a key says so instead (server status). */}
           {connected && (
             <span className="connection-badge" data-testid="connection-ready">
               <i aria-hidden="true" />
               {t("connected")}
+            </span>
+          )}
+          {connection === "missing-key" && (
+            <span
+              className="connection-badge"
+              data-state="missing-key"
+              data-testid="connection-missing-key"
+            >
+              <i aria-hidden="true" />
+              {t("keyNotConfigured")}
             </span>
           )}
           <Button
