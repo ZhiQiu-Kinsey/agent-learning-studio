@@ -235,6 +235,8 @@ def run(context: RunContext):
 
 `evidence-board` 消费当前回放位置的 `lesson.report` 事件：`title`、`summary` 为文本，`checks` 为 `{label, passed, detail}` 数组，`metrics` 为 `{label, value}` 数组，可选 `table` 为 `{columns: string[], rows: (string|number|boolean)[][]}`。同一运行可发布初稿、修复、最终等多份报告，界面允许选取并查看原始事件。只有真正执行过的检查才能标记通过，未执行项目应省略或不提供 `passed`。
 
+指标和表格单元格按值的形状显示（`frontend/src/lesson-extensions/shared/reportValue.ts`）：数字用大号指标字体；短文本用正文字体；超过 32 字（单元格 160 字）或带换行的文本单独占一行，默认折叠成四行；对象和内容是 JSON 对象的字符串（如服务商用量）显示成键值列表，嵌套键用点号连接。值本身不改写，原始记录里仍是原样。
+
 组件通过 `studio` 使用共享状态，通过 `children` 组合默认页面，并尊重 `active` 暂停离屏动效。专用观察图应使用当前回放位置的事件，不能总展示完整历史的最终状态。未知键、加载或渲染失败会退回默认视图；JSON 不能动态加载任意 URL、脚本或 HTML。新增组件后仍需构建前端，纯内容或 Python 课程更新通常只需重启后端。
 
 ## 工具限制

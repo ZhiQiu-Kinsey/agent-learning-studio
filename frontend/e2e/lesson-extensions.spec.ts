@@ -172,6 +172,74 @@ test("reusable evidence reports render real checks and tables, select older repo
   expect(runs).toBe(1);
 });
 
+test("evidence reports lay out usage objects and long text by shape, not as raw JSON in a metric tile", async ({
+  page,
+  request,
+}) => {
+  // Shapes of the context-compaction report: usage arrives as JSON text, the
+  // summary and probe answers are paragraphs.
+  const usage = JSON.stringify({
+    prompt_tokens: 462,
+    total_tokens: 940,
+    prompt_tokens_details: { cached_tokens: 0 },
+  });
+  const long = "The earliest source was messages-context. ".repeat(40);
+  const report = {
+    title: "Compaction report",
+    metrics: [
+      { label: "Model calls", value: 5 },
+      { label: "Summary usage", value: usage },
+      { label: "Summary style", value: "keep_sources" },
+      { label: "Summary text", value: long },
+    ],
+    table: {
+      columns: ["Layout", "Probe answer", "Provider usage"],
+      rows: [["full", long, usage]],
+    },
+  };
+  await mockRunStream(
+    page,
+    stream([
+      { type: "run_start", data: {} },
+      { type: "lesson.report", data: report },
+      { type: "done", data: { status: "completed" } },
+    ]),
+  );
+  await fixtureLesson(page, request, {
+    ui: { lab: "structured-inputs", inspector: "evidence-board" },
+  });
+  await page.getByTestId("scene-tab-lab").click();
+  await page.getByTestId("lab-run-button").click();
+  const board = page.getByRole("region", { name: t("lab:evidence.region") });
+  await expect(
+    board.getByRole("heading", { name: report.title }),
+  ).toBeVisible();
+  // Usage reads as key-value rows in the metrics and in the table, never as JSON text.
+  const pairs = board.getByTestId("evidence-pairs");
+  await expect(pairs).toHaveCount(2);
+  await expect(pairs.first()).toContainText(
+    "prompt_tokens_details.cached_tokens",
+  );
+  await expect(board).not.toContainText('"prompt_tokens"');
+  // Long text starts folded and opens on request; the full text stays in the page.
+  const folded = board.getByTestId("evidence-long");
+  await expect(folded).toHaveCount(2);
+  const toggle = folded
+    .first()
+    .getByRole("button", { name: t("lab:evidence.expand") });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  const closed = (await folded.first().boundingBox())!.height;
+  await toggle.click();
+  await expect(
+    folded.first().getByRole("button", { name: t("lab:evidence.collapse") }),
+  ).toHaveAttribute("aria-expanded", "true");
+  expect((await folded.first().boundingBox())!.height).toBeGreaterThan(closed);
+  // Numbers keep the big tile; the folded summary keeps the tiles short.
+  const tile = board.getByRole("definition").filter({ hasText: /^5$/ });
+  await expect(tile).toBeVisible();
+  expect(closed).toBeLessThan(160);
+});
+
 test("new lesson reuses structured inputs, local execution and arbitrary event replay without platform branches", async ({
   page,
   request,

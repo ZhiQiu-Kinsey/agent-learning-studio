@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   CheckCircle2,
@@ -10,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../../motion";
 import type { InspectorExtensionProps } from "../types";
 import { Button } from "../../components/ui/button";
+import { LONG_CELL, reportValue, splitMetrics } from "./reportValue";
 import "./evidence-board.css";
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -20,6 +22,71 @@ const text = (value: unknown, fallback = "") =>
     : typeof value === "number" || typeof value === "boolean"
       ? String(value)
       : fallback;
+
+/** Long text starts folded to a few lines; the full text stays in the page. */
+function LongText({ text: value }: { text: string }) {
+  const { t } = useTranslation("lab", { keyPrefix: "evidence" });
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="evidence-long"
+      data-testid="evidence-long"
+      data-open={open || undefined}
+    >
+      <p>{value}</p>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((shown) => !shown)}
+      >
+        {open ? t("collapse") : t("expand")}
+      </button>
+    </div>
+  );
+}
+
+/** One report value laid out by its shape; see reportValue. */
+function ValueView({
+  value,
+  longAt,
+  fallback,
+}: {
+  value: unknown;
+  longAt?: number;
+  fallback: string;
+}) {
+  const shown = reportValue(value, longAt);
+  switch (shown.kind) {
+    case "pairs":
+      return (
+        <dl className="evidence-pairs" data-testid="evidence-pairs">
+          {shown.pairs.map((pair) => (
+            <div key={pair.key}>
+              <dt>
+                {pair.key.split(".").map((part, index) => (
+                  <span key={index}>
+                    {index > 0 && (
+                      <>
+                        .<wbr />
+                      </>
+                    )}
+                    {part}
+                  </span>
+                ))}
+              </dt>
+              <dd>{pair.value}</dd>
+            </div>
+          ))}
+        </dl>
+      );
+    case "long":
+      return <LongText text={shown.text} />;
+    case "empty":
+      return <>{fallback}</>;
+    default:
+      return <>{shown.text}</>;
+  }
+}
 
 /** One report contract serves validation, experiments, state, context and memory. */
 export default function EvidenceBoard({
@@ -49,6 +116,9 @@ export default function EvidenceBoard({
   const rows = Array.isArray(table?.rows)
     ? table.rows.filter(Array.isArray)
     : [];
+  const { tiles, wide } = splitMetrics(metrics.slice(0, 12));
+  const metricLabel = (metric: Record<string, unknown>, index: number) =>
+    text(metric.label, t("metricN", { n: index + 1 }));
   return (
     <>
       {children}
@@ -107,14 +177,31 @@ export default function EvidenceBoard({
                 {typeof report.summary === "string" && (
                   <p className="evidence-report-summary">{report.summary}</p>
                 )}
-                {!!metrics.length && (
+                {!!tiles.length && (
                   <dl className="evidence-metrics">
-                    {metrics.slice(0, 12).map((metric, index) => (
+                    {tiles.map(({ metric, index, shown }) => (
+                      <div key={index} data-kind={shown.kind}>
+                        <dt>{metricLabel(metric, index)}</dt>
+                        <dd>
+                          {shown.kind === "number" || shown.kind === "text"
+                            ? shown.text
+                            : t("notProvided")}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {!!wide.length && (
+                  <dl className="evidence-metric-details">
+                    {wide.map(({ metric, index }) => (
                       <div key={index}>
-                        <dt>
-                          {text(metric.label, t("metricN", { n: index + 1 }))}
-                        </dt>
-                        <dd>{text(metric.value, t("notProvided"))}</dd>
+                        <dt>{metricLabel(metric, index)}</dt>
+                        <dd>
+                          <ValueView
+                            value={metric.value}
+                            fallback={t("notProvided")}
+                          />
+                        </dd>
                       </div>
                     ))}
                   </dl>
@@ -178,7 +265,13 @@ export default function EvidenceBoard({
                         {rows.slice(0, 40).map((row, index) => (
                           <tr key={index}>
                             {columns.map((_, cell) => (
-                              <td key={cell}>{text(row[cell], "—")}</td>
+                              <td key={cell}>
+                                <ValueView
+                                  value={row[cell]}
+                                  longAt={LONG_CELL}
+                                  fallback="—"
+                                />
+                              </td>
                             ))}
                           </tr>
                         ))}
