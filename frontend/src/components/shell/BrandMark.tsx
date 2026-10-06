@@ -18,8 +18,8 @@ const glyph = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
 
 /**
  * WebGL electric outline over the brand glyph. Mounted only while the brand is
- * hovered or focused, and only once the shared WebGL budget grants a slot;
- * unmounting releases the slot and the GL context.
+ * hovered or focused, at full motion with WebGL support (useMotionBudget);
+ * unmounting releases the GL context.
  */
 function BrandSpark() {
   const { ref, granted } = useMotionBudget<HTMLSpanElement>("webgl");

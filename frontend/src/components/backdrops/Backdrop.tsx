@@ -26,9 +26,10 @@ function lazyBackdrop(name: BackdropName) {
 /**
  * Living background for hero bands, in the applied theme's variant (the shader
  * remounts when the theme changes). A CSS gradient in the preset's palette is
- * always painted underneath; the WebGL shader mounts only at full motion, while
- * on screen in a visible tab and holding the shared WebGL slot, and fades in on
- * top. Leaving the viewport unmounts it, which releases the GPU context.
+ * always painted underneath; the WebGL shader mounts only at full motion with
+ * WebGL support, while on screen in a visible tab, and fades in on top. Leaving
+ * the viewport unmounts it, and every preset shader loses its GL context on
+ * unmount, so scrolling never piles up contexts toward the browser's limit.
  */
 export function Backdrop({
   name,

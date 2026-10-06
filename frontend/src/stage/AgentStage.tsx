@@ -15,8 +15,8 @@ import "../styles/stage.css";
 const MetaBalls = lazy(() => import("../components/react-bits/MetaBalls"));
 
 /**
- * Decoration behind the empty stage only (before any real event). It holds a
- * WebGL slot while on screen at full motion and unmounts as soon as the stage
+ * Decoration behind the empty stage only (before any real event). It runs a
+ * WebGL context while on screen at full motion and unmounts as soon as the stage
  * has events, because the stage itself then renders instead.
  */
 function EmptyStageDecor() {

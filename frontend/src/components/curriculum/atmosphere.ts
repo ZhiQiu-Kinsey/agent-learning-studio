@@ -50,7 +50,7 @@ function deepen(hex: string): string {
 
 /**
  * Each domain borrows the palette of its hero backdrop (presets.ts), so a
- * domain card, its hover preview and its lesson masthead share one atmosphere.
+ * domain card's live window and its lesson masthead share one atmosphere.
  * Values are "r, g, b" so MagicBento can derive glow alphas. The light theme
  * gets a deeper shade of the same hue so glows and meters read on white.
  */

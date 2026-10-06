@@ -103,7 +103,7 @@
 - 方向：“夜间观测站 / 仪器面板”，深色默认，浅色是“实验记录本”。角色色：模型紫、运行层青、工具珊瑚橙、状态与记忆绿、错误红；只定义基础色，变体用 `color-mix` 推导；同一色票用于节点、事件标签和 JSON 高亮。
 - 动效令牌：缓动 `cubic-bezier(.16,1,.3,1)`，基础 160ms，折叠 220ms。原则：加载时入场一次，之后不主动动；同屏只允许一个持续脉冲。
 - 字体用 @fontsource 本地打包（CSP 只允许同源），中文走系统字体；标题 600、加粗 700、`text-spacing-trim`。主题在首屏前设置（沿用 `public/theme-init.js`）。
-- `src/motion/`：`MotionProvider` 合并系统减少动画、用户设置（跟随系统 / 完整 / 简洁 / 静态）、WebGL 能力、页面可见性；`useMotionBudget(ref, cost)` 视口内且页面可见才激活，WebGL 同屏最多 1 个，其余显示静态图；意图注册表登记懒加载组件、成本与静态降级；效果写成带版本的声明式轨道数据（参考 OpenMAIC `lib/choreography/descriptors`），每个都有减少动画变体。聚光灯：测量目标矩形 + 0–100 SVG 遮罩 + `AnimatePresence` 按目标键控。
+- `src/motion/`：`MotionProvider` 合并系统减少动画、用户设置（跟随系统 / 完整 / 简洁 / 静态）、WebGL 能力、页面可见性；`useMotionBudget(ref, cost)` 视口内且页面可见才激活，WebGL 同屏最多 1 个，其余显示静态图（已改：使用者 2026-10-06 决定去掉同屏上限，见 `frontend-workspace.md`）；意图注册表登记懒加载组件、成本与静态降级；效果写成带版本的声明式轨道数据（参考 OpenMAIC `lib/choreography/descriptors`），每个都有减少动画变体。聚光灯：测量目标矩形 + 0–100 SVG 遮罩 + `AnimatePresence` 按目标键控。
 - 页面切换用 View Transitions，带超时与降级。
 
 React Bits 选用（从 213 个免费组件中选；用 `npx shadcn@4.21.0 search|view|add @react-bits/<Name>-TS-TW` 获取，清单见 `https://reactbits.dev/r/registry.json`）：

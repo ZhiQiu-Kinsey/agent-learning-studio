@@ -178,6 +178,8 @@ const Grainient: React.FC<GrainientProps> = ({
       document.removeEventListener('visibilitychange', onVisibility);
       ctxMap.delete(container);
       try { container.removeChild(canvas); } catch { /* ignore */ }
+      // Release the GPU context now instead of at GC, so remounts never pile up toward the browser limit.
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
     };
   }, []); // renderer created once
 

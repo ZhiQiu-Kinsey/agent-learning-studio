@@ -195,7 +195,8 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 - **文案**：只写在 `i18n/locales/<语言>/*.json`，组件里不硬编码中文。后端错误带 `code`，由前端翻译。
 - **动效**：判断一律走 `frontend/src/motion`，不直接写 `prefers-reduced-motion`。
   - CSS 用 `:root:not([data-motion="full"])` 写静态降级。
-  - 重效果经 `MotionIntent` / `useMotionBudget` 接入：按需加载、离屏暂停、同屏 WebGL 有上限。
+  - 重效果经 `MotionIntent` / `useMotionBudget` 接入：按需加载、离屏暂停（离屏即卸载并释放 WebGL context）。
+  - 同屏 WebGL 不设数量上限（使用者 2026-10-06 决定）；着色器卸载时必须调用 `loseContext()`，新页面要确认同时存活的 context 不超过浏览器硬上限（Chrome 约 16 个）。
   - 运行数据不加装饰性特效。
 - **数据**：舞台、胶片、时间线、工具卡片都从真实事件推导；等待模型时只显示真实计时，不写“思考中”，不加打字机效果。
 - **代码风格**：TypeScript/CSS 用 2 空格缩进；组件用 PascalCase，Hooks 用 `useSomething`。

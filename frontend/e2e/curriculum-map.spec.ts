@@ -30,7 +30,9 @@ async function load(request: import("@playwright/test").APIRequestContext) {
   const catalog: CurriculumData = await (
     await request.get("/api/curriculum")
   ).json();
-  const first: Detail = await (await request.get("/api/lessons/chat-request")).json();
+  const first: Detail = await (
+    await request.get("/api/lessons/chat-request")
+  ).json();
   return { catalog, first };
 }
 
@@ -54,7 +56,9 @@ test("domain cards and roadmap show real counts, and a run mark appears only aft
     if (isRunCreation(req)) runs++;
   });
   const firstLesson = catalog.lessons.find((lesson) => lesson.id === first.id)!;
-  const planned = catalog.lessons.find((lesson) => lesson.status === "planned")!;
+  const planned = catalog.lessons.find(
+    (lesson) => lesson.status === "planned",
+  )!;
   await page.goto("/");
   await expect(lessonHeading(page, first.title)).toBeVisible();
   await openMap(page);
@@ -86,7 +90,9 @@ test("domain cards and roadmap show real counts, and a run mark appears only aft
   await page.getByTestId("curriculum-view-roadmap").click();
   const nodes = page.getByTestId("roadmap-node");
   await expect(nodes).toHaveCount(catalog.lessons.length);
-  await expect(nodes.and(page.locator('[data-status="available"]'))).toHaveCount(
+  await expect(
+    nodes.and(page.locator('[data-status="available"]')),
+  ).toHaveCount(
     catalog.lessons.filter((lesson) => lesson.status === "available").length,
   );
   const firstNode = nodes.and(page.locator(byLesson(first.id)));
@@ -178,7 +184,10 @@ test("on a phone-width screen the route becomes a list and nothing scrolls sidew
   const items = list.getByTestId("roadmap-list-item");
   await expect(items).toHaveCount(catalog.lessons.length);
   await expect(
-    items.and(page.locator('[data-status="planned"]')).first().getByRole("button"),
+    items
+      .and(page.locator('[data-status="planned"]'))
+      .first()
+      .getByRole("button"),
   ).toHaveCount(0);
   // Polls: the view switch's pill springs into place and may overshoot for a
   // few frames; only a layout that keeps scrolling sideways fails.
@@ -203,6 +212,92 @@ test("on a phone-width screen the route becomes a list and nothing scrolls sidew
   await expect(lessonHeading(page, first.title)).toBeVisible();
 });
 
+// Counts live WebGL contexts in the page: created minus lost, with the peak.
+// Chrome force-loses the oldest context past its limit (~16) and logs a warning.
+const countWebglContexts = () => {
+  const stats = { created: 0, lost: 0, live: 0, peak: 0 };
+  (window as unknown as { __webgl: typeof stats }).__webgl = stats;
+  const original = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (
+    this: HTMLCanvasElement,
+    type: string,
+    ...rest: unknown[]
+  ) {
+    const context = (original as (...args: unknown[]) => unknown).call(
+      this,
+      type,
+      ...rest,
+    );
+    const canvas = this as HTMLCanvasElement & { __counted?: boolean };
+    if (context && type.startsWith("webgl") && !canvas.__counted) {
+      canvas.__counted = true;
+      stats.created++;
+      stats.live++;
+      stats.peak = Math.max(stats.peak, stats.live);
+      canvas.addEventListener("webglcontextlost", () => {
+        stats.lost++;
+        stats.live--;
+      });
+    }
+    return context;
+  } as typeof original;
+};
+
+test("every domain card shows its own live backdrop without hover, within the WebGL context limit", async ({
+  page,
+  request,
+}) => {
+  const { catalog } = await load(request);
+  await page.addInitScript(countWebglContexts);
+  const warnings: string[] = [];
+  page.on("console", (message) => {
+    if (/too many active webgl contexts|context lost/i.test(message.text()))
+      warnings.push(message.text());
+  });
+  await page.goto("/");
+  test.skip(
+    !(await page.evaluate(() => {
+      const gl = document.createElement("canvas").getContext("webgl");
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+      return !!gl;
+    })),
+    "this browser has no WebGL",
+  );
+  await openMap(page);
+  const windows = page.getByTestId("curriculum-domain-window");
+  await expect(windows).toHaveCount(catalog.categories.length);
+  await expect(
+    windows.and(page.locator('[data-atmosphere="live"]')),
+  ).toHaveCount(catalog.categories.length);
+  // Each domain keeps its own preset (no shared resting texture).
+  const presets = await windows
+    .locator("[data-backdrop]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-backdrop")),
+    );
+  expect(new Set(presets).size).toBe(catalog.categories.length);
+
+  // Scroll card by card without hovering: each window mounts its shader on its own.
+  await page.mouse.move(0, 0);
+  for (const tile of await windows.all()) {
+    await tile.scrollIntoViewIfNeeded();
+    await expect(tile.locator("canvas").first()).toBeAttached();
+  }
+  // Scroll back and forth: off-screen shaders release their contexts.
+  for (let pass = 0; pass < 2; pass++) {
+    await page.getByTestId("curriculum-title").scrollIntoViewIfNeeded();
+    await windows.last().scrollIntoViewIfNeeded();
+  }
+  await expect(windows.last().locator("canvas").first()).toBeAttached();
+  const stats = await page.evaluate(
+    () =>
+      (window as unknown as { __webgl: { live: number; peak: number } })
+        .__webgl,
+  );
+  expect(stats.peak).toBeLessThanOrEqual(16);
+  expect(warnings).toEqual([]);
+});
+
 test("with reduced motion the map is static and fully visible", async ({
   page,
   request,
@@ -217,6 +312,12 @@ test("with reduced motion the map is static and fully visible", async ({
   await expect(cards).toHaveCount(catalog.categories.length);
   await cards.first().hover();
   await expect(domains).toHaveAttribute("data-animate", "false");
+  // Static motion keeps the gradient windows: no shader, not even on hover.
+  const windows = page.getByTestId("curriculum-domain-window");
+  await expect(
+    windows.and(page.locator('[data-atmosphere="still"]')),
+  ).toHaveCount(catalog.categories.length);
+  await expect(windows.locator("canvas")).toHaveCount(0);
   for (const card of await cards.all()) {
     await expect(card).toBeVisible();
     await expect(card).toHaveCSS("opacity", "1");

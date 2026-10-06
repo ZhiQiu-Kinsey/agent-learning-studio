@@ -1,18 +1,29 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useRef } from "react";
 import { useInView } from "motion/react";
 import { useMotion } from "./context";
-import { createSlotPool } from "./slotPool";
+import type { MotionLevel } from "./level";
 
-/** css: transforms/opacity; canvas: 2D loops; webgl: GPU contexts (one at a time). */
+/** css: transforms/opacity; canvas: 2D loops; webgl: GPU contexts. */
 export type MotionCost = "css" | "canvas" | "webgl";
 
-// Three live contexts: a page hero plus up to two inline effects (orb, button, badge).
-export const webglSlots = createSlotPool(3);
+/**
+ * Whether an effect of this cost may exist at all. There is no on-screen WebGL
+ * cap (maintainer decision 2026-10-06): every WebGL effect runs at full motion
+ * when the browser supports WebGL, and the viewport gate in useMotionBudget
+ * unmounts off-screen ones so their GPU contexts are released.
+ */
+export function motionGranted(
+  cost: MotionCost,
+  { level, webgl }: { level: MotionLevel; webgl: boolean },
+): boolean {
+  if (level !== "full") return false;
+  return cost !== "webgl" || webgl;
+}
 
 /**
- * Per-effect budget. `granted` means the effect may exist at all (level, WebGL
- * support and the shared WebGL slot); `active` additionally requires the element
- * to be on screen in a visible tab, so recurring work pauses otherwise.
+ * Per-effect budget. `granted` means the effect may exist at all (level and
+ * WebGL support); `active` additionally requires the element to be on screen in
+ * a visible tab, so recurring work pauses and WebGL effects unmount otherwise.
  */
 export function useMotionBudget<T extends HTMLElement>(
   cost: MotionCost = "css",
@@ -21,21 +32,7 @@ export function useMotionBudget<T extends HTMLElement>(
   const ref = useRef<T>(null);
   const { level, reduced, webgl, pageVisible } = useMotion();
   const inView = useInView(ref, { margin: margin as `${number}px` });
-  const [token] = useState(() => Symbol("motion-budget"));
-  const wantsSlot = cost === "webgl" && level === "full" && webgl;
-
-  useEffect(() => {
-    if (!wantsSlot) return;
-    webglSlots.request(token);
-    return () => webglSlots.release(token);
-  }, [wantsSlot, token]);
-
-  const hasSlot = useSyncExternalStore(
-    webglSlots.subscribe,
-    () => webglSlots.has(token),
-    () => false,
-  );
-  const granted = !reduced && (cost !== "webgl" || (wantsSlot && hasSlot));
+  const granted = motionGranted(cost, { level, webgl });
 
   return {
     ref,

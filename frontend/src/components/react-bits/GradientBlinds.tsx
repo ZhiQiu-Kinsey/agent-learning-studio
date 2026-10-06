@@ -235,6 +235,8 @@ const GradientBlinds: React.FC<GradientBlindsProps> = ({
       callIfFn(geometryRef.current, 'remove');
       callIfFn(meshRef.current as unknown as { remove?: () => void }, 'remove');
       callIfFn(rendererRef.current as unknown as { destroy?: () => void }, 'destroy');
+      // Release the GPU context now instead of at GC, so remounts never pile up toward the browser limit.
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
       programRef.current = null;
       geometryRef.current = null;
       meshRef.current = null;

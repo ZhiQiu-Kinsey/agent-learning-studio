@@ -108,6 +108,13 @@ export default function DarkVeil({
                                    lightMode = false
                                  }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const glRef = useRef<WebGLRenderingContext | WebGL2RenderingContext | null>(null);
+
+  // The canvas outlives prop changes (the renderer reattaches to it), so only
+  // release the GPU context on unmount, not between effect runs.
+  useEffect(() => () => {
+    glRef.current?.getExtension('WEBGL_lose_context')?.loseContext();
+  }, []);
 
   useEffect(() => {
     const canvas = ref.current as HTMLCanvasElement;
@@ -119,6 +126,7 @@ export default function DarkVeil({
     });
 
     const gl = renderer.gl;
+    glRef.current = gl;
     const geometry = new Triangle(gl);
 
     const program = new Program(gl, {

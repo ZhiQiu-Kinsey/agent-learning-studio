@@ -201,7 +201,7 @@ function BadgeStage({ face }: { face: Face }) {
 
 /**
  * 回顾页的本机学习徽章：卡面只写这台设备的真实数字（打开过的场景、
- * 完成的运行、自测作答次数）。桌面 + 完整动效 + WebGL 名额允许时是可拖动的
+ * 完成的运行、自测作答次数）。桌面 + 完整动效 + 浏览器支持 WebGL 时是可拖动的
  * 3D 挂牌（懒加载），否则是同内容的静态卡片。children 放在说明下方。
  */
 export function LearningBadge({

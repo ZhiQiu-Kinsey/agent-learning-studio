@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent,
-} from "react";
+import { useRef, type CSSProperties } from "react";
 import { useInView } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -47,9 +41,6 @@ const domainIcons: Record<string, LucideIcon> = {
 };
 const fallbackIcons = [Terminal, Braces, Layers3, Database, Workflow, Network];
 
-/** Wait this long on a tile before spending the second WebGL slot on it. */
-const PREVIEW_DELAY = 160;
-
 function Count({ value }: { value: number }) {
   const reduced = useReducedMotion();
   return (
@@ -63,9 +54,10 @@ function Count({ value }: { value: number }) {
 }
 
 /**
- * The tile's atmosphere window: always the preset's CSS gradient; the live
- * shader mounts only while this tile is hovered or focused (one tile at a time,
- * so the page never holds more than hero + one preview WebGL contexts).
+ * The tile's atmosphere window. At full motion with WebGL every tile keeps its
+ * own live backdrop mounted (no hover needed, no on-screen cap: maintainer
+ * decision 2026-10-06); Backdrop still unmounts the shader off screen. Static
+ * motion or missing WebGL shows the preset's gradient with faint contours.
  */
 function DomainWindow({
   category,
@@ -81,7 +73,12 @@ function DomainWindow({
   const theme = useResolvedTheme();
   const atmosphere = domainAtmosphere(category.id, theme);
   return (
-    <span className="curriculum-domain-window" aria-hidden="true">
+    <span
+      className="curriculum-domain-window"
+      aria-hidden="true"
+      data-testid="curriculum-domain-window"
+      data-atmosphere={live ? "live" : "still"}
+    >
       {live ? (
         <Backdrop
           name={atmosphere.backdrop}
@@ -119,24 +116,7 @@ export function DomainBento({
   const theme = useResolvedTheme();
   const sectionRef = useRef<HTMLElement>(null);
   const entered = useInView(sectionRef, { once: true, amount: 0.08 });
-  const [preview, setPreview] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const canPreview = !reduced && webgl;
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-  useEffect(() => {
-    if (!canPreview) setPreview(null);
-  }, [canPreview]);
-
-  const queuePreview = (id: string) => {
-    if (!canPreview) return;
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setPreview(id), PREVIEW_DELAY);
-  };
-  const dropPreview = (id: string) => {
-    clearTimeout(timer.current);
-    setPreview((current) => (current === id ? null : current));
-  };
+  const live = !reduced && webgl;
 
   return (
     <section
@@ -169,9 +149,6 @@ export function DomainBento({
           const marks = countMarks(progress, lessons);
           const hasProgress = marks.opened + marks.ran + marks.quizzed > 0;
           const ratio = lessons.length ? available / lessons.length : 0;
-          const onPointerEnter = (event: PointerEvent) => {
-            if (event.pointerType === "mouse") queuePreview(category.id);
-          };
           return (
             <MagicBentoCard
               key={category.id}
@@ -191,18 +168,11 @@ export function DomainBento({
               data-available={available}
               data-planned={planned}
             >
-              <div
-                className="curriculum-domain-shell"
-                data-live={preview === category.id}
-                onPointerEnter={onPointerEnter}
-                onPointerLeave={() => dropPreview(category.id)}
-                onFocus={() => queuePreview(category.id)}
-                onBlur={() => dropPreview(category.id)}
-              >
+              <div className="curriculum-domain-shell">
                 <DomainWindow
                   category={category}
                   index={index}
-                  live={preview === category.id}
+                  live={live}
                   Icon={Icon}
                 />
                 <button
