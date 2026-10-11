@@ -18,11 +18,14 @@
 [English](README.md) · **简体中文**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/home-dark.png">
-  <img alt="Agent Learning Studio 首页" src="docs/assets/screenshots/home.png" width="900">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/zh-CN/home-dark.png">
+  <img alt="Agent Learning Studio 首页" src="docs/assets/screenshots/zh-CN/home.png" width="900">
 </picture>
 
 </div>
+
+> [!NOTE]
+> **支持简体中文和 English**，在顶栏随时切换。界面、导学、24 门可学课程、课程目录和术语表都有英文版。课程源码、系统提示词、练习预设输入和运行输出保持中文，因为它们就是真实运行的内容；英文正文引用它们时保留原文并附英文说明。
 
 <details>
 <summary><b>目录</b></summary>
@@ -62,18 +65,19 @@
 | 📖 **术语就地解释** | 课程术语可悬停查看释义，并区分本课新术语、前面学过的术语和背景知识。正文提到的源码名字显示为代码样式，可附说明。 |
 | 🔌 **不绑定服务商** | 百炼走手写的原生 HTTP 路径，展示完整请求体。OpenAI、Anthropic、Gemini、DeepSeek、OpenRouter、Ollama 和 OpenAI 兼容服务经 LiteLLM 接入，界面如实标为“标准化请求/响应”。 |
 | 🗂️ **课程即数据** | 课程目录、术语表和每课内容都是带 schema 校验的 JSON。后端自动发现课程，新增一课不用改平台代码。 |
+| 🌐 **中英双语** | 界面和课程文本可在中英文之间随时切换，不丢当前进度。译文是按稳定 id 合并的译文层：事实字段（答案、代码引用、选择器）不可覆盖；中文源文本一改，对应译文就视为过期并回落到源文本。 |
 | 🔒 **本地、私密** | 服务只监听 `127.0.0.1`。密钥只在后端，不写进运行记录、日志或浏览器存储。 |
 
 ## 界面预览
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/screenshots/lesson-understand.png" alt="理解场景"><p align="center"><b>理解</b>：概念卡、正文、微型自测</p></td>
-    <td width="50%"><img src="docs/assets/screenshots/lesson-code.png" alt="读码场景"><p align="center"><b>读码</b>：真实源码与锚定批注</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/zh-CN/lesson-understand.png" alt="理解场景"><p align="center"><b>理解</b>：概念卡、正文、微型自测</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/zh-CN/lesson-code.png" alt="读码场景"><p align="center"><b>读码</b>：真实源码与锚定批注</p></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/assets/screenshots/lesson-lab.png" alt="实验场景"><p align="center"><b>实验</b>：假设、观察点、运行观察台</p></td>
-    <td width="50%"><img src="docs/assets/screenshots/curriculum.png" alt="课程地图"><p align="center"><b>课程地图</b>：十个领域与先修路线</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/zh-CN/lesson-lab.png" alt="实验场景"><p align="center"><b>实验</b>：假设、观察点、运行观察台</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/zh-CN/curriculum.png" alt="课程地图"><p align="center"><b>课程地图</b>：十个领域与先修路线</p></td>
   </tr>
 </table>
 
@@ -183,7 +187,8 @@ docs/          课程大纲与架构文档
 
 ```bash
 uv run python -m unittest discover -s tests       # 全部 Python 测试（含各课 test_lesson.py）
-uv run python scripts/validate_lessons.py         # 实现清单、内容、术语表、用词、录制
+uv run python scripts/validate_lessons.py         # 实现清单、内容、术语表、用词、录制、译文层
+uv run python scripts/translation_kit.py status --locale en   # 各课、导学、目录、术语表的译文覆盖率
 npm --prefix frontend run build                   # 类型检查并构建
 npm --prefix frontend exec vitest run             # 前端单元测试
 npm --prefix frontend run i18n:check              # 各语言翻译键一致
@@ -201,6 +206,7 @@ npm --prefix frontend run i18n:check              # 各语言翻译键一致
 - [新增课程](docs/architecture/adding-lessons.md)：从登记课程到开放的完整流程
 - [术语与代码名](docs/architecture/terminology.md)：术语收录标准与统一用词表
 - [开发验证](docs/architecture/validation.md)：测试与校验命令
+- **翻译**：`scripts/translation_kit.py` 导出待译条目，校验占位符与行内代码，写回译文层（`content.<语言>.json`、`lesson.<语言>.json`、`catalog.<语言>.json` 等）。流程见 [新增课程](docs/architecture/adding-lessons.md) 的多语言一节。
 - [平台架构](docs/architecture/platform.md) · [前端结构](docs/architecture/frontend-workspace.md) · [事件信封 v2](docs/architecture/event-envelope-v2.md)
 
 几条红线，都有测试或校验守着：
@@ -221,7 +227,9 @@ npm --prefix frontend run i18n:check              # 各语言翻译键一致
 - [ ] 评估、可观测性与可靠工具
 - [ ] MCP 与 A2A
 - [ ] 多 Agent、长时任务与毕业项目
-- [ ] 英文等其他语言的界面与课程译文
+- [x] 英文界面与课程译文（导学、24 课、课程目录、术语表）
+- [ ] 按语言运行（系统提示词、预设和报告使用学习者的语言）
+- [ ] 更多语言
 
 ## 致谢
 

@@ -18,14 +18,14 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 **English** · [简体中文](README.zh-CN.md)
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/home-dark.png">
-  <img alt="Agent Learning Studio home page" src="docs/assets/screenshots/home.png" width="900">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/en/home-dark.png">
+  <img alt="Agent Learning Studio home page" src="docs/assets/screenshots/en/home.png" width="900">
 </picture>
 
 </div>
 
 > [!NOTE]
-> The course content and the web UI are currently in **Simplified Chinese**. The i18n architecture is in place — adding a language means adding locale files and translation layers, and contributions are welcome.
+> **Available in English and 简体中文** — switch languages from the top bar. The UI, the onboarding, all 24 available lessons, the curriculum and the glossary are translated. Lesson source code, system prompts, preset inputs and run outputs stay in Chinese because they are exactly what runs; the English text quotes them verbatim with a gloss.
 
 <details>
 <summary><b>Table of contents</b></summary>
@@ -65,18 +65,19 @@ Most agent tutorials either hide the loop behind a framework or show static code
 | 📖 **Terms explained in place** | Course terms show a hover card and are marked as new, previously learned or background. Source names in the prose are rendered as code with short notes. |
 | 🔌 **Provider-agnostic** | Alibaba Bailian (DashScope) goes through a hand-written raw HTTP path that shows the full request body. OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Ollama and any OpenAI-compatible service go through LiteLLM, and the UI honestly labels them as *SDK-standardized* requests and responses. |
 | 🗂️ **Curriculum as data** | The catalog, glossary and every lesson's content are JSON validated against schemas. The backend discovers lessons automatically — adding a lesson needs no platform code changes. |
+| 🌐 **Bilingual** | English and Simplified Chinese UI and course text, switchable at any time without losing your place. Translations are overlays keyed by stable IDs: facts (answers, code references, selectors) can't be overridden, and a translation goes stale — falling back to the source — as soon as the Chinese source changes. |
 | 🔒 **Local and private** | The server binds to `127.0.0.1` only. API keys stay in the backend and are never written to run records, logs or browser storage. |
 
 ## Screenshots
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/screenshots/lesson-understand.png" alt="Understand scene"><p align="center"><b>Understand</b> — concept cards, prose, micro-quizzes</p></td>
-    <td width="50%"><img src="docs/assets/screenshots/lesson-code.png" alt="Read-the-code scene"><p align="center"><b>Read the code</b> — real source with anchored notes</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/en/lesson-understand.png" alt="Understand scene"><p align="center"><b>Understand</b> — concept cards, prose, micro-quizzes</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/en/lesson-code.png" alt="Read-the-code scene"><p align="center"><b>Read the code</b> — real source with anchored notes</p></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/assets/screenshots/lesson-lab.png" alt="Experiment scene"><p align="center"><b>Experiment</b> — hypothesis, observation points, run console</p></td>
-    <td width="50%"><img src="docs/assets/screenshots/curriculum.png" alt="Curriculum map"><p align="center"><b>Curriculum map</b> — 10 domains, prerequisite routes</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/en/lesson-lab.png" alt="Experiment scene"><p align="center"><b>Experiment</b> — hypothesis, observation points, run console</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/en/curriculum.png" alt="Curriculum map"><p align="center"><b>Curriculum map</b> — 10 domains, prerequisite routes</p></td>
   </tr>
 </table>
 
@@ -89,11 +90,11 @@ The course starts with a 7-chapter onboarding (no model calls needed), then runs
 | A | Native foundations | One model request, multi-turn history, sampling; tool definitions, executing tools, dependent calls, error boundaries | ✅ 7 / 7 |
 | B | Tasks & interfaces | Acceptance criteria, structured output with business validation, prompts & tool descriptions | ✅ 3 / 3 |
 | C | Context & state | Message protocol, app state, context budgets & compaction, persistent memory, prompt caching, Skills & progressive disclosure | ✅ 8 / 8 |
-| R | Reasoning & control | Text actions vs. native tool calls, TODO planning, plan-and-replan, bounded reflection, workflow patterns, orchestrator–worker & evaluator–optimizer | ✅ 6 / 6 |
+| R | Reasoning & control | Text actions vs. native tool calls, TODO planning, plan-and-replan, bounded reflection, workflow patterns, orchestrator–workers & evaluator–optimizer | ✅ 6 / 6 |
 | D | Knowledge & retrieval | Chunking, BM25, embeddings, hybrid search & reranking, RAG with citations, agentic RAG | 🚧 0 / 6 |
 | E | Frameworks & orchestration | LangChain vs. native, LangGraph state & branches, streaming & cancellation, approvals, human-in-the-loop & recovery | 🚧 0 / 7 |
 | K | Coding agents & sandboxes | A single-bash-tool coding agent, file tools and change evidence | 🚧 0 / 2 |
-| F | Quality & reliability | Eval sets & verifiers, observability & cost, reliable tools, prompt injection & permissions | 🚧 0 / 4 |
+| F | Quality & reliability | Eval sets & validators, observability & cost, reliable tools, prompt injection & permissions | 🚧 0 / 4 |
 | G | Protocols & tool services | MCP fundamentals, connection lifecycle, A2A delegation | 🚧 0 / 3 |
 | H | Capstone & delivery | Multi-agent trade-offs, long-running tasks, local delivery, capstone project | 🚧 0 / 7 |
 
@@ -186,7 +187,8 @@ Run records are stored redacted in `.runtime/runs.sqlite3`; learning progress li
 
 ```bash
 uv run python -m unittest discover -s tests       # all Python tests (incl. every lesson's test_lesson.py)
-uv run python scripts/validate_lessons.py         # manifests, content, glossary, wording, recordings
+uv run python scripts/validate_lessons.py         # manifests, content, glossary, wording, recordings, translations
+uv run python scripts/translation_kit.py status --locale en   # translation coverage per lesson / onboarding / catalog / glossary
 npm --prefix frontend run build                   # type-check and build
 npm --prefix frontend exec vitest run             # frontend unit tests
 npm --prefix frontend run i18n:check              # translation keys are consistent
@@ -204,6 +206,7 @@ Contributions of all kinds are welcome — new lessons, clearer prose, bug fixes
 - [Adding lessons](docs/architecture/adding-lessons.md) — from registering a lesson to opening it
 - [Terminology](docs/architecture/terminology.md) — glossary rules and the unified wording table
 - [Validation](docs/architecture/validation.md) — test and check commands
+- **Translations:** `scripts/translation_kit.py` exports untranslated strings, checks placeholders and inline code, and writes the overlay files (`content.<lang>.json`, `lesson.<lang>.json`, `catalog.<lang>.json`, …). See the multilingual section of [Adding lessons](docs/architecture/adding-lessons.md).
 - [Platform](docs/architecture/platform.md) · [Frontend](docs/architecture/frontend-workspace.md) · [Event envelope v2](docs/architecture/event-envelope-v2.md)
 
 A few non-negotiables, each guarded by tests or validators:
@@ -224,7 +227,9 @@ A few non-negotiables, each guarded by tests or validators:
 - [ ] Evaluation, observability and reliable tools
 - [ ] MCP and A2A
 - [ ] Multi-agent systems, long-running tasks and the capstone
-- [ ] English and other UI / course translations
+- [x] English UI and course translation (onboarding, 24 lessons, curriculum, glossary)
+- [ ] Per-language runtime (system prompts, presets and reports in the learner's language)
+- [ ] More languages
 
 ## Acknowledgements
 
