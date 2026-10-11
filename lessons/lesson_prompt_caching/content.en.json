@@ -1,0 +1,1094 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "CONTEXT / PROMPT CACHING",
+      "source": "a3290de70f6d"
+    },
+    "hero.headline": {
+      "text": "Only a byte-for-byte identical start",
+      "source": "69a5f8766e2a"
+    },
+    "hero.highlight": {
+      "text": "can be reused by the provider.",
+      "source": "2898251385b3"
+    },
+    "hero.takeaway": {
+      "text": "When you ask several questions in a row about the same long document, the provider may reuse the beginning it has already processed and report in usage how many tokens hit the cache. Where you put dynamic content decides whether the beginning stays the same. If a response has no cache fields, you can only write \"not reported\", never 0.",
+      "source": "723790e19006"
+    },
+    "concepts.01-cache.label": {
+      "text": "01 / CACHE",
+      "source": "52a5243cab0e"
+    },
+    "concepts.01-cache.title": {
+      "text": "Prompt caching",
+      "source": "daea92993ed5"
+    },
+    "concepts.01-cache.description": {
+      "text": "Prompt caching: when the start of a request is identical, character for character, to an earlier request, the provider reuses the result it already computed for that part. What the model sees does not change by a single character.",
+      "source": "2a9909cd9df7"
+    },
+    "concepts.02-prefix.label": {
+      "text": "02 / PREFIX",
+      "source": "042eef0b9000"
+    },
+    "concepts.02-prefix.title": {
+      "text": "Stable prefix",
+      "source": "e372300e31da"
+    },
+    "concepts.02-prefix.description": {
+      "text": "Stable prefix: the part at the start of every request that never changes, such as rules and a long document. Dynamic content that changes every time, like a request number or a send time, must go after it.",
+      "source": "2b782f283e6c"
+    },
+    "concepts.03-hit.label": {
+      "text": "03 / HIT",
+      "source": "9d5072865a61"
+    },
+    "concepts.03-hit.title": {
+      "text": "Cached tokens",
+      "source": "b25044fa9a5c"
+    },
+    "concepts.03-hit.description": {
+      "text": "Cached tokens: the number of input tokens in this request that the provider reports as served from the cache. Each provider names the field differently; this lesson normalizes them into one number.",
+      "source": "bbe531f49071"
+    },
+    "concepts.04-unknown.label": {
+      "text": "04 / UNKNOWN",
+      "source": "d2916d042735"
+    },
+    "concepts.04-unknown.title": {
+      "text": "Not reported is not 0",
+      "source": "498d5d13095f"
+    },
+    "concepts.04-unknown.description": {
+      "text": "If the response has no cache field, all you can say is \"not reported\". 0 means the provider explicitly said there was no hit. Writing not reported as 0 puts a conclusion in the provider's mouth.",
+      "source": "f6f80255a000"
+    },
+    "section-1.title": {
+      "text": "The start is the same every round, yet it is reprocessed every round",
+      "source": "55a062f52815"
+    },
+    "section-1.paragraphs.0": {
+      "text": "An agent's request often starts the same way every round, yet the provider processes it from scratch each time. Prompt caching exists to save that repeated work. In {{lesson:context-budget}} we saw that every request sends the whole context to the model again. When an agent works continuously, the start is usually the system prompt, the tool definitions, and a long document, unchanged for dozens of rounds.",
+      "source": "f8c7cd9601a8"
+    },
+    "section-1.paragraphs.1": {
+      "text": "A made-up example: a 5000-token document, each round followed by a new 50-token question, four rounds in a row, and each round sends only the document and that round's question. The provider processes 20200 input tokens in total, and 15000 of them are the same document read three more times. The longer the document and the more rounds, the bigger the repeated part, and both waiting time and cost go up with it.",
+      "source": "07daadab50cc"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Prompt caching lets the provider remember the beginning it has already processed. If the start of the next request is identical, character for character, to an earlier request, that part is reused and only the newly added part is processed. Reuse happens on the provider's side: the messages the model sees are identical to the character, and the answer does not change because of a cache hit. What you save is processing time and cost; whether the cached part is discounted, and by how much, is set by the provider's price list.",
+      "source": "b9eac99e5a8b"
+    },
+    "section-1.paragraphs.3": {
+      "text": "This lesson uses one fixed document and looks at one thing: where the line that changes in every request goes, and whether it stops the beginning from being reused. {{lesson:memory-lifecycle}} ended by noting that recalled memories can differ every time. They are content of exactly this changing kind.",
+      "source": "cc2a2216c9f7"
+    },
+    "section-2.title": {
+      "text": "Only an identical start counts, from the first character",
+      "source": "2c1be4c45e61"
+    },
+    "section-2.paragraphs.0": {
+      "text": "The cache matches by prefix: it compares this request with earlier ones from the first character, up to the first character that differs. Only the part before that can be reused. If one character in the middle changes, no amount of identical content after it can be used.",
+      "source": "7019b69b29cd"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Why only the start? When the provider processes input, the intermediate result at each position depends on everything before it. Change one character earlier and every position after it computes to something different, so it can't be reused, while the part before the change is unaffected. It is like keeping a ledger in order: if entry 3 changes, every balance after entry 3 must be recalculated, and the balances of the first two entries stay as they were.",
+      "source": "4da496561aa5"
+    },
+    "section-2.paragraphs.2": {
+      "text": "In this lesson every request sends the same three things: a set of rules, a library handbook of over 2700 characters (handbook.md), and a question about the handbook. There is also one line of dynamic content that differs each time, for example \"请求序号：2；发送时间：2026-10-03T10:15:02+08:00\" (\"request number: 2; sent at: …\"). If that line is the first line of the system prompt, the comparison diverges at the number after \"请求序号：\", and the rules and handbook after it can't be used. Move it to the end of the last user message, and the rules and handbook become the stable prefix.",
+      "source": "507194ea0ae6"
+    },
+    "section-2.paragraphs.3": {
+      "text": "What is compared is what the provider actually receives, not the meaning. An extra space, a different punctuation mark, or tool definitions in a different order all count as different. \"The content didn't change\" has to be checked character by character.",
+      "source": "562aed8e61a8"
+    },
+    "deep-dive-cost.title": {
+      "text": "A made-up calculation: what the cache saves",
+      "source": "20b4b2a5a256"
+    },
+    "deep-dive-cost.summary": {
+      "text": "A hit saves the time and cost of processing the start; the part that generates the answer is not saved.",
+      "source": "25a23fdc9380"
+    },
+    "deep-dive-cost.paragraphs.0": {
+      "text": "Continuing the example from section 1: a 5000-token document, a 50-token new question each round, four rounds. Without caching, the four rounds process 20200 input tokens in total. Suppose round 1 writes to the cache and rounds 2 to 4 each hit 5000 tokens, so only 50 new tokens need processing each. Then what is really processed from scratch is 5050 plus 150, 5200 in total.",
+      "source": "fa0338e58c63"
+    },
+    "deep-dive-cost.paragraphs.1": {
+      "text": "How cost works out depends on the price list. Here we use only a symbol: let the unit price of the hit part be `r` times the unit price of the missed part. `r` is a made-up parameter, not any provider's actual discount. Without caching you pay 20200 units of input. With caching you pay round 1's 5050 units, plus 50 units of new content for each of the last three rounds and 5000 × `r` units of hit cost, for a total of 5200 + 15000 × `r` units. The smaller `r` is, the more you save; at `r` equal to 1 there is no discount, the total is 20200 units, the same as no caching. Some providers charge separately for writing to the cache, and discounts on hits differ, so the real bill is whatever the provider's price list says.",
+      "source": "352015efbba2"
+    },
+    "deep-dive-cost.paragraphs.2": {
+      "text": "For time, what you save is processing the start, so the most visible gain is that the first token arrives sooner. Generating the answer still takes one token at a time, and the longer the answer, the larger its share of the time and the less noticeable the cache. This lesson caps the answer at 200 tokens so that elapsed time depends less on answer length.",
+      "source": "2b5581ef695a"
+    },
+    "predict-hits.prompt": {
+      "text": "Run it once: before you run \"Dynamic content first\", guess how many lesson.cache_hit events (requests where the provider reports a hit) this run will produce.",
+      "source": "bf15724acc08"
+    },
+    "mq-position.position.prompt": {
+      "text": "In which layout can the rules and handbook of request 2 be reused?",
+      "source": "605c7516edfa"
+    },
+    "mq-position.position.a.text": {
+      "text": "The dynamic line goes at the end of the last user message",
+      "source": "11800b5e3551"
+    },
+    "mq-position.position.a.feedback": {
+      "text": "Correct. The rules and handbook come before the dynamic line, so the two requests are identical from the start to the end of the handbook.",
+      "source": "9ffb4eda3118"
+    },
+    "mq-position.position.b.text": {
+      "text": "The dynamic line goes on the first line of the system prompt, and the handbook after it is unchanged",
+      "source": "4ec067b895a5"
+    },
+    "mq-position.position.b.feedback": {
+      "text": "Not quite. The request number on the first line differs every time, so the prefix breaks there, and identical content after it can't be used.",
+      "source": "0e5e90f2a463"
+    },
+    "mq-position.position.c.text": {
+      "text": "Either works, as long as the handbook content is unchanged",
+      "source": "a4917f28978c"
+    },
+    "mq-position.position.c.feedback": {
+      "text": "Not quite. The cache compares the identical part from the very start, not whether \"some part of the content is the same\".",
+      "source": "5ab0f9a9be69"
+    },
+    "mq-position.position.explanation": {
+      "text": "Position matters more than content: the identical content has to come at the start, with no differing character before it.",
+      "source": "b063eac46317"
+    },
+    "section-3.title": {
+      "text": "Reading the hit count from usage",
+      "source": "8f8bb3fa4dae"
+    },
+    "section-3.paragraphs.0": {
+      "text": "How many tokens hit can only be read from how the provider reports it in the response's usage; you can't compute it locally. With Bailian, the response is reported in the OpenAI-compatible format, and the hit count is in usage.prompt_tokens_details.cached_tokens, which is part of usage.prompt_tokens. A made-up example: prompt_tokens is 2000 and cached_tokens is 1500, meaning 1500 of the 2000 input tokens reused the cache, a hit ratio of 75%.",
+      "source": "57eea9893e2c"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Other providers write it differently. The official DeepSeek API reports hits and misses separately in prompt_cache_hit_tokens and prompt_cache_miss_tokens. In the Anthropic API, input_tokens does not include the cached part: hits go in cache_read_input_tokens, newly written cache goes in cache_creation_input_tokens, and you add the three to get all input. This lesson's normalize_cache_usage turns these formats into three numbers (all input, cached tokens, tokens written to the cache) and records which field the hit count came from. The hit ratio is cached tokens divided by all input.",
+      "source": "acacb6d89224"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Only after normalization can the numbers from different providers go in one table and be compared. When you read a report, check which field the hit count came from, and you know which provider's rule that row was computed by. If you apply the wrong rule, the numbers go badly wrong: treat Anthropic's input_tokens as all input, and the hit ratio comes out too high, even above 100%.",
+      "source": "023c89b31b55"
+    },
+    "section-4.title": {
+      "text": "If it isn't reported, write not reported",
+      "source": "324133474c3b"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Some providers or endpoints don't return cache fields. In that case normalize_cache_usage returns None, and the lab report says \"未报告\" (\"not reported\"). It must not be written as 0: 0 means the provider explicitly said \"no hit this time\", while None means we don't know. Mix them up, and the computed hit ratio treats \"don't know\" as \"no hit\".",
+      "source": "b8426e4b90c6"
+    },
+    "section-4.paragraphs.1": {
+      "text": "A number is used only if the field exists and its value is a non-negative integer. If the value is null, a string, or a decimal, it is also treated as not reported, with no guessing or conversion. In offline test mode, the fixture for the \"Stable prefix + warmup\" arm deliberately returns no cache fields, and the test uses it to check that no 0 shows up in the report.",
+      "source": "c0dd55c60f10"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Why so strict? A made-up example: of 4 requests, 2 report a hit of 3000 and the other 2 report nothing. Record the unreported ones as 0 and the average hit becomes 1500, which looks as if the cache did only half its job. Those two might actually have hit; the endpoint just didn't say. Once \"don't know\" is written as a number, every later calculation rests on a number that was made up.",
+      "source": "64a542f48bd9"
+    },
+    "mq-unreported.unreported.prompt": {
+      "text": "The usage of a response has only prompt_tokens and completion_tokens and no cache field at all. What should the report show as the hit count?",
+      "source": "09b30d65a726"
+    },
+    "mq-unreported.unreported.a.text": {
+      "text": "Not reported",
+      "source": "b4724185c9ed"
+    },
+    "mq-unreported.unreported.a.feedback": {
+      "text": "Correct. The response didn't say, so we don't know how many tokens hit.",
+      "source": "76e36f4163f0"
+    },
+    "mq-unreported.unreported.b.text": {
+      "text": "0",
+      "source": "5feceb66ffc8"
+    },
+    "mq-unreported.unreported.b.feedback": {
+      "text": "Not quite. 0 means the provider reported \"no hit\"; here the provider reported nothing.",
+      "source": "d208efca17e9"
+    },
+    "mq-unreported.unreported.c.text": {
+      "text": "Estimate a number from prompt_tokens",
+      "source": "c4deea03e4b1"
+    },
+    "mq-unreported.unreported.c.feedback": {
+      "text": "Not quite. Only the provider knows how many tokens hit; a locally estimated number would pass itself off as the provider's report.",
+      "source": "cbf0f24a721a"
+    },
+    "mq-unreported.unreported.explanation": {
+      "text": "\"Not reported\" and \"reported as 0\" are two different facts, and tables and ratios must treat them separately.",
+      "source": "e7a5d3f8c419"
+    },
+    "section-5.title": {
+      "text": "Prefix hash: confirm locally that the start didn't change",
+      "source": "eda736cf8e23"
+    },
+    "section-5.paragraphs.0": {
+      "text": "The hit count comes from the provider and fluctuates for reasons such as cache expiry and server scheduling. What the runner can determine by itself is whether the starts of two requests are really the same. prefix_hash serializes all messages before the last one (in this lesson, just the system message), computes sha256, and keeps the first 12 characters. If two hashes are equal, the prefixes are identical character for character; if they differ, at least one character has changed.",
+      "source": "d0d6d0ab037f"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The report has another column, \"与上一次相同的前缀（字符）\" (\"prefix shared with the previous request, in characters\"), computed by shared_prefix_chars: it serializes this request's and the previous request's messages, compares them from the start character by character, and counts up to the first character that differs. When the dynamic line is at the start, this number is only a dozen or so characters; when it is at the end, the number is longer than the whole handbook. Both columns are computed locally and have nothing to do with the provider, so they work the same for any provider.",
+      "source": "b5020ee5326f"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Read the hash and the hit count together. If the hash is the same but the hit is 0, the start really didn't change, and the cause is on the provider's side, such as the cache not being written yet or having expired. If the hash differs but a hit is reported, the third check in the report lists that request: the hit may come from a cache left over from before this run, or the provider may have hit on a shorter beginning. Use the hash to rule out \"the content changed\" first, then speculate about the provider's side.",
+      "source": "38b76bec077f"
+    },
+    "section-6.title": {
+      "text": "Warmup: move the first cold request earlier",
+      "source": "4a7e7b5282b7"
+    },
+    "section-6.paragraphs.0": {
+      "text": "For the first request of the stable-prefix arm, the provider hasn't seen this prefix yet and usually won't hit; only later requests can. The warmup arm first sends one request whose only purpose is to write to the cache, asking only for the reply \"已读\" (\"read\"), and only then starts measuring. That way every measured request is preceded by a request with the same prefix.",
+      "source": "550b89b86236"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The system prompt also contains a session tag line, an 8-character hexadecimal string randomly generated for this run. Within one run it stays the same, so it doesn't break the prefix; across runs it changes, so cache left by a previous run doesn't leak into this one, and the three arms don't affect each other. Set the isolate_run parameter to false and the session tag is fixed to \"不隔离\" (\"not isolated\"), so you can observe reuse across runs.",
+      "source": "2dd62b0093a4"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Warmup has a cost: one more model call, and that request has to process all of the input, so you pay for it in full. Whether it's worth it depends on how many later requests can use it and how long the cache is kept. Retention differs by provider, and with some, each hit extends it; check the provider's documentation. If a long time passes after the warmup before the request is sent, the cache may have expired.",
+      "source": "e873196ee6ab"
+    },
+    "deep-dive-warmup.title": {
+      "text": "How warmup and cache markers are used in real products",
+      "source": "b04428df57b0"
+    },
+    "deep-dive-warmup.summary": {
+      "text": "While the user is still typing, send the long document off for processing; some endpoints require you to mark in the request where the cache ends.",
+      "source": "3fe04a69bc0a"
+    },
+    "deep-dive-warmup.paragraphs.0": {
+      "text": "A user opens a long document and gets ready to ask a question; from starting to type to pressing send often takes several seconds. Some products use that time to send a request that carries only the document and asks for almost no output, so the start is processed and written to the cache. When the real question is sent, the start can already be reused and the first token arrives sooner. This lesson's warmup arm is a simplified version of that. The key point is that the warmup request and the real request must start with identical text, character for character; otherwise the warmup is wasted.",
+      "source": "f672042e9e50"
+    },
+    "deep-dive-warmup.paragraphs.1": {
+      "text": "Not every provider caches automatically. Some endpoints require you to mark in the request where the cache ends. Take the Anthropic API as an example. There are two ways to mark it. You can add cache_control to a content block, meaning \"cache up to here\", with at most four marks per request. Or you can set a single switch at the top level of the request, and the provider puts the mark at the last cacheable position; in a multi-turn conversation that position moves toward the end automatically as messages are added. The first way suits caching the system prompt and the conversation separately, each with its own retention time; the second is less work.",
+      "source": "2ff9efd376e4"
+    },
+    "deep-dive-warmup.paragraphs.2": {
+      "text": "Which requests share a cache is set by the provider's documentation. For example, it may be shared only within the same account. When the sharing scope is wider than one run, an identical start sent in a previous run can make request 1 of this run report a hit. This lesson puts a random session tag in the system prompt to rule that out; turn isolation off and run \"Stable prefix\" twice in a row, and you can see it for yourself.",
+      "source": "76ad1ba1810b"
+    },
+    "mq-warmup.warmup.prompt": {
+      "text": "All four requests in the \"Stable prefix\" arm have the same prefix hash. Request 1 reports a hit of 0, and from request 2 on hits are reported. What is the most likely cause?",
+      "source": "84f8f1d280ef"
+    },
+    "mq-warmup.warmup.a.text": {
+      "text": "At request 1, the provider had no cache for this prefix yet",
+      "source": "1e05fc6833aa"
+    },
+    "mq-warmup.warmup.a.feedback": {
+      "text": "Correct. Request 1 writes the prefix to the cache, and only then do later requests have something to reuse.",
+      "source": "6009fa2dfb33"
+    },
+    "mq-warmup.warmup.b.text": {
+      "text": "The handbook in request 1 differs from the later ones",
+      "source": "7f72bf4a1d75"
+    },
+    "mq-warmup.warmup.b.feedback": {
+      "text": "Not quite. The prefix hash is the same in all four requests, so the handbook didn't change by a single character.",
+      "source": "6490b0e4e2bc"
+    },
+    "mq-warmup.warmup.c.text": {
+      "text": "The model didn't read the handbook carefully on request 1",
+      "source": "b39751ed64b2"
+    },
+    "mq-warmup.warmup.c.feedback": {
+      "text": "Not quite. Caching happens while the provider processes the input and has nothing to do with how the model answers.",
+      "source": "da66679747e8"
+    },
+    "mq-warmup.warmup.explanation": {
+      "text": "Use the prefix hash to rule out \"the content changed\" first; only then do you consider when the cache was written.",
+      "source": "fc4fbce07a0c"
+    },
+    "section-7.title": {
+      "text": "The ways an agent most easily breaks the prefix",
+      "source": "79f6771e26f8"
+    },
+    "section-7.paragraphs.0": {
+      "text": "In a real agent, each round's request usually starts with the system prompt and tool definitions, followed by an ever longer message history. The following practices make the start change every round: putting the current time in the system prompt; generating a new random ID for each request and putting it at the start; tool definitions in no fixed order, for example taken from a set, whose order can differ every time the program starts; and stuffing changing application state (current step, remaining budget) into the system prompt.",
+      "source": "851fcb5e1d58"
+    },
+    "section-7.paragraphs.1": {
+      "text": "A made-up counterexample: so that the model knows what time it is, a customer-service agent writes the current time, down to the second, on the first line of the system prompt. From then on every request starts differently, the rules and tool definitions that could have been reused all have to be reprocessed, responses get slower and the bill gets higher, and yet no code and no model has changed, so the cause is hard to find. If the time is really needed, add it as a new message at the end, or let the model call a tool to look it up when it needs it.",
+      "source": "0efe70ee0d62"
+    },
+    "section-7.paragraphs.2": {
+      "text": "The fix is to put what is stable first and what changes last: rules, tool definitions, and fixed documents first, and dynamic information appended at the end as new messages. If the message history is only appended to and never rewritten, the whole request of one round can become the prefix of the next. Conversely, the truncation window in {{lesson:context-budget}} and the rule-based compression in {{lesson:context-compaction}} rewrite earlier messages, and in the round after a rewrite, processing has to start over from the point of change. So compression is best saved until the context is nearly full and done thoroughly in one go, rather than changing things every round.",
+      "source": "e082255f15b1"
+    },
+    "section-8.title": {
+      "text": "What one run can tell you",
+      "source": "286115a59a66"
+    },
+    "section-8.paragraphs.0": {
+      "text": "Whether a hit happens is up to the provider. Some providers cache only when the request explicitly marks the cache position, such as cache_control in the Anthropic API. The requests in this lesson carry no such marks, so whether they can hit depends on whether the provider caches automatically. The minimum length that can be cached, the block size used to count hits, and how long the cache is kept all differ by provider, and can change from model to model within one provider. The Bailian documentation states that reaching the minimum length does not guarantee a hit either; it also depends on the cache creation state, validity period, and scheduling. The DeepSeek documentation also says caching is best-effort. So one run can only tell you \"what the provider reported this time\"; it can't prove a pattern.",
+      "source": "29bbfcbd1d43"
+    },
+    "section-8.paragraphs.1": {
+      "text": "The same goes for elapsed time. The elapsed time in the report is timed by the runner around complete, and includes network round trips, queueing, and answer generation. It exceeds the response event's duration_ms by the few milliseconds it takes to record the event. A single fast or slow request can't be credited directly to the cache. To compare, run several times and see whether requests with the same prefix hash are faster overall.",
+      "source": "65f583549495"
+    },
+    "section-8.paragraphs.2": {
+      "text": "{{lesson:skills-disclosure}} turns a set of procedures into a directory that stays at the start, and loads the full text only when needed. There too, think about this: the part that stays resident must stay identical character for character, and content loaded on demand should be attached after it.",
+      "source": "4541b736472f"
+    },
+    "deep-dive-cache-shape.title": {
+      "text": "How caching in turn shapes the request",
+      "source": "eacb044d46b1"
+    },
+    "deep-dive-cache-shape.summary": {
+      "text": "The start splits into a part that is the same for everyone and a part specific to each session; the further forward a switch's condition sits, the more versions of the start there are.",
+      "source": "4aee869ccc3f"
+    },
+    "deep-dive-cache-shape.paragraphs.0": {
+      "text": "When caching saves enough, it starts to decide how requests are laid out. In its analysis of Claude Code, *Understanding AI Agents in Depth* (深入理解 AI Agent) notes that Claude Code splits the system prompt into two segments with a cache boundary: the first segment is the same for all users and all sessions, such as general rules; only the second segment holds content tied to this user and this session. The first segment can be reused by a great many requests, while the second is reused only within one session.",
+      "source": "4dbcdaae9911"
+    },
+    "deep-dive-cache-shape.paragraphs.1": {
+      "text": "Every switch placed in the first segment has a cost. The book's example: operating system, run mode, and language each have two values, and if all three switches go in the first segment, the start has 2×2×2=8 versions, each cached separately, so the chances of reuse are split into eight shares. Conditions that vary should go after the boundary whenever possible.",
+      "source": "bebcf739ecc0"
+    },
+    "deep-dive-cache-shape.paragraphs.2": {
+      "text": "The book mentions another detail, also meant to keep the start identical character for character: after a very long tool result is replaced with a preview, the replacement text has to be saved as is and reused verbatim when the session is resumed, rather than regenerating a preview that means the same thing but uses different characters.",
+      "source": "368fd028b47a"
+    },
+    "deep-dive-cache-shape.paragraphs.3": {
+      "text": "The official Claude Code documentation sorts a request into three layers by how fast they change: at the front, the system prompt and tool definitions; next, project instructions such as `CLAUDE.md`; and last, the conversation messages, where new content is only appended at the end. The documentation lists operations that make the next request unable to use the cache in part or in full, such as switching models or compacting the conversation. Editing `CLAUDE.md` mid-session doesn't break the cache, but the change only takes effect after `/clear`, `/compact`, or a restart. In newer versions, running `/usage` shows what share of the input came from the cache and how many misses there were. This lesson moves only one line of dynamic content, whereas the product has to lay out every request it sends, but the principle is the same. Details change between versions; follow the official documentation.",
+      "source": "43beeeb3550c"
+    },
+    "misconception-cached-answer.claim": {
+      "text": "A cache hit means the provider simply returned its previous answer, so the answer will be the same as last time.",
+      "source": "3b54c9710c40"
+    },
+    "misconception-cached-answer.correction": {
+      "text": "The cache reuses the result of processing the start of the request, not the answer. After a hit, the provider still processes the newly added part and then generates the answer one token at a time, so the answer may differ from last time. What the model sees is identical, character for character, to what it sees without a hit, so a cache hit makes the answer neither better nor worse.",
+      "source": "0eddde9567f7"
+    },
+    "mq-limits.limits.prompt": {
+      "text": "In the \"Stable prefix\" arm, requests 2 and 4 report a hit, request 3 reports a hit of 0, and all four prefix hashes are the same. What does this show?",
+      "source": "1dfaabc4bd3c"
+    },
+    "mq-limits.limits.a.text": {
+      "text": "The provider didn't reuse the cache this time; one run can't show a pattern",
+      "source": "c4a962fb1453"
+    },
+    "mq-limits.limits.a.feedback": {
+      "text": "Correct. The prefix didn't change, whether it hits is up to the provider, and you need several runs to see a trend.",
+      "source": "4f15e8cc64d5"
+    },
+    "mq-limits.limits.b.text": {
+      "text": "The prefix of request 3 was altered",
+      "source": "b3b5b6d5f130"
+    },
+    "mq-limits.limits.b.feedback": {
+      "text": "Not quite. The prefix hashes are the same, so the prefix didn't change by a single character.",
+      "source": "df351b09657e"
+    },
+    "mq-limits.limits.c.text": {
+      "text": "This provider doesn't support prompt caching",
+      "source": "4706e885eddd"
+    },
+    "mq-limits.limits.c.feedback": {
+      "text": "Not quite. Requests 2 and 4 reported hits, so the provider supports it; request 3 just wasn't reused this time.",
+      "source": "e922eaaaa5fc"
+    },
+    "mq-limits.limits.explanation": {
+      "text": "What you can verify locally is the prefix; what happens on the provider's side can only be recorded as it is, and you can't infer a pattern from one run.",
+      "source": "6cd60050eec2"
+    },
+    "compare-layouts.title": {
+      "text": "How the three arms differ",
+      "source": "811a0646e37c"
+    },
+    "compare-layouts.paragraphs.0": {
+      "text": "The rules, handbook, and question are identical across the three arms. The table lists only the differences decided by the code; the hit counts the provider reports are whatever your own run shows.",
+      "source": "3abeed5bc092"
+    },
+    "compare-layouts.columns.0": {
+      "text": "Item",
+      "source": "5512242c5690"
+    },
+    "compare-layouts.columns.1": {
+      "text": "Dynamic content first",
+      "source": "dd6e54c14127"
+    },
+    "compare-layouts.columns.2": {
+      "text": "Stable prefix",
+      "source": "e372300e31da"
+    },
+    "compare-layouts.columns.3": {
+      "text": "Stable prefix + warmup",
+      "source": "31182937e958"
+    },
+    "compare-layouts.rows.0.0": {
+      "text": "Where the dynamic line goes",
+      "source": "f2e91c18b9b9"
+    },
+    "compare-layouts.rows.0.1": {
+      "text": "First line of the system prompt",
+      "source": "58c50de047bf"
+    },
+    "compare-layouts.rows.0.2": {
+      "text": "End of the last user message",
+      "source": "76d7215eb1d0"
+    },
+    "compare-layouts.rows.0.3": {
+      "text": "End of the last user message",
+      "source": "76d7215eb1d0"
+    },
+    "compare-layouts.rows.1.0": {
+      "text": "Prefix hash of each request",
+      "source": "985d951530e3"
+    },
+    "compare-layouts.rows.1.1": {
+      "text": "Different every time",
+      "source": "a61c231c43c7"
+    },
+    "compare-layouts.rows.1.2": {
+      "text": "The same every time",
+      "source": "2935e3416e74"
+    },
+    "compare-layouts.rows.1.3": {
+      "text": "The same every time (including warmup)",
+      "source": "c567f6caf24d"
+    },
+    "compare-layouts.rows.2.0": {
+      "text": "Before the first measured request",
+      "source": "2146da513432"
+    },
+    "compare-layouts.rows.2.1": {
+      "text": "No request with the same prefix",
+      "source": "bd8c96078368"
+    },
+    "compare-layouts.rows.2.2": {
+      "text": "No request with the same prefix",
+      "source": "bd8c96078368"
+    },
+    "compare-layouts.rows.2.3": {
+      "text": "One warmup request",
+      "source": "7c7294bb0c21"
+    },
+    "compare-layouts.rows.3.0": {
+      "text": "Default number of model calls",
+      "source": "7c821294e770"
+    },
+    "compare-layouts.rows.3.1": {
+      "text": "4",
+      "source": "4b227777d4dd"
+    },
+    "compare-layouts.rows.3.2": {
+      "text": "4",
+      "source": "4b227777d4dd"
+    },
+    "compare-layouts.rows.3.3": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "references.bailian.title": {
+      "text": "Context Cache for Qwen models (Alibaba Cloud Bailian docs, checked 2026-10-03)",
+      "source": "30dd25ec419e"
+    },
+    "references.deepseek.title": {
+      "text": "DeepSeek Context Caching (DeepSeek docs, checked 2026-10-03)",
+      "source": "8eff18c72278"
+    },
+    "references.anthropic.title": {
+      "text": "Prompt Caching (Anthropic docs, checked 2026-10-03)",
+      "source": "579646c1d081"
+    },
+    "references.cookbook-prompt-caching.title": {
+      "text": "Prompt caching: automatic caching and explicit cache markers (Claude Cookbooks)",
+      "source": "d5d6deca60af"
+    },
+    "references.cookbook-speculative-caching.title": {
+      "text": "Warming the cache while the user types (Claude Cookbooks)",
+      "source": "e208d8a4929e"
+    },
+    "references.ai-agent-book-ch2.title": {
+      "text": "Context engineering: cache-friendly context design — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "bd72f4a6ebce"
+    },
+    "references.claude-code-prompt-caching.title": {
+      "text": "How Claude Code uses prompt caching (Claude Code docs, checked 2026-10-04)",
+      "source": "3466e19ab752"
+    },
+    "code-layout.n43.text": {
+      "text": "The dynamic line: request number and send time, different in every request.",
+      "source": "d5b93fc0af61"
+    },
+    "code-layout.n48.text": {
+      "text": "The stable part: session tag, rules, and handbook, identical in all three arms.",
+      "source": "b0fb4e0ca100"
+    },
+    "code-layout.n51.text": {
+      "text": "Dynamic content first: the dynamic line is the first line of the system prompt.",
+      "source": "165dca9f9145"
+    },
+    "code-layout.n54.text": {
+      "text": "Stable prefix: system holds only the stable part, and the dynamic line follows the question.",
+      "source": "8c1c5fc9a558"
+    },
+    "code-layout.n59.text": {
+      "text": "Serialize with the keys in a fixed order, so the same message always gives the same string.",
+      "source": "a159468025a4"
+    },
+    "code-layout.n64.text": {
+      "text": "The prefix hash covers only what comes before the last message; equal hashes mean identical prefixes.",
+      "source": "b7647365d20a"
+    },
+    "code-layout.n71.text": {
+      "text": "Compare two requests character by character from the start, and count up to the first character that differs.",
+      "source": "cb53bf18c2ef"
+    },
+    "code-loop.n76.text": {
+      "text": "Check whether it was reported first, then whether it is 0; the three outcomes emit three different events.",
+      "source": "5c8fa01209b4"
+    },
+    "code-loop.n84.text": {
+      "text": "The session tag is generated once per run and stays the same within the run.",
+      "source": "044230858be9"
+    },
+    "code-loop.n85.text": {
+      "text": "The warmup arm sends one extra request before the measured ones; all three arms have the same number of measurements.",
+      "source": "a107f761117c"
+    },
+    "code-loop.n92.text": {
+      "text": "Each time only the question and the dynamic line change; everything else stays untouched.",
+      "source": "1f727be11986"
+    },
+    "code-loop.n94.text": {
+      "text": "The prefix fingerprint is computed before sending, and it depends only on the locally assembled messages.",
+      "source": "cc983c019881"
+    },
+    "code-loop.n98.text": {
+      "text": "The request and response are recorded as events exactly as they are; whether the cache hits is up to the provider.",
+      "source": "cee7dd47aa78"
+    },
+    "code-loop.n102.text": {
+      "text": "Read only the usage the response actually reports; with no cache field, the hit count is None.",
+      "source": "8bab9cd9c248"
+    },
+    "code-loop.n104.text": {
+      "text": "One record per request: prefix hash, hit count, and source field kept together.",
+      "source": "7c7a71db45b3"
+    },
+    "code-loop.n107.text": {
+      "text": "Assemble the lab report; every number in the table can be found in the recorded events above.",
+      "source": "472745392777"
+    },
+    "code-normalize.n11.text": {
+      "text": "Accept only non-negative integers: True, decimals, and strings are not treated as token counts.",
+      "source": "f71fc4b3dc97"
+    },
+    "code-normalize.n14.text": {
+      "text": "A pure function: takes the response's usage and returns a uniform set of four values.",
+      "source": "c17f424021c5"
+    },
+    "code-normalize.n18.text": {
+      "text": "If the response has no usage at all, all four values are None.",
+      "source": "d1489cdc3207"
+    },
+    "code-normalize.n23.text": {
+      "text": "OpenAI-compatible endpoints such as Bailian: the hit count is under prompt_tokens_details.",
+      "source": "d2822cab3a1a"
+    },
+    "code-normalize.n27.text": {
+      "text": "The official DeepSeek API: hits and misses each have their own field.",
+      "source": "8c350bb79f67"
+    },
+    "code-normalize.n31.text": {
+      "text": "If prompt_tokens is missing, fill in all input as hits plus misses.",
+      "source": "fd1c9f7fbed3"
+    },
+    "code-normalize.n37.text": {
+      "text": "Anthropic: hits are in cache_read_input_tokens.",
+      "source": "4516de1efd03"
+    },
+    "code-normalize.n39.text": {
+      "text": "Its input_tokens excludes cache reads and writes; add the three to get all input.",
+      "source": "eabcac39250d"
+    },
+    "code-normalize.n46.text": {
+      "text": "No cache field of any kind: the hit count stays None, and the report says \"未报告\" (\"not reported\").",
+      "source": "c69ad0f582e6"
+    },
+    "code-decision.title": {
+      "text": "A cache field that isn't reported is recorded as None, not 0",
+      "source": "bb77cd7f53fd"
+    },
+    "code-decision.chosen": {
+      "text": "normalize_cache_usage uses only cache fields that actually appear in the response with a non-negative integer value. If there are none, cached_tokens is None, the event is recorded as lesson.cache_unreported, the report says \"未报告\" (\"not reported\"), and no hit ratio is computed.",
+      "source": "a42bd62391d0"
+    },
+    "code-decision.missing-as-zero.title": {
+      "text": "Treat a missing field as 0",
+      "source": "d31d82d6ea50"
+    },
+    "code-decision.missing-as-zero.why_not": {
+      "text": "0 would be read as the provider's conclusion that \"there was no hit this time\". The overall hit ratio would be dragged down, and in a comparison across providers, the one that doesn't report would look worst.",
+      "source": "49abb11d4e64"
+    },
+    "code-decision.estimate-locally.title": {
+      "text": "Estimate the hit count with a local tokenizer",
+      "source": "af05d3c97d2b"
+    },
+    "code-decision.estimate-locally.why_not": {
+      "text": "How many tokens hit depends on the provider's cache state, which can't be known locally; an estimated number would pass itself off as the provider's report.",
+      "source": "9e0adbf9429b"
+    },
+    "code-decision.single-provider.title": {
+      "text": "Read only the current provider's fields",
+      "source": "e4ace6fb6a1a"
+    },
+    "code-decision.single-provider.why_not": {
+      "text": "Switch to another provider and the field names change, so the fields wouldn't be found and would be misjudged. Normalization concentrates the differences in one function, and unit tests cover each provider.",
+      "source": "36ba76ccec3c"
+    },
+    "dynamic-position.title": {
+      "text": "Where the dynamic content goes",
+      "source": "6b4c7bce15be"
+    },
+    "dynamic-position.hypothesis": {
+      "text": "The rules, handbook, and question are all the same; the only change is moving the dynamic line from the first line of the system prompt to the end of the last user message. With the dynamic line first, every prefix hash differs and the provider has no beginning to reuse; moved to the end, the prefix hashes are the same from request 2 on, and the provider may report hits.",
+      "source": "4128379e1dcd"
+    },
+    "dynamic-position.dynamic-first.label": {
+      "text": "Dynamic content first",
+      "source": "dd6e54c14127"
+    },
+    "dynamic-position.stable-prefix.label": {
+      "text": "Stable prefix",
+      "source": "e372300e31da"
+    },
+    "dynamic-position.first-system.text": {
+      "text": "The system prompt of request 1: with dynamic content first, the first line is the dynamic line.",
+      "source": "85c5b6dba199"
+    },
+    "dynamic-position.last-user.text": {
+      "text": "The last user message of request 2: in the stable-prefix arm, the dynamic line has moved here.",
+      "source": "1af47e17d0ee"
+    },
+    "dynamic-position.usage-2.text": {
+      "text": "The raw usage from response 2: the cache fields are here.",
+      "source": "98e3663be981"
+    },
+    "dynamic-position.hash-2.text": {
+      "text": "The prefix hash of request 2, to compare with request 1.",
+      "source": "4c32d8585178"
+    },
+    "dynamic-position.shared-2.text": {
+      "text": "The number of characters request 2 shares with request 1 from the start.",
+      "source": "d0c6e2291226"
+    },
+    "dynamic-position.cached-2.text": {
+      "text": "The normalized cached tokens of request 2.",
+      "source": "97fa73a0f5cf"
+    },
+    "dynamic-position.table.text": {
+      "text": "The lab report's per-request table.",
+      "source": "3bb7386b4ab3"
+    },
+    "dynamic-position.guide.0.text": {
+      "text": "Both arms send the same rules, handbook, and question; the only difference is where the dynamic line goes. Start with the system prompt of request 1.",
+      "source": "f95bafa47ad9"
+    },
+    "dynamic-position.guide.1.text": {
+      "text": "With dynamic content first, the request number and send time are the first line; in the stable-prefix arm, the first line is the session tag.",
+      "source": "2f4602353fa6"
+    },
+    "dynamic-position.guide.2.text": {
+      "text": "The stable-prefix arm puts the dynamic line after the question, so no changing character comes before the rules and handbook.",
+      "source": "231436145e74"
+    },
+    "dynamic-position.guide.3.text": {
+      "text": "The prefix hash is computed locally by the runner. Compare it with request 1: if they are equal, the prefix is unchanged character for character.",
+      "source": "31802af79f87"
+    },
+    "dynamic-position.guide.4.text": {
+      "text": "This number is how many characters the two requests share from the start. With the dynamic line first, it is only a dozen or so characters.",
+      "source": "e7da349a2dc8"
+    },
+    "dynamic-position.guide.5.text": {
+      "text": "This is the raw usage the provider reported in response 2. Look for the cache fields.",
+      "source": "01cc89703e10"
+    },
+    "dynamic-position.guide.6.text": {
+      "text": "The normalized hit count. None means the response didn't report it; 0 means the provider reported no hit.",
+      "source": "bf920f50d45a"
+    },
+    "dynamic-position.guide.7.text": {
+      "text": "The report lays out each request as a table. Compare the prefix hash column and the cached tokens column across the two arms.",
+      "source": "32ce6c99d19f"
+    },
+    "dynamic-position.conclusion.proves.0": {
+      "text": "In this run, whether each request's prefix is identical character for character (prefix hash, characters shared with the previous request), and how many cached tokens the provider reported for each request.",
+      "source": "9d6d499dbb63"
+    },
+    "dynamic-position.conclusion.proves.1": {
+      "text": "The two arms differ only in where the dynamic line goes: the rules, handbook, and question are identical, which you can check character by character in the request events.",
+      "source": "4d1a20e31430"
+    },
+    "dynamic-position.conclusion.does_not_prove.0": {
+      "text": "One run can't prove that a provider will always, or never, hit; a hit also depends on cache state, validity period, and scheduling.",
+      "source": "d42d925bc137"
+    },
+    "dynamic-position.conclusion.does_not_prove.1": {
+      "text": "A difference in elapsed time can't be credited directly to the cache; network, queueing, and answer length all affect it.",
+      "source": "c91e555f0fcf"
+    },
+    "dynamic-position.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, token counts and hit counts are generated by the fixture according to whether the prefix repeats; they don't represent any provider.",
+      "source": "eeeceab8f50f"
+    },
+    "warmup-effect.title": {
+      "text": "The warmup request",
+      "source": "2faf0871f6bd"
+    },
+    "warmup-effect.hypothesis": {
+      "text": "The two arms have the same prefix. Without warmup, there is no request with the same prefix before the first measured request; the warmup arm first sends one warmup request, and all measured requests come after it, so hits may be reported from the first measurement on.",
+      "source": "84a0d748e8a1"
+    },
+    "warmup-effect.no-warmup.label": {
+      "text": "Stable prefix (no warmup)",
+      "source": "eba6ec0e08b4"
+    },
+    "warmup-effect.warmup.label": {
+      "text": "Stable prefix + warmup",
+      "source": "31182937e958"
+    },
+    "warmup-effect.first-question.text": {
+      "text": "The last user message of request 1: in the warmup arm, this is the warmup request that asks only for the reply \"已读\" (\"read\").",
+      "source": "1eb0edab486c"
+    },
+    "warmup-effect.purpose-1.text": {
+      "text": "The purpose of request 1: warmup or measurement.",
+      "source": "c156fa47cf32"
+    },
+    "warmup-effect.cached-1.text": {
+      "text": "The cached tokens of request 1.",
+      "source": "21c21255d951"
+    },
+    "warmup-effect.cached-first-measure.text": {
+      "text": "The cached tokens of request 2: in the warmup arm, this is where the first measurement is.",
+      "source": "e5d33d5d070a"
+    },
+    "warmup-effect.hash-check.text": {
+      "text": "The report's first check: whether the prefix hashes of all requests are the same (warmup included).",
+      "source": "77e1cfc7b8ed"
+    },
+    "warmup-effect.metrics.text": {
+      "text": "The number of measured requests that reported a hit, and the overall hit ratio; \"未报告\" (\"not reported\") when nothing was reported.",
+      "source": "f980b2046476"
+    },
+    "warmup-effect.guide.0.text": {
+      "text": "The two arms have the same prefix; the difference is that the warmup arm sends one extra request first. Start with what request 1 asked.",
+      "source": "f64c9364722c"
+    },
+    "warmup-effect.guide.1.text": {
+      "text": "The warmup request asks only for the reply \"已读\" (\"read\"); its purpose is to have the provider process this prefix once first.",
+      "source": "c42c28708fa6"
+    },
+    "warmup-effect.guide.2.text": {
+      "text": "The record states whether this request is warmup or measurement; warmup is not counted in the measurement statistics.",
+      "source": "b81fcca5ecf4"
+    },
+    "warmup-effect.guide.3.text": {
+      "text": "No request with the same prefix came before request 1. See what the provider reported.",
+      "source": "936097499b7b"
+    },
+    "warmup-effect.guide.4.text": {
+      "text": "Request 2: in the warmup arm it is the first measurement, and a request with the same prefix already came before it.",
+      "source": "d1b4cec7658a"
+    },
+    "warmup-effect.guide.5.text": {
+      "text": "Confirm that the prefix hashes match first; only then is comparing hit counts meaningful.",
+      "source": "cc9e6ee2b29e"
+    },
+    "warmup-effect.guide.6.text": {
+      "text": "Finally, compare the number of hits and the overall ratio across the measured requests of the two arms.",
+      "source": "93bb2ed5bc04"
+    },
+    "warmup-effect.conclusion.proves.0": {
+      "text": "Every measured request in the warmup arm is preceded by a request with the same prefix, and what the provider reported for each of those requests.",
+      "source": "90d91fa9884b"
+    },
+    "warmup-effect.conclusion.does_not_prove.0": {
+      "text": "The warmup request itself doesn't save money: it has to process all of the input.",
+      "source": "7caf8c259684"
+    },
+    "warmup-effect.conclusion.does_not_prove.1": {
+      "text": "How long the cache is kept, and how long after warmup it stays valid, this experiment did not measure.",
+      "source": "cc3838d7c701"
+    },
+    "warmup-effect.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the warmup arm's fixture deliberately returns no cache fields, only to test how \"未报告\" (\"not reported\") is displayed; it doesn't represent any provider.",
+      "source": "b763b6dd19ee"
+    },
+    "inputs.layout.label": {
+      "text": "Request layout",
+      "source": "87b0a60e0e4c"
+    },
+    "inputs.layout.options.dynamic_first.label": {
+      "text": "Dynamic content first",
+      "source": "dd6e54c14127"
+    },
+    "inputs.layout.options.stable_prefix.label": {
+      "text": "Stable prefix",
+      "source": "e372300e31da"
+    },
+    "inputs.layout.options.warmup.label": {
+      "text": "Stable prefix + warmup",
+      "source": "31182937e958"
+    },
+    "inputs.repeats.label": {
+      "text": "Measured requests",
+      "source": "634f89a1c64c"
+    },
+    "inputs.repeats.help": {
+      "text": "How many requests of the same kind each arm sends in a row (3–5); the warmup arm adds 1 warmup request.",
+      "source": "d95131b986a5"
+    },
+    "inputs.isolate_run.label": {
+      "text": "New session tag for each run",
+      "source": "f7b1c1369730"
+    },
+    "inputs.isolate_run.help": {
+      "text": "When on, the session tag is randomly generated for this run, so cache left by a previous run can't be used; when off, it is fixed to \"不隔离\" (\"not isolated\") so you can observe reuse across runs.",
+      "source": "e8dfdbe12b3c"
+    },
+    "quiz.q1.prompt": {
+      "text": "What does prompt caching reuse?",
+      "source": "e0ea9cd38a3f"
+    },
+    "quiz.q1.a.text": {
+      "text": "The start the provider has processed that is identical, character for character, to an earlier request",
+      "source": "59706ba78cb7"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Correct. Reuse happens while the provider processes the input, and what the model sees doesn't change.",
+      "source": "f4efc8254160"
+    },
+    "quiz.q1.b.text": {
+      "text": "The model's previous answer",
+      "source": "a535de035f1b"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Not quite. The answer is generated fresh each time; only the processing result of the start of the input is reused.",
+      "source": "b97c2289e429"
+    },
+    "quiz.q1.c.text": {
+      "text": "The whole request, as long as the content is roughly similar",
+      "source": "27ec681946d6"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "Not quite. It has to be identical character for character from the first character; \"roughly similar\" doesn't count.",
+      "source": "33296181267c"
+    },
+    "quiz.q1.explanation": {
+      "text": "Prompt caching only saves the provider's repeated processing; it doesn't change the request content and doesn't reuse answers.",
+      "source": "45e0753ea85f"
+    },
+    "quiz.q2.prompt": {
+      "text": "The first line of an agent's system prompt says \"Current time: 10:15:02\". What happens?",
+      "source": "d63c91efddb0"
+    },
+    "quiz.q2.a.text": {
+      "text": "The start differs every round, so the tool definitions and document after it can't be reused",
+      "source": "ad06ffb6035c"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. The change is at the very front, so everything after it loses its chance of being reused.",
+      "source": "10facc1e3e80"
+    },
+    "quiz.q2.b.text": {
+      "text": "No effect, since the time is only a few characters",
+      "source": "c6305567a5d4"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Not quite. It doesn't matter that it's only a few characters; what matters is that it's at the very front.",
+      "source": "1c5e809036a2"
+    },
+    "quiz.q2.c.text": {
+      "text": "Only the time itself can't be reused",
+      "source": "dc058441358f"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "Not quite. Prefix matching stops at the first differing character and doesn't skip over it to keep comparing.",
+      "source": "20d2543df10b"
+    },
+    "quiz.q2.explanation": {
+      "text": "Put changing content at the end so the stable prefix can stay unchanged.",
+      "source": "0f42b26a2e2e"
+    },
+    "quiz.q3.prompt": {
+      "text": "In one response from the official DeepSeek API, prompt_cache_hit_tokens is 0; in another response from Bailian, there is no prompt_tokens_details. How should each be recorded?",
+      "source": "7ab1f966ff51"
+    },
+    "quiz.q3.a.text": {
+      "text": "The first as reported 0, the second as not reported",
+      "source": "b574d71f4ae9"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Correct. A field that exists with value 0 is an explicit report from the provider; a field that doesn't exist means we don't know.",
+      "source": "4ecf76484ab5"
+    },
+    "quiz.q3.b.text": {
+      "text": "Both as 0",
+      "source": "35fd0c0730af"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Not quite. The second has no cache field at all, and recording it as 0 puts a conclusion in the provider's mouth.",
+      "source": "9afb71771e01"
+    },
+    "quiz.q3.c.text": {
+      "text": "Both as not reported",
+      "source": "f6de5bd6ac18"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "Not quite. In the first, the field exists with value 0, which is the provider's explicit report of \"no hit\".",
+      "source": "af5035acaaa5"
+    },
+    "quiz.q3.explanation": {
+      "text": "First check whether the field is there, then check what its value is.",
+      "source": "50d8ded01d87"
+    },
+    "quiz.q4.prompt": {
+      "text": "Two requests have the same prefix hash, yet the second reports a hit of 0. Which statement is right?",
+      "source": "9715e29743f6"
+    },
+    "quiz.q4.a.text": {
+      "text": "The prefix is identical character for character; the lack of reuse this time is down to the provider's side",
+      "source": "7c5411db2112"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Correct. All we can confirm locally is that the prefix didn't change; whether it hits is up to the provider.",
+      "source": "5d7ac8df95f6"
+    },
+    "quiz.q4.b.text": {
+      "text": "The hash was computed wrong, so the prefix must have changed",
+      "source": "ce73802abc36"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "Not quite. If the sha256 is equal, the serialized prefixes are identical character for character.",
+      "source": "4d3339813bf6"
+    },
+    "quiz.q4.c.text": {
+      "text": "A cache hit changes what the model sees, so this one didn't hit",
+      "source": "a9002d775963"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "Not quite. Hit or no hit, what the model sees doesn't change.",
+      "source": "bc4440b7a243"
+    },
+    "quiz.q4.explanation": {
+      "text": "The prefix hash separates \"did anything change on our side\" from \"did the provider reuse the cache\".",
+      "source": "9b4848f8be58"
+    },
+    "quiz.q5.prompt": {
+      "text": "In one response from the Anthropic API, input_tokens is 100, cache_read_input_tokens is 900, and cache_creation_input_tokens is 0. What is the hit ratio?",
+      "source": "8364fee2e767"
+    },
+    "quiz.q5.a.text": {
+      "text": "90%: all input is the sum of the three, 1000, and 900 of it hit",
+      "source": "c8e6b4de7520"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Correct. Anthropic's input_tokens excludes the cached part, so you have to add it back to get all input.",
+      "source": "2848335cd9c4"
+    },
+    "quiz.q5.b.text": {
+      "text": "900%: 900 hits divided by input_tokens of 100",
+      "source": "f28d403c6259"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "Not quite. Here input_tokens does not include the hit part, so using it as the denominator makes the ratio exceed 100%.",
+      "source": "05aa54f1aeca"
+    },
+    "quiz.q5.c.text": {
+      "text": "It can't be computed, because there is no prompt_tokens",
+      "source": "d4c45b92fbf2"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "Not quite. Anthropic's format has no prompt_tokens; the sum of the three is all input.",
+      "source": "449847410906"
+    },
+    "quiz.q5.explanation": {
+      "text": "The fields mean different things at different providers; normalize by field source first, then compute the ratio.",
+      "source": "7fad1997d6d0"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Stable prefix\" and find the request where the provider first reports a hit.",
+      "source": "c6faebdcea82"
+    },
+    "check-hunt.explanation": {
+      "text": "lesson.cache_hit appears only when the cached tokens reported in the response are greater than 0. The event carries that request's prefix hash, hit count, and source field; the first one has first_hit, and later hits don't count. Compare it with the request before it: the prefix hashes are the same. If your run has no such event, look at lesson.cache_miss and lesson.cache_unreported: the former means the provider reported 0, and the latter means the response had no cache field.",
+      "source": "c248d29240d7"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I compared the prefix hash column of the \"Dynamic content first\" and \"Stable prefix\" runs, and can point to the line that breaks the prefix.",
+      "source": "7efd295268aa"
+    },
+    "check-points.item-2.text": {
+      "text": "I found the cache field in the usage of a response event and matched it to the cached tokens number in the report.",
+      "source": "216b193cd8f3"
+    },
+    "check-points.item-3.text": {
+      "text": "I turned off \"New session tag for each run\", ran \"Stable prefix\" twice in a row, and compared the hit reported for request 1 of the second run.",
+      "source": "9fcf0c4fbf8e"
+    },
+    "check-points.item-4.text": {
+      "text": "I can name two ways an agent can break the prefix, and where dynamic information should go.",
+      "source": "91e0c6c02cdd"
+    },
+    "code_notes.cached_tokens.note": {
+      "text": "The field where OpenAI-compatible endpoints such as Bailian report cache hits; it sits under prompt_tokens_details in usage.",
+      "source": "6883dcdf3ba3"
+    },
+    "code_notes.prefix_hash.note": {
+      "text": "The runner's prefix fingerprint: all messages before the last one, serialized, then the first 12 characters of sha256.",
+      "source": "5e97346570d5"
+    },
+    "code_notes.shared_prefix_chars.note": {
+      "text": "How many characters this request shares with the previous one from the start, after serialization; the first request has nothing to compare with.",
+      "source": "be3c1c0fb0a9"
+    },
+    "code_notes.normalize_cache_usage.note": {
+      "text": "Normalizes each provider's cache fields into three numbers: all input, hits, and written to cache; anything not reported is None.",
+      "source": "b1d6cb290ea6"
+    },
+    "code_notes.lesson.cache_hit.note": {
+      "text": "Emitted when the cached tokens reported in the response are greater than 0; carries the prefix hash, hit count, and source field.",
+      "source": "8b4ac0398722"
+    },
+    "code_notes.lesson.cache_miss.note": {
+      "text": "Emitted when the response reports a cache field with value 0: the provider explicitly said there was no hit this time.",
+      "source": "35ab76512238"
+    },
+    "code_notes.lesson.cache_unreported.note": {
+      "text": "Emitted when the response has no cache field at all: the hit count is unknown, not 0.",
+      "source": "068f86a8aabe"
+    },
+    "code_notes.isolate_run.note": {
+      "text": "Parameter: when on, each run generates a new session tag, so cache from a previous run can't be used.",
+      "source": "1f5334530260"
+    }
+  }
+}

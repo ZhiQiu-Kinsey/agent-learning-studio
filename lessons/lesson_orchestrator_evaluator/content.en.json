@@ -1,0 +1,1030 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "REASONING / ORCHESTRATION",
+      "source": "7171fca25a60"
+    },
+    "hero.headline": {
+      "text": "Before you call the model more times,",
+      "source": "6f1bb34ddd13"
+    },
+    "hero.highlight": {
+      "text": "work out what the extra calls buy you.",
+      "source": "b0b1497cec2b"
+    },
+    "hero.takeaway": {
+      "text": "Orchestrator-workers has one model split the task and several models work in parallel. Evaluator-optimizer has one model write and another review. Both cost more than a single call, and the revision loop of the second must have a limit.",
+      "source": "cf3691aff4e1"
+    },
+    "concepts.01-orchestrate.label": {
+      "text": "01 / ORCHESTRATE",
+      "source": "7342af463ee4"
+    },
+    "concepts.01-orchestrate.title": {
+      "text": "Subtasks are decided at run time",
+      "source": "86ba2b99e777"
+    },
+    "concepts.01-orchestrate.description": {
+      "text": "The orchestrator reads the task and outputs a list of subtasks, and the program dispatches workers from the list. The subtasks are not hard-coded in advance.",
+      "source": "19ba80cf8805"
+    },
+    "concepts.02-workers.label": {
+      "text": "02 / WORKERS",
+      "source": "ceea3e048085"
+    },
+    "concepts.02-workers.title": {
+      "text": "Workers in parallel",
+      "source": "060df75a9b1a"
+    },
+    "concepts.02-workers.description": {
+      "text": "Each worker gets only its own instruction and the matching material. Requests go out in parallel with a branch.",
+      "source": "0ebcb496512a"
+    },
+    "concepts.03-evaluate.label": {
+      "text": "03 / EVALUATE",
+      "source": "9114e634e7d5"
+    },
+    "concepts.03-evaluate.title": {
+      "text": "Write one version, review one version",
+      "source": "276895a1da81"
+    },
+    "concepts.03-evaluate.description": {
+      "text": "The generator writes a question. The evaluator gives pass or revise with specific comments, judging against a list of items written in advance (a rubric). The generator then writes another version based on the comments.",
+      "source": "652d95f61bdd"
+    },
+    "concepts.04-cost.label": {
+      "text": "04 / COST",
+      "source": "9ef4f7ec256b"
+    },
+    "concepts.04-cost.title": {
+      "text": "The call ledger",
+      "source": "d821b59d1c35"
+    },
+    "concepts.04-cost.description": {
+      "text": "Each call gets one row: which role, and the total_tokens the provider reported. Then compare with a baseline that makes just one call.",
+      "source": "1e7bd3764166"
+    },
+    "section-1.title": {
+      "text": "From a fixed flow to dynamic splitting",
+      "source": "1080b8ba596f"
+    },
+    "section-1.paragraphs.0": {
+      "text": "When you only know how to split the subtasks after reading the task, you can have a model split the task first and let the program dispatch work from the resulting list. This is orchestrator-workers. In the parallel arm of {{lesson:workflow-patterns}}, the three subtasks were hard-coded in the source, so you knew how many there were and what each did when you wrote the code. Change the task to \"write one question for each lesson studied this week\", and you only know how many lessons there are and what each question should test after reading the task. The program cannot hard-code them in advance.",
+      "source": "71c7e3ce21f1"
+    },
+    "section-1.paragraphs.1": {
+      "text": "This is like a project manager leading a few people. The manager reads the requirements first, lists several tasks, writes one sentence of instruction for each, and hands them to different people to do at the same time. Here the manager is the orchestrator: one model request that only splits the task and does no work. The workers do the work: one request each, doing only the item assigned. The number and content of the subtasks are decided by the orchestrator at run time.",
+      "source": "ff0fe133b71a"
+    },
+    "section-1.paragraphs.2": {
+      "text": "This lesson's task is to write one four-option multiple-choice question each for {{lesson:messages-context}}, {{lesson:application-state}}, and {{lesson:context-budget}}. In the program they are referred to by lesson identifiers such as messages-context. To allow a comparison with a single call, the task is deliberately small: the three lessons are fixed, so there is little room for the orchestrator to split differently. What this lesson looks at is how the mechanism works and how many more calls it costs, not a proof that orchestration is always better.",
+      "source": "38331b849ef5"
+    },
+    "section-2.title": {
+      "text": "The orchestrator's output is a plan: validate it, then dispatch",
+      "source": "acffa822a6a3"
+    },
+    "section-2.paragraphs.0": {
+      "text": "The orchestrator's reply decides how many requests go out next, so like the plan in {{lesson:plan-and-replan}}, the program checks it before execution. The orchestrator outputs only JSON: each item in the subtasks list has an id, a lesson, and one instruction sentence. valid_subtasks checks four things: there are 1 to 4 subtasks, each item is an object with all its fields, lesson is one of these three lessons, and no id is repeated.",
+      "source": "2ab3d633fbdb"
+    },
+    "section-2.paragraphs.1": {
+      "text": "The cap on the number protects the call budget. If the orchestrator splits out 10 subtasks, that means dispatching 10 workers and sending 10 more requests. This lesson limits workers to 4, so a run makes at most 5 calls. If validation fails, no workers are dispatched, a lesson.plan_error is recorded with the original text in raw, and the program neither patches the output for the orchestrator nor makes it split again.",
+      "source": "153089a9cc3a"
+    },
+    "section-2.paragraphs.2": {
+      "text": "After validation passes, the runner records the subtasks as one plan version: it publishes a lesson.plan with event set to created, with each subtask as one item in the plan. When all workers have returned, the program checks each question's format, marks each item done or failed, and publishes another lesson.plan with event set to progress. Note that validation checks only the shape of the list, not whether the split is good: splitting one lesson into two subtasks also passes, and when combining, only that lesson's first question is used.",
+      "source": "bb5ef5a956ca"
+    },
+    "section-3.title": {
+      "text": "Keep the workers' input small",
+      "source": "de854b80dff8"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Each worker gets only the one instruction the orchestrator gave it, plus the key points of its lesson. It cannot see the whole task, nor what the other workers are doing. Small input has three benefits: a worker is less likely to be led astray by irrelevant information, each request is shorter and so uses fewer tokens, and the workers do not depend on each other, so they can run in parallel.",
+      "source": "32738861fb07"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The cost is that nobody sees the whole picture. Three workers each write their own, so the wrong options of the three questions may look very alike, and the difficulty may differ a lot. The reference example does it slightly differently: besides its own instruction, a worker also gets the full original task, which makes it easier to align with the whole, but the input is longer. Like the reference example, this lesson's combine step only has the program collect the results and check the format, with no further model request to rewrite them together. To make the three questions consistent in style and non-overlapping, you could add a final request to edit them together, and that would be one more call.",
+      "source": "6dbc5f17aab2"
+    },
+    "section-3.paragraphs.2": {
+      "text": "The workers are sent in parallel with a thread pool. The branch on each request is the subtask id the orchestrator gave, such as `w1`, and the timeline uses it to pair requests and responses. The three workers' requests are all recorded in round 2, and round 1 is the orchestrator. As in the previous lesson, parallelism saves waiting time: the number of model calls is 1 plus the number of subtasks, not one fewer.",
+      "source": "b766d24fb76a"
+    },
+    "deep-dive-cost.title": {
+      "text": "Worked out by hand: how much more orchestration costs",
+      "source": "9d7fe65f2619"
+    },
+    "deep-dive-cost.summary": {
+      "text": "The orchestrator's request is pure overhead, and each worker's request also carries its own copy of the prompt.",
+      "source": "9fe5fe7007ae"
+    },
+    "deep-dive-cost.paragraphs.0": {
+      "text": "Here is a made-up example. A single call: the system prompt, the task, and the key points of three lessons add up to about 300 input tokens, and the model writes all three questions in one go for about 600 output tokens, about 900 in total.",
+      "source": "87c1a6939fea"
+    },
+    "deep-dive-cost.paragraphs.1": {
+      "text": "Orchestration: the orchestrator reads the task and writes the subtask list, about 250 input plus 100 output. Each of the three workers carries one question-writing prompt, one instruction, and one lesson's key points, about 150 input, and writes one question for about 220 output, so about 1110 for the three. The total is about 1460, around 1.6 times a single call. The extra comes from two places: the orchestrator's request produces none of the questions, and every worker has to carry its own copy of the system prompt and format instructions.",
+      "source": "5f2e1ba339db"
+    },
+    "deep-dive-cost.paragraphs.2": {
+      "text": "In a real run, this accounting is settled by the ledger: lesson.cost has one row per call, recording the role and the total_tokens the provider reported. Parallelism does not change this accounting. It only makes the three workers' waiting overlap. The more subtasks there are and the smaller each one is, the bigger the share of prompt-repetition overhead, which is one reason this lesson caps workers at 4.",
+      "source": "7b8e512af0ba"
+    },
+    "misconception-split-better.claim": {
+      "text": "Splitting a task among several parallel workers is always better than a single call.",
+      "source": "262abffd1e33"
+    },
+    "misconception-split-better.correction": {
+      "text": "Splitting costs an extra orchestration request, and each worker repeats the prompt. Workers cannot see each other, so the results may differ in style or overlap in content. When the subtasks are fixed and the task is small, a single call or a hard-coded parallel run is often more suitable. Whether splitting is good has to be judged by comparing with a baseline using the same checks.",
+      "source": "e76c54a1e02d"
+    },
+    "predict-calls.prompt": {
+      "text": "Before you run \"Orchestrator-workers\", guess: how many request events will this run have?",
+      "source": "de19a9fb9296"
+    },
+    "mq-n-plus-one.orchestrator-cost.prompt": {
+      "text": "The orchestrator splits out 3 subtasks, and each worker makes one request. How many times did this run call the model in total?",
+      "source": "a590fd3fc0f0"
+    },
+    "mq-n-plus-one.orchestrator-cost.a.text": {
+      "text": "4: 1 for the orchestrator and 3 for the workers",
+      "source": "99c030160d85"
+    },
+    "mq-n-plus-one.orchestrator-cost.a.feedback": {
+      "text": "Correct. In orchestration, the number of model calls is 1 + the number of subtasks.",
+      "source": "04d793a9bb8a"
+    },
+    "mq-n-plus-one.orchestrator-cost.b.text": {
+      "text": "3, not counting the orchestrator",
+      "source": "1cc5675cbff6"
+    },
+    "mq-n-plus-one.orchestrator-cost.b.feedback": {
+      "text": "Not quite. Splitting the task is itself a model request.",
+      "source": "61dd2d631b74"
+    },
+    "mq-n-plus-one.orchestrator-cost.c.text": {
+      "text": "1, because the workers run in parallel",
+      "source": "6b4730ece63e"
+    },
+    "mq-n-plus-one.orchestrator-cost.c.feedback": {
+      "text": "Not quite. Parallelism saves time, not calls.",
+      "source": "08fe5bfcac1f"
+    },
+    "mq-n-plus-one.orchestrator-cost.explanation": {
+      "text": "Parallelism can shorten the wait, but it does not reduce the number of model calls or the usage.",
+      "source": "42b68861e68b"
+    },
+    "section-4.title": {
+      "text": "One writes, one reviews, in turns with a limit",
+      "source": "4e6a261e3659"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Evaluator-optimizer has one role write and another review against a rubric. If a change is needed, it writes another version with the comments, until the review passes or the iteration limit is reached. The regex in {{lesson:reflection-revision}} had cases you could run, but a question does not: whether a multiple-choice question is good cannot be written as a program that decides right from wrong. The fallback is to write \"a good question\" in advance as a few specific judging items and ask a model to judge them one by one. That list of items is the rubric.",
+      "source": "b5bc10ffe7bd"
+    },
+    "section-4.paragraphs.1": {
+      "text": "This lesson's rubric has three items, written in the evaluator's system prompt: the stem tests the given key point; all four options are plausible, but only one is correct; and the explanation says why it is correct. The evaluator outputs only JSON: verdict is pass or revise, and feedback lists the specific problems. The generator, which is the \"optimizer\" in the pattern's name, gets only the key points in the first round. After that, each round it gets the key points, the previous version of the question, and the review comments. The reference example hands back every earlier version, while this lesson hands back only the previous one. To make it easy to count how many extra calls each round adds, this pattern writes a question only for the context-budget lesson.",
+      "source": "b11ee6243b35"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The reference example's loop has no limit. If the evaluator is never satisfied, it keeps running, and its review prompt requires \"no suggestions for improvement\" to pass, a bar that is very hard to meet. This lesson requires an iteration limit max_iters (1 to 3) and states the reason when it stops: the review passed, the review output had the wrong format, or the iteration limit was reached. Unlike {{lesson:reflection-revision}}, this lesson has no \"revision made no change\" rule. If the generator hands back the same question unchanged, it also has to wait for the limit as the backstop.",
+      "source": "1bb36c90d960"
+    },
+    "section-5.title": {
+      "text": "Whatever the program can determine, the program checks first",
+      "source": "fb5667391596"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Before asking the evaluator there is a program check. If the question's format is wrong, the format problem is returned directly as the comment, without spending an evaluator request. The format check is run by check_question: there must be a stem and an explanation, options must be exactly 4 distinct non-empty strings, and answer must be an integer from 0 to 3. An answer of true also counts as wrong, because in Python a boolean is a kind of integer, and the program deliberately excludes it.",
+      "source": "fc1f71bd00fd"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Both kinds of comments are recorded as lesson.review and told apart by source: format-check means it came from the program, and evaluator means it came from the evaluator. This is the same idea as the gate in {{lesson:workflow-patterns}}: deterministic rules go to the program, which costs no calls and judges the same way every time. Only what the program cannot judge, such as whether a distractor is \"plausible but really wrong\", goes to the model.",
+      "source": "612564dbbb8a"
+    },
+    "section-5.paragraphs.2": {
+      "text": "When the evaluator says pass, it means it found no problem against the three rubric items, not that the question is definitely right. The evaluator and the generator are the same model and see the same key points, so it may miss something, or be more lenient toward its own way of writing. So the report check \"每道题都通过格式检查\" (\"every question passes the format check\") speaks only about format; you still have to read the questions yourself to judge their quality.",
+      "source": "5045a1db6e4f"
+    },
+    "deep-dive-judge.title": {
+      "text": "How to make the evaluator more reliable",
+      "source": "42ec603a1859"
+    },
+    "deep-dive-judge.summary": {
+      "text": "The more specific the rubric, the better. The evaluator itself also has to be checked against human-annotated samples.",
+      "source": "fb51fb6d9708"
+    },
+    "deep-dive-judge.paragraphs.0": {
+      "text": "Ideally each item of a rubric lets two people reach the same verdict independently. \"The question is high quality\" cannot be judged, while \"exactly one of the four options is correct\" can be checked option by option. This lesson's three items are already fairly specific, but \"all four options are plausible\" still takes judgment, and this is where the evaluator is most likely to be inconsistent.",
+      "source": "4dd489391030"
+    },
+    "deep-dive-judge.paragraphs.1": {
+      "text": "Models acting as reviewers have several known biases: they favor longer, more detailed answers, the same question reviewed twice can get different verdicts, and when the reviewer is the same model as the generator, it may favor its own way of writing. Common countermeasures are to say in the rubric that length earns no extra credit, to review the same output several times and see whether the verdicts agree, and to use a different model from the generator as the reviewer.",
+      "source": "1090005329bc"
+    },
+    "deep-dive-judge.paragraphs.2": {
+      "text": "In the end you still have to check the evaluator against human annotation: prepare a batch of questions that people judged as \"should pass\" or \"should not pass\", let the evaluator judge them all, and see what share agrees with the people. Only when that share is high enough does its pass carry weight. This lesson does not do this step, so the evaluator's verdict is treated as one comment, not as an acceptance result.",
+      "source": "e73b50d2d4d1"
+    },
+    "misconception-pass-means-good.claim": {
+      "text": "The evaluator gave pass, so the question has no problems and can be used as is.",
+      "source": "dfea82fb41ab"
+    },
+    "misconception-pass-means-good.correction": {
+      "text": "Pass only means the evaluator found no problem against the three rubric items. The evaluator and the generator are the same model, so it may miss something or be inconsistent, and how accurate it is has to be checked against human-annotated samples. This lesson treats its verdict as one comment, and a person still has to read the questions to judge their quality.",
+      "source": "07270cff579b"
+    },
+    "mq-eval-gate.format-before-judge.prompt": {
+      "text": "The question the generator wrote has only 3 options. What does this lesson's loop do next?",
+      "source": "bfd04a47671d"
+    },
+    "mq-eval-gate.format-before-judge.a.text": {
+      "text": "The program returns the missing-options problem as the comment directly, without requesting the evaluator",
+      "source": "63efa339776c"
+    },
+    "mq-eval-gate.format-before-judge.a.feedback": {
+      "text": "Correct. A problem the program can determine does not need a model request.",
+      "source": "da77d1b700f9"
+    },
+    "mq-eval-gate.format-before-judge.b.text": {
+      "text": "Hand it to the evaluator and let it point out the missing options",
+      "source": "f2645a83eb33"
+    },
+    "mq-eval-gate.format-before-judge.b.feedback": {
+      "text": "Not quite. That would work, but it wastes one extra call.",
+      "source": "bbd1ca93c9b0"
+    },
+    "mq-eval-gate.format-before-judge.c.text": {
+      "text": "Judge it passed, because the stem is fine",
+      "source": "8a406f1a2bf1"
+    },
+    "mq-eval-gate.format-before-judge.c.feedback": {
+      "text": "Not quite. A wrong format cannot pass.",
+      "source": "b7a47600397b"
+    },
+    "mq-eval-gate.format-before-judge.explanation": {
+      "text": "Deterministic checks go before the model review.",
+      "source": "ebb253cf5ea1"
+    },
+    "section-6.title": {
+      "text": "The call ledger: what the extra calls bought",
+      "source": "9331c9619a8e"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Before you call the model more times, you should be able to say how much more it cost and what it bought. This lesson's runner writes one ledger row for each call. The Ledger records the role (single call, orchestrator, worker, generator, evaluator), the round, the branch, the duration, and the total_tokens the provider reported in its response. If a response did not report usage, it is recorded as not reported and not estimated. The report gives the number of model calls, the number of calls per role, and the accumulated total_tokens, and the full ledger is in lesson.cost.",
+      "source": "b444c9e48da7"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The number of calls for the three kinds of run can be worked out in advance. A single call is always 1. Orchestration is 1 plus the number of subtasks, so 4 for three lessons. If validation fails, it is only the orchestrator's 1 call. The revision loop asks the generator first in each round, and asks the evaluator once the format is right, so each round takes 1 to 2 calls. With max_iters=3 the minimum is 2 (passing in the first round) and the maximum is 6 (every round has the right format and is asked to revise).",
+      "source": "79aa56454a1d"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The ledger can only answer half of what the extra calls bought. Format is checked by the program, so the three kinds of run can be compared directly: a single call has to get the format of all three questions right in one reply, and an error anywhere counts. In orchestration each question is generated and checked separately, and when something goes wrong you can tell which worker did it. But whether the questions are well written is something the format check cannot see. Only the evaluator mode asked a model to review against a rubric, and its verdict is just one comment. In the end, you have to read the questions to judge whether it was worth it.",
+      "source": "ab776cc49f55"
+    },
+    "section-6.paragraphs.3": {
+      "text": "{{lesson:reflection-revision}} and this lesson are both answering the same question: can one more role and one more round of calls buy a better result? The answer depends on what the extra calls bring. Test results are new information that did not exist when the draft was written. The orchestrator's split lets each worker do just one thing. The evaluator has a rubric that is not in the generator's prompt. A round that brings nothing new is just spending money. {{lesson:multi-agent-patterns}} does this accounting again when it covers several agents working together.",
+      "source": "407dd15e99ef"
+    },
+    "deep-dive-when.title": {
+      "text": "When these two patterns are worth using",
+      "source": "92467b4528d0"
+    },
+    "deep-dive-when.summary": {
+      "text": "Both patterns trade calls and time for quality, so first confirm the task really needs it.",
+      "source": "bd0d0bc09f2a"
+    },
+    "deep-dive-when.paragraphs.0": {
+      "text": "Orchestrator-workers suits tasks whose subtasks cannot be stated in advance: for the same kind of request, this time it splits into two parts and next time into five, and how to split depends on the input itself. Deep research features are a typical example: a model first reads the question and splits out several research directions, several workers then search in parallel, and the results are combined into a report. Different questions yield different directions and numbers. *Understanding AI Agents in Depth* (深入理解 AI Agent) classes Anthropic's research system as this structure; for each product's actual approach, see its public docs. Conversely, if the task splits into the same few parts every time, hard-code them in the program and use the previous lesson's parallelism, which saves the orchestrator's request and the code that validates it. For a simple task with a single output, splitting only adds places for errors.",
+      "source": "d45914fb5ea9"
+    },
+    "deep-dive-when.paragraphs.1": {
+      "text": "Claude Code offers product versions of both structures. The model in the main conversation can use the `Agent` tool to send out subtasks. The dispatched agent has its own context, system prompt, and available tools, and when it finishes it hands only a summary back to the main conversation. Investigations that do not depend on each other can be sent out several at a time, and each one consumes usage on its own. Whether to dispatch and how many are decided by the model round by round, whereas this lesson's orchestrator writes the subtask list just once and leaves dispatching to the program. The official best practices also suggest that before wrapping up, you start another agent with a clean context to review the changes, looking only at the changes and the given standard. They also warn that a reviewer asked to find problems will often report some even when the work is fine, so ask it to report only problems that affect correctness or the requirements. The same reasoning is why this lesson does not use \"no suggestions for improvement\" as the bar for passing. Follow the official docs for the exact mechanism.",
+      "source": "46a80d08a879"
+    },
+    "deep-dive-when.paragraphs.2": {
+      "text": "Evaluator-optimizer suits tasks where two conditions both hold: there are judging items you can state clearly, and revising with comments really makes the output better. For example, a translation that dropped a sentence, or an essay that left one question unanswered: the comment is specific and the revision has a direction. If the comments are always a vague \"make it a bit better\", or revisions often introduce new problems, extra rounds just cost more money.",
+      "source": "5132cab470ed"
+    },
+    "deep-dive-when.paragraphs.3": {
+      "text": "Both patterns lengthen the wait: orchestration first waits for the orchestrator and then for the slowest worker, and the revision loop is serial, with each round waiting for the previous round's review. In scenarios that demand fast responses, first work out the maximum number of rounds you may have to wait. This lesson's experiments run each pattern only once on one small task, to show the mechanism and the ledger. They cannot show whether the patterns are worth it on other tasks.",
+      "source": "e45341efb432"
+    },
+    "compare-modes.title": {
+      "text": "The three runs",
+      "source": "a22329a9175d"
+    },
+    "compare-modes.columns.0": {
+      "text": "Pattern",
+      "source": "47a270081ab2"
+    },
+    "compare-modes.columns.1": {
+      "text": "Model requests",
+      "source": "3186fef1a2be"
+    },
+    "compare-modes.columns.2": {
+      "text": "Who decides the split or the stop",
+      "source": "a50146f3e3ed"
+    },
+    "compare-modes.columns.3": {
+      "text": "Main risk",
+      "source": "a53f0c67cdda"
+    },
+    "compare-modes.rows.0.0": {
+      "text": "Single call",
+      "source": "a62c8d9e6d63"
+    },
+    "compare-modes.rows.0.1": {
+      "text": "1",
+      "source": "35cf44ac0fcb"
+    },
+    "compare-modes.rows.0.2": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "compare-modes.rows.0.3": {
+      "text": "Writing too much at once, and one question gets the format wrong",
+      "source": "9ca05a6430db"
+    },
+    "compare-modes.rows.1.0": {
+      "text": "Orchestrator-workers",
+      "source": "65e600c34283"
+    },
+    "compare-modes.rows.1.1": {
+      "text": "1 + number of subtasks",
+      "source": "42b9252d9a72"
+    },
+    "compare-modes.rows.1.2": {
+      "text": "The orchestrator decides how many parts to split into",
+      "source": "b5f807c91d87"
+    },
+    "compare-modes.rows.1.3": {
+      "text": "A poor split; workers cannot see each other",
+      "source": "ea6c62143e24"
+    },
+    "compare-modes.rows.2.0": {
+      "text": "Evaluator-optimizer",
+      "source": "ffa94aaa95ca"
+    },
+    "compare-modes.rows.2.1": {
+      "text": "1 to 2 per round",
+      "source": "fb385bb7b912"
+    },
+    "compare-modes.rows.2.2": {
+      "text": "The evaluator's verdict and max_iters",
+      "source": "1b062aa33a82"
+    },
+    "compare-modes.rows.2.3": {
+      "text": "The evaluator is never satisfied, and without a limit it cannot stop",
+      "source": "be951b831a5d"
+    },
+    "walkthrough.title": {
+      "text": "One orchestration",
+      "source": "635735ba26a0"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, one run of the orchestration pattern. The code is a simplified illustration. Your run's evidence is in the events on the lab bench.",
+      "source": "b9d5586e0659"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Split",
+      "source": "afbe69d8c5f5"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Orchestrator",
+      "source": "54789cbb5178"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Output the subtask list",
+      "source": "88b90c782ef4"
+    },
+    "walkthrough.step-1.body": {
+      "text": "After the program validates it, it is recorded as one plan version.",
+      "source": "9dc66e660708"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.plan (event=created)",
+      "source": "1816fc1405a6"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Dispatch",
+      "source": "97d5647f408a"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Dispatch the workers in parallel",
+      "source": "a844dc517430"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Each worker's request carries its own branch.",
+      "source": "4231ea238a0f"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "request.data.branch",
+      "source": "27fa5360ddcf"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Check",
+      "source": "978e275133d1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Check each question's format",
+      "source": "01f3ff9024b2"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Four distinct options, a valid answer, a stem, and an explanation.",
+      "source": "7aba37972b38"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.worker",
+      "source": "11ad96f4b331"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Ledger",
+      "source": "23b1604546bf"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Sum up calls and usage",
+      "source": "a550afbc74ef"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Only the total_tokens the provider reported are added up.",
+      "source": "2278e194959b"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.cost",
+      "source": "5780acba1f2d"
+    },
+    "references.cookbook-orchestrator.title": {
+      "text": "Orchestrator-workers: deciding subtasks at run time (Claude Cookbooks)",
+      "source": "c50d68d78a27"
+    },
+    "references.cookbook-evaluator.title": {
+      "text": "Evaluator-optimizer: the generate-and-review loop (Claude Cookbooks)",
+      "source": "af9a9a9414e4"
+    },
+    "references.book-collaboration.title": {
+      "text": "Collaboration topologies and proposer-reviewer — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "c682e910bbb1"
+    },
+    "references.book-rubric-judge.title": {
+      "text": "Rubrics and judge model bias — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "ffbfd64b10d9"
+    },
+    "references.ms-multi-agent.title": {
+      "text": "Division of labor and visibility among multiple agents (Microsoft AI Agents for Beginners)",
+      "source": "fe1c84c6fc85"
+    },
+    "references.claude-code-delegate.title": {
+      "text": "Dispatching agents that work in their own context (Claude Code docs, checked 2026-10-04)",
+      "source": "b2ee73d74a02"
+    },
+    "references.claude-code-review-step.title": {
+      "text": "Best practices: add an adversarial review before wrapping up (Claude Code docs, checked 2026-10-04)",
+      "source": "ccb4e11eb8f9"
+    },
+    "code-ledger.n83.text": {
+      "text": "The ledger is this lesson's cost evidence: one row per model call, with the role, round, branch, and usage.",
+      "source": "f54e7dd9b36e"
+    },
+    "code-ledger.n90.text": {
+      "text": "Every role goes through the same call, so single call, orchestrator, workers, generator, and evaluator are all in the same ledger.",
+      "source": "33a6f45d8700"
+    },
+    "code-ledger.n92.text": {
+      "text": "Requests and responses are still recorded as events by the platform as they are, and the ledger adds just one summary row.",
+      "source": "c135d9535c6e"
+    },
+    "code-ledger.n96.text": {
+      "text": "Record only the total_tokens the provider reported, and None if there is none.",
+      "source": "52ef25f0d89e"
+    },
+    "code-ledger.n103.text": {
+      "text": "When accumulating, write out how many calls did not report, and do not fill the gap with an estimate.",
+      "source": "efc7783c53d1"
+    },
+    "code-ledger.n106.text": {
+      "text": "If no call reported usage, write \"未报告\" (not reported), not 0.",
+      "source": "e6f8d6bcf9ef"
+    },
+    "code-orchestrator.n126.text": {
+      "text": "The orchestrator's output is plan data, and the program validates it before dispatching.",
+      "source": "834e7d0fb70a"
+    },
+    "code-orchestrator.n129.text": {
+      "text": "At most 4 subtasks: however many the orchestrator splits out, the number of workers has a cap.",
+      "source": "d15a77104e5f"
+    },
+    "code-orchestrator.n130.text": {
+      "text": "lesson must be one of the three lessons, so the worker can get the matching key points.",
+      "source": "e23abbaeb42c"
+    },
+    "code-orchestrator.n132.text": {
+      "text": "id must not repeat: it is both the plan item's id and the worker request's branch.",
+      "source": "77ab7b511cc4"
+    },
+    "code-orchestrator.n139.text": {
+      "text": "Call 1: the orchestrator only splits the task and writes no questions.",
+      "source": "e19a13e314ee"
+    },
+    "code-orchestrator.n146.text": {
+      "text": "If validation fails, no workers are dispatched, and the original text is recorded.",
+      "source": "d092b0492812"
+    },
+    "code-orchestrator.n149.text": {
+      "text": "Subtasks are plan items, published as lesson.plan, and the \"Plan and checklist\" view can show their status.",
+      "source": "c18de03cce07"
+    },
+    "code-orchestrator.n153.text": {
+      "text": "A worker gets only its own instruction and that lesson's key points, and its request carries branch.",
+      "source": "dae200ebf5f6"
+    },
+    "code-orchestrator.n157.text": {
+      "text": "Workers run in parallel and share one call budget. The total number of calls is 1 + the number of subtasks.",
+      "source": "8d5ae38c33e1"
+    },
+    "code-orchestrator.n160.text": {
+      "text": "_collect checks each question's format and marks the plan item done or failed.",
+      "source": "3d32baf6d98e"
+    },
+    "code-evaluator.n197.text": {
+      "text": "Evaluator-optimizer writes a question for just one lesson, to make it easy to count how many extra calls each round adds.",
+      "source": "bebdf9f33079"
+    },
+    "code-evaluator.n199.text": {
+      "text": "The number of loop iterations is decided by max_iters, so there is no infinite loop.",
+      "source": "632f6a17d203"
+    },
+    "code-evaluator.n203.text": {
+      "text": "The revision request carries the previous version and the review comments, and the generator rewrites based on them.",
+      "source": "911741ea8541"
+    },
+    "code-evaluator.n204.text": {
+      "text": "The generator and the workers use the same question-writing prompt, with at least one call each round.",
+      "source": "957f59a064cd"
+    },
+    "code-evaluator.n205.text": {
+      "text": "First do the format check the program can determine: four distinct options, answer an integer from 0 to 3, and a stem and an explanation.",
+      "source": "3071505b505b"
+    },
+    "code-evaluator.n209.text": {
+      "text": "If the format is wrong, return the format problem directly without requesting the evaluator, saving one call.",
+      "source": "e4f94836ffd2"
+    },
+    "code-evaluator.n212.text": {
+      "text": "Only when the format is right is the evaluator asked to review against the rubric, and its verdict accepts only pass or revise.",
+      "source": "4cb5c56b3d1b"
+    },
+    "code-evaluator.n214.text": {
+      "text": "The source of lesson.review says whether the comments came from the format check or the evaluator.",
+      "source": "c11ac3d90584"
+    },
+    "code-evaluator.n218.text": {
+      "text": "If the evaluator judges it passed, stop, and write the stop reason into the report.",
+      "source": "7301dae5b71b"
+    },
+    "code-evaluator.n225.text": {
+      "text": "The format verdict in the report refers to the last version of the question.",
+      "source": "61bf5de9b63b"
+    },
+    "code-decision.title": {
+      "text": "Workers in parallel, revisions with a limit, and a separate ledger",
+      "source": "1caba7977244"
+    },
+    "code-decision.chosen": {
+      "text": "The orchestrator's subtasks are validated before dispatching, and workers run in parallel with minimal input. The revision loop does the format check first and sets max_iters. Every call is entered in the ledger, using only usage the provider reported.",
+      "source": "4a14ae384247"
+    },
+    "code-decision.serial-workers.title": {
+      "text": "Run the workers one after another",
+      "source": "024414efc52c"
+    },
+    "code-decision.serial-workers.why_not": {
+      "text": "The reference example is serial, which waits longer for no reason when the subtasks do not depend on each other.",
+      "source": "9df4fe86510f"
+    },
+    "code-decision.unbounded-eval.title": {
+      "text": "Keep revising until the evaluator is satisfied",
+      "source": "b14bd3f4e7ee"
+    },
+    "code-decision.unbounded-eval.why_not": {
+      "text": "The evaluator might return revise forever, and the loop would never stop.",
+      "source": "7af90ac39194"
+    },
+    "code-decision.estimate-cost.title": {
+      "text": "Estimate each call's usage from the text length",
+      "source": "f704aaf19ea7"
+    },
+    "code-decision.estimate-cost.why_not": {
+      "text": "An estimate is not the provider's metering. If nothing was reported, say not reported.",
+      "source": "af754eef8fef"
+    },
+    "orchestrator-vs-single.title": {
+      "text": "Orchestrator-workers versus a single call",
+      "source": "d410a8e22c31"
+    },
+    "orchestrator-vs-single.hypothesis": {
+      "text": "Orchestration makes at least one more request than a single call and uses more tokens. The workers run in parallel, and each question is checked separately.",
+      "source": "986d9058616e"
+    },
+    "orchestrator-vs-single.single.label": {
+      "text": "Single call (baseline)",
+      "source": "e8b56e6474cb"
+    },
+    "orchestrator-vs-single.orchestrator.label": {
+      "text": "Orchestrator-workers",
+      "source": "65e600c34283"
+    },
+    "orchestrator-vs-single.subtasks.text": {
+      "text": "The subtasks the orchestrator split out, recorded as the items in the plan.",
+      "source": "0b4e4c42c3c1"
+    },
+    "orchestrator-vs-single.worker-branch.text": {
+      "text": "The branch a worker request carries.",
+      "source": "d9b056125cb2"
+    },
+    "orchestrator-vs-single.worker-result.text": {
+      "text": "One worker's format check result.",
+      "source": "6aafa62eedfb"
+    },
+    "orchestrator-vs-single.calls.text": {
+      "text": "The number of model calls.",
+      "source": "934a7faf27b3"
+    },
+    "orchestrator-vs-single.tokens.text": {
+      "text": "Accumulated total_tokens.",
+      "source": "fd38b079012b"
+    },
+    "orchestrator-vs-single.guide.0.text": {
+      "text": "Both arms do the same task: write one question for each of three lessons. First see how the orchestrator splits it.",
+      "source": "ca85f26c2fb4"
+    },
+    "orchestrator-vs-single.guide.1.text": {
+      "text": "The orchestrator's subtasks became three items in the plan. The single-call arm has no such step.",
+      "source": "30ba37408af8"
+    },
+    "orchestrator-vs-single.guide.2.text": {
+      "text": "The workers' requests go out in parallel carrying a branch, and responses are paired by it.",
+      "source": "d0786a51e476"
+    },
+    "orchestrator-vs-single.guide.3.text": {
+      "text": "Each question gets a format check when it comes back.",
+      "source": "1149a2c538bb"
+    },
+    "orchestrator-vs-single.guide.4.text": {
+      "text": "Compare the number of model calls: 1 for a single call, and 1 + number of subtasks for orchestration.",
+      "source": "3fc948df8989"
+    },
+    "orchestrator-vs-single.guide.5.text": {
+      "text": "Usage takes only the numbers the provider reported.",
+      "source": "5c6872ded9ee"
+    },
+    "orchestrator-vs-single.conclusion.proves.0": {
+      "text": "In this run, how many subtasks the orchestrator split out, each worker's request and result, and both arms' number of model calls and reported usage.",
+      "source": "16126a780d3a"
+    },
+    "orchestrator-vs-single.conclusion.does_not_prove.0": {
+      "text": "Passing the format check does not mean the question is well written. Quality depends on the evaluator's review or on a person reading it.",
+      "source": "6d25856d9e0d"
+    },
+    "orchestrator-vs-single.conclusion.does_not_prove.1": {
+      "text": "One comparison cannot show that orchestration is worth these extra calls on other tasks.",
+      "source": "65a8b71d21f3"
+    },
+    "orchestrator-vs-single.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the subtasks, questions, and usage are given by a fixed script.",
+      "source": "42cbaa33f2a9"
+    },
+    "evaluator-loop.title": {
+      "text": "The revision loop and the iteration limit",
+      "source": "fdf161187334"
+    },
+    "evaluator-loop.hypothesis": {
+      "text": "When the evaluator asks for a revision, the generator revises once with the comments. The loop stops when the evaluator judges it passed, when the evaluator's output has the wrong format, or when max_iters is reached, and the stop reason goes into the report.",
+      "source": "33072f6fbb0f"
+    },
+    "evaluator-loop.three.label": {
+      "text": "Evaluator-optimizer, up to 3 rounds",
+      "source": "562edcd3afe2"
+    },
+    "evaluator-loop.one.label": {
+      "text": "Evaluator-optimizer, 1 round only",
+      "source": "16df51b8779d"
+    },
+    "evaluator-loop.first-review.text": {
+      "text": "The first round's review: source, verdict, and comments.",
+      "source": "36f8953cf2ef"
+    },
+    "evaluator-loop.revision.text": {
+      "text": "The generator's revised draft: revises points to the version it revised.",
+      "source": "9d54c8d670a9"
+    },
+    "evaluator-loop.stop.text": {
+      "text": "The stop reason.",
+      "source": "28c96ca606c1"
+    },
+    "evaluator-loop.ledger.text": {
+      "text": "The full call ledger.",
+      "source": "8fa9df309cfb"
+    },
+    "evaluator-loop.guide.0.text": {
+      "text": "The revision loop has two roles: the generator and the evaluator. First look at the first round's review.",
+      "source": "b15d8e11a93a"
+    },
+    "evaluator-loop.guide.1.text": {
+      "text": "source says whether the comments came from the evaluator or the format check.",
+      "source": "f0cc579ab393"
+    },
+    "evaluator-loop.guide.2.text": {
+      "text": "The generator revised once with the comments. revises is the version of the draft that was revised, and previous is that version's original text.",
+      "source": "fbeb7eec07b2"
+    },
+    "evaluator-loop.guide.3.text": {
+      "text": "Why the loop stopped: the evaluator judged it passed, or the limit was reached.",
+      "source": "7ef073d7e2aa"
+    },
+    "evaluator-loop.guide.4.text": {
+      "text": "Each ledger row is one call, with the role and usage.",
+      "source": "225788b3012d"
+    },
+    "evaluator-loop.conclusion.proves.0": {
+      "text": "How many rounds this loop ran, where each round's comments came from, and why it stopped can all be checked in the events.",
+      "source": "f539210163af"
+    },
+    "evaluator-loop.conclusion.does_not_prove.0": {
+      "text": "The evaluator saying it passed only means it found no problem against the rubric. The question may still be wrong.",
+      "source": "98f16484d719"
+    },
+    "evaluator-loop.conclusion.does_not_prove.1": {
+      "text": "In offline test mode the evaluator always asks for a revision the first time; the script is written that way.",
+      "source": "5a0557768d64"
+    },
+    "inputs.pattern.label": {
+      "text": "Pattern",
+      "source": "47a270081ab2"
+    },
+    "inputs.pattern.options.single.label": {
+      "text": "Single call",
+      "source": "a62c8d9e6d63"
+    },
+    "inputs.pattern.options.orchestrator.label": {
+      "text": "Orchestrator-workers",
+      "source": "65e600c34283"
+    },
+    "inputs.pattern.options.evaluator.label": {
+      "text": "Evaluator-optimizer",
+      "source": "ffa94aaa95ca"
+    },
+    "inputs.max_iters.label": {
+      "text": "Iteration limit",
+      "source": "37d9488d54e2"
+    },
+    "inputs.max_iters.help": {
+      "text": "Takes effect only in evaluator-optimizer mode, 1 to 3 rounds.",
+      "source": "f2c587cf6801"
+    },
+    "quiz.q1.prompt": {
+      "text": "How does orchestrator-workers differ from the parallelism in the previous lesson?",
+      "source": "acbd66350979"
+    },
+    "quiz.q1.a.text": {
+      "text": "The subtasks are decided by the orchestrator at run time and are not hard-coded in advance",
+      "source": "900a655c3696"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Correct. You only know how to split after reading the task, so an orchestrator is needed.",
+      "source": "cb409f0ca498"
+    },
+    "quiz.q1.b.text": {
+      "text": "Orchestrator-workers cannot run in parallel",
+      "source": "fb0225e5f717"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Not quite. This lesson's workers do run in parallel.",
+      "source": "587471d88515"
+    },
+    "quiz.q1.c.text": {
+      "text": "Orchestrator-workers does not need a model",
+      "source": "1349af2d0a5a"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "Not quite. Both the orchestrator and the workers call a model.",
+      "source": "c13eddbb088e"
+    },
+    "quiz.q1.explanation": {
+      "text": "Dynamic splitting is what defines this pattern, and it is also why it costs one more call.",
+      "source": "186c1ff485c1"
+    },
+    "quiz.q2.prompt": {
+      "text": "Why must evaluator-optimizer set max_iters?",
+      "source": "b335a7f4ecae"
+    },
+    "quiz.q2.a.text": {
+      "text": "The evaluator may keep asking for revisions, and the loop would never stop",
+      "source": "0c3dae63cb93"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. Every loop needs a stop condition.",
+      "source": "d29a4ad56f75"
+    },
+    "quiz.q2.b.text": {
+      "text": "The provider limits the number of model calls",
+      "source": "72b5c771603d"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Not quite. The limit is the program's own design.",
+      "source": "527f990612fa"
+    },
+    "quiz.q2.c.text": {
+      "text": "The first round's result is always the best",
+      "source": "320c458098cf"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "Not quite. The limit has nothing to do with how good the result is.",
+      "source": "59e38d42635b"
+    },
+    "quiz.q2.explanation": {
+      "text": "Every loop needs a limit.",
+      "source": "bb7c3de8d383"
+    },
+    "quiz.q3.prompt": {
+      "text": "What effect does running the workers in parallel have on usage?",
+      "source": "ed07f4220416"
+    },
+    "quiz.q3.a.text": {
+      "text": "None. The number of model calls and the usage are the same",
+      "source": "b6972496396b"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Correct. Parallelism saves waiting time.",
+      "source": "fb67c42551aa"
+    },
+    "quiz.q3.b.text": {
+      "text": "Usage goes down because they are sent at the same time",
+      "source": "1ab42f698d87"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Not quite. Each request is metered as usual.",
+      "source": "ffb1e12c65ba"
+    },
+    "quiz.q3.c.text": {
+      "text": "Usage doubles",
+      "source": "b1d796046c41"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "Not quite. The number of model calls did not change.",
+      "source": "a22141fd1d05"
+    },
+    "quiz.q3.explanation": {
+      "text": "Time and cost are two different things, and they should be looked at separately.",
+      "source": "5249547428b5"
+    },
+    "quiz.q4.prompt": {
+      "text": "With max_iters at 3, the evaluator says revise every round, and the question's format is correct every round. How many times does this run call the model in total?",
+      "source": "7a90a1106375"
+    },
+    "quiz.q4.a.text": {
+      "text": "6: 1 generator call and 1 evaluator call per round",
+      "source": "02ce95e7ca4f"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Correct. The format is right every time, so the evaluator is asked every round.",
+      "source": "dad170c660f6"
+    },
+    "quiz.q4.b.text": {
+      "text": "5: the last round does not ask the evaluator",
+      "source": "6cc62f06ca53"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "Not quite. The last round is reviewed as well, and there is just no revision after the review.",
+      "source": "43ee42fa7c51"
+    },
+    "quiz.q4.c.text": {
+      "text": "3: the evaluator does not count as a model call",
+      "source": "12d4db4b6474"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "Not quite. The evaluator is also a model request, and the ledger records it as evaluator.",
+      "source": "d6cbff55e9ec"
+    },
+    "quiz.q4.explanation": {
+      "text": "The revision loop makes 1 to 2 calls per round. A round with a format error skips the evaluator's call.",
+      "source": "751240d5b1b8"
+    },
+    "quiz.q5.prompt": {
+      "text": "The orchestrator split out 5 subtasks. What does this lesson's runner do?",
+      "source": "5bd504d94658"
+    },
+    "quiz.q5.a.text": {
+      "text": "Validation fails, a lesson.plan_error is recorded, no workers are dispatched, and there is only the orchestrator's 1 call",
+      "source": "ec864558fefa"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Correct. There are at most 4 subtasks, and anything over that means the whole plan is discarded.",
+      "source": "e00e67790051"
+    },
+    "quiz.q5.b.text": {
+      "text": "Dispatch the first 4 workers and drop the 5th",
+      "source": "d4a924d7800e"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "Not quite. The program does not trim the orchestrator's output. If validation fails, no work is dispatched.",
+      "source": "fcc915de14e3"
+    },
+    "quiz.q5.c.text": {
+      "text": "Dispatch 5 workers anyway",
+      "source": "fd59f9a9898d"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "Not quite. The cap on workers is what protects the call budget.",
+      "source": "27a9dfd00920"
+    },
+    "quiz.q5.explanation": {
+      "text": "The orchestrator's output is a plan to be checked, and if it fails, it is not executed.",
+      "source": "64ddcda9a2a3"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Orchestrator-workers\" and find the step where the orchestrator splits out the subtasks.",
+      "source": "0d7b83cd3d1b"
+    },
+    "check-hunt.explanation": {
+      "text": "This lesson.plan with event=created is the plan recorded after the orchestrator's output passed validation, and each item corresponds to one worker. The requests with a branch that follow were dispatched according to this plan. Round 2 also has a lesson.plan with event=progress, which is the status update after the workers returned, not the split. If the orchestrator's output did not pass validation, you would see a lesson.plan_error instead of a plan.",
+      "source": "edfca3a2c928"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I compared the number of model calls and the accumulated usage of the single call and orchestration.",
+      "source": "c363bc07a433"
+    },
+    "check-points.item-2.text": {
+      "text": "I found the stop reason in the revision loop and can say which kind it was.",
+      "source": "cd1618819a67"
+    },
+    "check-points.item-3.text": {
+      "text": "I read at least one generated question and judged for myself whether it was well written.",
+      "source": "60bad8f4b911"
+    },
+    "code_notes.lesson.plan.note": {
+      "text": "Reuses the plan event from {{lesson:plan-and-replan}}. created records the subtasks the orchestrator split out. progress marks each item's success or failure after all workers have returned.",
+      "source": "d89438688428"
+    },
+    "code_notes.branch.note": {
+      "text": "The pairing tag for parallel requests. This lesson uses the subtask id the orchestrator gave (such as w1), and responses are matched back to requests by it.",
+      "source": "03112214fbb1"
+    },
+    "code_notes.lesson.note": {
+      "text": "A subtask field: which lesson this question belongs to. It can only be one of the three lessons, and the worker uses it to get that lesson's key points.",
+      "source": "dcba2faa26b7"
+    },
+    "code_notes.answer.note": {
+      "text": "The index of the correct option in the question JSON. 0 to 3 map to the four options in order.",
+      "source": "6496b0d40791"
+    },
+    "code_notes.source.note": {
+      "text": "Review source: evaluator means the comments came from the evaluator, and format-check means they came from the program's format check.",
+      "source": "093d0ab46f99"
+    },
+    "code_notes.total_tokens.note": {
+      "text": "The total token count the provider reports in each response's usage. A call that did not report is recorded as None and not estimated.",
+      "source": "f3becc99eb17"
+    },
+    "code_notes.lesson.cost.note": {
+      "text": "The call ledger: calls holds one row per call (role, branch, round, tokens, duration), and total_tokens is the accumulated total.",
+      "source": "3bafbf3e30d1"
+    },
+    "code_notes.valid_subtasks.note": {
+      "text": "Validates the orchestrator's subtasks before dispatching: 1 to 4 of them, all fields present, lesson within the three lessons, and no repeated id.",
+      "source": "61853781c40d"
+    },
+    "code_notes.check_question.note": {
+      "text": "The format check the program can determine: a stem, an explanation, 4 distinct options, and answer an integer from 0 to 3.",
+      "source": "cf68cca0365c"
+    },
+    "code_notes.Ledger.note": {
+      "text": "The call ledger: one row per model call, with the role, round, branch, duration, and the usage the provider reported.",
+      "source": "58ef74b2fb8b"
+    }
+  }
+}

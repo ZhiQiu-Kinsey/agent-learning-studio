@@ -1,0 +1,954 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "MODEL CALLS / ONE REQUEST",
+      "source": "49f031180a1c"
+    },
+    "hero.headline": {
+      "text": "One request,",
+      "source": "78bed63cb68a"
+    },
+    "hero.highlight": {
+      "text": "one answer.",
+      "source": "b31325a9e1eb"
+    },
+    "hero.takeaway": {
+      "text": "Every step of an agent starts with a model request. This lesson uses no tools. It only looks at what the request says and what comes back in the response.",
+      "source": "c335a483ae40"
+    },
+    "concepts.01-request.label": {
+      "text": "01 / REQUEST",
+      "source": "ef7da22130cf"
+    },
+    "concepts.01-request.title": {
+      "text": "Request body",
+      "source": "c3760858cdb6"
+    },
+    "concepts.01-request.description": {
+      "text": "A request is one JSON object: model says which model to use, and messages holds the messages in order.",
+      "source": "bbf666e87986"
+    },
+    "concepts.02-role.label": {
+      "text": "02 / ROLE",
+      "source": "a71698120379"
+    },
+    "concepts.02-role.title": {
+      "text": "Who is speaking",
+      "source": "0db4463a0402"
+    },
+    "concepts.02-role.description": {
+      "text": "Every message has a message role: system is the rules for the model, user is the question, and assistant is what the model said.",
+      "source": "b9a72984e92a"
+    },
+    "concepts.03-finish.label": {
+      "text": "03 / FINISH",
+      "source": "512857d86e2a"
+    },
+    "concepts.03-finish.title": {
+      "text": "Why it stopped",
+      "source": "7da4863e86b7"
+    },
+    "concepts.03-finish.description": {
+      "text": "The finish reason in the response says why the output stopped: stop means the model finished on its own, length means it hit the output limit and was cut off.",
+      "source": "aba3e3d738e8"
+    },
+    "concepts.04-usage.label": {
+      "text": "04 / USAGE",
+      "source": "19eb22773cfe"
+    },
+    "concepts.04-usage.title": {
+      "text": "What it cost",
+      "source": "6b08e1a576a2"
+    },
+    "concepts.04-usage.description": {
+      "text": "Usage is the token count the provider reports: prompt, completion, and total. A number that is not reported is marked as not reported, never 0.",
+      "source": "b7d44a9bc295"
+    },
+    "section-1.title": {
+      "text": "One request is one JSON object",
+      "source": "0bd1d632790d"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Every step of an agent starts with a model request, and a request is a JSON object your program sends out. The Before you start section said that in an agent the model decides the next step and the program carries it out. So what actually happens when you \"ask the model once\"? In a chat page you type a sentence and the answer appears bit by bit, as if you were talking to a person. From the program's side it is an ordinary HTTP request: the program sends a JSON object to the provider, the provider computes, and a JSON object comes back. The answer appears piece by piece on a web page because the provider streams it while writing. This lesson waits until it is finished and receives it all at once.",
+      "source": "fe964225b7bf"
+    },
+    "section-1.paragraphs.1": {
+      "text": "This lesson isolates that one step: no tools, a single request, and a close look at what goes out and what comes back. Every request in later lessons is this object with more fields added. Read it once carefully, and when you meet new fields like tools and tool_calls later, you will know where they attach and why.",
+      "source": "4368a67ad1f3"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The request body is a JSON object. In this lesson build_request writes only messages: a list that holds the messages in order, each with a role and content. You don't write model yourself; the platform fills it in from the current connection. So in the body of a request event on the lab bench you will see two fields, model and messages. If an output limit is set, there is a third one, max_tokens.",
+      "source": "0a266159d258"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The request body is everything the model gets for this call. Instructions you wrote elsewhere on the page, the answer from the previous run, files on your computer: if they are not in this object, the model cannot see them. So when you read a run, first ask: what was the model told this time? The whole answer is in the request event.",
+      "source": "3f178245d25b"
+    },
+    "section-2.title": {
+      "text": "Message role: who said each message",
+      "source": "48338b1de1e9"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Each message in messages uses role to say who spoke. That is the message role. Why label it? In the end the model reads a stream of text. If rules, the user's question, and the model's own earlier words are mixed together, it cannot tell which sentence is a requirement to follow and which is a question to answer. role keeps these kinds of text apart.",
+      "source": "6ace3b531c71"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Three roles are common. A system message is the rules for the model; this lesson's default is \"你是编程课的助教。回答简短、具体，不超过两句话。\" (\"You are a teaching assistant for a programming course. Keep answers short and specific, no more than two sentences.\"). A user message is this turn's question. An assistant message is what the model said. This lesson sends only one request, so assistant appears only in the response; {{lesson:multi-turn-history}} puts it back into the next request. The lessons on tools also use a fourth role, tool.",
+      "source": "e8eadb646f35"
+    },
+    "section-2.paragraphs.2": {
+      "text": "A system message has no enforcement power at the program level: the provider does not check whether the answer follows it, and an answer that breaks the rules is returned all the same. During training the model saw a huge number of conversations that give rules first and a question second, and many models were also trained to weight system more heavily, so they usually comply. But that is a tendency, not a guarantee. If the rules are vague, or conflict with what the user asks, the model may not follow them.",
+      "source": "4282578fcb16"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The exercise \"Remove the system prompt\" leaves system_prompt empty, so build_request adds no system message and the request has only one user message. The model still answers, just without that rule: the answer may be longer and the tone may differ. How much it differs is for your own two runs to show.",
+      "source": "86fecba102a5"
+    },
+    "deep-dive-chat-template.title": {
+      "text": "What messages finally becomes: the chat template",
+      "source": "5bb7a63aac0f"
+    },
+    "deep-dive-chat-template.summary": {
+      "text": "The model does not read a JSON list. It reads one block of text. The provider uses a chat template to join the messages into that text with special tokens.",
+      "source": "2b9e7375e6ab"
+    },
+    "deep-dive-chat-template.paragraphs.0": {
+      "text": "The model itself only reads a sequence of tokens and continues it. The messages list is a format the provider designed to be convenient for programs. Once the request reaches the provider, it is first joined into one block of text according to this model's chat template, and that text is then given to the model.",
+      "source": "b1e2e06fe031"
+    },
+    "deep-dive-chat-template.paragraphs.1": {
+      "text": "When joining, special tokens are placed around each message to show where it starts, what role it has, and where it ends. Here is a format used by one open-source model: it starts with `<|im_start|>system`, then the rules, and ends with `<|im_end|>`; the user message is wrapped the same way; finally a `<|im_start|>assistant` is added, meaning it is the assistant's turn to speak. The model continues from there, and what it writes is the answer.",
+      "source": "dd3098ec07f3"
+    },
+    "deep-dive-chat-template.paragraphs.2": {
+      "text": "In a tokenizer these markers are usually dedicated tokens, so if you type the same characters in a message they are generally not treated as markers. Different models use different markers, so the same messages produce different text. The provider does this step for you, so you only need to order the messages by role. This also shows two things: the effect of role is something the model learned in training, not something the program enforces; and the prompt token count is somewhat higher than the visible text suggests, because these markers are counted too.",
+      "source": "2fe1cac3cd4a"
+    },
+    "deep-dive-chat-template.paragraphs.3": {
+      "text": "A base model that only went through pre-training has not learned this template. Given the same text, it may go on to invent the next user message instead of answering. The chat models that providers offer are instruct models. They were trained on conversations, so they learned to write an answer after the assistant marker and to output an end marker when done.",
+      "source": "9393fcf4860a"
+    },
+    "deep-dive-chat-template.paragraphs.4": {
+      "text": "When the model finishes its answer, it writes a special end token. The provider sees it and stops generating. This is the most common source of a finish reason of stop. Templates and markers differ by provider, so go by the model's documentation. You do not need to memorize them in this lesson.",
+      "source": "0572c6a51c7e"
+    },
+    "predict-request-count.prompt": {
+      "text": "Run it once first. In the experiment \"With or without a system prompt\", before you run \"With system prompt\", guess: how many model requests (request events) will this run send?",
+      "source": "128cba0b862b"
+    },
+    "mq-roles.roles-in-request.prompt": {
+      "text": "How many messages are in the messages sent by the exercise \"With system prompt\", and what are their roles?",
+      "source": "50fed61a5d2c"
+    },
+    "mq-roles.roles-in-request.a.text": {
+      "text": "Two: system and user",
+      "source": "e0231fae4996"
+    },
+    "mq-roles.roles-in-request.a.feedback": {
+      "text": "Correct. The rules are in system and the question is in user. The model's answer for this turn is in the response.",
+      "source": "36478f44dc5c"
+    },
+    "mq-roles.roles-in-request.b.text": {
+      "text": "Three: system, user, and assistant",
+      "source": "951aaa9bbc4a"
+    },
+    "mq-roles.roles-in-request.b.feedback": {
+      "text": "Not quite. This lesson sends only one request. The assistant message is the model's answer for this turn, and it appears in the response, not the request.",
+      "source": "b98b760a615f"
+    },
+    "mq-roles.roles-in-request.c.text": {
+      "text": "One user message; the system rules go in the HTTP request headers",
+      "source": "7cd8bc68134b"
+    },
+    "mq-roles.roles-in-request.c.feedback": {
+      "text": "Not quite. system is also a message in messages. The request headers carry authentication information.",
+      "source": "0d3ec383d68d"
+    },
+    "mq-roles.roles-in-request.explanation": {
+      "text": "messages is an ordered list of messages, and each one uses role to say who spoke.",
+      "source": "9e794f5e12fc"
+    },
+    "section-3.title": {
+      "text": "The response: the answer and the finish reason",
+      "source": "f2eb21a7500c"
+    },
+    "section-3.paragraphs.0": {
+      "text": "The response is also a JSON object. The answer is in choices[0].message.content, and finish_reason next to it says why the output stopped. choices is a list of candidate answers. Some providers let you ask for several candidates at once, but the default is one, so this lesson's read_reply reads only the first. In it, message has role assistant, and content is the text of the answer.",
+      "source": "daf784877a07"
+    },
+    "section-3.paragraphs.1": {
+      "text": "If you read only content, you cannot tell whether a sentence was finished or cut off. Here is a made-up example: content is \"An agent is a program that, given a goal, decides on its own\". It reads as if it stopped midway, but maybe the model really wrote it that way. finish_reason settles it: stop means the model finished on its own; length means it reached the output limit and was cut off. That limit is usually max_tokens in the request; if the request does not set one, the provider's default limit applies.",
+      "source": "b444951b886f"
+    },
+    "section-3.paragraphs.2": {
+      "text": "The exercise \"Set a tiny output limit\" sets max_tokens to 16. After running it, check whether finish_reason in the response is length, then see how much content is left. In {{lesson:tool-proposals}} you will meet a third value, tool_calls, which means the model proposed a call. Some providers have other values too, for example when a safety policy blocks the content; go by the provider's documentation. When the lab report meets a value it does not recognize, it shows the value as is and labels it \"其他\" (\"other\").",
+      "source": "31511a835559"
+    },
+    "section-3.paragraphs.3": {
+      "text": "A finish reason only says why the output stopped. It does not judge the content. stop does not mean the answer is correct, and length does not mean the request failed: in both cases the request came back successfully. When reading a response you can follow this order: check finish_reason first to see whether the output is complete; then read content; finally look at usage, which sits alongside choices, to see what this call cost.",
+      "source": "40c4deaab376"
+    },
+    "misconception-stop.claim": {
+      "text": "finish_reason is stop, so the model got it right and the task is done.",
+      "source": "c3dcd2923422"
+    },
+    "misconception-stop.correction": {
+      "text": "stop only means the model stopped by itself and was not cut off by the output limit. Three things are involved here, and none guarantees another: the request succeeded (a response came back), the output is complete (the finish reason is stop), and the answer is correct (the content holds up when checked). You can confirm the first two from the response. The third you have to check separately against the question and the facts.",
+      "source": "39d46d347d95"
+    },
+    "section-4.title": {
+      "text": "Usage: how many tokens this call cost",
+      "source": "68c9d73abaeb"
+    },
+    "section-4.paragraphs.0": {
+      "text": "usage in the response reports how many tokens this call used. The provider bills by it and also limits how large a request can be by it. A token is the unit in which the model splits text, and the tokenizer decides how to split. It is not a character and not a word: a common word may be one token, while a rare word is split into several pieces. A Chinese character may be exactly one token, or several characters may merge into one, or a rare character may split into several; each provider's tokenizer differs. So the same sentence gets a different token count on a different model.",
+      "source": "5c43c507fd91"
+    },
+    "section-4.paragraphs.1": {
+      "text": "usage has three numbers. prompt_tokens are the prompt tokens, counted over all the messages in the request. completion_tokens are the completion tokens, counted over what the model wrote. total_tokens is the sum of the two. Prompt tokens are usually a bit higher than the visible text suggests, because the markers the provider adds when joining messages are counted too. Many providers charge more per output token than per input token, so look at these two numbers separately.",
+      "source": "3f4e16bd5648"
+    },
+    "section-4.paragraphs.2": {
+      "text": "A reasoning model (one that reasons first and then answers) on some providers writes its reasoning into the reasoning_content field of message. The tokens it uses are recorded in completion_tokens_details.reasoning_tokens and are also counted in completion_tokens. On some providers the reasoning is subject to max_tokens as well; field names and these rules differ by provider, so go by the provider's documentation. On such a provider, when the limit is very small, content may have only half a sentence, or may be empty, because the reasoning was cut off before it finished. Compare reasoning_tokens with completion_tokens to tell which case you are in.",
+      "source": "26167759b663"
+    },
+    "section-4.paragraphs.3": {
+      "text": "When the provider does not report some usage item, the lab report shows \"未报告\" (\"not reported\"). It does not write 0, and it does not substitute a local estimate. 0 is a measured value meaning not a single token was spent; not reported means unknown. To see how many fewer prompt tokens you get after removing the system prompt, compare prompt_tokens in the two responses.",
+      "source": "8f90918add49"
+    },
+    "deep-dive-token-cost.title": {
+      "text": "By hand: what one request costs",
+      "source": "a76200efb53f"
+    },
+    "deep-dive-token-cost.summary": {
+      "text": "Work through a made-up price and usage to see how prompt tokens, completion tokens, and reasoning tokens each contribute.",
+      "source": "8dcc5c8826a1"
+    },
+    "deep-dive-token-cost.paragraphs.0": {
+      "text": "Here is a made-up example. Suppose a model's price list says input costs 2 yuan per million tokens and output costs 8 yuan per million tokens. One request's usage is prompt_tokens 60 and completion_tokens 40. Input costs `60 × 2 ÷ 1000000 = 0.00012` yuan, output costs `40 × 8 ÷ 1000000 = 0.00032` yuan, for a total of 0.00044 yuan. There are fewer output tokens than input tokens, yet the output costs more.",
+      "source": "c916f850aff9"
+    },
+    "deep-dive-token-cost.paragraphs.1": {
+      "text": "One request looks very cheap, but an agent makes many requests to finish one task. Using the same made-up numbers: a task with 10 requests, each with the same usage, costs 0.0044 yuan; ten thousand tasks a day cost 44 yuan. In the later lessons each request actually gets larger than the one before, so the bill has to be added up request by request from each usage, not by multiplying the first one by the count.",
+      "source": "490dcf49b28a"
+    },
+    "deep-dive-token-cost.paragraphs.2": {
+      "text": "Now reasoning. Take the same question on a reasoning model, and suppose usage reports completion_tokens 400, of which reasoning_tokens is 360. The answer itself is only 40 tokens, but 400 are billed as output, so the output cost becomes 10 times what it was. Most providers bill reasoning tokens as output; go by each provider's price list. The reasoning is not in the answer, yet it costs money all the same, which is why you read it separately.",
+      "source": "13918e30df68"
+    },
+    "deep-dive-token-cost.paragraphs.3": {
+      "text": "Why not estimate from character count locally? Tokenizers differ by provider, and the same Chinese text can give quite different token counts on two models. The markers the provider adds when joining messages are also invisible to you locally. An estimate would not match the bill, and it would pose as provider data. This lesson records only the numbers the provider reports.",
+      "source": "ff8e6b79a08e"
+    },
+    "deep-dive-token-cost.paragraphs.4": {
+      "text": "In Claude Code you check this with `/usage`, and `/cost` is its alias. According to the official documentation, its Session section lists the input and output tokens used by each model in the current session, plus a total cost. The token counts come from API responses; the cost is calculated locally by Claude Code from list prices, and the documentation says it is only an estimate, so for the exact bill check the console. This matches the division of labor in this lesson: usage counts only what the provider reports, and the money is computed from those counts. The scope differs: this lesson looks at the usage of a single request, while that view shows the running total for the whole session, which is the usage of each request added up one by one. The documentation also says tokens used for reasoning are billed as output. Command names and what they display change with versions, so go by the official documentation.",
+      "source": "a55bb4ff84f9"
+    },
+    "mq-finish.finish-length.prompt": {
+      "text": "A response has finish_reason length. What can you be sure of?",
+      "source": "19a302bf3772"
+    },
+    "mq-finish.finish-length.a.text": {
+      "text": "The output reached the output limit and was cut off",
+      "source": "c8085c090d44"
+    },
+    "mq-finish.finish-length.a.feedback": {
+      "text": "Correct. length means the output stopped before it was finished. The answer may be only half a sentence, or even empty.",
+      "source": "9e95b40d1b66"
+    },
+    "mq-finish.finish-length.b.text": {
+      "text": "The model considers the answer complete",
+      "source": "17ae9e9d7913"
+    },
+    "mq-finish.finish-length.b.feedback": {
+      "text": "Not quite. That would be stop. length means the output was cut off by the limit.",
+      "source": "2d4692751fcc"
+    },
+    "mq-finish.finish-length.c.text": {
+      "text": "The request failed and must be sent again",
+      "source": "1ccde0915648"
+    },
+    "mq-finish.finish-length.c.feedback": {
+      "text": "Not quite. The request came back successfully; only the output was cut off. If you want a complete answer, raise max_tokens and send it again.",
+      "source": "1bb771914149"
+    },
+    "mq-finish.finish-length.explanation": {
+      "text": "A finish reason only says why the output stopped. It does not judge whether the answer is right.",
+      "source": "9b0e9502b4a1"
+    },
+    "section-5.title": {
+      "text": "The key stays in the backend",
+      "source": "95f204a8afda"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A request event records the request body, and the body has no API key. The key is your identity and your payment credential: whoever has it can call the model on your quota. So it must not appear anywhere that gets recorded, displayed, or stored in the browser.",
+      "source": "38595618bdfc"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The key is added only at the moment of sending: send_bailian puts it in the Authorization field of the HTTP request headers, written as Bearer followed by the key. The request body contains only the fields meant for the model, such as model and messages. The headers travel only between the backend and the provider. The browser never gets them, and they are not in the run record. A key you enter on the web page lives only in backend memory and is gone when the backend restarts.",
+      "source": "90c700a76806"
+    },
+    "section-5.paragraphs.2": {
+      "text": "When connected to Bailian, the request event is the HTTP request body that was actually sent. For other providers connected through LiteLLM, the event holds the SDK-standardized request and response, not raw HTTP messages. In both cases the key stays in the backend.",
+      "source": "e72422cc9e60"
+    },
+    "section-5.paragraphs.3": {
+      "text": "If the key is wrong or the quota is used up, the provider returns an HTTP error instead of a normal response. Then the timeline has only the request and no response, and the run ends with error, with the reason in the error message. The platform does not resend automatically, to avoid being billed twice. Once you know the cause, run it again manually.",
+      "source": "e50388b9d31e"
+    },
+    "walkthrough.title": {
+      "text": "One request, from assembly to readback",
+      "source": "f81e87beb053"
+    },
+    "walkthrough.description": {
+      "text": "Three steps, using \"With system prompt\" as the example. What follows is an illustration, not a record of this run; look at your own run for the numbers.",
+      "source": "3d678a8f9357"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Build the body",
+      "source": "aca5dd993483"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Lesson code",
+      "source": "87c6ce24a71d"
+    },
+    "walkthrough.step-1.title": {
+      "text": "build_request writes only messages",
+      "source": "ba0bd89de462"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The system rules come first and the user question after. When no output limit is set, max_tokens is left out.",
+      "source": "bee65d5d63a5"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "Expand body.messages of the request event and check the number of messages and each one's role.",
+      "source": "7b3888afb90b"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Send",
+      "source": "edecf0ae6e51"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Backend",
+      "source": "9b826346239e"
+    },
+    "walkthrough.step-2.title": {
+      "text": "The key goes in the request headers",
+      "source": "631a9f1a2d74"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The platform fills in model, and send_bailian puts the key in the Authorization header before sending. There is no key in the request body.",
+      "source": "c683dd0d9b69"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "Search the request event for an API key and you won't find one.",
+      "source": "16c3787c67ec"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Read the response",
+      "source": "d81e6861cc3d"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Model → lesson code",
+      "source": "15ae1b0e85a9"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Take three things from the response",
+      "source": "932dfa64fb49"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The answer is in choices[0].message.content, the finish reason in finish_reason, and usage in usage.",
+      "source": "ae21364ef878"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "Expand the response event and compare it with the numbers in the lab report.",
+      "source": "d6f37fbc9470"
+    },
+    "mq-key.where-is-key.prompt": {
+      "text": "If you look for the API key in the body of a request event, what will you find?",
+      "source": "81ca6bf1daac"
+    },
+    "mq-key.where-is-key.a.text": {
+      "text": "Nothing: the key is put into the HTTP request headers only when sending",
+      "source": "dbbe911c5b65"
+    },
+    "mq-key.where-is-key.a.feedback": {
+      "text": "Correct. The body is the content the model sees. Authentication goes in the headers and stays in the backend.",
+      "source": "292b94840aca"
+    },
+    "mq-key.where-is-key.b.text": {
+      "text": "In the first message of messages",
+      "source": "7456109c6e74"
+    },
+    "mq-key.where-is-key.b.feedback": {
+      "text": "Not quite. messages holds only messages, and the first one is the system rules.",
+      "source": "592da92612e6"
+    },
+    "mq-key.where-is-key.c.text": {
+      "text": "In the model field",
+      "source": "2fddc752c495"
+    },
+    "mq-key.where-is-key.c.feedback": {
+      "text": "Not quite. model holds only the model name.",
+      "source": "dc8e28c58592"
+    },
+    "mq-key.where-is-key.explanation": {
+      "text": "send_bailian writes the key into the Authorization header only when sending. The recorded request body does not contain it.",
+      "source": "9bc2e230d685"
+    },
+    "section-6.title": {
+      "text": "What one request cannot do",
+      "source": "0c5484f0c61c"
+    },
+    "section-6.paragraphs.0": {
+      "text": "A single request cannot do three things: remember the earlier conversation, guarantee the same answer for the same request, or look something up or calculate by itself. The next three lessons take one each.",
+      "source": "15902de68b25"
+    },
+    "section-6.paragraphs.1": {
+      "text": "First, the model does not remember you. In this lesson every run is a brand-new request: what the last run asked is not in this request, so the model does not know it. To keep a conversation going, the program has to send the earlier messages again; {{lesson:multi-turn-history}} covers that. Second, sending the same request again can give a different answer. Running the two exercises once each and drawing a conclusion is unreliable; {{lesson:sampling-variance}} sends the same request several times in a row to look at this.",
+      "source": "3a2666ff6591"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Third, the model can only write text. Ask it what time it is now and it has no way to know. It can only give an answer based on text it saw in training, and it often sounds very sure. To let it look things up or calculate through the program, the request has to carry a list of tools. {{lesson:tool-proposals}} starts from here.",
+      "source": "c5c2be2e6618"
+    },
+    "section-6.paragraphs.3": {
+      "text": "With these three things in place you have a minimal agent: the program keeps the earlier messages, sends the tool list along with the request, the model proposes what to do, the program does it, and the result goes back to the model. Each step is still a request like the one in this lesson. The request and response you learned to read here stay useful in every later lesson.",
+      "source": "2f7909962511"
+    },
+    "references.hf-messages.title": {
+      "text": "Messages and special tokens: how the chat template joins messages into one block of text (Hugging Face Agents Course)",
+      "source": "0fe6b249c765"
+    },
+    "references.hf-what-are-llms.title": {
+      "text": "What is an LLM: special tokens and end markers (Hugging Face Agents Course)",
+      "source": "d75ecc96c9ac"
+    },
+    "references.ai-agent-book-ch1.title": {
+      "text": "Introduction to AI agents: the parts of a model call — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "ee3812f61809"
+    },
+    "references.cc-costs.title": {
+      "text": "Manage costs: view a session's token usage and estimated cost (Claude Code documentation)",
+      "source": "d45f3dfe71e5"
+    },
+    "code-build-request.n9.text": {
+      "text": "Lists only the two most common finish reasons. The lab report uses it to explain finish_reason in words (in Chinese); any other value is shown as is.",
+      "source": "af7fb977f267"
+    },
+    "code-build-request.n14.text": {
+      "text": "The system prompt is an input parameter. The exercise \"Remove the system prompt\" sets it to an empty string.",
+      "source": "460001d6df4f"
+    },
+    "code-build-request.n16.text": {
+      "text": "0 means \"no limit\". That way the form needs only one number box and no extra toggle.",
+      "source": "b3126aed3d28"
+    },
+    "code-build-request.n22.text": {
+      "text": "This function does one thing: it assembles the question and the settings into the request body. It does not send the request and cannot touch the key.",
+      "source": "dd0234916524"
+    },
+    "code-build-request.n25.text": {
+      "text": "The system message is added only when the system prompt is non-empty. All spaces counts as empty, so no content-free rule gets sent.",
+      "source": "365184d2af14"
+    },
+    "code-build-request.n29.text": {
+      "text": "The user message is always last. The order of messages is the order the model reads them.",
+      "source": "bc8a70f3caaa"
+    },
+    "code-build-request.n31.text": {
+      "text": "When max_tokens is 0 the field is absent from the request body, and the output limit is left to the provider's default.",
+      "source": "00d1394303f1"
+    },
+    "code-read-reply.n39.text": {
+      "text": "The answer is in the choices list. First confirm it exists, and raise an error if the response format is wrong instead of treating an empty string as the answer.",
+      "source": "0dd186196d4f"
+    },
+    "code-read-reply.n46.text": {
+      "text": "content may be null or an empty string. Both are normalized to an empty string here, so the answer length is 0.",
+      "source": "900d9b2b9de1"
+    },
+    "code-read-reply.n48.text": {
+      "text": "The reasoning is pulled out separately and kept out of the answer. For a model without this field, it is None here.",
+      "source": "edf88165670c"
+    },
+    "code-read-reply.n49.text": {
+      "text": "The finish reason sits next to message, both inside choices[0].",
+      "source": "f2c2e61061d4"
+    },
+    "code-read-reply.n50.text": {
+      "text": "Usage is read with get: if the provider did not report a number you get None, and the report shows \"未报告\" (\"not reported\") instead of 0.",
+      "source": "22bea405119e"
+    },
+    "code-read-reply.n54.text": {
+      "text": "Reasoning tokens are in completion_tokens_details. They are part of completion_tokens, not an addition to it.",
+      "source": "e3ddada26538"
+    },
+    "code-read-reply.n58.text": {
+      "text": "The entry point of the run. The whole flow has just three steps, each marked with a numbered comment.",
+      "source": "b541394def0b"
+    },
+    "code-read-reply.n64.text": {
+      "text": "context.complete is called only once, so this run has exactly one request and one response event. max_rounds in lesson.json is set to 1, so a second call would be blocked by the platform.",
+      "source": "e9023d25a711"
+    },
+    "code-read-reply.n68.text": {
+      "text": "The return value is recorded as the final answer. When content is empty, no sentence is made up to fill it; the run says plainly that it is empty.",
+      "source": "72e215016df0"
+    },
+    "code-read-reply.fold-report.label": {
+      "text": "Platform: publish the lab report (_report)",
+      "source": "9018f731c256"
+    },
+    "code-send.n32.text": {
+      "text": "The backend function that sends a Bailian request. The request body and the key are passed in as two separate parameters, and the event records only the first.",
+      "source": "f3daf1566d23"
+    },
+    "code-send.n38.text": {
+      "text": "The HTTP body is the same request body recorded in the request event.",
+      "source": "540b3775c0dc"
+    },
+    "code-send.n40.text": {
+      "text": "The key appears only here: it goes into the Authorization header, not into the request body or the run record.",
+      "source": "51cda79b9144"
+    },
+    "code-send.n48.text": {
+      "text": "The response body is parsed into a dict and returned unchanged. The response event records exactly this.",
+      "source": "79ddd27d43c5"
+    },
+    "code-decision.title": {
+      "text": "Show unreported usage as \"未报告\" (\"not reported\"), not 0",
+      "source": "a690614a6f4c"
+    },
+    "code-decision.chosen": {
+      "text": "read_reply reads each item in usage with get, which gives None when an item is missing. The lab report shows None as \"未报告\" (\"not reported\"). All usage numbers come from this response.",
+      "source": "ecc12d2844eb"
+    },
+    "code-decision.zero.title": {
+      "text": "Write 0 when missing",
+      "source": "f362dbe8af82"
+    },
+    "code-decision.zero.why_not": {
+      "text": "0 is a measured value, and a reader would think no tokens were spent. Missing and 0 are different things.",
+      "source": "67a2f748d8ec"
+    },
+    "code-decision.estimate.title": {
+      "text": "Estimate one locally from character count",
+      "source": "ee52983f74c4"
+    },
+    "code-decision.estimate.why_not": {
+      "text": "Tokenizers split text differently, so an estimate will not match what the provider bills, and it would pose as provider data.",
+      "source": "6fdf7419ed90"
+    },
+    "system-or-not.title": {
+      "text": "With or without a system prompt",
+      "source": "bd921cc4d7fa"
+    },
+    "system-or-not.hypothesis": {
+      "text": "Both arms have the same user question and differ by one system message. Remove it and messages in the request has one fewer entry, prompt_tokens drops accordingly, and the length and tone of the answer may differ.",
+      "source": "034181003646"
+    },
+    "system-or-not.with-system.label": {
+      "text": "With system prompt",
+      "source": "ff95772bc06c"
+    },
+    "system-or-not.without-system.label": {
+      "text": "Remove the system prompt (system_prompt left empty)",
+      "source": "d2099faed382"
+    },
+    "system-or-not.messages.text": {
+      "text": "messages in the request: the arm with the system prompt has two messages, system and user; the arm without it has only one user message.",
+      "source": "769e49591e4a"
+    },
+    "system-or-not.answer.text": {
+      "text": "choices[0].message.content in the response: the model's answer this time. Compare the length and tone between the arms.",
+      "source": "bc9779db8501"
+    },
+    "system-or-not.prompt-tokens.text": {
+      "text": "usage.prompt_tokens in the response: the prompt tokens counted over all the messages in the request.",
+      "source": "610a1a4d6a0c"
+    },
+    "system-or-not.report.text": {
+      "text": "Lab report: answer length, finish reason, and each usage item together. Items that were not reported show \"未报告\" (\"not reported\").",
+      "source": "ac41923ca47d"
+    },
+    "system-or-not.guide.0.text": {
+      "text": "This run sent only one request. Look at the messages that went out first.",
+      "source": "19e24daf3e50"
+    },
+    "system-or-not.guide.1.text": {
+      "text": "Count how many messages there are and what each role is. The two arms differ only here.",
+      "source": "5661cd95713c"
+    },
+    "system-or-not.guide.2.text": {
+      "text": "This is the model's answer, taken straight from the response.",
+      "source": "e1f31a895060"
+    },
+    "system-or-not.guide.3.text": {
+      "text": "Prompt tokens are counted over all the messages in the request. Compare the two arms and the difference is roughly that system message plus the markers around it.",
+      "source": "5faeafe27b8e"
+    },
+    "system-or-not.guide.4.text": {
+      "text": "The lab report puts these fields together: usage comes from the response's usage, max_tokens and the system message come from the request, and the answer length is counted.",
+      "source": "6b91ad671384"
+    },
+    "system-or-not.conclusion.proves.0": {
+      "text": "Whether the system message appeared in the request in this run, and the actual difference in prompt tokens between the two arms.",
+      "source": "6f4939c75db0"
+    },
+    "system-or-not.conclusion.proves.1": {
+      "text": "The answer comes from content in the response; the platform did not write it.",
+      "source": "a386b3a9dcda"
+    },
+    "system-or-not.conclusion.does_not_prove.0": {
+      "text": "A difference in answers from one run does not show that a system prompt always makes answers shorter; sending the same request again can also give a different answer, and {{lesson:sampling-variance}} looks at exactly that.",
+      "source": "7524c2fef559"
+    },
+    "system-or-not.conclusion.does_not_prove.1": {
+      "text": "The exact prompt token count depends on the provider's tokenizer and will differ on another model.",
+      "source": "1c3693291eba"
+    },
+    "output-limit.title": {
+      "text": "Output limit and finish reason",
+      "source": "57694e098eba"
+    },
+    "output-limit.hypothesis": {
+      "text": "With max_tokens set to 16, the output is cut off at 16 tokens and finish_reason is length. With no limit, the model finishes and stops by itself, and finish_reason is stop.",
+      "source": "c6fb4b433116"
+    },
+    "output-limit.no-limit.label": {
+      "text": "No max_tokens",
+      "source": "3e08b4e97110"
+    },
+    "output-limit.short-limit.label": {
+      "text": "max_tokens set to 16",
+      "source": "85b087c55261"
+    },
+    "output-limit.limit-sent.text": {
+      "text": "max_tokens in the request: only the \"max_tokens set to 16\" arm has this field.",
+      "source": "608513b43d9c"
+    },
+    "output-limit.finish.text": {
+      "text": "choices[0].finish_reason in the response: see whether it is stop or length.",
+      "source": "b6cb11ba66dc"
+    },
+    "output-limit.completion-tokens.text": {
+      "text": "usage.completion_tokens in the response: for the truncated arm, compare it with max_tokens.",
+      "source": "336769789ff5"
+    },
+    "output-limit.limit-report.text": {
+      "text": "Lab report: answer length and the meaning of the finish reason. When the model reports reasoning tokens, they are listed here too.",
+      "source": "b5875f9da597"
+    },
+    "output-limit.guide.0.text": {
+      "text": "Both arms ask the same question. The only difference is whether the request has max_tokens.",
+      "source": "6ea5c8290d08"
+    },
+    "output-limit.guide.1.text": {
+      "text": "If you ran the arm with no limit, this tells you the run has no such evidence. That is exactly the difference between the arms.",
+      "source": "ef8c1038f02a"
+    },
+    "output-limit.guide.2.text": {
+      "text": "The finish reason tells you why the output stopped: stop means it finished, length means it was cut off by the limit.",
+      "source": "8c2f1b6c785a"
+    },
+    "output-limit.guide.3.text": {
+      "text": "Compare completion_tokens with max_tokens. A reasoning model's reasoning is counted in this number too.",
+      "source": "4050c3564ea6"
+    },
+    "output-limit.guide.4.text": {
+      "text": "An answer length of 0 is also a result: the output hit the limit before the reasoning finished.",
+      "source": "e14df1940539"
+    },
+    "output-limit.conclusion.proves.0": {
+      "text": "Whether this request carried max_tokens, and whether the output was cut off because of it (whether finish_reason is length).",
+      "source": "fcfb3ab3cca0"
+    },
+    "output-limit.conclusion.proves.1": {
+      "text": "Whether completion_tokens reached the limit, and how much of it the reasoning used (when the model reports reasoning tokens).",
+      "source": "0e40b6dc358e"
+    },
+    "output-limit.conclusion.does_not_prove.0": {
+      "text": "length only says the output was cut off. It does not say whether the part already written is correct.",
+      "source": "347378c86112"
+    },
+    "output-limit.conclusion.does_not_prove.1": {
+      "text": "With the same limit of 16, another model cuts off at a different place: a reasoning model may not even start writing the answer.",
+      "source": "d599b23f75e2"
+    },
+    "inputs.system_prompt.label": {
+      "text": "System prompt",
+      "source": "0894b78b866e"
+    },
+    "inputs.system_prompt.help": {
+      "text": "Placed first as the system message. Leave it empty to send no system message.",
+      "source": "79324687a8e6"
+    },
+    "inputs.max_tokens.label": {
+      "text": "Output limit (max_tokens)",
+      "source": "ca0429042b39"
+    },
+    "inputs.max_tokens.help": {
+      "text": "0 means the request body has no max_tokens, and the provider decides the limit.",
+      "source": "ab62e51909ae"
+    },
+    "quiz.request-fields.prompt": {
+      "text": "What do model and messages in the request body hold?",
+      "source": "0a88526afc20"
+    },
+    "quiz.request-fields.a.text": {
+      "text": "model says which model to use, and messages holds the messages in order",
+      "source": "1edcb6764ff3"
+    },
+    "quiz.request-fields.a.feedback": {
+      "text": "Correct. This lesson writes only messages; the platform fills in model from the current connection.",
+      "source": "8c8ef263ac21"
+    },
+    "quiz.request-fields.b.text": {
+      "text": "model holds the model's answer, and messages holds the user's question",
+      "source": "6c0c89c3bc9b"
+    },
+    "quiz.request-fields.b.feedback": {
+      "text": "Not quite. The model's answer is in the response, not the request body.",
+      "source": "7c14166a791a"
+    },
+    "quiz.request-fields.c.text": {
+      "text": "model holds the API key, and messages holds the question",
+      "source": "5bab6774c05f"
+    },
+    "quiz.request-fields.c.feedback": {
+      "text": "Not quite. The key does not go in the request body. It is put in the headers when sending.",
+      "source": "f7e2ce90453c"
+    },
+    "quiz.request-fields.explanation": {
+      "text": "The request body is the content for the model: which model to use, plus the messages in order.",
+      "source": "6e0f180b5335"
+    },
+    "quiz.empty-system.prompt": {
+      "text": "What happens to the request if you leave system_prompt empty and run?",
+      "source": "504295bacfb9"
+    },
+    "quiz.empty-system.a.text": {
+      "text": "messages has only the one user message, and the model still answers",
+      "source": "1272a004b9e1"
+    },
+    "quiz.empty-system.a.feedback": {
+      "text": "Correct. The system message is not required. Removing it just means one rule fewer.",
+      "source": "7a5d72990f73"
+    },
+    "quiz.empty-system.b.text": {
+      "text": "The request fails because the system message is missing",
+      "source": "574dcfdf9f48"
+    },
+    "quiz.empty-system.b.feedback": {
+      "text": "Not quite. The system message is optional, and a request with only a user message is valid.",
+      "source": "c58379efc18e"
+    },
+    "quiz.empty-system.c.text": {
+      "text": "The model automatically reuses the system rules from the previous run",
+      "source": "74934cc56272"
+    },
+    "quiz.empty-system.c.feedback": {
+      "text": "Not quite. Each request carries only what was written into messages this time. Rules from the previous run do not carry over by themselves.",
+      "source": "6aadc6f4b08b"
+    },
+    "quiz.empty-system.explanation": {
+      "text": "The model sees only the messages in this one request.",
+      "source": "11fe7ece0d15"
+    },
+    "quiz.missing-usage.prompt": {
+      "text": "The response's usage has no total_tokens. What should the lab report show?",
+      "source": "c0d569bf639a"
+    },
+    "quiz.missing-usage.a.text": {
+      "text": "Write 0",
+      "source": "0ad71941b304"
+    },
+    "quiz.missing-usage.a.feedback": {
+      "text": "Not quite. 0 is a measured value, and a reader would think no tokens were spent.",
+      "source": "3660809cbcfd"
+    },
+    "quiz.missing-usage.b.text": {
+      "text": "Write \"未报告\" (\"not reported\")",
+      "source": "4d41a9ef6821"
+    },
+    "quiz.missing-usage.b.feedback": {
+      "text": "Correct. If it is missing, say it is missing.",
+      "source": "02feecc579aa"
+    },
+    "quiz.missing-usage.c.text": {
+      "text": "Estimate one from the character count of the answer",
+      "source": "31c20ca54b0f"
+    },
+    "quiz.missing-usage.c.feedback": {
+      "text": "Not quite. Character count and token count are different things, and an estimate would pose as provider data.",
+      "source": "abdd9acd1cc5"
+    },
+    "quiz.missing-usage.explanation": {
+      "text": "Usage records only the numbers the provider reports. If a number is not reported, it is marked as not reported.",
+      "source": "dd03bb6dd4f5"
+    },
+    "quiz.stop-not-correct.prompt": {
+      "text": "A response has finish_reason stop and a complete sentence in content. What can you be sure of?",
+      "source": "fae7113bf9c5"
+    },
+    "quiz.stop-not-correct.a.text": {
+      "text": "The output was not cut off by the limit; whether the answer is correct still has to be checked separately",
+      "source": "958efc53b611"
+    },
+    "quiz.stop-not-correct.a.feedback": {
+      "text": "Correct. stop only says the model stopped on its own. It does not judge the content.",
+      "source": "1d547f3e3c44"
+    },
+    "quiz.stop-not-correct.b.text": {
+      "text": "The answer is definitely correct and the task is done",
+      "source": "3cdcafb34424"
+    },
+    "quiz.stop-not-correct.b.feedback": {
+      "text": "Not quite. The finish reason does not judge content, and a successful request is not the same as a correct answer.",
+      "source": "bfa17fdc511f"
+    },
+    "quiz.stop-not-correct.c.text": {
+      "text": "This output used up exactly the limit set by max_tokens",
+      "source": "a9f5f3519850"
+    },
+    "quiz.stop-not-correct.c.feedback": {
+      "text": "Not quite. If the output is cut off at the limit, the reason is length, not stop.",
+      "source": "1b52dcea9bc8"
+    },
+    "quiz.stop-not-correct.explanation": {
+      "text": "A finish reason only says why the output stopped. Whether the answer is correct has to be checked separately.",
+      "source": "d1e311a0ccf1"
+    },
+    "quiz.prompt-tokens-overhead.prompt": {
+      "text": "A made-up example: the system and user messages in the request add up to 30 characters, and usage reports prompt_tokens of 45. What is the most reasonable explanation?",
+      "source": "1eea2b0f36c4"
+    },
+    "quiz.prompt-tokens-overhead.a.text": {
+      "text": "A token is not a character, and the markers the provider adds when joining messages are counted in the prompt tokens too",
+      "source": "62efa477d9e8"
+    },
+    "quiz.prompt-tokens-overhead.a.feedback": {
+      "text": "Correct. Tokens are split by the tokenizer, and the markers used to join messages are counted as well.",
+      "source": "5b8325b8878e"
+    },
+    "quiz.prompt-tokens-overhead.b.text": {
+      "text": "The provider overcounted; it should be 30",
+      "source": "8562d8942889"
+    },
+    "quiz.prompt-tokens-overhead.b.feedback": {
+      "text": "Not quite. Billing uses the tokens the provider reports, and character count and token count never matched to begin with.",
+      "source": "79ec06f49dcc"
+    },
+    "quiz.prompt-tokens-overhead.c.text": {
+      "text": "prompt_tokens includes the model's answer for this turn",
+      "source": "44df10dbc898"
+    },
+    "quiz.prompt-tokens-overhead.c.feedback": {
+      "text": "Not quite. The answer is counted in completion_tokens, and prompt_tokens counts only the request.",
+      "source": "1345983dc46f"
+    },
+    "quiz.prompt-tokens-overhead.explanation": {
+      "text": "Tokens are determined by the tokenizer, and prompt tokens are counted over everything in the request, including markers you can't see.",
+      "source": "0905b1a111aa"
+    },
+    "quiz.empty-content.prompt": {
+      "text": "finish_reason is length, but content is empty. What is the most likely cause?",
+      "source": "a8627359df28"
+    },
+    "quiz.empty-content.a.text": {
+      "text": "A reasoning model reached max_tokens before it finished reasoning",
+      "source": "178b72c965eb"
+    },
+    "quiz.empty-content.a.feedback": {
+      "text": "Correct. Look at reasoning_tokens in usage: if it equals completion_tokens, all the output went to reasoning.",
+      "source": "79b5830bd931"
+    },
+    "quiz.empty-content.b.text": {
+      "text": "The provider had an error and returned no answer",
+      "source": "ce2c2a75af1c"
+    },
+    "quiz.empty-content.b.feedback": {
+      "text": "Not quite. When there is an error there is no normal response. Here there is a finish_reason, so the response came back normally and the output was cut off.",
+      "source": "9288c4db7e37"
+    },
+    "quiz.empty-content.c.text": {
+      "text": "The model refused to answer the question",
+      "source": "9d87687cb093"
+    },
+    "quiz.empty-content.c.feedback": {
+      "text": "Not quite. A refusal is also written as text. An empty content with finish reason length means the output was cut off by the limit.",
+      "source": "67bf11c4832a"
+    },
+    "quiz.empty-content.explanation": {
+      "text": "On providers that count reasoning toward max_tokens, reasoning and the answer share this limit. When the limit is too small, the answer may not get a single character.",
+      "source": "351aebf424f0"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Set a tiny output limit\" and find the field that says why this output stopped.",
+      "source": "60135b7cb4ac"
+    },
+    "check-hunt.explanation": {
+      "text": "It is choices[0].finish_reason in the response event. The value is length, meaning the output reached the max_tokens limit set in the request. Then look at usage in the same event and compare completion_tokens with that limit.",
+      "source": "5811773c0186"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In the request event I pointed out model, messages, and the role of each message.",
+      "source": "3fb5f484a141"
+    },
+    "check-points.item-2.text": {
+      "text": "In the response event I found the answer, finish_reason, and usage, and matched them against the lab report.",
+      "source": "739bc45ce112"
+    },
+    "check-points.item-3.text": {
+      "text": "In the request event I confirmed there is no API key.",
+      "source": "a8eeac687c0c"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed max_tokens to 200 and ran again, and compared finish_reason, completion_tokens, and the answer length.",
+      "source": "5fa14a404549"
+    },
+    "code_notes.messages.note": {
+      "text": "The list of messages in the request body, in order. Each message has a role and content.",
+      "source": "6872e53614b1"
+    },
+    "code_notes.role.note": {
+      "text": "The message's role: system is the rules, user is the question, and assistant is the model's answer.",
+      "source": "c787abc526fc"
+    },
+    "code_notes.choices.note": {
+      "text": "The list of candidate answers in the response, usually just one. The answer is in choices[0].message.content.",
+      "source": "92e9782bcfc6"
+    },
+    "code_notes.finish_reason.note": {
+      "text": "Says why the output stopped: stop means it finished, and length means it reached max_tokens.",
+      "source": "ff9095d8758d"
+    },
+    "code_notes.max_tokens.note": {
+      "text": "A request parameter: the maximum number of tokens to write. Some providers count reasoning toward it.",
+      "source": "3f6fc9a1072b"
+    },
+    "code_notes.completion_tokens.note": {
+      "text": "The number of tokens the model wrote, including those used for reasoning.",
+      "source": "77affe1bc691"
+    },
+    "code_notes.reasoning_content.note": {
+      "text": "Reasoning some models write before the answer. It is not the answer, and on some providers it counts toward the output limit too.",
+      "source": "f90c62227266"
+    },
+    "code_notes.send_bailian.note": {
+      "text": "The backend function that sends a Bailian request. The key is put in the Authorization header only here.",
+      "source": "6d0214d0dd27"
+    }
+  }
+}

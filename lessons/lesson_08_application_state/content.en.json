@@ -1,0 +1,978 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "CONTEXT / STATE",
+      "source": "b87b4d044ddf"
+    },
+    "hero.headline": {
+      "text": "How far a task has got",
+      "source": "50fd972a0bd4"
+    },
+    "hero.highlight": {
+      "text": "is decided by program events.",
+      "source": "45091cd7e50d"
+    },
+    "hero.takeaway": {
+      "text": "This lesson does not call a model. Messages are what the model can see this time. Application state is the goal, evidence, and progress the program records. Where the task stands is decided by program events.",
+      "source": "1d70880856c5"
+    },
+    "concepts.01-input.label": {
+      "text": "01 / INPUT",
+      "source": "a1fee4b99e11"
+    },
+    "concepts.01-input.title": {
+      "text": "Goal and session",
+      "source": "ef76cb7738bc"
+    },
+    "concepts.01-input.description": {
+      "text": "Each run gets a new run_id, and the goal comes from validated input.",
+      "source": "5e9ce59b842b"
+    },
+    "concepts.02-evidence.label": {
+      "text": "02 / EVIDENCE",
+      "source": "aed74be19d11"
+    },
+    "concepts.02-evidence.title": {
+      "text": "Source evidence",
+      "source": "c1ef66481c90"
+    },
+    "concepts.02-evidence.description": {
+      "text": "Evidence comes only from real reads of local material, and carries its source key.",
+      "source": "f6bf36018c17"
+    },
+    "concepts.03-terminal.label": {
+      "text": "03 / TERMINAL",
+      "source": "2bf4e38c91f7"
+    },
+    "concepts.03-terminal.title": {
+      "text": "Terminal-state constraints",
+      "source": "946d9e0e0d02"
+    },
+    "concepts.03-terminal.description": {
+      "text": "Completed, failed, and cancelled can each be entered only from allowed states, and each needs a stated reason.",
+      "source": "7b3458e03914"
+    },
+    "concepts.04-snapshot.label": {
+      "text": "04 / SNAPSHOT",
+      "source": "c922d30b1e7f"
+    },
+    "concepts.04-snapshot.title": {
+      "text": "State snapshots",
+      "source": "65059709105f"
+    },
+    "concepts.04-snapshot.description": {
+      "text": "At each key change, the program publishes a full copy, so replay can check it step by step.",
+      "source": "335b6909bbcc"
+    },
+    "section-1.title": {
+      "text": "What messages and state each manage",
+      "source": "3ef7c48a7105"
+    },
+    "section-1.paragraphs.0": {
+      "text": "How far a task has got and which facts have been checked should be recorded by the program in its own state. You cannot expect to read them out of the messages. This lesson does not call a model, and every state change is written by local Python, so a state transition hard-coded by the program is never passed off as model behavior.",
+      "source": "aee6c227dcde"
+    },
+    "section-1.paragraphs.1": {
+      "text": "First, see where relying on messages alone breaks. In {{lesson:messages-context}}, all the facts an answer needed sat in the messages of one request. But a task takes several steps: look up material, check sources, produce a conclusion. If \"which material has been checked\" and \"how many steps are left\" are written only in the conversation, the program has to reread the conversation and guess to know the progress, and the model has to recount from a long history every time. *Understanding AI Agents in Depth* (深入理解 AI Agent) gives an example: a rule allows at most 3 calls per merchant, but the model often loses count of how many calls it has made, and makes a 4th.",
+      "source": "95a4a536f433"
+    },
+    "section-1.paragraphs.2": {
+      "text": "So keep them apart. messages is the conversation material sent to the model. Application state is the structured record the program uses to coordinate the task, called state for short in code. This lesson's messages contain exactly one user message from start to finish, and its content is the task goal \"说明消息与应用状态的区别\" (\"explain the difference between messages and application state\"). Reading material, updating progress, and writing the terminal state all happen in a different object, TaskState.",
+      "source": "f88bc739766a"
+    },
+    "section-1.paragraphs.3": {
+      "text": "An analogy: messages are like your chat log with customer service, and application state is like the shipping status in the order system. If customer service says \"it has shipped\" in the chat, the shipping status does not change. The status becomes \"delivered\" only through an event such as the courier scanning the parcel. In the same way, no matter how many messages appear on screen, you cannot tell from them whether the task is done. You have to look at status in TaskState.",
+      "source": "ab1553221a3c"
+    },
+    "section-2.title": {
+      "text": "What a state looks like",
+      "source": "7cf61e01c5d4"
+    },
+    "section-2.paragraphs.0": {
+      "text": "TaskState uses eight fields to answer a few basic questions: which run is this, what is it to do, how far has it got, on what basis, how much has been used, what was delivered, and why did it stop. run_id and goal are written at creation: run_id is newly generated for each run, and goal comes from validated input. status starts at ready and records which step it has reached.",
+      "source": "90a61697821c"
+    },
+    "section-2.paragraphs.1": {
+      "text": "evidence is the material that has been checked. Each entry has two items, source and excerpt, for example a source of messages-context and an excerpt that is the original text of that material. steps records the names of the steps performed, in order, and used_steps is the number of steps already used. result is the in-lesson summary points generated in step 3. When the state enters a terminal state, the reason is written into terminal_reason.",
+      "source": "13db3cbe5b73"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Why use a data class with fixed fields instead of stuffing things into a dictionary? With fixed fields, a mistyped field name at construction makes Python raise an error right away, instead of quietly adding a key nobody reads. The meaning of each field is written in one place, and the report, the snapshots, and the tests all read the same set of fields. The task card in {{lesson:task-contract}} wrote \"what counts as done\" as fields, and here \"where we are now\" is written as fields too.",
+      "source": "0c79884039ef"
+    },
+    "section-3.title": {
+      "text": "The step budget and state snapshots",
+      "source": "2fddf54a8e31"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Each step deducts from the budget before it runs. When the budget is used up, the step that goes over never starts. A run of this lesson has at most three steps: read the local material index, check the material source, and generate the in-lesson material points. Before each step, consume_step is called: if used_steps has not yet reached step_budget, it adds one, records the step name, and returns True. If it has reached it, it returns False and the caller decides how to wrap up.",
+      "source": "aa81fd0dcf05"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Why not run first and deduct afterward? If you run first, then even with a budget of 0 left one more step runs, and that extra step may already have had side effects, such as sending an email or changing a file. With a step_budget of 3, all three steps fit. With 2, the budget runs out before step 3 runs. This is the same idea as the call budget in {{lesson:structured-output}}, except that it counts steps instead of model calls.",
+      "source": "f92e5ab4a35c"
+    },
+    "section-3.paragraphs.2": {
+      "text": "At each key change, the runner publishes a lesson.state containing a copy of the full state at that moment, which is a state snapshot. Storing a full copy rather than just \"what changed\" lets replay jump straight to any moment and look, without recomputing the changes from the start. Replay only reads these records and does not execute anything again. Looking at the snapshots in order, you can see how status, evidence, and used_steps change with the actual steps.",
+      "source": "886e6f1ff91c"
+    },
+    "predict-state-snapshots.prompt": {
+      "text": "Before you run \"Material exists, step budget 3\" in the experiment, predict: how many state snapshots (lesson.state events) will this run publish?",
+      "source": "a226a55db89e"
+    },
+    "mq-messages-not-progress.messages-not-progress.prompt": {
+      "text": "Several messages are already shown on screen. Can you tell from them that the task is done?",
+      "source": "522b1db63eeb"
+    },
+    "mq-messages-not-progress.messages-not-progress.a.text": {
+      "text": "No; whether it is done depends on the status, evidence, and deliverable in the application state",
+      "source": "539c5162178e"
+    },
+    "mq-messages-not-progress.messages-not-progress.a.feedback": {
+      "text": "Correct. Messages are material for the model, and progress is recorded by the state.",
+      "source": "21b309057e3d"
+    },
+    "mq-messages-not-progress.messages-not-progress.b.text": {
+      "text": "Yes, more messages means more progress",
+      "source": "896ea1109d7f"
+    },
+    "mq-messages-not-progress.messages-not-progress.b.feedback": {
+      "text": "Not quite. The number of messages does not correspond to task progress. In this lesson the message count stays at 1.",
+      "source": "1ea70399e71d"
+    },
+    "mq-messages-not-progress.messages-not-progress.c.text": {
+      "text": "Yes, as long as the last message is from the assistant",
+      "source": "f8a6bc84c021"
+    },
+    "mq-messages-not-progress.messages-not-progress.c.feedback": {
+      "text": "Not quite. This lesson does not call a model at all, and the program decides whether it is done.",
+      "source": "1df50dae0fbd"
+    },
+    "mq-messages-not-progress.messages-not-progress.explanation": {
+      "text": "Messages and state are managed separately, and progress counts only what the program wrote into the state.",
+      "source": "fc2e9978de69"
+    },
+    "section-4.title": {
+      "text": "Transition rules guard the boundaries",
+      "source": "8deb933e67f3"
+    },
+    "section-4.paragraphs.0": {
+      "text": "status can only move along the transition table TRANSITIONS, and any transition not in the table is rejected. ready can only move to running or cancelled. running can move to waiting, completed, failed, or cancelled. waiting can go back to running, or move to failed or cancelled. completed, failed, and cancelled are terminal states with an empty set of exits, and once entered they cannot be left. A set of states plus transition rules like this is a state machine.",
+      "source": "9fa0186868d0"
+    },
+    "section-4.paragraphs.1": {
+      "text": "transition checks this table on every transition. For example, calling transition(\"completed\") while in ready raises \"非法状态转换：ready → completed\" (\"illegal state transition: ready → completed\"). All state changes go through this one entry point, so the rules are written in one place and tested in one place, and are not scattered across conditional branches.",
+      "source": "84757af15000"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Entering completed has one more condition: there must be evidence and an actual result. Any terminal state must have a reason written. Here completed only means that the \"in-lesson material summary\" flow has finished. It does not mean whatever goal you typed was achieved. {{lesson:task-contract}} showed that a completion claim is not the same as passing acceptance. If the model's single \"I have finished\" were mapped straight to completed, those checks would be bypassed, so this lesson has no such path.",
+      "source": "24add4574181"
+    },
+    "deep-dive-state-machine.title": {
+      "text": "Why a transition table instead of a few boolean flags",
+      "source": "d4e9dafa4089"
+    },
+    "deep-dive-state-machine.summary": {
+      "text": "Three boolean flags make eight combinations, and most of them contradict themselves. A transition table lists only the legal paths and rejects everything else.",
+      "source": "f942b27d9b74"
+    },
+    "deep-dive-state-machine.paragraphs.0": {
+      "text": "The most direct way to write it is a few flags: `is_running`, `is_done`, `is_failed`. Three booleans give `2×2×2=8` combinations, and combinations like \"both done and failed\" or \"failed but still running\" make no sense, yet the code allows them to appear. Everywhere a flag is changed, you have to remember to change the others too. Miss one and you get a contradiction, and such bugs often do not show up until much later.",
+      "source": "c0663dc11cd3"
+    },
+    "deep-dive-state-machine.paragraphs.1": {
+      "text": "status has only one value, which naturally rules out \"being in two states at once\". The transition table goes a step further and writes \"what can go where\" as data: 6 states and 9 legal transitions, which you can take in at a glance, and tests can enumerate them one by one: every legal transition works, and every transition outside the table is rejected. This lesson's tests check several of them: ready cannot go straight to completed, missing evidence or a missing deliverable cannot enter completed, and after entering a terminal state it cannot go back to running.",
+      "source": "2f07bd4ab98d"
+    },
+    "deep-dive-state-machine.paragraphs.2": {
+      "text": "The task system in Learn Claude Code also separates states from actions this way: `pending`, `in_progress`, and `completed` are states, claiming and finishing are actions that move the state forward, and each action can only start from particular states. This lesson's waiting adds a path back: when the material arrives it returns to running, and when it does not arrive it goes to failed.",
+      "source": "1db99d17f6bf"
+    },
+    "deep-dive-state-machine.paragraphs.3": {
+      "text": "There is a reason terminal states cannot be left. After a run ends, the events and the report have already been written for that terminal state. If it could still change, what replay shows would differ from what happened. To retry, start a new run with a new run_id.",
+      "source": "72e4330bbded"
+    },
+    "mq-illegal-transition.illegal-transition.prompt": {
+      "text": "The state is already failed, and the program calls transition(\"running\") to carry on. What happens?",
+      "source": "906a161727af"
+    },
+    "mq-illegal-transition.illegal-transition.a.text": {
+      "text": "It raises \"非法状态转换：failed → running\" (\"illegal state transition: failed → running\") and the state stays the same",
+      "source": "c4653360a64f"
+    },
+    "mq-illegal-transition.illegal-transition.a.feedback": {
+      "text": "Correct. failed is a terminal state with an empty set of exits, so any transition out of it is rejected.",
+      "source": "2d5ecbb05ce7"
+    },
+    "mq-illegal-transition.illegal-transition.b.text": {
+      "text": "The state goes back to running and continues from where it failed",
+      "source": "c1254e9c12af"
+    },
+    "mq-illegal-transition.illegal-transition.b.feedback": {
+      "text": "Not quite. A terminal state cannot be left. To retry, start a new run.",
+      "source": "a83d1796cc75"
+    },
+    "mq-illegal-transition.illegal-transition.c.text": {
+      "text": "The state first becomes waiting, waiting for more material",
+      "source": "1549cce8ea14"
+    },
+    "mq-illegal-transition.illegal-transition.c.feedback": {
+      "text": "Not quite. The transition table has no failed → waiting path.",
+      "source": "e5bc482d88b6"
+    },
+    "mq-illegal-transition.illegal-transition.explanation": {
+      "text": "Every state change goes through the transition table. After a terminal state is entered, it cannot be left.",
+      "source": "b60aac4c74a5"
+    },
+    "section-5.title": {
+      "text": "Waiting, failure, and the budget running out",
+      "source": "88c1e93d53f4"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Missing material and an exhausted budget both end in failed, for different reasons, and the evidence already obtained is kept in both cases. When material is missing, the state first enters waiting, meaning \"something external is missing, so it cannot go on for now\". In a real system, waiting can mean waiting for a person to supply a file or for an approval, and once that arrives the state goes back to running. In this lesson's preset nobody will supply the material, so it then turns to failed with the reason \"本次预设没有可核验的资料，无法完成目标。\" (\"this preset has no verifiable material, so the goal cannot be completed\"). The lifecycle is ready → running → waiting → failed, and evidence stays empty throughout.",
+      "source": "6053377d9d37"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The budget preset has a step_budget of 2: reading and checking each use one step, so used_steps reaches 2. Before step 3 runs, consume_step returns False and the state turns to failed with the reason \"步骤预算在生成资料要点前耗尽。\" (\"the step budget ran out before generating the material points\"). The entry in evidence is still kept. With a budget of 1 it stops even earlier: step 2, checking the material source, is refused, evidence is empty, and the reason reads \"步骤预算在核对资料来源前耗尽。\" (\"the step budget ran out before checking the material source\").",
+      "source": "6ccd625c37fa"
+    },
+    "section-5.paragraphs.2": {
+      "text": "A failure must also leave evidence and a reason, so the next attempt knows what was missing and where to resume. If a failure clears evidence, or writes only the word \"failed\", debugging has to start from scratch.",
+      "source": "fd61ff4cbe0f"
+    },
+    "section-5.paragraphs.3": {
+      "text": "You also need to tell two kinds of \"ending\" apart. The terminal state the platform gives each run (completed, error, cancelled in the done event) says whether the flow finished running. The status in TaskState says how the task itself ended. In the \"Missing material\" arm, the run finishes normally and the done event's status is completed, but the task state is failed. The check items in the report are computed by the runner from TaskState, item by item, and do not look at message content.",
+      "source": "68742c8775ec"
+    },
+    "mq-budget-terminal.budget-terminal.prompt": {
+      "text": "The budget preset has only 2 steps, and the material has been read and checked. What is the final state?",
+      "source": "aece40f39f2f"
+    },
+    "mq-budget-terminal.budget-terminal.a.text": {
+      "text": "failed, because the budget ran out before generating the points; the evidence already obtained is kept",
+      "source": "3d26d5937655"
+    },
+    "mq-budget-terminal.budget-terminal.a.feedback": {
+      "text": "Correct. Without a deliverable it cannot be marked completed.",
+      "source": "6da9a99dbb16"
+    },
+    "mq-budget-terminal.budget-terminal.b.text": {
+      "text": "completed, because there is already evidence",
+      "source": "bfbb47c5ae49"
+    },
+    "mq-budget-terminal.budget-terminal.b.feedback": {
+      "text": "Not quite. completed also requires an actual deliverable.",
+      "source": "10675e44df51"
+    },
+    "mq-budget-terminal.budget-terminal.c.text": {
+      "text": "waiting, for more budget",
+      "source": "ffab1fa0c3be"
+    },
+    "mq-budget-terminal.budget-terminal.c.feedback": {
+      "text": "Not quite. An exhausted budget goes straight to the failed terminal state.",
+      "source": "fc749e80a0d3"
+    },
+    "mq-budget-terminal.budget-terminal.explanation": {
+      "text": "Completion requires evidence and a deliverable to exist together. If either is missing, it cannot be marked completed.",
+      "source": "657acde4233e"
+    },
+    "section-6.title": {
+      "text": "Session isolation and cancellation",
+      "source": "cb0ee5f9c822"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Each run creates its own TaskState and run_id, so two runs' states do not interfere with each other. If the state lived in a module-level global, the evidence left by the previous run would carry into the next: the \"Missing material\" arm could \"inherit\" the successful arm's evidence and be wrongly judged able to complete. run_id is randomly generated with uuid4, and it appears in every state snapshot and in the report table. It is TaskState's own identifier. The platform's events have a separate run_id that replay uses to tell runs apart, and the two are not the same value.",
+      "source": "cff89e27d23f"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Cancellation is checked by the platform between steps. When you click stop, context.check_cancelled raises RunCancelled, and the platform records the run as cancelled, never passing it off as completed. This lesson checks once before entering running and once after recording the evidence, and the platform also checks when an event is published. So a stop does not interrupt the middle of a step; it takes effect at the next check.",
+      "source": "3f123125b63b"
+    },
+    "section-6.paragraphs.2": {
+      "text": "TaskState does not turn cancelled just because of a stop. The cancelled in the transition table is left for programs that handle cancellation themselves, and this lesson leaves cancellation to the platform to record. The in-memory state disappears when the run ends, while event replay still keeps every snapshot. Saving across runs is covered in {{lesson:persistent-memory}}.",
+      "source": "11ea119e1406"
+    },
+    "section-state-to-model.title": {
+      "text": "How state gets back in front of the model",
+      "source": "7440bff256a2"
+    },
+    "section-state-to-model.paragraphs.0": {
+      "text": "In this lesson the model cannot see this state. In a real agent, the runner formats the state as a short piece of text and puts it in the request, so the model does not have to count from the history itself. For example, it appends a line at the end of each request: \"Executed 2/3 steps; source messages-context checked; remaining: generate points\". The model sees the progress at a glance and does not need to reread dozens of earlier messages.",
+      "source": "7cc80d7b2eb0"
+    },
+    "section-state-to-model.paragraphs.1": {
+      "text": "This text is computed by the program from TaskState, and the model is not asked to summarize it. There are two reasons. A program does not miscount. And a model tends to take such a status note at face value, and if it is wrong the model will not check it. So the state must be maintained by code, and when it is put into the request it should be marked as written by the runner, not said by the user. {{lesson:todo-planning}} will have the harness insert a reminder as a separate message.",
+      "source": "7fc6a6592d75"
+    },
+    "section-state-to-model.paragraphs.2": {
+      "text": "Keeping state outside the messages has another benefit: messages can be cut without losing the progress. {{lesson:context-budget}} will show that when the context does not fit, earlier messages have to be dropped. If the goal and evidence were written only in those messages, dropping them would mean forgetting what had been done. With the state stored separately, the task progress is still there however the messages are cut.",
+      "source": "5f78d9df524f"
+    },
+    "deep-dive-status-bar.title": {
+      "text": "The status bar: hand the model a conclusion that is already computed",
+      "source": "7484de863a9b"
+    },
+    "deep-dive-status-bar.summary": {
+      "text": "*Understanding AI Agents in Depth* calls the status summary injected at the end of a request a status bar, and explains why it works and what to watch for.",
+      "source": "dde8af7714d6"
+    },
+    "deep-dive-status-bar.paragraphs.0": {
+      "text": "The book's explanation is that a model is good at finding a passage of original text in the context, but not good at counting records scattered around and summing them into a conclusion without working it out. \"How many calls have been made\" is originally scattered through the history as three call records, and the model has to count them each time. If the tool result says directly \"this is the 3rd call to this merchant\", the model can see at once that the limit has been reached.",
+      "source": "f018fd0b4e3c"
+    },
+    "deep-dive-status-bar.paragraphs.1": {
+      "text": "The book calls this kind of summary a status bar, like the battery and clock at the top of a phone screen: not the main content, but you can glance at it any time to know the current situation. The book's approach is to borrow the user role and append it to the end of the request as a message, without rewriting the system prompt at the start. Once the start changes, the provider can no longer reuse the beginning it has already processed, which {{lesson:prompt-caching}} covers. The content is wrapped in a tag like `<agent_status>` to show it is program-generated status and not something the user said.",
+      "source": "a346e5964250"
+    },
+    "deep-dive-status-bar.paragraphs.2": {
+      "text": "The book also gives two warnings. First, maintain the status bar in code wherever possible, for the reason given in the previous section. If you really must use a model, only let it extract item by item and have code do the totals. Second, a status bar only computes the items thought of in advance, so it is a lossy summary of the raw records. If you keep only the status bar and delete the raw records, you cannot answer questions the status bar did not cover. This lesson's TaskState is the source of that summary, but here it is not put into the request.",
+      "source": "399d15b01443"
+    },
+    "deep-dive-status-bar.paragraphs.3": {
+      "text": "You can see the same practice in Claude Code. The official documentation lists content the harness adds to the conversation itself. For example, if a file read earlier has been changed on disk, a note is attached. After the conversation is summarized, background commands that are still running do not disappear: a reminder tells the model which ones are still running so it does not start them again. A plan written in plan mode is stored on disk and put back from disk after the summary, not relayed through the summary. All of these are computed by the program from the actual situation and then given to the model. It is the same idea as the status bar, and as this lesson keeping progress outside the messages. Also, the configurable status line in its interface is for people to read, so do not confuse it with the status bar for the model discussed here. Follow the official documentation.",
+      "source": "b7e139639f4c"
+    },
+    "deep-dive-status-bar.paragraphs.4": {
+      "text": "The status bar and this lesson's lab report are two uses of the same data: the report is for people, and the status bar is for the model. Both should be computed on the spot from TaskState, not recorded separately, so that what people see and what the model sees do not contradict each other.",
+      "source": "ace5589c3f88"
+    },
+    "mq-state-to-model.state-to-model.prompt": {
+      "text": "The runner wants the model to know \"2 steps executed, budget 3 steps\". Which approach is the most reliable?",
+      "source": "0a8f7b2430e2"
+    },
+    "mq-state-to-model.state-to-model.a.text": {
+      "text": "The program computes this sentence from TaskState, marks it as written by the runner, and puts it in the request",
+      "source": "767053cfd92b"
+    },
+    "mq-state-to-model.state-to-model.a.feedback": {
+      "text": "Correct. A count the program maintains is not miscounted, and stating its source keeps the model from taking it as something the user said.",
+      "source": "0415d1a2787e"
+    },
+    "mq-state-to-model.state-to-model.b.text": {
+      "text": "Ask the model in the system prompt to count how many steps it has done",
+      "source": "094dd231a709"
+    },
+    "mq-state-to-model.state-to-model.b.feedback": {
+      "text": "Not quite. The model has to count from the history, which is easy to get wrong, and once earlier messages are cut it cannot count at all.",
+      "source": "21cd36e1d933"
+    },
+    "mq-state-to-model.state-to-model.c.text": {
+      "text": "Do not tell the model, and let it judge for itself",
+      "source": "1edbc1eafeac"
+    },
+    "mq-state-to-model.state-to-model.c.feedback": {
+      "text": "Not quite. The model cannot see the program's state and can only guess.",
+      "source": "0160d7e8ea33"
+    },
+    "mq-state-to-model.state-to-model.explanation": {
+      "text": "State is maintained by code, and when needed the program formats it as text and gives it to the model.",
+      "source": "fa2af80edffe"
+    },
+    "misconception-state-in-messages.claim": {
+      "text": "The message history has everything. Just let the model read the task progress from the conversation. There is no need to keep a separate state.",
+      "source": "c308daea8623"
+    },
+    "misconception-state-in-messages.correction": {
+      "text": "Messages are text for the model to read, and the program cannot enforce rules on them such as \"no completion without evidence\". A model counting progress from a long history is also error-prone, and once earlier messages are cut, the progress is lost with them. Progress, evidence, and the terminal state should be written by the program into the application state, and formatted as text for the model when needed.",
+      "source": "e9187d547b18"
+    },
+    "walkthrough.title": {
+      "text": "From input to a terminal state",
+      "source": "256a2aa502eb"
+    },
+    "walkthrough.description": {
+      "text": "Explains step by step how a run goes from input to a terminal state. The code is a simplified illustration. See lesson.state for the actual state snapshots of this run.",
+      "source": "b0cae9b7926b"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Create the state",
+      "source": "115980e3a772"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Each run creates its own independent state.",
+      "source": "7a5c59952ad6"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.state",
+      "source": "8cb394d33f44"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Start executing",
+      "source": "1ac56dba1bcf"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Only a legal transition can start.",
+      "source": "7aeb5f7b0246"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.state",
+      "source": "8cb394d33f44"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Material source",
+      "source": "08a266076283"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Read the evidence",
+      "source": "52cfa63d7dc0"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Only material that was really read goes into evidence.",
+      "source": "2052ebfed64d"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.state",
+      "source": "8cb394d33f44"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "State machine",
+      "source": "14b576166ea9"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Decide the terminal state",
+      "source": "b056655f05a5"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Deduct from the budget before step 3 runs, then generate the in-lesson points and decide the terminal state.",
+      "source": "930eac5345ef"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.state",
+      "source": "8cb394d33f44"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Publish the report",
+      "source": "dbdc00b57f1c"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Compare the terminal state, the evidence, and the messages.",
+      "source": "5e48649f18d4"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.book-ch2-status-bar.title": {
+      "text": "Context engineering: the agent status bar — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "37e783fb90c8"
+    },
+    "references.lcc-task-system.title": {
+      "text": "Task system: task states, actions, and dependencies (Learn Claude Code)",
+      "source": "0ee96d7f7a78"
+    },
+    "references.book-ch1-harness.title": {
+      "text": "Getting started with AI agents: the model decides, the harness assembles the context and executes — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "5604b5d4e802"
+    },
+    "references.cc-how-it-works.title": {
+      "text": "How Claude Code works: context the harness adds itself (Claude Code documentation)",
+      "source": "4ccd1c31432d"
+    },
+    "references.cc-context-window.title": {
+      "text": "After a conversation is summarized, what the program puts back (Claude Code documentation)",
+      "source": "28282853c1a6"
+    },
+    "code-state-machine.n27.text": {
+      "text": "The transition table lists every legal path explicitly, and any transition not in the table is rejected.",
+      "source": "7d29ca9983d3"
+    },
+    "code-state-machine.n31.text": {
+      "text": "All three terminal states have an empty set of exits and cannot be left once entered.",
+      "source": "61b3acfc931a"
+    },
+    "code-state-machine.n37.text": {
+      "text": "Application state is a plain data class. It and messages are two separate containers, and a state update does not automatically become a message.",
+      "source": "b21935ccd0f0"
+    },
+    "code-state-machine.n42.text": {
+      "text": "Evidence is a field of its own: it is kept even on failure, so both the facts and the reason for stopping can be traced.",
+      "source": "2a2c7342d892"
+    },
+    "code-state-machine.n46.text": {
+      "text": "The reason written when entering a terminal state. The report item \"终态有原因\" (\"terminal state has a reason\") shows it directly.",
+      "source": "7c0c0c7f4d7a"
+    },
+    "code-state-machine.n52.text": {
+      "text": "The step budget is deducted before execution: when it runs out it returns False, and the caller turns the state to failed and states the reason.",
+      "source": "ae589d1f8839"
+    },
+    "code-state-machine.n60.text": {
+      "text": "Every transition checks the transition table first. Going straight from ready to completed raises an error here.",
+      "source": "3fd792ae14b9"
+    },
+    "code-state-machine.n62.text": {
+      "text": "Entering a terminal state requires a stated reason.",
+      "source": "6c1733335381"
+    },
+    "code-state-machine.n65.text": {
+      "text": "Without evidence or a deliverable it cannot be marked completed. The rule lives in the state machine and does not depend on the caller's discipline.",
+      "source": "b3f2d0140552"
+    },
+    "code-state-run.n75.text": {
+      "text": "Each run creates a new state and run_id, and no global task state is shared.",
+      "source": "28bd50524bfb"
+    },
+    "code-state-run.n76.text": {
+      "text": "messages has only this one user message throughout, and state updates are never disguised as assistant or tool messages.",
+      "source": "6b8c184e3879"
+    },
+    "code-state-run.n77.text": {
+      "text": "_publish publishes a full state snapshot (lesson.state), so replay can show the state at every step.",
+      "source": "8f8231dd9baf"
+    },
+    "code-state-run.n83.text": {
+      "text": "If a nonexistent material is chosen, SOURCES has no entry for it, and the run goes waiting → failed.",
+      "source": "8ac62be48b9d"
+    },
+    "code-state-run.n89.text": {
+      "text": "With a budget of 1, it runs out before step 2, the state turns to failed, and evidence is empty.",
+      "source": "d7a2a1ea0b8c"
+    },
+    "code-state-run.n93.text": {
+      "text": "The evidence is written into the application state, and messages does not grow because of it.",
+      "source": "9c1f9d31c123"
+    },
+    "code-state-run.n97.text": {
+      "text": "The budget preset sets the budget to 2: step 3 is refused before it runs, the state turns to failed, and the existing evidence is kept.",
+      "source": "7e0dc6fc6af0"
+    },
+    "code-state-run.n101.text": {
+      "text": "Only when both the evidence and result exist does transition allow entering completed.",
+      "source": "22e1c85f5783"
+    },
+    "code-state-run.n104.text": {
+      "text": "Assembling the report lives in _report, where the check items are computed one by one from the state. The Code scene does not expand it.",
+      "source": "90a492346dff"
+    },
+    "code-decision.title": {
+      "text": "Keep application state in a typed state machine, separate from the message list",
+      "source": "b1177aa03a5d"
+    },
+    "code-decision.chosen": {
+      "text": "A TaskState data class plus a TRANSITIONS table: each transition validates legality and terminal-state conditions and publishes a snapshot as a lesson.state event. The message list carries only the conversation the model sees.",
+      "source": "e2363984917f"
+    },
+    "code-decision.state-in-messages.title": {
+      "text": "Write progress into the message history and let the model infer state from the conversation",
+      "source": "7a1ea220789b"
+    },
+    "code-decision.state-in-messages.why_not": {
+      "text": "Messages are text for the model to read and cannot enforce rules such as \"no completion without evidence\".",
+      "source": "987d3817cb82"
+    },
+    "code-decision.boolean-flags.title": {
+      "text": "Use boolean flags such as is_running and is_done",
+      "source": "3794b6e59ad9"
+    },
+    "code-decision.boolean-flags.why_not": {
+      "text": "Flag combinations can produce contradictory states such as \"both done and failed\", while a transition table can reject illegal transitions directly.",
+      "source": "af15ae29d504"
+    },
+    "terminal-states.title": {
+      "text": "Three terminal states, each with a reason",
+      "source": "6e0821d63bcf"
+    },
+    "terminal-states.hypothesis": {
+      "text": "Terminal states are written by the program according to the transition rules: only with evidence in hand and a deliverable generated can it enter completed. When material is missing or the step budget runs out it turns to failed with a stated reason, and evidence already obtained is not erased.",
+      "source": "c2c558a4beee"
+    },
+    "terminal-states.success.label": {
+      "text": "Material exists, step budget 3",
+      "source": "2121ecaed695"
+    },
+    "terminal-states.missing.label": {
+      "text": "Material does not exist, everything else unchanged",
+      "source": "3080a4e6b3b5"
+    },
+    "terminal-states.budget.label": {
+      "text": "Material exists, step budget only 2",
+      "source": "37d3f06a9027"
+    },
+    "terminal-states.first-snapshot.text": {
+      "text": "The first state snapshot: status is ready, run_id is newly generated for this run, and used_steps is 0.",
+      "source": "f3304341a09d"
+    },
+    "terminal-states.evidence-recorded.text": {
+      "text": "The moment evidence is written into the state: source and excerpt come from the local SOURCES. The missing-material arm does not have this entry.",
+      "source": "1536106d0600"
+    },
+    "terminal-states.third-step.text": {
+      "text": "Step 3, \"生成课内资料要点\" (\"generate the in-lesson material points\"): reached only when the budget is enough.",
+      "source": "12e17366698e"
+    },
+    "terminal-states.terminal-reason.text": {
+      "text": "The detail of \"终态有原因\" (\"terminal state has a reason\") in the report: it is this run's terminal_reason.",
+      "source": "adde87cc52ba"
+    },
+    "terminal-states.status-metrics.text": {
+      "text": "Report metrics: status, evidence count, message count, step budget, and steps executed side by side.",
+      "source": "74881477817d"
+    },
+    "terminal-states.guide.0.text": {
+      "text": "This lesson does not call a model. Every change in the state is written by the program and published as a snapshot.",
+      "source": "5b6ac7b2f619"
+    },
+    "terminal-states.guide.1.text": {
+      "text": "The state is ready when the run starts. Each run has a new run_id and shares no global task state.",
+      "source": "f459e97e266f"
+    },
+    "terminal-states.guide.2.text": {
+      "text": "Evidence is written into the state only after the material source is checked. If you ran the missing-material arm, this step notes that the run has no such evidence.",
+      "source": "21e530decfe4"
+    },
+    "terminal-states.guide.3.text": {
+      "text": "Step 3 consumes the third unit of budget. The arm with a budget of only 2 never gets here and can only end in failure.",
+      "source": "e65b77193f1a"
+    },
+    "terminal-states.guide.4.text": {
+      "text": "A terminal state must come with a reason. completed and failed are both explicit terminal states, with different reasons.",
+      "source": "b5e333870341"
+    },
+    "terminal-states.guide.5.text": {
+      "text": "Compare the metrics: the message count stays at 1. State updates were not written into the message list and were not disguised as model replies.",
+      "source": "fe84201419aa"
+    },
+    "terminal-states.conclusion.proves.0": {
+      "text": "Every state change in this run has a snapshot, and the terminal state and its reason were written by the program, traceable to the evidence and steps executed in the snapshots.",
+      "source": "2190494fbc39"
+    },
+    "terminal-states.conclusion.proves.1": {
+      "text": "The message count stays at 1: state updates did not get mixed into the message list.",
+      "source": "7f8fa3b5a046"
+    },
+    "terminal-states.conclusion.does_not_prove.0": {
+      "text": "completed only means the in-lesson material summary flow finished. It does not prove that whatever goal you typed was achieved.",
+      "source": "848eff02e691"
+    },
+    "terminal-states.conclusion.does_not_prove.1": {
+      "text": "All three arms are fixed presets and cannot prove that other transitions such as cancellation are correct. Illegal transitions have to be verified separately in unit tests.",
+      "source": "c5c1ec7c5628"
+    },
+    "inputs.goal.label": {
+      "text": "Task goal",
+      "source": "f617beed33b0"
+    },
+    "inputs.source_key.label": {
+      "text": "Material source",
+      "source": "36ca458a92bd"
+    },
+    "inputs.source_key.options.messages-context.label": {
+      "text": "Material from {{lesson:messages-context}}",
+      "source": "e0ade096a370"
+    },
+    "inputs.source_key.options.application-state.label": {
+      "text": "Material from {{lesson:application-state}}",
+      "source": "8dad0f17ef27"
+    },
+    "inputs.source_key.options.missing.label": {
+      "text": "Nonexistent material",
+      "source": "304e4330773e"
+    },
+    "inputs.step_budget.label": {
+      "text": "Step budget",
+      "source": "096b51a95ab5"
+    },
+    "quiz.source.prompt": {
+      "text": "What can make this lesson's status become completed?",
+      "source": "e056067ac336"
+    },
+    "quiz.source.a.text": {
+      "text": "The assistant text claims it is done",
+      "source": "022dc33ff0ad"
+    },
+    "quiz.source.a.feedback": {
+      "text": "The assistant's text is only output, not proof of acceptance. The state transition checks the evidence and the actual result.",
+      "source": "afde56c8c9ad"
+    },
+    "quiz.source.b.text": {
+      "text": "The program has obtained source evidence and went through legal transitions",
+      "source": "d599b95f1e9a"
+    },
+    "quiz.source.b.feedback": {
+      "text": "Correct. Only after source evidence is obtained and an actual result is generated does the state transition allow entering completed.",
+      "source": "8cf215ea942b"
+    },
+    "quiz.source.c.text": {
+      "text": "There are more than three messages",
+      "source": "14e1814a5417"
+    },
+    "quiz.source.c.feedback": {
+      "text": "The number of messages has nothing to do with whether the task is done, and this lesson's state updates do not change the message list.",
+      "source": "63505796f66b"
+    },
+    "quiz.source.explanation": {
+      "text": "Completion is checked by transition, and it requires evidence and an actual result. The answer text itself is not proof of acceptance.",
+      "source": "947e46e406e8"
+    },
+    "quiz.terminal.prompt": {
+      "text": "When the material does not exist, what is the legal lifecycle?",
+      "source": "7c891e9d14dd"
+    },
+    "quiz.terminal.a.text": {
+      "text": "ready → completed",
+      "source": "d1044c1fdac5"
+    },
+    "quiz.terminal.a.feedback": {
+      "text": "It skips running: execution has to start first. And when the material does not exist, the task cannot be completed on the basis of evidence.",
+      "source": "8a1a83ca7483"
+    },
+    "quiz.terminal.b.text": {
+      "text": "ready → running → waiting → failed",
+      "source": "31831c3626ce"
+    },
+    "quiz.terminal.b.feedback": {
+      "text": "Correct. Execution starts first, the state enters waiting when material is missing, and after it is confirmed that this run cannot continue it enters failed, with the reason recorded.",
+      "source": "0e8f077435b3"
+    },
+    "quiz.terminal.c.text": {
+      "text": "failed → running → completed",
+      "source": "a7dce96ad0f7"
+    },
+    "quiz.terminal.c.feedback": {
+      "text": "failed is a terminal state, and it cannot go back to running afterward.",
+      "source": "2e5980ee841f"
+    },
+    "quiz.terminal.explanation": {
+      "text": "Execution starts first, waits when material is missing, and fails once it is confirmed that this run cannot continue. A terminal state cannot return to running.",
+      "source": "2bd712333489"
+    },
+    "quiz.state-message.prompt": {
+      "text": "After the state gains evidence, what happens to messages?",
+      "source": "da1561d9d0d0"
+    },
+    "quiz.state-message.a.text": {
+      "text": "A role=tool message is appended automatically",
+      "source": "0716a9347c05"
+    },
+    "quiz.state-message.a.feedback": {
+      "text": "A state update is not disguised as a tool message. This lesson's report checks exactly this with \"消息与状态分开\" (\"messages and state are separate\").",
+      "source": "909a39c94247"
+    },
+    "quiz.state-message.b.text": {
+      "text": "It stays a single user goal unless the program rewrites it explicitly",
+      "source": "9d3e4315fbdd"
+    },
+    "quiz.state-message.b.feedback": {
+      "text": "Correct. Application state and model messages are two containers. Unless the program explicitly rewrites messages, it still holds only the original user goal.",
+      "source": "7f4cc1cf6913"
+    },
+    "quiz.state-message.c.text": {
+      "text": "It is cleared automatically",
+      "source": "b54035414685"
+    },
+    "quiz.state-message.c.feedback": {
+      "text": "A state change does not clear messages. There is no automatic sync between the two.",
+      "source": "dcc2f7cbbc03"
+    },
+    "quiz.state-message.explanation": {
+      "text": "Application state and model messages are different containers, and a state update does not automatically become a message the model can see.",
+      "source": "19bee03b8872"
+    },
+    "quiz.budget.prompt": {
+      "text": "One piece of material was obtained but the step budget ran out. What is a reasonable result?",
+      "source": "7ff83bf8bf23"
+    },
+    "quiz.budget.a.text": {
+      "text": "With evidence it must succeed",
+      "source": "5df9e0b17401"
+    },
+    "quiz.budget.a.feedback": {
+      "text": "Evidence is only a fact from the process. The conclusion has not been generated, so the goal is not complete.",
+      "source": "d7ccbcff2646"
+    },
+    "quiz.budget.b.text": {
+      "text": "Keep the evidence and fail with the budget as the reason",
+      "source": "5e0abc326824"
+    },
+    "quiz.budget.b.feedback": {
+      "text": "Correct. Keep the evidence obtained and record failed with budget exhaustion as the reason for stopping, so both the facts and the reason are traceable.",
+      "source": "421a5bf106d1"
+    },
+    "quiz.budget.c.text": {
+      "text": "Delete the evidence and pretend it is done",
+      "source": "4f9a74b460a2"
+    },
+    "quiz.budget.c.feedback": {
+      "text": "Deleting the evidence throws away facts that really happened, and then pretending it is done is forging a result.",
+      "source": "b3b5f169adee"
+    },
+    "quiz.budget.explanation": {
+      "text": "Having evidence does not mean the goal is complete. When the budget stops a run, keep the existing facts and the reason.",
+      "source": "b217e2251223"
+    },
+    "quiz.run-vs-task.prompt": {
+      "text": "After the \"Missing material\" arm finishes, the done event's status is completed and TaskState's status is failed. How should you understand this?",
+      "source": "9b291d376936"
+    },
+    "quiz.run-vs-task.a.text": {
+      "text": "The run flow finished normally and the task itself failed; the two say different things",
+      "source": "3f8f162d579d"
+    },
+    "quiz.run-vs-task.a.feedback": {
+      "text": "Correct. The run's terminal state says whether the flow finished, and TaskState says how the task ended.",
+      "source": "d20f313c95e0"
+    },
+    "quiz.run-vs-task.b.text": {
+      "text": "The platform recorded it wrong, and the two should match",
+      "source": "1620234646a4"
+    },
+    "quiz.run-vs-task.b.feedback": {
+      "text": "Not quite. A flow ending normally and a task being completed are two different things, and they can differ by design.",
+      "source": "d63b9a3bbb28"
+    },
+    "quiz.run-vs-task.c.text": {
+      "text": "The task was actually completed, and failed is only a hint",
+      "source": "dd709729ef4f"
+    },
+    "quiz.run-vs-task.c.feedback": {
+      "text": "Not quite. Without evidence and a deliverable, transition does not allow entering completed.",
+      "source": "2ae4fc2ff56b"
+    },
+    "quiz.run-vs-task.explanation": {
+      "text": "Tell \"the flow ended\" apart from \"the task is complete\": the first is read from the done event, and the second from the application state.",
+      "source": "ba92f034d56c"
+    },
+    "quiz.budget-before-step.prompt": {
+      "text": "Why does consume_step deduct the budget before running a step instead of after?",
+      "source": "a35957012359"
+    },
+    "quiz.budget-before-step.a.text": {
+      "text": "When the budget is used up, the step that goes over never starts, so it cannot cause side effects",
+      "source": "2d741ffdf0ac"
+    },
+    "quiz.budget-before-step.a.feedback": {
+      "text": "Correct. Deduct first and then act, and the step that goes over never starts.",
+      "source": "f00a3473bb48"
+    },
+    "quiz.budget-before-step.b.text": {
+      "text": "Deducting before execution is faster",
+      "source": "56b391f22259"
+    },
+    "quiz.budget-before-step.b.feedback": {
+      "text": "Not quite. The difference is not speed but whether the step that goes over gets executed.",
+      "source": "d7b88d083e59"
+    },
+    "quiz.budget-before-step.c.text": {
+      "text": "You only know after execution whether the step succeeded, so you can only deduct first",
+      "source": "e379a1f735ac"
+    },
+    "quiz.budget-before-step.c.feedback": {
+      "text": "Not quite. Whether it succeeded does not affect this rule. The point is not to start when the budget is not enough.",
+      "source": "1f64f9627beb"
+    },
+    "quiz.budget-before-step.explanation": {
+      "text": "The budget is a check before execution. Once it is used up, no new step starts.",
+      "source": "0b2650b1a3ea"
+    },
+    "check-hunt.prompt": {
+      "text": "Find the step where the application state has already recorded source evidence (evidence is not empty).",
+      "source": "7968b159c863"
+    },
+    "check-hunt.explanation": {
+      "text": "This is a lesson.state event: state.evidence holds the source and the excerpt. The evidence was written into the application state, and messages did not grow because of it. In the \"Missing material\" exercise, evidence stays empty throughout and the state ends in failed.",
+      "source": "7e32f6dba5aa"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I can follow the lesson.state events and state the order of state transitions in this run.",
+      "source": "aad68e54e415"
+    },
+    "check-points.item-2.text": {
+      "text": "I saw evidence in the state get updated while the message count did not change.",
+      "source": "69d56cbc49d2"
+    },
+    "check-points.item-3.text": {
+      "text": "I can explain why a terminal state must state its terminal_reason.",
+      "source": "7768ea763adb"
+    },
+    "check-points.item-4.text": {
+      "text": "Small extension: with the material present, change the step budget to 1 and run again. See what used_steps, evidence, and terminal_reason are, and describe how it differs from a budget of 2.",
+      "source": "a5dec4193f5d"
+    },
+    "code_notes.TaskState.note": {
+      "text": "This lesson's application state data class: it holds the goal, evidence, steps, deliverable, and terminal reason, stored separately from messages.",
+      "source": "660285ac007f"
+    },
+    "code_notes.transition.note": {
+      "text": "The state transition method: looks up TRANSITIONS and raises on an illegal one. A terminal state needs a reason, and completed also needs evidence and a deliverable.",
+      "source": "417d3f10792d"
+    },
+    "code_notes.TRANSITIONS.note": {
+      "text": "The transition table: lists the next states each state may enter. The three terminal states map to empty sets and cannot be left once entered.",
+      "source": "b43e8ec78517"
+    },
+    "code_notes.evidence.note": {
+      "text": "A TaskState field: material written in after the source is checked. Each entry has source and excerpt, and it is kept on failure too.",
+      "source": "665165260192"
+    },
+    "code_notes.result.note": {
+      "text": "A TaskState field: the in-lesson points actually generated in step 3. When it is empty, transition does not allow entering completed.",
+      "source": "8c2cb6c9aaeb"
+    },
+    "code_notes.terminal_reason.note": {
+      "text": "The reason written when entering a terminal state. The report item \"终态有原因\" (\"terminal state has a reason\") shows it directly.",
+      "source": "7c0c0c7f4d7a"
+    },
+    "code_notes.step_budget.note": {
+      "text": "This lesson's input: the maximum number of steps to run. It is deducted before each step, and when it is not enough the state turns to failed.",
+      "source": "780add6dfa71"
+    },
+    "code_notes.consume_step.note": {
+      "text": "A TaskState method: deducts the budget before running a step, and returns False when the budget is used up so the caller writes the failure terminal state.",
+      "source": "e68296b2f076"
+    },
+    "code_notes.SOURCES.note": {
+      "text": "The two local materials built into this lesson (messages-context, application-state). Evidence can only be read from here.",
+      "source": "8ed2d1821137"
+    },
+    "code_notes.lesson.state.note": {
+      "text": "This lesson's event: at each key change it publishes the action name and a full TaskState snapshot.",
+      "source": "aac42a8cdef3"
+    },
+    "code_notes.RunCancelled.note": {
+      "text": "The exception the platform raises when it finds a stop request between steps. The run is recorded as cancelled, not completed.",
+      "source": "bf8ac9e3c2a7"
+    }
+  }
+}

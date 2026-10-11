@@ -1,0 +1,782 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "TOOL CALLING / PROPOSALS",
+      "source": "91f998565d29"
+    },
+    "hero.headline": {
+      "text": "The model only proposes calls.",
+      "source": "3f841526d106"
+    },
+    "hero.highlight": {
+      "text": "Executing them is the program's job.",
+      "source": "8cd24830cbfd"
+    },
+    "hero.takeaway": {
+      "text": "Send the tool definitions to the model with the request and see which tool it picks and what arguments it fills in. This lesson looks only at proposals and executes no tools.",
+      "source": "6c9368d53dd2"
+    },
+    "concepts.01-define.label": {
+      "text": "01 / DEFINE",
+      "source": "739bd6fcb03d"
+    },
+    "concepts.01-define.title": {
+      "text": "Tool definition",
+      "source": "2433800bfcbe"
+    },
+    "concepts.01-define.description": {
+      "text": "The tool description is written in each tool definition and says what the tool does and when to use it. The whole definition goes to the model in the tools field of the request.",
+      "source": "92bcd17ecb21"
+    },
+    "concepts.02-schema.label": {
+      "text": "02 / SCHEMA",
+      "source": "ca503c32c54a"
+    },
+    "concepts.02-schema.title": {
+      "text": "The shape of the arguments",
+      "source": "48d858d352bf"
+    },
+    "concepts.02-schema.description": {
+      "text": "Arguments are described with JSON Schema: which fields there are, their types, and which are required. The model writes the arguments to match it.",
+      "source": "3cf691df2cb8"
+    },
+    "concepts.03-propose.label": {
+      "text": "03 / PROPOSE",
+      "source": "0316ab8039db"
+    },
+    "concepts.03-propose.title": {
+      "text": "Propose, don't execute",
+      "source": "7d3028bfb937"
+    },
+    "concepts.03-propose.description": {
+      "text": "The model writes the tool name and arguments in tool_calls in the response. This is the first half of tool calling: the tool call proposal. Execution waits for the program.",
+      "source": "c2231bfad404"
+    },
+    "concepts.04-no-tool.label": {
+      "text": "04 / NO TOOL",
+      "source": "b29719268a46"
+    },
+    "concepts.04-no-tool.title": {
+      "text": "No need, no call",
+      "source": "59936e032da1"
+    },
+    "concepts.04-no-tool.description": {
+      "text": "When the question doesn't need a tool, the model just answers: finish_reason is stop and there is no tool_calls.",
+      "source": "772a1b19cfad"
+    },
+    "section-why-tools.title": {
+      "text": "The model can only write text, so it borrows the program to do things",
+      "source": "90ebb085eb6d"
+    },
+    "section-why-tools.paragraphs.0": {
+      "text": "The model can only write text. To have it check the time or do a calculation, you let it write down \"which tool I want to use and what the arguments are\" and hand that to the program to carry out. {{lesson:chat-request}} raised this problem at the end: ask the model what time it is now and it has no clock, so it can only give an answer based on text it saw in training, and it often sounds very sure. Multiplying large numbers is the same. It writes the digits one token at a time, and if one digit is wrong it won't notice.",
+      "source": "26cad24d065d"
+    },
+    "section-why-tools.paragraphs.1": {
+      "text": "What can check the time or compute numbers is the program. So the division of labor is this: the model decides whether to use a tool, which one, and what to fill in for the arguments, and writes that decision down; the program carries it out. When coding agents like Claude Code or Cursor show \"Read file\" or \"Run command\" in the interface, those are tool calls the model proposed and the program then executed on your computer. An early approach was to agree on a text format in the prompt, for example having the model write \"call add_numbers(19, 23)\" and then having the program find that sentence in the answer. This is fragile: if the model adds a space or words it differently, the program can't find it. {{lesson:text-actions}} compares it directly.",
+      "source": "3059f9c792e9"
+    },
+    "section-why-tools.paragraphs.2": {
+      "text": "Most models now support tool calling: the request carries a tool list, and when the model wants a tool it doesn't write the call into the body of the answer. It writes it into a dedicated place, and the provider arranges it into JSON with a fixed format and hands it to the program. This lesson looks only at the first half, how the model proposes a call. How the program executes it is left to {{lesson:tool-selection}}.",
+      "source": "416db99442e2"
+    },
+    "section-1.title": {
+      "text": "The request now has tools",
+      "source": "ae05ff67a975"
+    },
+    "section-1.paragraphs.0": {
+      "text": "The request in {{lesson:chat-request}} had only messages. This lesson adds two fields: tools is the list of tool definitions, and tool_choice is set to auto, which lets the model decide for itself whether to use a tool. TOOLS here comes from tools.py in {{lesson:tool-selection}} and holds two tools: add_numbers computes the sum of two numbers, and get_current_time reads the local time of the machine running Python.",
+      "source": "b0c9f45c237e"
+    },
+    "section-1.paragraphs.1": {
+      "text": "All the model sees is this text. It can't see the Python functions. Each definition has three parts: name is the tool name, description is the tool description, and parameters describes the arguments. The tool description of add_numbers is \"把两个数字相加。需要计算两个数的和时调用。\" (\"Add two numbers. Call it when you need the sum of two numbers.\"), which says what it does and also when to use it. The model reads this text to pick tools: if the description is vague, it may pick wrongly, or not use a tool when it should.",
+      "source": "5f4d69511cda"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Besides auto, common values for tool_choice include `none` (no tools allowed this time) and `required` (a tool must be used), and you can also name one specific tool. Which values each provider supports is in its documentation. This lesson uses auto so that you can see the model's own choice.",
+      "source": "84b985d8a790"
+    },
+    "section-1.paragraphs.3": {
+      "text": "Tool definitions are part of the request too and count toward prompt_tokens: the more tools and the longer the descriptions, the bigger every request. The system prompt and the question in this lesson both differ from {{lesson:chat-request}}, so the prompt tokens of the two lessons can't be subtracted directly, and you can't work out how much these two definitions take.",
+      "source": "c3f52bfcea21"
+    },
+    "section-2.title": {
+      "text": "JSON Schema describes the arguments",
+      "source": "850657de7e4d"
+    },
+    "section-2.paragraphs.0": {
+      "text": "The parameters of each tool definition is a piece of JSON Schema: it uses JSON to spell out which fields the arguments have, their types, and which are required. Why not just write \"pass two numbers\"? Because the model writes the arguments from it and the program checks the arguments against it, so both sides need the same precise agreement. \"Two numbers\" could be 19 and 23, or it could be \"nineteen\" and \"twenty-three\". With the Schema saying the type is number, the latter fails, and the program has something to check against.",
+      "source": "f508d3e318a9"
+    },
+    "section-2.paragraphs.1": {
+      "text": "This is how add_numbers is written: type is object, meaning the arguments as a whole are a JSON object; properties has two fields, a and b, both of type number, each with a description; required says both are mandatory; additionalProperties is false, meaning no extra fields may be passed. get_current_time needs no arguments, so its properties is an empty object.",
+      "source": "60f830a39e7a"
+    },
+    "section-2.paragraphs.2": {
+      "text": "JSON Schema is only an agreement written for the model, and the model can still get it wrong: leave out b, write a number as quoted text, or even write incomplete JSON. Some providers offer a strict mode that declares the arguments will conform to the Schema; which Schema features are supported and how far the guarantee goes is in the provider's documentation. This lesson doesn't rely on it: real checking of arguments happens in the program before execution, which {{lesson:tool-selection}} and {{lesson:fail-safely}} cover.",
+      "source": "03ecddcabe00"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The description of an argument is also written for the model. The description of a says only \"第一个数字\" (\"the first number\"), because addition doesn't care about order. If the tool were subtraction, you would have to say which is the minuend, or the model might fill them in reversed. Like the tool description, the argument description is the only explanation the model can read.",
+      "source": "eaf2bd435492"
+    },
+    "deep-dive-tools-in-prompt.title": {
+      "text": "How the model \"sees\" the tools and writes the call",
+      "source": "7e38c3487ce2"
+    },
+    "deep-dive-tools-in-prompt.summary": {
+      "text": "The tool definitions are joined into the prompt. The model writes the call in the format it learned in training, and the provider parses it into tool_calls.",
+      "source": "529624d41217"
+    },
+    "deep-dive-tools-in-prompt.paragraphs.0": {
+      "text": "The model only reads a block of text and continues it, so it can't read the JSON field tools directly. When the request reaches the provider, the tool definitions are turned into a piece of text in the prompt by the model's chat template. The chat templates of open-source models are public, and you can see that this text usually sits near the system message and says roughly, \"You can use the following tools; each tool's name, purpose, and parameters are as follows.\" So tool definitions cost tokens, and they also interact with the system prompt you write.",
+      "source": "1d84b0fe3e38"
+    },
+    "deep-dive-tools-in-prompt.paragraphs.1": {
+      "text": "A model that supports tool calling saw a lot of examples like this in training: it reads the tool list, and when a tool should be used, it writes the tool name and arguments in a specific format and then writes an end marker and stops. The provider recognizes this format in the output, parses it into tool_calls in the response, and records the finish reason as tool_calls. Formats differ by provider: those of open-source models are in the model documentation, while most commercial services don't publish theirs, and in the response you see only the parsed result.",
+      "source": "d880855a80f0"
+    },
+    "deep-dive-tools-in-prompt.paragraphs.2": {
+      "text": "arguments is also text the model writes one token at a time. The interface in this lesson hands it to you unchanged as a string and doesn't parse it for you. Since it is written text, it can be wrong: a bracket may be missing, or it may not match the Schema. read_proposals in this lesson only checks whether it can be parsed into a JSON object, precisely to lay this out in the open.",
+      "source": "594871bb57c1"
+    },
+    "deep-dive-tools-in-prompt.paragraphs.3": {
+      "text": "And precisely because the call is written by the model, it fluctuates just like an answer: ask the same question again and the model may pick a different tool, or none at all. The sampling covered in {{lesson:sampling-variance}} applies here too.",
+      "source": "b78287c7321a"
+    },
+    "predict-tool-results.prompt": {
+      "text": "Run it once first. In the experiment \"Sum, time, and small talk\", before you run \"Ask for a sum\", guess: how many tool_result events will this run produce?",
+      "source": "f7a58e75ed40"
+    },
+    "mq-what-model-sees.what-model-sees.prompt": {
+      "text": "What can the model see about add_numbers in the request?",
+      "source": "0ceb237991aa"
+    },
+    "mq-what-model-sees.what-model-sees.a.text": {
+      "text": "The name, the tool description, and the JSON Schema of the arguments",
+      "source": "2759e4e4d584"
+    },
+    "mq-what-model-sees.what-model-sees.a.feedback": {
+      "text": "Correct. tools holds the tool definitions, and the model uses them to decide whether to propose a call.",
+      "source": "7440159bfb72"
+    },
+    "mq-what-model-sees.what-model-sees.b.text": {
+      "text": "The Python source code of add_numbers",
+      "source": "e11a884b9e8d"
+    },
+    "mq-what-model-sees.what-model-sees.b.feedback": {
+      "text": "Not quite. The function implementation stays on your machine, and the request has no source code.",
+      "source": "1869d37a437e"
+    },
+    "mq-what-model-sees.what-model-sees.c.text": {
+      "text": "The result add_numbers computed in a previous run",
+      "source": "f8555e4d4240"
+    },
+    "mq-what-model-sees.what-model-sees.c.feedback": {
+      "text": "Not quite. The model keeps no state between calls, and the request has no execution results.",
+      "source": "966dcb16a11e"
+    },
+    "mq-what-model-sees.what-model-sees.explanation": {
+      "text": "The model sees the tool definitions, Python holds the implementation, and the two sides are matched only by tool name.",
+      "source": "693830ec6cb1"
+    },
+    "section-3.title": {
+      "text": "Tool call proposal: what tool_calls says",
+      "source": "bf6b59d796a4"
+    },
+    "section-3.paragraphs.0": {
+      "text": "When the model decides to use a tool, the message in the response has a tool_calls list, and content is often empty. It may also hold a line for the user like \"Let me work that out for you\", which doesn't affect the call. Each item in tool_calls has id, type, and function: function.name is the tool name and function.arguments is the arguments. finish_reason is usually tool_calls here, meaning the model has stopped and is waiting for the program to act. Some providers return another value here, so to tell whether there is a tool call proposal, the program checks whether tool_calls is empty; the loop in {{lesson:tool-selection}} does exactly that.",
+      "source": "febaee3c5561"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Note that arguments is a JSON string, text like {\"a\": 19, \"b\": 23}, and not an already-parsed object. read_proposals in this lesson tries to parse it with json.loads only to mark in the lab report whether it is a valid JSON object. The parsed result is not used to call any function.",
+      "source": "a06a2d36300d"
+    },
+    "section-3.paragraphs.2": {
+      "text": "id is the number of this call, generated by the provider. For now it seems to serve no purpose. In {{lesson:tool-selection}} the program uses it to match an execution result with this call. tool_calls is a list because the model can propose several calls in one response, for example when a sentence asks for two additions; {{lesson:dependent-calls}} runs into this.",
+      "source": "6894c15a6b83"
+    },
+    "section-3.paragraphs.3": {
+      "text": "To read a tool call proposal on the lab bench, you can follow this order: first check whether tool_calls has content and whether finish_reason is tool_calls, to confirm that this round proposes a call and doesn't give an answer; then see which tool function.name chose; finally see what arguments says and whether it can be parsed. The lab report's table puts these on one row.",
+      "source": "f4a07dda76ac"
+    },
+    "section-4.title": {
+      "text": "A proposal is not execution",
+      "source": "d5974f767c58"
+    },
+    "section-4.paragraphs.0": {
+      "text": "tool_calls is only a tool call proposal the model wrote down, like an order a waiter writes on a pad: the dish and any special requests are on the slip, but nothing has been cooked yet. This lesson stops right there: no executable function is registered, and no second request is sent, so the events hold just one request and one response, with no tool_call and no tool_result.",
+      "source": "25f5863651eb"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Why separate \"propose\" from \"execute\"? Because the slip can be wrong. The tool name the model proposes may not exist, the arguments may be wrong, or it may propose an operation you don't want it to do at all. With the power to execute left to the program, the program can take a look first and then decide: do it, refuse, or return an error so the model rewrites it. How these proposals are executed and how the results go back to the model is left to {{lesson:tool-selection}}. The permission prompts in Claude Code put this step on screen. According to the official documentation, reading files and searching in the working directory need no confirmation; in Manual mode (manual approval), before running a command or editing a file, it first shows what the model wants to do, such as the command to run, and asks whether to continue. If you choose no, the call is not executed. Which operations need confirmation in each mode is in the official documentation.",
+      "source": "b7964909b9ab"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The provider doesn't execute for you either. The tools in this lesson are all of type function, the functions are in your program, and the provider only hands the model's written call back. Some providers also offer built-in tools, such as web search, which run on the provider's side and are outside the scope of this lesson.",
+      "source": "2c3db79469af"
+    },
+    "section-4.paragraphs.3": {
+      "text": "So the evidence in this lesson is clean: the timeline has one request and one response. Every tool name and argument you see was written by the model, and the program didn't change a single character. This lesson draws no conclusion about whether they are right or whether they could be executed.",
+      "source": "7ad735cbd212"
+    },
+    "deep-dive-other-formats.title": {
+      "text": "The same thing, with different field names at each provider",
+      "source": "0b6f459fb903"
+    },
+    "deep-dive-other-formats.summary": {
+      "text": "Other APIs also follow the three steps of \"define the tool, propose a call, return the result\", only with different field names and locations.",
+      "source": "1b758cdbf985"
+    },
+    "deep-dive-other-formats.paragraphs.0": {
+      "text": "This lesson uses the OpenAI-compatible API format: the request has tools and tool_choice, the response has tool_calls, and the arguments are a JSON string. Other APIs do the same thing under different names. Once you know the correspondence, field names won't trip you up when you read another provider's documentation.",
+      "source": "d9e849ee2556"
+    },
+    "deep-dive-other-formats.paragraphs.1": {
+      "text": "In Anthropic's Messages API, a tool definition also has a name and a description, and the argument Schema goes in the `input_schema` field. When the model proposes a call, `stop_reason` is `tool_use`; the call is written in a block of type `tool_use` in the answer content, and the arguments `input` is already a parsed object. The execution result goes into a user message with type `tool_result`, which points back to that call with `tool_use_id`.",
+      "source": "cbb66b195ddd"
+    },
+    "deep-dive-other-formats.paragraphs.2": {
+      "text": "In OpenAI's newer Responses API, a call is an item of type `function_call`, the arguments are still a JSON string, and the identifier is called `call_id`. To return the result you write a `function_call_output` item with the same `call_id`.",
+      "source": "2fb6abcfc140"
+    },
+    "deep-dive-other-formats.paragraphs.3": {
+      "text": "Put the three side by side and what they share is clear: each has a tool definition written for the model, each has the model propose the call and the program execute it, and each uses an identifier to match the result to the call. Field names and whether the arguments are a string are in each provider's documentation. When this platform connects to other providers through LiteLLM, the request in the event is a request body in this lesson's format, and the response is the result after LiteLLM standardized it to this format; the raw HTTP message the SDK sent to the provider is not in the event. When you return a result in {{lesson:tool-selection}}, you will see the counterpart in this lesson's format: a message with role tool, carrying tool_call_id.",
+      "source": "149cdae936d5"
+    },
+    "misconception-called.claim": {
+      "text": "tool_calls appeared in the response, so the model has called the tool and the result will be there right away.",
+      "source": "ee2cac95744b"
+    },
+    "misconception-called.correction": {
+      "text": "tool_calls is only a tool call proposal the model wrote down. Whether the tool ran and what came out depends on whether a tool_result event follows. This lesson executes no tools, so there is no tool_result in the events. \"The model called the tool\" is a casual shorthand; when reading a run record, say \"the model proposed a call\".",
+      "source": "0099d85d908a"
+    },
+    "mq-proposal-only.proposal-only.prompt": {
+      "text": "The response contains add_numbers with arguments 19 and 23. What can you be sure of?",
+      "source": "e57b6d7ceb94"
+    },
+    "mq-proposal-only.proposal-only.a.text": {
+      "text": "The model proposed one call; nothing has been executed yet",
+      "source": "e3de7ad71f4f"
+    },
+    "mq-proposal-only.proposal-only.a.feedback": {
+      "text": "Correct. tool_calls is only a proposal, and this lesson doesn't execute it.",
+      "source": "1f8cb8e15078"
+    },
+    "mq-proposal-only.proposal-only.b.text": {
+      "text": "Python has already computed 42",
+      "source": "60f38af695ba"
+    },
+    "mq-proposal-only.proposal-only.b.feedback": {
+      "text": "Not quite. This lesson executes no tools, and there is no tool_result in the events.",
+      "source": "0306e97d72cb"
+    },
+    "mq-proposal-only.proposal-only.c.text": {
+      "text": "The provider performed the addition for you",
+      "source": "ad3a151c8414"
+    },
+    "mq-proposal-only.proposal-only.c.feedback": {
+      "text": "Not quite. The provider only returns what the model wrote. It doesn't run your Python functions.",
+      "source": "ad41545b9757"
+    },
+    "mq-proposal-only.proposal-only.explanation": {
+      "text": "The model proposes the call, and only the program can execute it.",
+      "source": "f5c40e2bbe56"
+    },
+    "section-5.title": {
+      "text": "When no tool is needed, answer directly",
+      "source": "ab3733f88cb5"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A small-talk question needs neither addition nor the time. The model then answers directly: message.content is the answer, there is no tool_calls, and finish_reason is stop. tools is still in the request; it just wasn't chosen this time.",
+      "source": "2df1e048ec32"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Whether to use a tool and which one is decided only from the text in this request: the user's question, the system prompt, and the tool descriptions. The system prompt in this lesson says which question uses which tool and that other questions are answered directly, and the tool descriptions also say when to use them; the two agree. If the descriptions are vague, or the two contradict each other, the model may pick wrongly or not pick at all. {{lesson:prompt-experiments}} tests this with a controlled experiment.",
+      "source": "b2e0b5218d99"
+    },
+    "section-5.paragraphs.2": {
+      "text": "There is a more hidden case: the model doesn't use a tool when it should and simply makes up an answer. Asked \"what time is it now\", it may not propose a call and instead write a time that looks very sure. Such an answer is well formed and the finish reason is also stop, so you can't tell real from fake from the answer alone. To judge whether an answer has a basis, first check whether this run proposed a call, then check whether it was actually executed afterward.",
+      "source": "e77b0d37df7c"
+    },
+    "section-5.paragraphs.3": {
+      "text": "One run is just one sample. If you run each of the three exercises once and the model chooses right every time, that only describes this time; ask the same question again and the choice may differ. To know how often the model usually chooses right, repeat the same request several times and count, as in {{lesson:sampling-variance}}.",
+      "source": "6617b8af2aec"
+    },
+    "mq-chat.chat-no-calls.prompt": {
+      "text": "The small-talk response has no tool_calls. What does that mean?",
+      "source": "da99f6ae3126"
+    },
+    "mq-chat.chat-no-calls.a.text": {
+      "text": "The model judged that the question didn't need a tool and answered directly",
+      "source": "5fbf47d4222a"
+    },
+    "mq-chat.chat-no-calls.a.feedback": {
+      "text": "Correct. finish_reason is stop, and the answer is in content.",
+      "source": "120e938d737c"
+    },
+    "mq-chat.chat-no-calls.b.text": {
+      "text": "This request didn't send tools",
+      "source": "2fc8d01adaf0"
+    },
+    "mq-chat.chat-no-calls.b.feedback": {
+      "text": "Not quite. The requests of all three exercises carry the same tools.",
+      "source": "7e1d5deb37ee"
+    },
+    "mq-chat.chat-no-calls.c.text": {
+      "text": "The tool failed to execute",
+      "source": "08ace2f833b4"
+    },
+    "mq-chat.chat-no-calls.c.feedback": {
+      "text": "Not quite. This lesson executes no tools, so there is nothing to fail.",
+      "source": "18bba933a478"
+    },
+    "mq-chat.chat-no-calls.explanation": {
+      "text": "tools only offers options. Whether to use one is decided by the model in this one answer.",
+      "source": "bd53be3c2cb2"
+    },
+    "references.hf-tools.title": {
+      "text": "What are tools: telling the model which tools exist through tool descriptions (Hugging Face Agents Course)",
+      "source": "1adc0deef1c8"
+    },
+    "references.hf-actions.title": {
+      "text": "Actions: the model writes the call and stops, then the program parses it (Hugging Face Agents Course)",
+      "source": "63c4cdfaf8bc"
+    },
+    "references.ms-tool-use.title": {
+      "text": "Tool use design pattern: tool definitions and the calling flow (Microsoft AI Agents for Beginners)",
+      "source": "2a9b97c58611"
+    },
+    "references.cookbook-calculator.title": {
+      "text": "Calculator tool: tool definition and calling in another API (Claude Cookbooks)",
+      "source": "68a4caefc141"
+    },
+    "references.ai-agent-book-ch1.title": {
+      "text": "Introduction to AI agents: tool calling in four steps — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "6f7e0e05827b"
+    },
+    "references.cc-permissions.title": {
+      "text": "Configure permissions: which operations need your confirmation before running (Claude Code documentation)",
+      "source": "cc4ca4282b5a"
+    },
+    "code-tool-schema.n7.text": {
+      "text": "TOOLS goes into the tools field of the request body unchanged. The number of definitions in the list is the number of tools the model can choose from.",
+      "source": "10c403c6cb50"
+    },
+    "code-tool-schema.n9.text": {
+      "text": "The tools in this lesson are all of type function: the function lives in your program and the program executes it. The real content is in the function object below.",
+      "source": "2c6852485f12"
+    },
+    "code-tool-schema.n11.text": {
+      "text": "The tool name. This is the name the model writes when it proposes a call, and the program later uses it to find the matching function.",
+      "source": "4923ac124628"
+    },
+    "code-tool-schema.n12.text": {
+      "text": "The tool description says \"when to call it\", not just \"what it does\". When picking a tool, the model can read only this sentence and the argument descriptions.",
+      "source": "7def5c4478eb"
+    },
+    "code-tool-schema.n13.text": {
+      "text": "From here on is the JSON Schema of the arguments.",
+      "source": "41f629fae0b7"
+    },
+    "code-tool-schema.n16.text": {
+      "text": "Each argument also has its own type and description. number means both integers and decimals are fine.",
+      "source": "a868773ef6b5"
+    },
+    "code-tool-schema.n19.text": {
+      "text": "Both arguments are required. If the model leaves one out, that field is missing from the proposal, and it won't be noticed until before execution.",
+      "source": "7d3e2fc4f214"
+    },
+    "code-tool-schema.n20.text": {
+      "text": "No extra fields. This is only an agreement told to the model; if the model passes extra ones, the Python side still has to block them itself.",
+      "source": "a9a75770f230"
+    },
+    "code-tool-schema.n27.text": {
+      "text": "The second tool. This lesson only looks at whether the model picks it, and doesn't actually read the time.",
+      "source": "51f6798e059e"
+    },
+    "code-tool-schema.n30.text": {
+      "text": "The description says which fields are returned. The model knows what the result looks like before it proposes the call, and {{lesson:dependent-calls}} will use hour and minute.",
+      "source": "710180ac89d5"
+    },
+    "code-tool-schema.n35.text": {
+      "text": "With no arguments, write an empty object. When the model proposes the call, arguments is usually {}.",
+      "source": "b6f318191605"
+    },
+    "code-proposals.n14.text": {
+      "text": "Read only, never execute: nothing in this function can call a tool.",
+      "source": "9a1d111aece0"
+    },
+    "code-proposals.n17.text": {
+      "text": "With no tool_calls you get an empty list, which is what the small-talk arm gets.",
+      "source": "60df7aec5ffe"
+    },
+    "code-proposals.n19.text": {
+      "text": "arguments is kept as a string, unchanged, and what the lab report shows is the text the model wrote.",
+      "source": "713d1519dd86"
+    },
+    "code-proposals.n22.text": {
+      "text": "It only checks whether the string parses into a JSON object. If it's malformed it is marked false, and the model's text is not repaired.",
+      "source": "fe748d2c5669"
+    },
+    "code-proposals.n33.text": {
+      "text": "messages is written the same way as without tools, and the system prompt says which question uses which tool.",
+      "source": "701364d8ef1d"
+    },
+    "code-proposals.n34.text": {
+      "text": "The two new fields: the tool definitions, and letting the model decide whether to use a tool.",
+      "source": "47ae857e1c6a"
+    },
+    "code-proposals.n36.text": {
+      "text": "The whole lesson has only this one request. max_rounds in lesson.json is 1, so there is no second round.",
+      "source": "149f9829fca4"
+    },
+    "code-proposals.n42.text": {
+      "text": "All it gets is the list of proposals. Nothing is executed afterward, and no result is handed back to the model.",
+      "source": "c2109042ff76"
+    },
+    "code-proposals.n44.text": {
+      "text": "With no proposals, the model's content is taken as the answer.",
+      "source": "a69c52544272"
+    },
+    "code-proposals.n47.text": {
+      "text": "With proposals, the final answer states exactly what was proposed and says that this lesson did not execute it.",
+      "source": "a6b888556d7a"
+    },
+    "code-proposals.fold-report.label": {
+      "text": "Platform: publish the lab report (_report)",
+      "source": "9018f731c256"
+    },
+    "code-decision.title": {
+      "text": "Record proposals only: show them unchanged, don't execute or fix them",
+      "source": "702e01df3a53"
+    },
+    "code-decision.chosen": {
+      "text": "run sends only one request, and read_proposals lists every item of tool_calls unchanged, marking only whether arguments can be parsed into a JSON object. No executable function is registered, so tool_call and tool_result never appear in the events.",
+      "source": "76fab6ecd78d"
+    },
+    "code-decision.execute-now.title": {
+      "text": "Execute the proposal as soon as it arrives",
+      "source": "173d790ec763"
+    },
+    "code-decision.execute-now.why_not": {
+      "text": "Executing means looking up the name, parsing and checking the arguments, and then handing the result back to the model, which is a separate topic. This lesson first makes clear what the model hands over.",
+      "source": "ae294fe6e4f0"
+    },
+    "code-decision.repair-arguments.title": {
+      "text": "Fix malformed arguments before showing them",
+      "source": "e3a5af0b3cc2"
+    },
+    "code-decision.repair-arguments.why_not": {
+      "text": "Fixing would hide where the model got it wrong. The table shows the string unchanged and only marks whether it can be parsed.",
+      "source": "c398cce31c4c"
+    },
+    "three-questions.title": {
+      "text": "Sum, time, and small talk",
+      "source": "5f0cc94b1c29"
+    },
+    "three-questions.hypothesis": {
+      "text": "The system and tools are exactly the same in all three arms, and only the user question changes. When asked for a sum the model proposes add_numbers, when asked for the time it proposes get_current_time, and in small talk it proposes no call and answers directly. In none of the three arms is any tool executed.",
+      "source": "b6047ae4e46d"
+    },
+    "three-questions.sum.label": {
+      "text": "Ask for a sum",
+      "source": "0e0a94368e82"
+    },
+    "three-questions.time.label": {
+      "text": "Ask for the time",
+      "source": "ac61805e9f0c"
+    },
+    "three-questions.chat.label": {
+      "text": "Small talk",
+      "source": "15b60566ac02"
+    },
+    "three-questions.tools-sent.text": {
+      "text": "tools in the request: all three arms carry the same two tool definitions.",
+      "source": "dc5bec408da8"
+    },
+    "three-questions.proposal.text": {
+      "text": "function of the first tool call proposal in the response: the tool name and the JSON string arguments. The small-talk arm doesn't have this.",
+      "source": "dcdc1f734bf7"
+    },
+    "three-questions.finish.text": {
+      "text": "finish_reason in the response: tool_calls when a call is proposed, stop when the model answers directly.",
+      "source": "93beadd174d8"
+    },
+    "three-questions.content.text": {
+      "text": "message.content in the response: the small-talk arm's answer is here; when a call is proposed it is usually empty.",
+      "source": "63b46e835076"
+    },
+    "three-questions.proposal-table.text": {
+      "text": "The lab report's table: one row per tool call proposal, marking whether arguments can be parsed into a JSON object.",
+      "source": "5ad6c293b2d2"
+    },
+    "three-questions.guide.0.text": {
+      "text": "This run has only one request. First look at the extra tools in the request.",
+      "source": "cfe2d17cba3b"
+    },
+    "three-questions.guide.1.text": {
+      "text": "There is only the name, description, and argument Schema here, with no Python code. Run another arm and this part won't change.",
+      "source": "8913d59de585"
+    },
+    "three-questions.guide.2.text": {
+      "text": "Look at name to see which tool was chosen. arguments is a JSON string waiting to be parsed.",
+      "source": "087122022753"
+    },
+    "three-questions.guide.3.text": {
+      "text": "The finish reason tells you whether this round proposed a call or answered directly.",
+      "source": "74f535d4db80"
+    },
+    "three-questions.guide.4.text": {
+      "text": "The small-talk arm's answer is here. For the two arms that propose a call, this is usually empty.",
+      "source": "c4f85d27e81e"
+    },
+    "three-questions.guide.5.text": {
+      "text": "Each tool call proposal takes one row of the report table, and the small-talk arm has an empty table. The last column shows whether arguments can be parsed into a JSON object; that checks only the format, and the proposal was not executed.",
+      "source": "7b1c6817380a"
+    },
+    "three-questions.conclusion.proves.0": {
+      "text": "Which tool the model proposed for this question in this run and what arguments it wrote, or that it chose to answer directly.",
+      "source": "d699ef68e917"
+    },
+    "three-questions.conclusion.proves.1": {
+      "text": "The tools are the same in all three arms, so differences in the choice can only come from the user question, or from fluctuation in sampling itself.",
+      "source": "dbe38f44452d"
+    },
+    "three-questions.conclusion.proves.2": {
+      "text": "The events of this lesson's run have no tool_call or tool_result, so no tool was executed.",
+      "source": "49562d1a5fea"
+    },
+    "three-questions.conclusion.does_not_prove.0": {
+      "text": "One run is just one sample. It can't prove that the model picks the right tool every time for similar questions.",
+      "source": "306f91e4a117"
+    },
+    "three-questions.conclusion.does_not_prove.1": {
+      "text": "That the arguments parse into a JSON object doesn't mean they conform to the JSON Schema, and certainly not that execution would succeed.",
+      "source": "33a2006746ce"
+    },
+    "three-questions.conclusion.does_not_prove.2": {
+      "text": "Proposals in offline test mode come from a fixed script and do not represent a real model's choices.",
+      "source": "5e031e91ba4d"
+    },
+    "quiz.tools-purpose.prompt": {
+      "text": "What does the model do with the tool definitions in the tools field?",
+      "source": "2867d823ee89"
+    },
+    "quiz.tools-purpose.a.text": {
+      "text": "Reads the name and the tool description to decide whether to use one and which, and writes arguments following the JSON Schema",
+      "source": "31022495bf17"
+    },
+    "quiz.tools-purpose.a.feedback": {
+      "text": "Correct. The tool definitions are explanations written for the model.",
+      "source": "508a5ca45cbc"
+    },
+    "quiz.tools-purpose.b.text": {
+      "text": "Runs the functions in them directly",
+      "source": "eef455299608"
+    },
+    "quiz.tools-purpose.b.feedback": {
+      "text": "Not quite. The tool definitions contain no functions, only a name, a description, and an argument specification.",
+      "source": "816276745e2e"
+    },
+    "quiz.tools-purpose.c.text": {
+      "text": "Nothing; tools is only for the program itself to look at",
+      "source": "d70a73cf91cc"
+    },
+    "quiz.tools-purpose.c.feedback": {
+      "text": "Not quite. tools is sent to the model with the request, and the model picks tools by it.",
+      "source": "51463b21ee86"
+    },
+    "quiz.tools-purpose.explanation": {
+      "text": "The model reads the tool definitions to decide on a tool call proposal. Whether it is executed is up to the program.",
+      "source": "2d2438799278"
+    },
+    "quiz.tool-choice-auto.prompt": {
+      "text": "The request has tool_choice set to auto. What does that mean?",
+      "source": "46703aed4cf1"
+    },
+    "quiz.tool-choice-auto.a.text": {
+      "text": "It lets the model decide for itself whether to use a tool this time and which one",
+      "source": "417dcb9d0791"
+    },
+    "quiz.tool-choice-auto.a.feedback": {
+      "text": "Correct. That's why the small-talk arm can propose no call and answer directly.",
+      "source": "fe74ce13107a"
+    },
+    "quiz.tool-choice-auto.b.text": {
+      "text": "The provider automatically executes the tool the model chose",
+      "source": "8974c85d504e"
+    },
+    "quiz.tool-choice-auto.b.feedback": {
+      "text": "Not quite. The provider doesn't run your functions. tool_choice only governs whether the model may, or must, propose a call.",
+      "source": "8ddc18c76a6c"
+    },
+    "quiz.tool-choice-auto.c.text": {
+      "text": "The model must propose a call every time",
+      "source": "04621407ec01"
+    },
+    "quiz.tool-choice-auto.c.feedback": {
+      "text": "Not quite. That is what values like required do. auto allows the model to answer directly.",
+      "source": "d4ed48288b95"
+    },
+    "quiz.tool-choice-auto.explanation": {
+      "text": "tool_choice controls how the model proposes calls. Execution is always the program's job.",
+      "source": "4a664aa062d6"
+    },
+    "quiz.arguments-type.prompt": {
+      "text": "In a tool call proposal, the value of arguments is {\"a\": 19, \"b\": 23}. What is it?",
+      "source": "09fefbdf8753"
+    },
+    "quiz.arguments-type.a.text": {
+      "text": "A JSON string, which must be parsed before use",
+      "source": "877d427ee0d6"
+    },
+    "quiz.arguments-type.a.feedback": {
+      "text": "Correct. The program has to run json.loads first, and it might not even be valid JSON.",
+      "source": "e8f45aabcc5c"
+    },
+    "quiz.arguments-type.b.text": {
+      "text": "An already-parsed object that can be used directly as arguments",
+      "source": "af494fa3b1cc"
+    },
+    "quiz.arguments-type.b.feedback": {
+      "text": "Not quite. It's a string; using it without parsing gives a type mismatch.",
+      "source": "20c8fba5a475"
+    },
+    "quiz.arguments-type.c.text": {
+      "text": "A piece of Python code that calls the function",
+      "source": "c9cebd842b03"
+    },
+    "quiz.arguments-type.c.feedback": {
+      "text": "Not quite. It is only the arguments. The tool name is in function.name.",
+      "source": "b36399451b49"
+    },
+    "quiz.arguments-type.explanation": {
+      "text": "The tool name and the arguments are kept separate. The arguments are JSON text the model wrote.",
+      "source": "8221b56efcb2"
+    },
+    "quiz.schema-not-guarantee.prompt": {
+      "text": "The tool definition contains a JSON Schema. Do the arguments the model proposes always conform to it?",
+      "source": "c85182a88166"
+    },
+    "quiz.schema-not-guarantee.a.text": {
+      "text": "Not necessarily: the Schema is only an agreement written for the model, and the arguments may lack a field, have the wrong type, or not be valid JSON at all",
+      "source": "39769fe5fd6b"
+    },
+    "quiz.schema-not-guarantee.a.feedback": {
+      "text": "Correct. That's why the program has to check them itself before execution.",
+      "source": "0a161cb57834"
+    },
+    "quiz.schema-not-guarantee.b.text": {
+      "text": "Always, because the provider blocks arguments that don't conform",
+      "source": "5adcb05f4ef4"
+    },
+    "quiz.schema-not-guarantee.b.feedback": {
+      "text": "Not quite. Without strict mode, the provider doesn't block arguments for you. How far strict mode guarantees is in the provider's documentation, and this lesson doesn't rely on it.",
+      "source": "3b486e5ff6cd"
+    },
+    "quiz.schema-not-guarantee.c.text": {
+      "text": "Always, because additionalProperties is false",
+      "source": "9683ecc2014d"
+    },
+    "quiz.schema-not-guarantee.c.feedback": {
+      "text": "Not quite. That keyword only tells the model not to pass extra fields, and the model can still pass them.",
+      "source": "cf3dedd174d1"
+    },
+    "quiz.schema-not-guarantee.explanation": {
+      "text": "JSON Schema lets the model know how to write the arguments, but it doesn't guarantee it writes them correctly.",
+      "source": "ba7612c808fc"
+    },
+    "quiz.no-result.prompt": {
+      "text": "After running \"Ask for a sum\", why is there no tool_result in the events?",
+      "source": "a672c15e0c19"
+    },
+    "quiz.no-result.a.text": {
+      "text": "This lesson only records proposals and executes no tools",
+      "source": "eceb505cf68e"
+    },
+    "quiz.no-result.a.feedback": {
+      "text": "Correct. This lesson registers no executable function and sends no second request.",
+      "source": "13d948338da4"
+    },
+    "quiz.no-result.b.text": {
+      "text": "The model didn't propose a call",
+      "source": "7fb6bea39726"
+    },
+    "quiz.no-result.b.feedback": {
+      "text": "Not quite. Look at tool_calls in the response: the model proposed add_numbers.",
+      "source": "6091fb348c37"
+    },
+    "quiz.no-result.c.text": {
+      "text": "The tool failed and the result was discarded",
+      "source": "4606813ea196"
+    },
+    "quiz.no-result.c.feedback": {
+      "text": "Not quite. This lesson doesn't perform that step at all, so there is nothing to fail.",
+      "source": "905aba61d972"
+    },
+    "quiz.no-result.explanation": {
+      "text": "Proposing and executing are two separate things, and this lesson does only the first.",
+      "source": "14fcc8f8aad3"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Ask for a sum\" and find the arguments the model wrote.",
+      "source": "43f1fb5167ab"
+    },
+    "check-hunt.explanation": {
+      "text": "They are in choices[0].message.tool_calls[0].function.arguments of the response event. It is a JSON string with a and b. No later event executes it.",
+      "source": "ef9ee248167f"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In tools of the request I found the tool description and the argument JSON Schema of add_numbers.",
+      "source": "52b86cacf823"
+    },
+    "check-points.item-2.text": {
+      "text": "In the response I found tool_calls, the tool name, the JSON string arguments, and finish_reason.",
+      "source": "03a73cdd5cdb"
+    },
+    "check-points.item-3.text": {
+      "text": "I confirmed that the events of all three runs have no tool_call or tool_result.",
+      "source": "0a8863f02c62"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed the question in the user message (for example \"What is 3.5 plus 4.25?\") and ran again to see how the model writes the arguments.",
+      "source": "cfc8b5a94a66"
+    },
+    "code_notes.tools.note": {
+      "text": "The list of tool definitions in the request body, from TOOLS in tools.py. It has only the name, description, and argument Schema.",
+      "source": "9b6c0921ecd2"
+    },
+    "code_notes.tool_choice.note": {
+      "text": "A request parameter. auto lets the model decide for itself whether to use a tool.",
+      "source": "56efc4603d14"
+    },
+    "code_notes.tool_calls.note": {
+      "text": "The list of tool call proposals in the response message. Each item has an id, a tool name, and JSON string arguments.",
+      "source": "b501b1668a0e"
+    },
+    "code_notes.arguments.note": {
+      "text": "The arguments in a tool call proposal: a JSON string, not a parsed object.",
+      "source": "f047cd97f1b3"
+    },
+    "code_notes.parameters.note": {
+      "text": "The JSON Schema in the tool definition that describes the arguments.",
+      "source": "fc65747b2bb7"
+    },
+    "code_notes.additionalProperties.note": {
+      "text": "A JSON Schema keyword. false means no fields other than those in properties may appear.",
+      "source": "a5403976ea49"
+    }
+  }
+}

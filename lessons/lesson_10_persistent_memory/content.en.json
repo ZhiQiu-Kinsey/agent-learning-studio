@@ -1,0 +1,1146 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "CONTEXT / MEMORY",
+      "source": "db4c4ef0ba36"
+    },
+    "hero.headline": {
+      "text": "The model won't remember you,",
+      "source": "ccf946550d88"
+    },
+    "hero.highlight": {
+      "text": "so your program stores it and hands it over.",
+      "source": "2836523c7ac0"
+    },
+    "hero.takeaway": {
+      "text": "Persistent memory is data your program writes to external storage: save it in SQLite, close the connection and read it back, then recall it before the next request and put it in the user message as data. The model's parameters do not change at all.",
+      "source": "13d1765a0acd"
+    },
+    "concepts.01-memory.label": {
+      "text": "01 / MEMORY",
+      "source": "b7dbd347ae74"
+    },
+    "concepts.01-memory.title": {
+      "text": "Memory lives outside the model",
+      "source": "7681b6aec153"
+    },
+    "concepts.01-memory.description": {
+      "text": "Memory is information the program saves on the model's behalf and provides later. This lesson stores it as one SQLite row, with the main fields namespace, key, value, source, and version.",
+      "source": "9670f8da4032"
+    },
+    "concepts.02-reopen.label": {
+      "text": "02 / REOPEN",
+      "source": "716f54c396f8"
+    },
+    "concepts.02-reopen.title": {
+      "text": "Readable after closing the connection",
+      "source": "b50667d9fc9f"
+    },
+    "concepts.02-reopen.description": {
+      "text": "After writing, close the connection, then open a new one and read by the same namespace and key. Only if it reads back does it count as persistent memory: it survives across connections and across runs.",
+      "source": "3fda6929b3c9"
+    },
+    "concepts.03-namespace.label": {
+      "text": "03 / NAMESPACE",
+      "source": "063a593813e9"
+    },
+    "concepts.03-namespace.title": {
+      "text": "Namespace partitions",
+      "source": "0cb4b38be491"
+    },
+    "concepts.03-namespace.description": {
+      "text": "namespace partitions the records; looking up the same key in a different namespace finds nothing. It is only a query condition and does not verify who the caller is.",
+      "source": "6a52d213d3d6"
+    },
+    "concepts.04-recall.label": {
+      "text": "04 / RECALL",
+      "source": "062ca64f032e"
+    },
+    "concepts.04-recall.title": {
+      "text": "Recall into the request",
+      "source": "1744bfed217e"
+    },
+    "concepts.04-recall.description": {
+      "text": "Before the next request, the program fetches the memory by namespace. This step is called recall. The fetched records go into a data block in the user message as data, not into system.",
+      "source": "f0f7de98e101"
+    },
+    "section-1.title": {
+      "text": "Memory is not in the model",
+      "source": "f0d1675f82aa"
+    },
+    "section-1.paragraphs.0": {
+      "text": "A model does not remember you because you talked once. For the next run to know something, the program has to store it outside the model and hand it over when needed. A scenario: yesterday you told the teaching assistant \"my learning goal is to understand messages and state in an agent\"; today you start a new run and ask \"what is my goal?\". The messages of this request contain only today's question, so the model has no way to know what was said yesterday. It can only ask you to say it again, or guess.",
+      "source": "a3e8be5d70c5"
+    },
+    "section-1.paragraphs.1": {
+      "text": "The earlier lessons have shown where information lives. The context is the messages in this one request, and it ends once the request is sent. The multi-turn conversation in {{lesson:multi-turn-history}} works because the program resends the message history every time. The application state in {{lesson:application-state}} lives only in the memory of one run and is gone when the run ends. The compression in {{lesson:context-compaction}} also rewrites history only within one run. None of them last until the next run.",
+      "source": "04f1a3fdcb8c"
+    },
+    "section-1.paragraphs.2": {
+      "text": "This lesson writes the information that must outlive a run into external storage. It is like consulting an advisor who forgets you every time you meet: you bring your own notebook and turn to the relevant page before handing it to him. The notebook is in your hands, not in his head; after he reads it and gives advice, the notebook has not gained a word. The model's parameters likewise do not change at all, and this has nothing to do with training.",
+      "source": "9754307581a2"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The lesson comes in two halves. The first half uses only local Python and SQLite: saving, reopening, and read-only recovery never call the model. In the second half, \"Recall, then have the model answer\" and \"Ask again in a namespace with no memory\" each send one real model request, to see how memory enters the request and what the answer is based on.",
+      "source": "4e8816165846"
+    },
+    "section-2.title": {
+      "text": "Store only values that were explicitly given",
+      "source": "49bdabc01e76"
+    },
+    "section-2.paragraphs.0": {
+      "text": "This lesson stores only values you explicitly give, and records the source with them. Information in a conversation is a mix of true and false: \"I want to learn agents\" is a goal, \"I heard agents all need a framework\" is hearsay, and \"you probably prefer hands-on work\" in a model's answer is a guess. If you store them all without telling them apart, then at the next recall the guesses and the facts are mixed together and no one can tell which entries to trust.",
+      "source": "2f90aa2a9a99"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Everything written by \"Save and reopen the connection\" comes from your input. The default namespace is learner_demo, the key is learning_goal, the value is \"理解 Agent 的消息与状态\" (\"understand messages and state in an agent\"), and the source is \"本次学习者显式输入\" (\"explicit input from the learner this time\"). The program explicitly calls put to write this row; version starts at 1 and goes up by one each time the same key is written. It does not guess your preferences from model answers, and it does not scan other sessions.",
+      "source": "04b627a45611"
+    },
+    "section-2.paragraphs.2": {
+      "text": "source is the note on where the value came from, so you can later ask \"who said this?\". When two records conflict, the source is also the basis for deciding which to believe. But this lesson only proves that the source is saved faithfully, not that what it says is true: if you write \"the teacher said so\" in source, the program stores it just the same.",
+      "source": "14fdfab5d8dd"
+    },
+    "section-2.paragraphs.3": {
+      "text": "Not everything is worth storing either. A one-off request, such as \"don't generate files this time\", is valid only for the current task; stored as a long-term record, it would mislead later tasks. {{lesson:memory-lifecycle}} uses scope to separate this kind of record from long-term ones.",
+      "source": "ea759f1ee227"
+    },
+    "section-3.title": {
+      "text": "Close the connection, then read again",
+      "source": "e56494303ffb"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Closing the connection after writing and reading back on a new one is what proves the data really reached disk. If you read directly with the same object after writing, the value read back might come only from what that object holds in memory, such as a dictionary used as a cache; it disappears when the program exits, yet that kind of check would still pass.",
+      "source": "518811705f51"
+    },
+    "section-3.paragraphs.1": {
+      "text": "So the program first closes the first connection, then opens a new MemoryStore and queries with the same namespace and key. The first connection and everything it held in memory are gone, so the value read back can only come from the SQLite file on disk. The report's table has three rows: written by the first connection, read back by the second connection, and another namespace. The first check compares whether the value and version read back match what was written.",
+      "source": "f05ae0495b14"
+    },
+    "section-3.paragraphs.2": {
+      "text": "This is the same idea as saving a document, closing the editor, and opening it again: only if it is still there after reopening has it really been saved. A real run writes to a fixed teaching database under the project's .runtime directory, and can read it back in the next run or even after restarting the backend. Offline test mode writes to a temporary database that is deleted after use and never touches the fixed teaching database.",
+      "source": "f474ccd5d9a3"
+    },
+    "section-3.paragraphs.3": {
+      "text": "SQLite is chosen because it is in the Python standard library, one file is one database, and no separate service is needed. Reading back after reopening proves only that this one row is in this one file on this machine; backup, syncing across machines, and recovery after file corruption are not covered in this lesson.",
+      "source": "51970a7f7690"
+    },
+    "deep-dive-store-format.title": {
+      "text": "What a memory is stored as, and who writes it",
+      "source": "cbe1d4e1a3f2"
+    },
+    "deep-dive-store-format.summary": {
+      "text": "A key-value row, a notes file, or a card with context; writing can be done by explicit human input, or the model can extract it from the conversation.",
+      "source": "4c241ebbc922"
+    },
+    "deep-dive-store-format.paragraphs.0": {
+      "text": "In this lesson one memory is one database row, with the main fields namespace, key, value, source, and version. The key-value form is the simplest: it reads and writes exactly by key, and changing one does not affect the others. The downside is that facts get broken into small pieces: \"works on a recommendation system at a company, leads 5 people\" split into several rows loses the links between them.",
+      "source": "966ce962b350"
+    },
+    "deep-dive-store-format.paragraphs.1": {
+      "text": "Another common approach is one text file per memory, starting with a name, a one-line description, and a type, such as user preference, project fact, or external reference, with a separate index file listing all the entries. Recall looks at the index first and then reads only the few files it needs. Some systems make each memory a card that records, besides the fact, the circumstances under which it was learned and who said it. For example, \"Dr. Zhang\" might be the user's own dentist or the user's father's doctor, and without that background you can't tell which.",
+      "source": "84b4cce76c12"
+    },
+    "deep-dive-store-format.paragraphs.2": {
+      "text": "There are also two choices for who writes it. In this lesson a person explicitly gives the value and the program writes it as is. The other choice has the model extract, after a round of conversation ends, what is worth keeping long term: it picks out what will be used again, summarizes it into long-term preferences, and writes it into queryable fields. This is how ChatGPT's memory feature is described in its public documentation: during chat it decides on its own to remember certain information, and users can view and delete it in settings (go by the product documentation for details). That way the user doesn't have to say \"please remember\" every time. The cost is that what gets written is the model's inference, which may be summarized wrongly, attributed to the wrong person, or turn a one-off request into a long-term rule. So extraction results count only as candidates and must first pass program checks: whether the fields are complete, whether it is valid only for this task, and whether it duplicates an existing record.",
+      "source": "28eae1c019e9"
+    },
+    "deep-dive-store-format.paragraphs.3": {
+      "text": "Records that pile up also need tidying: the same matter stored in several entries, old and new versions side by side, some long out of date. A common approach is to merge and rewrite the records periodically. Tidying can also go wrong, so a snapshot is kept before rewriting so a failure can be recovered from; for two disputed versions, go back to the original sources to check, rather than just keeping the latest.",
+      "source": "a78f44f5b9c1"
+    },
+    "predict-requests.prompt": {
+      "text": "Before you run \"Write the learning goal, close the connection, read back on a new connection\" on the lab bench, guess: how many request events will this run produce?",
+      "source": "fa5a29f19fea"
+    },
+    "mq-reopen-proves.reopen-proves.prompt": {
+      "text": "What does closing the first connection and then reading the record back on a new connection prove?",
+      "source": "b1b6be3bd52c"
+    },
+    "mq-reopen-proves.reopen-proves.a.text": {
+      "text": "The record was really written to the SQLite file, not just kept in a variable inside the process",
+      "source": "c9b2b0088acc"
+    },
+    "mq-reopen-proves.reopen-proves.a.feedback": {
+      "text": "Correct. The first connection is already closed, so the value read back can only come from storage.",
+      "source": "254a3bda9dfa"
+    },
+    "mq-reopen-proves.reopen-proves.b.text": {
+      "text": "The model's parameters learned this memory",
+      "source": "8ee485bd43c1"
+    },
+    "mq-reopen-proves.reopen-proves.b.feedback": {
+      "text": "Not quite. Neither saving nor reopening calls the model, let alone trains it.",
+      "source": "d8aaef2931be"
+    },
+    "mq-reopen-proves.reopen-proves.c.text": {
+      "text": "Other namespaces can read this record too",
+      "source": "92695559ee89"
+    },
+    "mq-reopen-proves.reopen-proves.c.feedback": {
+      "text": "Not quite. Looking up the same key under another namespace should find nothing.",
+      "source": "2f9cb7efd095"
+    },
+    "mq-reopen-proves.reopen-proves.explanation": {
+      "text": "Persistent memory lives in storage outside the model, and reading it back after reopening is what counts as recovery across connections.",
+      "source": "69fb843da8b6"
+    },
+    "section-4.title": {
+      "text": "A namespace is a partition, not a permission",
+      "source": "ec9990efe1c8"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A namespace splits records into separate pieces, but it only decides which piece to query, not who may query. A memory store usually serves more than one person: learner A's goal should not show up in learner B's request. The most direct way is to label each record with which piece it belongs to and carry that label on every read and write; namespace is that label.",
+      "source": "b5df5055a67e"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The table's primary key is (namespace, key). The same key in different namespaces is two unrelated rows, and querying under another namespace finds nothing. The report's second check compares what other_learner reads before and after the write, to confirm that the write did not touch another partition. namespace and key accept only short English identifiers, and are always passed as SQL parameters, so they cannot be used to write into a database path or an SQL fragment.",
+      "source": "ccc261b051ef"
+    },
+    "section-4.paragraphs.2": {
+      "text": "But this is not permission isolation. The example has no login and does not bind namespace to an identity confirmed by the backend, so any caller who knows the namespace can read it. It is like a cabinet divided into drawers with no locks: drawers keep things from getting mixed up, but locks decide who can open them.",
+      "source": "b37ce99b5c51"
+    },
+    "section-4.paragraphs.3": {
+      "text": "A real system first confirms \"who you are\", and then the backend decides which namespaces you may use, instead of letting the request fill them in. Filtering has to be done at recall time: once another person's record is in this request, it is hard to guarantee that it will not show up in the answer.",
+      "source": "1ec33bad0223"
+    },
+    "section-5.title": {
+      "text": "Read-only recovery of the last memory",
+      "source": "171d7d895a55"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Reading should not change anything, and this lesson makes the reading connection unable to write at the database level. If the read function hid a line that \"updates the access time while it's at it\", or created an empty database automatically when the file is missing, then even \"just taking a look\" would leave traces, and when troubleshooting later you couldn't tell which change was made by whom.",
+      "source": "4a373f8a4c3a"
+    },
+    "section-5.paragraphs.1": {
+      "text": "\"Read-only recovery of the last memory\" does not write. It opens the database with SQLite's mode=ro, so the connection cannot write at the database level; when the file does not exist yet, it uses an empty in-memory database instead, so no file is created during the read stage. total_changes in the report is the number of rows this connection changed, and it should be 0 when read-only.",
+      "source": "420712d58172"
+    },
+    "section-5.paragraphs.2": {
+      "text": "In a real run, do \"Save and reopen the connection\" first and then this exercise, and you will see the value, source, and version left behind last time. Offline test mode first puts a controlled sample in the temporary database, and its source says \"离线测试预置的样本\" (\"sample preset for offline testing\"). Which kind you read, the source column tells you.",
+      "source": "900cd1475329"
+    },
+    "mq-namespace.namespace-partition.prompt": {
+      "text": "Querying the same key under a different namespace returns nothing. What does that show?",
+      "source": "43e172815320"
+    },
+    "mq-namespace.namespace-partition.a.text": {
+      "text": "Records are partitioned by namespace, and this write did not touch another partition",
+      "source": "50edc5c3c518"
+    },
+    "mq-namespace.namespace-partition.a.feedback": {
+      "text": "Correct. The primary key is (namespace, key), and different namespaces are unrelated.",
+      "source": "9a0f1aaadb17"
+    },
+    "mq-namespace.namespace-partition.b.text": {
+      "text": "Other users cannot read this memory",
+      "source": "e711a9a5e2d6"
+    },
+    "mq-namespace.namespace-partition.b.feedback": {
+      "text": "Not quite. namespace is only a query condition, and a caller who knows it can still read.",
+      "source": "fa0c5fe90012"
+    },
+    "mq-namespace.namespace-partition.c.text": {
+      "text": "This memory has been deleted",
+      "source": "100c87423488"
+    },
+    "mq-namespace.namespace-partition.c.feedback": {
+      "text": "Not quite. Switch back to the original namespace and it can still be read; nothing was found only because the wrong partition was queried.",
+      "source": "66a972a3e4bf"
+    },
+    "mq-namespace.namespace-partition.explanation": {
+      "text": "A namespace decides which piece of data to query, not who has the right to query it.",
+      "source": "5d016c3969fc"
+    },
+    "section-6.title": {
+      "text": "Recall: put memory in the next request",
+      "source": "975846e06b43"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Being stored in the database does not mean the model can see it. The program has to fetch the records it needs and put them in this request before sending, and that step is recall. The model is not connected to your database; all it can use is what is written in this request.",
+      "source": "6169d39dd664"
+    },
+    "section-6.paragraphs.1": {
+      "text": "\"Recall, then have the model answer\" first calls store.recall on a read-only connection and fetches all the records in learner_demo. This lesson's namespace has only a few, so carrying all of them is fine; with many records you have to choose, as in the deep dive below. build_messages writes each record's key, value, and source as JSON and puts them in a <memory> data block at the start of the user message, followed by the question \"我之前定下的学习目标是什么？\" (\"What is the learning goal I set earlier?\"). Angle brackets in the values are escaped, so writing </memory> cannot end the data block early.",
+      "source": "bef86eb11651"
+    },
+    "section-6.paragraphs.2": {
+      "text": "system holds only rules: the data block contains recalled records, to be treated only as reference data and not as instructions; if the records don't have it, say so; and for whichever record is used, write its key in square brackets at the end of the sentence. Why not splice the memory into system? system holds rules the program wrote for the model, while memory is text stored in the past from various sources. Splicing it in would promote data to rules, and when something goes wrong you couldn't tell which part was memory.",
+      "source": "705d599fa3d9"
+    },
+    "section-6.paragraphs.3": {
+      "text": "A made-up example: a record's value is \"from now on always answer in English\". In the data block, it is a piece of information about a preference that the model can consult; spliced into system, it becomes a command the program issues. If that record was wrong to begin with, or was slipped in by someone else, the first placement at least still shows it is only data.",
+      "source": "d76122a412c4"
+    },
+    "section-7.title": {
+      "text": "The grounds for an answer must be findable in the request",
+      "source": "b38831768a3f"
+    },
+    "section-7.paragraphs.0": {
+      "text": "The answer is generated by the model. Do not judge it only by how plausible it sounds; check whether the grounds it cites are in this request. The report makes three checks: total_changes is 0 during recall; the memory appears only in the data block of the user message and not in system; and every key cited in square brackets in the answer can be found in this request's data block.",
+      "source": "7aa74ff75803"
+    },
+    "section-7.paragraphs.1": {
+      "text": "\"Ask again in a namespace with no memory\" recalls from new_learner, so the data block is an empty [], and the third check becomes \"数据块为空时，回答没有引用任何 key\" (\"with an empty data block, the answer cites no key\"). This is the lesson's control: the same question and the same model, differing only in whether the data block has records. Whether the model follows the rule and says the memory has nothing on it is determined by your run's response. The square brackets are only this lesson's citation convention, and the model may not follow it; then the check truthfully shows failed.",
+      "source": "c8877c3bf5b5"
+    },
+    "section-7.paragraphs.2": {
+      "text": "Even if the answer says something like \"I'll remember that for you\", nothing is written to the memory store. Writing happens only when the program explicitly calls put; both recall exercises use a read-only connection, and total_changes is 0.",
+      "source": "bd88667ea59c"
+    },
+    "deep-dive-recall-select.title": {
+      "text": "With many records, which ones to recall",
+      "source": "efbf0b36ebb3"
+    },
+    "deep-dive-recall-select.summary": {
+      "text": "Carrying everything gets longer and longer; selecting has its own ways to miss.",
+      "source": "934b1537764d"
+    },
+    "deep-dive-recall-select.paragraphs.0": {
+      "text": "The simplest approach is to put all the records in the request every time. With few records it is fine; with many it becomes what {{lesson:context-budget}} described: it has to be carried on every request, longer and more expensive each time, and most of it is unrelated to this question.",
+      "source": "b97e80677c8b"
+    },
+    "deep-dive-recall-select.paragraphs.1": {
+      "text": "There are several common ways to select. Fetch exactly by key: the most reliable when you know what you want, such as fetching only learning_goal. Filter by rule: fetch only what belongs to the current task and has not expired, which is what {{lesson:memory-lifecycle}} does. First show the model an index, with just a name and a one-line description per entry, let it pick at most a few, and then read the full text of those; if this call fails, fall back to keyword matching. You can also search by semantic similarity, which suits fuzzy lookups where the way of asking doesn't match the way of storing; the retrieval lessons will cover it.",
+      "source": "21d46ab8b312"
+    },
+    "deep-dive-recall-select.paragraphs.2": {
+      "text": "Every way of selecting can go wrong: miss what should be carried and the answer lacks grounds; carry what is irrelevant and the model may be led astray. So the recall step has to be reviewable too: which entries were carried this time, and why. This lesson's lesson.memory event records the recalled keys for that purpose. Some implementations also write in the rules that when a recalled old record conflicts with what the user says this time, this time wins; the memory chapter of Learn Claude Code writes it this way. For example, if the old record says the goal is to learn frameworks and the user says today they want to learn principles instead, the answer should follow today's statement.",
+      "source": "3a14baa10972"
+    },
+    "deep-dive-recall-select.paragraphs.3": {
+      "text": "Claude Code's approach is worth comparing. It has two kinds of content that persist across sessions: `CLAUDE.md` is written by a person and holds project conventions and rules; auto memory is written by Claude itself and records your corrections and preferences, one directory per code repository, which amounts to a namespace per repository. Recall has two steps: the index file `MEMORY.md` in that directory loads its opening portion at the start of each session (the documentation says the first 200 lines or the first 25KB), and the body of each entry sits in a separate file that is read only when used. The official documentation also states that both kinds of content are given to the model as context, not as configuration that is enforced; `CLAUDE.md` is delivered in a user message after the system prompt. This is the same orientation as this lesson putting memory in the user message and not splicing it into system. Go by the official documentation.",
+      "source": "f3d5d658952d"
+    },
+    "mq-recall-where.recall-where.prompt": {
+      "text": "Where in the request should recalled memory go?",
+      "source": "23b632ba9158"
+    },
+    "mq-recall-where.recall-where.a.text": {
+      "text": "In the <memory> data block in the user message",
+      "source": "885ead3c8b7b"
+    },
+    "mq-recall-where.recall-where.a.feedback": {
+      "text": "Correct. It is reference material, kept apart from the rules, and easy to check word for word in the request.",
+      "source": "59aaf7afc7c4"
+    },
+    "mq-recall-where.recall-where.b.text": {
+      "text": "At the end of the system prompt",
+      "source": "b604afbca44d"
+    },
+    "mq-recall-where.recall-where.b.feedback": {
+      "text": "Not quite. That promotes data from various sources to rules.",
+      "source": "bfc758bab11b"
+    },
+    "mq-recall-where.recall-where.c.text": {
+      "text": "Nowhere; the model will look it up in the database itself",
+      "source": "2854871223ab"
+    },
+    "mq-recall-where.recall-where.c.feedback": {
+      "text": "Not quite. The model sees only the messages in this request, and it is not connected to your database.",
+      "source": "6699cff7721b"
+    },
+    "mq-recall-where.recall-where.explanation": {
+      "text": "The program has to recall memory and put it in the request before the model can see it; in a data block, you can tell what is data and what is a rule.",
+      "source": "677959f8d8f3"
+    },
+    "misconception-said-remember.claim": {
+      "text": "The model answered \"OK, I'll remember that\", so on the next run it will remember.",
+      "source": "0e3d13d8efef"
+    },
+    "misconception-said-remember.correction": {
+      "text": "When the model says it remembered, it only generated a sentence and wrote nothing to storage. Whether it can be recalled next time depends on whether the program called put to write the value into the store, and whether it was recalled and put into the request before the next one. Both recall exercises in this lesson use a read-only connection and total_changes is 0: whatever the answer says, it does not change the memory store.",
+      "source": "f543bb98b334"
+    },
+    "section-8.title": {
+      "text": "After it is stored",
+      "source": "e094d628ffd2"
+    },
+    "section-8.paragraphs.0": {
+      "text": "Persistent memory handles only one thing: the next run still knows. The earlier lessons of this unit each handle a different part. The context is everything this one request can see; application state records progress within one run; compression lets a run's history fit; persistent memory stores outside the model the few facts that must outlive a run, and recalls them next time. It is not a full backup of the message history and cannot replace compression: what is stored and what is fetched are both chosen by the program.",
+      "source": "f84811698e3f"
+    },
+    "section-8.paragraphs.1": {
+      "text": "Once it is stored, new questions follow. The learning goal changed; what about the old value? Two programs change the same record at the same time; whom do you listen to? Should \"this week's reminder\" still be carried after this week? Should the previous task's drafts go into this request? This lesson demonstrates only one writer, writing once. {{lesson:memory-lifecycle}} uses version numbers to reject stale writes, then covers expiry, deletion, and recall by scope.",
+      "source": "fe7d9998a382"
+    },
+    "walkthrough.title": {
+      "text": "Saving, reopening, and recalling one memory",
+      "source": "4dbee2af9da2"
+    },
+    "walkthrough.description": {
+      "text": "A step-by-step account of one memory from being written to entering a request. The code is a simplified illustration, not a run record. For the actual values, see the lesson.memory, request, and lesson.report events.",
+      "source": "2cc32b597d39"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Input",
+      "source": "2087c777c06f"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Give the fact to remember",
+      "source": "06d4d1d67e74"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The learner gives the namespace, key, value, and source.",
+      "source": "a3558fa47a78"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "Input validation",
+      "source": "d5977c41c45a"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "SQLite",
+      "source": "2d2eef3e092a"
+    },
+    "walkthrough.step-2.title": {
+      "text": "First connection writes",
+      "source": "61272440af7f"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Write this row, then close the connection.",
+      "source": "6c0a3fc41e16"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.memory (saved)",
+      "source": "1120d71bba66"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "SQLite",
+      "source": "2d2eef3e092a"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Second connection reads back",
+      "source": "75d313bb5b3b"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The new connection queries by the same namespace and key.",
+      "source": "a0ef9c953191"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.report table, row 2",
+      "source": "06a880daae53"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Recall and put in the data block",
+      "source": "bbe4a47aa7ce"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Recall read-only, and write the records into the data block of the user message.",
+      "source": "1956edf16656"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.memory (recalled) and request",
+      "source": "84fa69fcbc62"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Answer from the data block",
+      "source": "e5947f9a0ac6"
+    },
+    "walkthrough.step-5.body": {
+      "text": "The answer ends with the keys it relied on, in square brackets.",
+      "source": "609b8cb82b84"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "response and lesson.report",
+      "source": "23dbc5e1487f"
+    },
+    "references.ai-agent-book-ch3.title": {
+      "text": "User memory and knowledge bases: the user memory system — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "06f362bf7ff2"
+    },
+    "references.ms-agent-memory.title": {
+      "text": "Memory for AI agents: working memory, short-term and long-term memory (Microsoft AI Agents for Beginners, the agent memory lesson)",
+      "source": "0277eb9986ac"
+    },
+    "references.learn-claude-code-s09.title": {
+      "text": "Keeping information across sessions: storage, recall, extraction, and tidying (Learn Claude Code)",
+      "source": "82f2edc120b0"
+    },
+    "references.cookbook-context-engineering.title": {
+      "text": "Context engineering: how in-session compression and cross-session memory divide the work (Claude Cookbooks)",
+      "source": "4b721b5a06e9"
+    },
+    "references.cc-memory.title": {
+      "text": "CLAUDE.md and auto memory: who writes them and when they load (Claude Code docs)",
+      "source": "ecb5a650b6ed"
+    },
+    "code-store.n27.text": {
+      "text": "A MemoryStore is one database connection; read_only decides whether that connection can write.",
+      "source": "65886da21c1b"
+    },
+    "code-store.n30.text": {
+      "text": "mode=ro opens read-only: during the read stage it cannot write at the database level.",
+      "source": "03616b837034"
+    },
+    "code-store.n36.text": {
+      "text": "Creating the table takes effect only on the first open; later opens use the table and data already in the file. The value and source are stored together.",
+      "source": "70e887fb3edb"
+    },
+    "code-store.n40.text": {
+      "text": "This lesson does not use the three columns for expiry time and scope; {{lesson:memory-lifecycle}} covers them.",
+      "source": "effe3b275161"
+    },
+    "code-store.n41.text": {
+      "text": "The primary key is (namespace, key): within one namespace a key has one row, and different namespaces are unrelated.",
+      "source": "018426389869"
+    },
+    "code-store.n43.text": {
+      "text": "The second table records only which version each key has reached, and is not deleted when a memory is deleted. What that guards against is covered in {{lesson:memory-lifecycle}}.",
+      "source": "87e09fc67ddd"
+    },
+    "code-store.n44.text": {
+      "text": "Close the connection. Verifying after reopening depends on closing first and then opening.",
+      "source": "33b1c0ac6347"
+    },
+    "code-store.n49.text": {
+      "text": "Parameterized query: namespace and key first pass check_id, then go in through ? placeholders and are never spliced into the SQL string.",
+      "source": "77eb79af881f"
+    },
+    "code-store.n51.text": {
+      "text": "If there is no such row, return None. This lesson does not use the expiry check; {{lesson:memory-lifecycle}} covers it.",
+      "source": "6459df7e3b18"
+    },
+    "code-store.n53.text": {
+      "text": "Recall: fetch the records of one namespace that should be carried this time, and return two groups, the recalled and the filtered out.",
+      "source": "3c29948d3b15"
+    },
+    "code-store.n57.text": {
+      "text": "Query only this namespace; sorted by key, so the order is the same on every recall.",
+      "source": "a23ebad83caa"
+    },
+    "code-store.n60.text": {
+      "text": "The filtering rules for expiry and scope are read in {{lesson:memory-lifecycle}}. The records in this lesson are all persistent with no expiry time, so all are recalled.",
+      "source": "c7ea327fce33"
+    },
+    "code-save-reopen.n37.text": {
+      "text": "This exercise uses only local Python and SQLite and does not call the model; path is decided by the runner and cannot be passed in from the web page.",
+      "source": "e05557dc7903"
+    },
+    "code-save-reopen.n38.text": {
+      "text": "Pick another namespace to check that this write does not touch other partitions.",
+      "source": "61f30430a729"
+    },
+    "code-save-reopen.n42.text": {
+      "text": "Read once first: if there is an old record you get its version, and if not, None.",
+      "source": "9ff820f85571"
+    },
+    "code-save-reopen.n45.text": {
+      "text": "Explicit write: value and source both come from the input and are not extracted from model answers.",
+      "source": "d9e5acb56046"
+    },
+    "code-save-reopen.n48.text": {
+      "text": "Close the first connection; whatever it held in memory is of no use from now on.",
+      "source": "198bdc0d6629"
+    },
+    "code-save-reopen.n52.text": {
+      "text": "The second connection is brand new, and what it reads depends only on the SQLite file.",
+      "source": "5b2363b88dc8"
+    },
+    "code-save-reopen.n54.text": {
+      "text": "Read back by the same namespace and key; the report compares it with the value and version at write time.",
+      "source": "70ebc9af1a3b"
+    },
+    "code-save-reopen.n56.text": {
+      "text": "The other namespace should read exactly the same result before and after the write.",
+      "source": "a2302480896b"
+    },
+    "code-save-reopen.n64.text": {
+      "text": "If the file exists, open it read-only; if not, use an empty in-memory database, so no file is created during the read stage.",
+      "source": "dbfe2eff34cf"
+    },
+    "code-save-reopen.n67.text": {
+      "text": "Read-only recovery: no writing, just read the records left last time.",
+      "source": "a69140bbe81a"
+    },
+    "code-save-reopen.n70.text": {
+      "text": "Query only; if nothing is found, truthfully return None.",
+      "source": "3e28717ec33b"
+    },
+    "code-save-reopen.n71.text": {
+      "text": "The number of rows this connection changed. The report uses it to check that the read stage did not write.",
+      "source": "58fe799b2ddf"
+    },
+    "code-save-reopen.emit-saved.label": {
+      "text": "Platform: publish the lesson.memory event and check whether the run was stopped",
+      "source": "bc5d5dbea6f2"
+    },
+    "code-save-reopen.report-reopen.label": {
+      "text": "Platform: assemble the report event",
+      "source": "b011b948d4f9"
+    },
+    "code-save-reopen.emit-recall-only.label": {
+      "text": "Platform: publish the lesson.memory and report events",
+      "source": "370e0e4b770d"
+    },
+    "code-recall-request.n78.text": {
+      "text": "Here the recalled records become a request: one system message and one user message.",
+      "source": "6d120f4d4dcb"
+    },
+    "code-recall-request.n81.text": {
+      "text": "The memory is written as JSON; angle brackets are replaced with escaped forms, so writing </memory> in a value cannot end the data block early.",
+      "source": "b0ccf4c018f3"
+    },
+    "code-recall-request.n82.text": {
+      "text": "system holds only fixed rules, and no memory content is spliced in.",
+      "source": "f11e84a80ca2"
+    },
+    "code-recall-request.n83.text": {
+      "text": "The memory is in the data block at the start of the user message, with the question after it.",
+      "source": "59b8b75d66f1"
+    },
+    "code-recall-request.n88.text": {
+      "text": "Recall also uses a read-only connection, so the read stage does not change the memory store.",
+      "source": "c42434811094"
+    },
+    "code-recall-request.n90.text": {
+      "text": "Recall the records in this namespace; new_learner has none, so the result is an empty list.",
+      "source": "185c3428603c"
+    },
+    "code-recall-request.n97.text": {
+      "text": "Carry only key, value, and source: storage details like version and time are not needed to answer the question.",
+      "source": "193d7df5851e"
+    },
+    "code-recall-request.n99.text": {
+      "text": "The only model request in this exercise; the request and response are both recorded as events as they are.",
+      "source": "28e1dbaf21f4"
+    },
+    "code-recall-request.n101.text": {
+      "text": "Extract the keys in the answer's square brackets; the report checks whether they are all in this request's data block.",
+      "source": "f4e5faa5cee9"
+    },
+    "code-recall-request.emit-recalled.label": {
+      "text": "Platform: publish the lesson.memory event, recording which keys were recalled",
+      "source": "ae2cc2ce27b3"
+    },
+    "code-recall-request.report-recall.label": {
+      "text": "Platform: assemble the report event",
+      "source": "b011b948d4f9"
+    },
+    "code-decision.title": {
+      "text": "Store in SQLite, recall it, and put it in the user message as data",
+      "source": "f155cffed6bf"
+    },
+    "code-decision.chosen": {
+      "text": "The standard library's sqlite3 saves value, source, and version by (namespace, key); after the connection is closed, a new connection reads it back; before the next request, recall read-only and write the records as JSON into a data block in the user message, while system holds only rules.",
+      "source": "8bd5cfc0ae59"
+    },
+    "code-decision.in-process-dict.title": {
+      "text": "Keep it in an in-process dictionary",
+      "source": "f6ffb6910d43"
+    },
+    "code-decision.in-process-dict.why_not": {
+      "text": "It is gone when the process ends. What this lesson sets out to prove is that it can still be read back after closing the connection and restarting.",
+      "source": "8b6ae8268b30"
+    },
+    "code-decision.in-system.title": {
+      "text": "Splice the memory into the system prompt",
+      "source": "4ef00fa56be8"
+    },
+    "code-decision.in-system.why_not": {
+      "text": "system holds rules the program wrote, while memory is data from various sources; splicing it in promotes data to rules, and when something goes wrong you can't tell which part was memory.",
+      "source": "4fdc246d52b8"
+    },
+    "code-decision.auto-extract.title": {
+      "text": "Let the model pick what to remember from the conversation",
+      "source": "3f662443a764"
+    },
+    "code-decision.auto-extract.why_not": {
+      "text": "It can be done, but what is written is the model's inference rather than an explicitly given value, and the source is unclear. This lesson stores only explicit input for now.",
+      "source": "eae75eeec77f"
+    },
+    "code-decision.similarity-search.title": {
+      "text": "Look up by similarity in a vector store",
+      "source": "3691f34a0751"
+    },
+    "code-decision.similarity-search.why_not": {
+      "text": "It suits fuzzy lookup; this lesson demonstrates exact reads and writes by key and checks across connections, and similarity search would blur that evidence.",
+      "source": "070b450ac794"
+    },
+    "save-and-reopen.title": {
+      "text": "Save, reopen, and read-only recovery",
+      "source": "3287c169ae0d"
+    },
+    "save-and-reopen.hypothesis": {
+      "text": "After the first connection is closed, a new connection can still read the memory written to SQLite by namespace and key; read-only recovery does not write, and what it reads depends only on the records already in the database. The whole process does not call the model.",
+      "source": "2863089ffed2"
+    },
+    "save-and-reopen.reopen.label": {
+      "text": "Write the learning goal, close the connection, read back on a new connection",
+      "source": "a6201d7be055"
+    },
+    "save-and-reopen.recall-only.label": {
+      "text": "No write; read the same namespace and key read-only",
+      "source": "347267788446"
+    },
+    "save-and-reopen.memory-action.text": {
+      "text": "The action of lesson.memory: saved for the write arm, recall_only for the read-only arm.",
+      "source": "4d5c75a2bd78"
+    },
+    "save-and-reopen.record-fields.text": {
+      "text": "The record's fields: namespace, key, value, source, and version are stored together.",
+      "source": "4f95308c7fdb"
+    },
+    "save-and-reopen.storage.text": {
+      "text": "How it is stored: offline test mode uses a temporary database, and a real run uses a fixed local database.",
+      "source": "9023d699a0fb"
+    },
+    "save-and-reopen.reopen-row.text": {
+      "text": "Row 2 of the write arm's report table: the value and version read back by the second connection.",
+      "source": "d8fde3f93129"
+    },
+    "save-and-reopen.report-checks.text": {
+      "text": "The report checks: the write arm checks that the read-back matches and that namespaces are partitioned, and the read-only arm checks that total_changes is 0.",
+      "source": "dc429d7714fe"
+    },
+    "save-and-reopen.guide.0.text": {
+      "text": "This experiment does not call the model. First see what a memory looks like in the database.",
+      "source": "13fc4e272864"
+    },
+    "save-and-reopen.guide.1.text": {
+      "text": "saved is a write, and recall_only is a read-only read.",
+      "source": "1710d3dc48b8"
+    },
+    "save-and-reopen.guide.2.text": {
+      "text": "One memory is one row: the value, source, and version are stored together. The source being recorded does not mean what it says is true.",
+      "source": "3a652c3b432c"
+    },
+    "save-and-reopen.guide.3.text": {
+      "text": "Offline test mode writes a temporary database that is deleted when the run ends; a real run writes the fixed database, which can be read back next time.",
+      "source": "fbc9546ddb78"
+    },
+    "save-and-reopen.guide.4.text": {
+      "text": "This row comes from the second connection: the first is already closed, so the value read back can only come from the SQLite file.",
+      "source": "606178db75b4"
+    },
+    "save-and-reopen.guide.5.text": {
+      "text": "Every check comes from real database reads and writes. There is no request event in the whole run.",
+      "source": "e41ebeb29611"
+    },
+    "save-and-reopen.conclusion.proves.0": {
+      "text": "In the write arm, after the first connection was closed, a new connection read back the same record with its source and version by namespace and key.",
+      "source": "192fd452cf1d"
+    },
+    "save-and-reopen.conclusion.proves.1": {
+      "text": "The read-only arm queried with a read-only connection, total_changes is 0, and nothing was written.",
+      "source": "20877689af36"
+    },
+    "save-and-reopen.conclusion.proves.2": {
+      "text": "Neither arm has a request event: saving and reading do not go through the model.",
+      "source": "9590c4ff5170"
+    },
+    "save-and-reopen.conclusion.does_not_prove.0": {
+      "text": "source only proves that the note on where it came from was saved, not that what it says is true.",
+      "source": "7d8f8a1584bd"
+    },
+    "save-and-reopen.conclusion.does_not_prove.1": {
+      "text": "A namespace is only a query partition and does not prove that other callers cannot read this memory.",
+      "source": "6642052b7053"
+    },
+    "save-and-reopen.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, what the read-only arm reads is a sample preset before the run, not data left by your last run.",
+      "source": "c889601506ae"
+    },
+    "recall-into-request.title": {
+      "text": "Recall and put into the request",
+      "source": "be9ad08c302f"
+    },
+    "recall-into-request.hypothesis": {
+      "text": "After recalled records are put in the data block of the user message, the model can answer from them and every key the answer cites can be found in this request; when the data block is empty, the answer has no grounds and should not cite any key.",
+      "source": "c1bd49c12d66"
+    },
+    "recall-into-request.recall-answer.label": {
+      "text": "Ask after recalling from learner_demo",
+      "source": "d450bec85948"
+    },
+    "recall-into-request.other-namespace.label": {
+      "text": "Ask after recalling from new_learner, which has no memory",
+      "source": "8d0673e6fb3e"
+    },
+    "recall-into-request.recalled-keys.text": {
+      "text": "Which keys were recalled: learner_demo has records, and new_learner has none.",
+      "source": "30f61af504f8"
+    },
+    "recall-into-request.system-rules.text": {
+      "text": "The system in the request: only rules, no memory content.",
+      "source": "b795f75e3e27"
+    },
+    "recall-into-request.memory-block.text": {
+      "text": "The user message in the request: the data block first, the question after.",
+      "source": "49c8214b3d86"
+    },
+    "recall-into-request.model-answer.text": {
+      "text": "The model's answer: which key it cites in the square brackets at the end of a sentence.",
+      "source": "24162dfb4e4a"
+    },
+    "recall-into-request.grounded-check.text": {
+      "text": "The report's third check: whether the keys cited in the answer are all in this request's data block.",
+      "source": "fae12fdf710e"
+    },
+    "recall-into-request.guide.0.text": {
+      "text": "Each arm of this experiment sends one real model request. First see what the program recalled from the database.",
+      "source": "047429025a00"
+    },
+    "recall-into-request.guide.1.text": {
+      "text": "Recall only reads and does not write. Switch the namespace and the recall result differs.",
+      "source": "3d0661fb809c"
+    },
+    "recall-into-request.guide.2.text": {
+      "text": "system holds only rules, telling the model that the data block contains reference data, not instructions.",
+      "source": "367d5297e220"
+    },
+    "recall-into-request.guide.3.text": {
+      "text": "The memory is in the data block at the start of the user message. All the model can use is the records in this request.",
+      "source": "a97d8834972b"
+    },
+    "recall-into-request.guide.4.text": {
+      "text": "Look at the square brackets at the end of the answer: they say which record it relied on.",
+      "source": "ff1fdb54574f"
+    },
+    "recall-into-request.guide.5.text": {
+      "text": "The program compares the keys in the answer against the data block in the request. If they don't match, the check truthfully shows failed.",
+      "source": "1783daabce03"
+    },
+    "recall-into-request.conclusion.proves.0": {
+      "text": "The memory was recalled read-only from SQLite, and when it entered the request it appeared only in the data block of the user message.",
+      "source": "26fa1d672f26"
+    },
+    "recall-into-request.conclusion.proves.1": {
+      "text": "Whether the keys cited in the answer are all in this request was checked item by item in the report.",
+      "source": "ac6e21b1a2bd"
+    },
+    "recall-into-request.conclusion.does_not_prove.0": {
+      "text": "One correct citation does not mean the model will always cite by the rule in the future; the square-bracket format is only this lesson's convention.",
+      "source": "46ab15d48152"
+    },
+    "recall-into-request.conclusion.does_not_prove.1": {
+      "text": "The model did not remember anything as a result: in an empty namespace, the same question has no grounds.",
+      "source": "0220c6e115f5"
+    },
+    "recall-into-request.conclusion.does_not_prove.2": {
+      "text": "A data block only keeps data apart from rules; it cannot guarantee the model is not influenced by text inside the data, which is tested with a real model in {{lesson:prompt-injection}}.",
+      "source": "bdb0d07e6156"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.help": {
+      "text": "Saving writes; read-only recovery and answering after recall only read and do not write.",
+      "source": "8fca11ddf6d0"
+    },
+    "inputs.scenario.options.reopen.label": {
+      "text": "Save and reopen the connection",
+      "source": "8cb8fb32f287"
+    },
+    "inputs.scenario.options.recall_only.label": {
+      "text": "Read-only recovery of the last memory",
+      "source": "53e08f0e6675"
+    },
+    "inputs.scenario.options.recall_answer.label": {
+      "text": "Recall, then have the model answer",
+      "source": "a7eeca3aa2e6"
+    },
+    "inputs.namespace.label": {
+      "text": "Namespace",
+      "source": "db772f3ff724"
+    },
+    "inputs.namespace.help": {
+      "text": "A short identifier starting with an English letter; it is a query partition, not an account.",
+      "source": "8a3778c6744c"
+    },
+    "inputs.key.label": {
+      "text": "Memory key",
+      "source": "e37d95a4ac14"
+    },
+    "inputs.value.label": {
+      "text": "Memory content",
+      "source": "a1e87f0e4ac3"
+    },
+    "inputs.value.help": {
+      "text": "Written only in \"Save and reopen the connection\".",
+      "source": "8aaac087942b"
+    },
+    "inputs.source.label": {
+      "text": "Source note",
+      "source": "b24fe53f9769"
+    },
+    "quiz.persist.prompt": {
+      "text": "What proves that this memory was really persisted?",
+      "source": "8c15bda1ada9"
+    },
+    "quiz.persist.a.text": {
+      "text": "The page still shows the previous message",
+      "source": "069e7767562e"
+    },
+    "quiz.persist.a.feedback": {
+      "text": "Not quite. What the page shows comes from UI state and does not show that the data was written to SQLite.",
+      "source": "a184753a04c0"
+    },
+    "quiz.persist.b.text": {
+      "text": "After the first connection was closed, a new connection read back the same value by the same namespace and key",
+      "source": "a7979a920db7"
+    },
+    "quiz.persist.b.feedback": {
+      "text": "Correct. Everything in the first connection is gone, so the value read back can only come from storage.",
+      "source": "e524756ea239"
+    },
+    "quiz.persist.c.text": {
+      "text": "The model's answer says \"I remember\"",
+      "source": "e13ca19afad9"
+    },
+    "quiz.persist.c.feedback": {
+      "text": "Not quite. The model's own statement is not a storage check; saving and reopening never called the model at all.",
+      "source": "11e6050c8a5f"
+    },
+    "quiz.persist.explanation": {
+      "text": "Reading back across connections is a real check on storage; neither what the UI shows nor what the model says proves the record is in the database.",
+      "source": "06b7dab32ff0"
+    },
+    "quiz.namespace.prompt": {
+      "text": "A different namespace can't find this memory. Does that show it is protected by permissions?",
+      "source": "5de731e3913d"
+    },
+    "quiz.namespace.a.text": {
+      "text": "Yes, a namespace is the same as an account",
+      "source": "df34c0b4c59d"
+    },
+    "quiz.namespace.a.feedback": {
+      "text": "Not quite. namespace is only a query condition, and the caller can fill in any value.",
+      "source": "5f66863b2b2e"
+    },
+    "quiz.namespace.b.text": {
+      "text": "No, it only shows the data is partitioned by namespace; permission needs the backend to confirm identity first and then limit which namespaces can be used",
+      "source": "91ab2db70ad5"
+    },
+    "quiz.namespace.b.feedback": {
+      "text": "Correct. A partition answers \"which piece to query\", and permission answers \"who may query\".",
+      "source": "d650937951d7"
+    },
+    "quiz.namespace.c.text": {
+      "text": "Yes, parameterized SQL verifies identity as a side effect",
+      "source": "234fcaddf17a"
+    },
+    "quiz.namespace.c.feedback": {
+      "text": "Not quite. Parameterized SQL guards against splicing input into a statement; it does not confirm who the caller is.",
+      "source": "6c400958b079"
+    },
+    "quiz.namespace.explanation": {
+      "text": "A namespace is a query condition, not an authentication credential.",
+      "source": "a824147a1907"
+    },
+    "quiz.placement.prompt": {
+      "text": "The next request needs the recalled memory. How should the program place it?",
+      "source": "636c9341ab5a"
+    },
+    "quiz.placement.a.text": {
+      "text": "Write it as JSON and put it in a data block at the start of the user message, with system holding only rules",
+      "source": "b7fd1710439a"
+    },
+    "quiz.placement.a.feedback": {
+      "text": "Correct. Data and rules are kept apart, and it can also be checked word for word in the request.",
+      "source": "beee89fcf3b3"
+    },
+    "quiz.placement.b.text": {
+      "text": "Splice it into the system prompt so the model obeys it first",
+      "source": "bafa2e3d9875"
+    },
+    "quiz.placement.b.feedback": {
+      "text": "Not quite. That promotes data from various sources to rules.",
+      "source": "bfc758bab11b"
+    },
+    "quiz.placement.c.text": {
+      "text": "Put nothing; the model saw it last time so it will remember",
+      "source": "16c3e02cbf3d"
+    },
+    "quiz.placement.c.feedback": {
+      "text": "Not quite. The model does not remember the previous request, and it cannot see what is not in this one.",
+      "source": "764cfe17dd56"
+    },
+    "quiz.placement.explanation": {
+      "text": "The program recalls memory and puts it in the request, and only then can the model see it.",
+      "source": "fab3fa8a6d7f"
+    },
+    "quiz.grounded.prompt": {
+      "text": "In \"Recall, then have the model answer\", the model states your learning goal. Where should its grounds be found?",
+      "source": "af87633d5561"
+    },
+    "quiz.grounded.a.text": {
+      "text": "In the data block of the user message in this request",
+      "source": "5a980769a9e2"
+    },
+    "quiz.grounded.a.feedback": {
+      "text": "Correct. This is what the report's third check verifies.",
+      "source": "e79da6b13e4b"
+    },
+    "quiz.grounded.b.text": {
+      "text": "In the model's parameters; it has learned it",
+      "source": "d908f35bbd3c"
+    },
+    "quiz.grounded.b.feedback": {
+      "text": "Not quite. Saving memory does not change the model's parameters; in an empty namespace, the same question has no grounds.",
+      "source": "7d1159f87f51"
+    },
+    "quiz.grounded.c.text": {
+      "text": "In the previous run's response",
+      "source": "6ca4f81df121"
+    },
+    "quiz.grounded.c.feedback": {
+      "text": "Not quite. The previous answer was neither saved nor recalled; this request has only the records in the data block.",
+      "source": "24d020728187"
+    },
+    "quiz.grounded.explanation": {
+      "text": "The grounds for an answer must be findable word for word in this request.",
+      "source": "82268fe0387a"
+    },
+    "quiz.read-only.prompt": {
+      "text": "Why does \"Read-only recovery of the last memory\" open the database with mode=ro?",
+      "source": "e35710c84216"
+    },
+    "quiz.read-only.a.text": {
+      "text": "So the read stage cannot write at the database level",
+      "source": "9b083f207602"
+    },
+    "quiz.read-only.a.feedback": {
+      "text": "Correct. It doesn't rely on discipline; the connection itself can't write.",
+      "source": "1dc571744422"
+    },
+    "quiz.read-only.b.text": {
+      "text": "So reads are faster",
+      "source": "ac5b705c4ac6"
+    },
+    "quiz.read-only.b.feedback": {
+      "text": "Not quite. Read-only mode is there to guarantee no writes, not for speed.",
+      "source": "1b3631700a62"
+    },
+    "quiz.read-only.c.text": {
+      "text": "To stop other namespaces from reading this record",
+      "source": "b4d2a959c1a2"
+    },
+    "quiz.read-only.c.feedback": {
+      "text": "Not quite. mode=ro governs whether this connection can write and has nothing to do with namespaces.",
+      "source": "eb20a5840791"
+    },
+    "quiz.read-only.explanation": {
+      "text": "The promise of read-only recovery is no writing, and a read-only connection turns it into a fact the database guarantees.",
+      "source": "c932f0d59367"
+    },
+    "quiz.one-off-request.prompt": {
+      "text": "The learner says \"don't generate files this time\". Should it be stored as long-term memory?",
+      "source": "f72cd7430f19"
+    },
+    "quiz.one-off-request.a.text": {
+      "text": "No: it is valid only for the current task, and storing it as a long-term record would mislead later tasks",
+      "source": "9d76039796e7"
+    },
+    "quiz.one-off-request.a.feedback": {
+      "text": "Correct. A one-off request belongs to the current task and should not be carried across runs.",
+      "source": "5dfdcc00cf2c"
+    },
+    "quiz.one-off-request.b.text": {
+      "text": "Yes: everything the learner says should be stored",
+      "source": "a82654f2c7fc"
+    },
+    "quiz.one-off-request.b.feedback": {
+      "text": "Not quite. If you store without telling things apart, one-off requests and long-term preferences get mixed together at recall.",
+      "source": "fca958c2d49e"
+    },
+    "quiz.one-off-request.c.text": {
+      "text": "Yes: store it in the system prompt so the model always obeys it",
+      "source": "1f8043e7ebd9"
+    },
+    "quiz.one-off-request.c.feedback": {
+      "text": "Not quite. That both turns a one-off request into a long-term rule and promotes data to a rule.",
+      "source": "4ea5b17235f7"
+    },
+    "quiz.one-off-request.explanation": {
+      "text": "What is worth storing long term is a fact that will be used again; a request valid only for this task should not be kept across runs.",
+      "source": "adfeeec822e6"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Recall, then have the model answer\" and find the step that puts the memory into the request.",
+      "source": "91f286cee345"
+    },
+    "check-hunt.explanation": {
+      "text": "The user message of this request event starts with a <memory> data block containing records recalled from SQLite, with the question after it; the system of the same event has no memory content at all. The keys cited in the answer should be findable here.",
+      "source": "6266ed50136c"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran \"Save and reopen the connection\" first and then \"Read-only recovery of the last memory\", and saw the value, source, and version left last time.",
+      "source": "8a5bce32993f"
+    },
+    "check-points.item-2.text": {
+      "text": "I can point out which row of the report table comes from the second connection.",
+      "source": "3b1d7c988ee9"
+    },
+    "check-points.item-3.text": {
+      "text": "I found the <memory> data block in the request event and confirmed that system has no memory content.",
+      "source": "788b0cf91142"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed value to a new learning goal, reran \"Save and reopen the connection\", then ran \"Recall, then have the model answer\": version went up by one and the answer changed with it.",
+      "source": "494746b9b364"
+    },
+    "check-points.item-5.text": {
+      "text": "I can explain why a namespace is not user authentication.",
+      "source": "2d61e3a1ef9f"
+    },
+    "code_notes.put.note": {
+      "text": "MemoryStore's write method: writes the value, source, and version, and the version goes up by one each time the same key is written.",
+      "source": "d6479ed3c75a"
+    },
+    "code_notes.store.recall.note": {
+      "text": "MemoryStore's recall method: fetches the records of one namespace that should be carried this time.",
+      "source": "7efe4829cd99"
+    },
+    "code_notes.total_changes.note": {
+      "text": "A property of the SQLite connection: the number of rows this connection changed. It should be 0 for a read-only read.",
+      "source": "782c578fefdb"
+    },
+    "code_notes.build_messages.note": {
+      "text": "Wraps the recalled records into a request: system holds only rules, and the memory goes in a data block at the start of the user message.",
+      "source": "142340418869"
+    },
+    "code_notes.lesson.memory.note": {
+      "text": "This lesson's event: action marks a write (saved), a read-only recovery (recall_only), or a recall (recalled).",
+      "source": "97f0cef8cea4"
+    }
+  }
+}

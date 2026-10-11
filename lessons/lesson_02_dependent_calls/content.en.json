@@ -1,0 +1,822 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "TOOL CALLING / DEPENDENT CALLS",
+      "source": "e7e37787c19c"
+    },
+    "hero.headline": {
+      "text": "Let one step's result",
+      "source": "454da10e02a1"
+    },
+    "hero.highlight": {
+      "text": "be the basis for the next.",
+      "source": "3e46069bde56"
+    },
+    "hero.takeaway": {
+      "text": "Execution order cannot stand in for passing data. Get the real result first, then decide the next arguments.",
+      "source": "269b37576f73"
+    },
+    "concepts.01-dependency.label": {
+      "text": "01 / DEPENDENCY",
+      "source": "96b2ce99a547"
+    },
+    "concepts.01-dependency.title": {
+      "text": "Find the dependency first",
+      "source": "15091bd9f5e5"
+    },
+    "concepts.01-dependency.description": {
+      "text": "The hour and minute are not in the question to begin with. The inputs to the addition have to come from the time tool's actual output.",
+      "source": "11e7898a1b7a"
+    },
+    "concepts.02-context.label": {
+      "text": "02 / CONTEXT",
+      "source": "a6f182b1257b"
+    },
+    "concepts.02-context.title": {
+      "text": "History carries the tool result",
+      "source": "de71692b61cb"
+    },
+    "concepts.02-context.description": {
+      "text": "The runner adds the tool result to messages. The next request carries it, and only then does the model know what to pass.",
+      "source": "b490aee74b69"
+    },
+    "concepts.03-provenance.label": {
+      "text": "03 / PROVENANCE",
+      "source": "bbb4a5f1275c"
+    },
+    "concepts.03-provenance.title": {
+      "text": "Trace arguments to their source",
+      "source": "73585f2584b0"
+    },
+    "concepts.03-provenance.description": {
+      "text": "A correct final number is not enough. Check the previous round's return value against this round's actual arguments to explain why the answer can be trusted.",
+      "source": "c22f2e1d9946"
+    },
+    "section-1.title": {
+      "text": "Look at the data dependency first, then plan the steps",
+      "source": "4d05a3253850"
+    },
+    "section-1.paragraphs.0": {
+      "text": "When the arguments of a later step can only be decided once the earlier step's real result is in, the two steps have a data dependency and must go in two separate requests. In {{lesson:tool-selection}} each question used a single tool: an addition question called add_numbers, a time question called get_current_time, and the arguments were either in the question or not needed. This lesson's question is \"把现在的小时和分钟相加\" (\"add the current hour and minute\"). It needs two tools, and the addition's a and b are not in the user's words; they exist only as hour and minute in what get_current_time returns.",
+      "source": "4ea7de9b3e7d"
+    },
+    "section-1.paragraphs.1": {
+      "text": "An analogy: to ship a package to a friend, you have to ask for the address before you can fill in the shipping label. Fill it in before you have the address and you can only write one from memory. The model is the same: on the first request it has not seen any time yet, so if it proposes the addition right then, a and b can only be guesses, say 10 and 30 written off the cuff. Guessed arguments have a perfectly valid format, so Python computes a number all the same, with no error at all.",
+      "source": "018ac9244c9e"
+    },
+    "section-1.paragraphs.2": {
+      "text": "So whether all the calls can be proposed in the same round depends on the data, not on the tool names or on the order in the sentence: does the later step's input have to come from the earlier step's actual output? \"计算 19 加 23，并告诉我现在几点\" (\"add 19 and 23, and tell me what time it is\") also uses two tools, but 19 and 23 are in the question from the start, and neither task waits for the other. This lesson's two exercises are exactly such a pair: one with a dependency, one without.",
+      "source": "5f053b57fdad"
+    },
+    "section-unseen.title": {
+      "text": "The model does not know what time it is",
+      "source": "0a64392bb148"
+    },
+    "section-unseen.paragraphs.0": {
+      "text": "Data the model does not have can only be fetched by a tool and sent back to it. The model has no clock and does not go online on its own; it has just two things to work with: what it learned in training, and the messages in this request. \"What time is it now\" is in neither: training ended long ago, and the user's question does not state the time.",
+      "source": "2db725bec5e6"
+    },
+    "section-unseen.paragraphs.1": {
+      "text": "So on the first request the sensible thing for the model to do is propose get_current_time and write no time itself. If it answered directly, \"It is three in the afternoon now, and 15 plus 0 is 15\", that sentence would be fluent and confident, with no source at all. {{lesson:tool-proposals}} and {{lesson:tool-selection}} already gave the way out: let the model say what it wants to call, and let the program really go fetch it.",
+      "source": "136e64c439f2"
+    },
+    "section-unseen.paragraphs.2": {
+      "text": "The Hugging Face Agents course calls what a tool returns an observation: it is the channel through which the agent learns what its action led to, and it can be a piece of data, an error message, or a status code. Each time an observation arrives, the runner appends it to the context, and the model uses it to decide whether to keep calling or to answer now. This lesson's time result is exactly such an observation, and both arguments of the addition have to be taken from it.",
+      "source": "7968ec722834"
+    },
+    "section-unseen.paragraphs.3": {
+      "text": "A coding agent also needs the original text before it edits a file. According to the official Claude Code docs, its Edit tool does an exact string replacement: the `old_string` argument must match the text in the file character for character, and a single extra space makes it fail to match. The model does not know that text itself and can only take it from the result of an earlier tool call that read the file, so it normally reads first and edits afterward, in two rounds. If the file is changed after it was read, the text the model holds is out of date; the docs state that in this case Claude re-reads the file before editing.",
+      "source": "323512b6a834"
+    },
+    "section-2.title": {
+      "text": "Message history carries the result into the next decision",
+      "source": "776099075337"
+    },
+    "section-2.paragraphs.0": {
+      "text": "All the arguments the model writes in a single response are fixed before it sees any tool result. A response is a stretch of output the model generates in one go: in that output it proposes get_current_time, but this tool has no result until the response has returned and Python has run it. When the output is being generated the result does not exist yet, so the model has no way to write it into the addition's arguments in the same response.",
+      "source": "e9ba9a5bf8cb"
+    },
+    "section-2.paragraphs.1": {
+      "text": "The result has to enter the next request before the model can see it. In round 1 the model proposes get_current_time; run_agent first appends the assistant message holding tool_calls to messages, then runs the tool, wraps the result as a message with role tool, and pairs it by the same call id. So the round 2 request has four messages in messages: messages[0] is the system prompt, messages[1] is the user's question, messages[2] is the previous round's tool call proposal, and messages[3] is the time result. Only after reading hour and minute in messages[3] can the model fill them into a and b of add_numbers.",
+      "source": "a6ff7794ef37"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The runner does not fill in arguments for the model. It parses and executes the arguments exactly as the model wrote them. If the model proposes the time lookup and then the addition in one response, with guessed numbers in the addition's arguments, Python looks up the time first and then adds the guessed numbers: the order is entirely correct, yet the data was never passed.",
+      "source": "ad4b29d8cf67"
+    },
+    "section-2.paragraphs.3": {
+      "text": "This is also why SYSTEM_PROMPT says \"必须先单独调用 get_current_time\" (\"you must call get_current_time on its own first\") and \"不要并行调用这两个有依赖关系的工具\" (\"do not call these two dependent tools in parallel\"). Tool definitions can only describe the type and meaning of each parameter; they cannot say \"b has to wait for another tool's result\", so the dependency order can only be conveyed through the system prompt. A prompt is a request, not a guarantee; whether the model followed it is shown by the calls this run actually recorded.",
+      "source": "7bee89bebc8a"
+    },
+    "flow-dependent-chain.title": {
+      "text": "Illustration: look up the time, then add using the result",
+      "source": "ab083f184739"
+    },
+    "flow-dependent-chain.caption": {
+      "text": "Illustration · not a run record. The call ids and values are examples; see your own run in the experiment.",
+      "source": "e6f0c6219698"
+    },
+    "deep-dive-one-round.title": {
+      "text": "Can two dependent steps finish in one round?",
+      "source": "b4d57a55a85e"
+    },
+    "deep-dive-one-round.summary": {
+      "text": "Having the runner fill in arguments for the model, or having the model write code that chains the two calls, can each save a request round, but both have costs.",
+      "source": "b302e2dabce5"
+    },
+    "deep-dive-one-round.paragraphs.0": {
+      "text": "The idea of saving a round is natural: the model writes a placeholder in the addition's arguments meaning \"the hour in the previous call's result\", and after the runner finishes the time lookup it replaces the placeholder with the real value. This requires the runner and the model to agree on a reference syntax in advance: the model must write it correctly and the runner must parse it correctly, and if a field name is off by one letter you also have to design a set of error reports. This lesson's runner has no such convention; whatever is in arguments is what gets executed.",
+      "source": "0e5da775de1f"
+    },
+    "deep-dive-one-round.paragraphs.1": {
+      "text": "Another approach is to let the model write a small program: call the time lookup first, take the return value, then pass the hour and minute to the addition. The Hugging Face Agents course calls this kind of approach a code agent, and its benefit is that a single output can spell out the order and the data flow. The cost is that the harness must execute code the model wrote. Code can do far more than two registered functions, so there must first be an isolated execution environment that limits which files it can read and write, which network it can reach, and how long it can run. This platform's lesson code runs directly in the local process with no such isolation, so it does not do this.",
+      "source": "a4801637b1fa"
+    },
+    "deep-dive-one-round.paragraphs.2": {
+      "text": "One more request round costs one more wait and one more share of usage; in exchange, every step is visible. The time result in round 1 and the addition arguments in round 2 are each recorded as separate events and can be checked one by one. While you are still learning to build an agent, that matters more than saving a round.",
+      "source": "5fc692ba77cb"
+    },
+    "predict-request-count.prompt": {
+      "text": "Run it once first. In the experiment \"One step's result decides the next step's arguments\", before you run \"Add the hour and minute\", guess: how many model requests (request events) will this run send?",
+      "source": "a1260750fee7"
+    },
+    "mq-same-response.same-response-args.prompt": {
+      "text": "If the model proposes get_current_time and add_numbers together in one response, how does the runner handle the arguments of add_numbers?",
+      "source": "488ca2b0cbab"
+    },
+    "mq-same-response.same-response-args.a.text": {
+      "text": "It executes with the actual arguments the model wrote, without automatically replacing them with the time result",
+      "source": "edf465b560cb"
+    },
+    "mq-same-response.same-response-args.a.feedback": {
+      "text": "Correct. The runner does no placeholder substitution; the arguments can only be the values the model wrote this time.",
+      "source": "9569e62f97a6"
+    },
+    "mq-same-response.same-response-args.b.text": {
+      "text": "It waits for the time result and fills in hour and minute automatically",
+      "source": "c7a448212d78"
+    },
+    "mq-same-response.same-response-args.b.feedback": {
+      "text": "Not quite. The current runner has no such mechanism; a dependent call has to wait until the result enters the next request.",
+      "source": "39d1dae64dd4"
+    },
+    "mq-same-response.same-response-args.c.text": {
+      "text": "It refuses to execute the second call in the same response",
+      "source": "622e2faa742a"
+    },
+    "mq-same-response.same-response-args.c.feedback": {
+      "text": "Not quite. The runner executes the calls in the list one by one; the problem is that the second call's arguments may be guesses.",
+      "source": "f237e5454c9f"
+    },
+    "mq-same-response.same-response-args.explanation": {
+      "text": "Correct execution order does not mean correct data passing; a dependent argument can only be written after the result has been seen.",
+      "source": "65eb9344701a"
+    },
+    "misconception-order.claim": {
+      "text": "As long as Python executes in order, looking up the time first and adding afterward, the addition naturally uses the time it just looked up.",
+      "source": "2f0667c66c66"
+    },
+    "misconception-order.correction": {
+      "text": "Correct execution order does not mean the data was passed. The addition's arguments were already fixed when the model proposed the call, and the runner executes arguments exactly as written; it never fills in the previous tool's result. For arguments to come from a real result, the result must enter the next request so the model writes them after seeing it.",
+      "source": "1039552ca58b"
+    },
+    "section-3.title": {
+      "text": "Check where the arguments came from, not just the final number",
+      "source": "e4492a2a12dd"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A correct final number does not show it was computed from this run's time. Take a made-up example: the time tool returns hour=11, minute=33, so the addition should pass a=11, b=33 and get 44. But if the model did not wait for the result and wrote a=10, b=34 out of thin air, the result is also 44; so is 12:32. Looking only at the 44 in the answer, you cannot tell whether it used this run's time, a stale time, or guessed numbers.",
+      "source": "695a14337e07"
+    },
+    "section-3.paragraphs.1": {
+      "text": "To judge the source you have to look at the process. The requests, responses, tool calls, and tool results of one run, recorded in order, are called a trace. For a smooth run of this lesson the trace goes roughly like this: the round 1 request and response, where the response proposes get_current_time; then a pair of tool_call and tool_result, whose result holds hour and minute; the round 2 request carrying that result, whose response proposes add_numbers; another pair of tool_call and tool_result; and the round 3 request carrying both results, whose response gives the answer.",
+      "source": "31070e8758d8"
+    },
+    "section-3.paragraphs.2": {
+      "text": "To check the source, look back along the trace at three places: what a is in the addition tool_call's arguments; whether the time tool_result's hour in the same run is that number; and whether the time result already appears in the round 2 request's messages. Only if all three match does it show that a came from this run's time, and b and minute work the same way. Finally, check whether the number in the answer equals the value in the addition tool_result.",
+      "source": "a7da47596bc2"
+    },
+    "section-3.paragraphs.3": {
+      "text": "A check like this describes this one run. A real model may take another path, such as proposing two calls in the same round, or adding a sentence to the answer that has no source; go by your own trace. Carrying the message history again on each request only provides context for this one task and does not change the model itself; the next run starts from new messages and cannot see this run's time.",
+      "source": "cebcba47743a"
+    },
+    "mq-trust-answer.provenance-check.prompt": {
+      "text": "The final answer says 44. What is the most direct evidence that this number can be trusted?",
+      "source": "b01f7756795a"
+    },
+    "mq-trust-answer.provenance-check.a.text": {
+      "text": "The addition call's a and b match the hour and minute of the preceding time result",
+      "source": "5a55168b0384"
+    },
+    "mq-trust-answer.provenance-check.a.feedback": {
+      "text": "Correct. Only by checking the source of the arguments along the trace can you explain why the answer can be trusted.",
+      "source": "5b37ce6459d4"
+    },
+    "mq-trust-answer.provenance-check.b.text": {
+      "text": "The number 44 appears in the answer",
+      "source": "70e794726064"
+    },
+    "mq-trust-answer.provenance-check.b.feedback": {
+      "text": "Not enough. The number may be a lucky guess, or it may come from a stale time.",
+      "source": "a985877bfbd6"
+    },
+    "mq-trust-answer.provenance-check.c.text": {
+      "text": "The run status shows completed",
+      "source": "5442cc966135"
+    },
+    "mq-trust-answer.provenance-check.c.feedback": {
+      "text": "Not quite. completed only means the loop ended; it does not mean the arguments came from the right place.",
+      "source": "6b105a63c525"
+    },
+    "mq-trust-answer.provenance-check.explanation": {
+      "text": "Trust comes from traceable data passing: time result → addition arguments → addition result → answer.",
+      "source": "80c349951d87"
+    },
+    "section-4.title": {
+      "text": "Independent calls: proposed in one round, executed one by one",
+      "source": "cb2049317805"
+    },
+    "section-4.paragraphs.0": {
+      "text": "When two tasks do not depend on each other, the model can propose two calls at once in a single response. \"计算 19 加 23，并告诉我现在几点\" (\"add 19 and 23, and tell me what time it is\") is like this: 19 and 23 are in the question, and the time lookup does not need the addition's result. In this case the round 1 response's tool_calls has two items, each with its own call id. The exercise \"Two independent tasks\" asks exactly this question.",
+      "source": "84dbbee4c875"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Proposed in the same round does not mean executed at the same time. run_agent executes with a for loop, one by one: it runs the first call and records its tool result, then runs the second. The two tool messages are appended to messages in execution order, and the next request carries both. Pairing relies on tool_call_id, not on order: even if you swapped in a runner that executes both calls at the same time and writes whichever finishes first, each result can still be matched back to its own call by call id.",
+      "source": "17d00c2d9bf4"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The model may also split two independent calls into two rounds: look up the time first, then propose the addition after seeing the result. That is not an error; the answer is the same, with just one more request and one more wait. The parallel tool use example in Claude Cookbooks recorded this: when asked about the weather and the time together, Claude 3.7 Sonnet still proposed only the weather first even with parallel calls allowed; the example's remedy is to add a \"batch tool\" so the model wraps several calls into one call. This lesson does not insist on either; both kinds of trace are legitimate runs.",
+      "source": "999d314073b1"
+    },
+    "deep-dive-graph.title": {
+      "text": "Draw the dependency graph and estimate the minimum number of rounds",
+      "source": "ac8a2d25cc4d"
+    },
+    "deep-dive-graph.summary": {
+      "text": "Draw each call as a node and each dependency as an arrow; the longest chain decides how many request rounds you need at least.",
+      "source": "ca67b0d517fb"
+    },
+    "deep-dive-graph.paragraphs.0": {
+      "text": "With more tasks, draw each call as a node: if call B's input uses call A's output, draw an arrow from A to B. Nodes not connected by arrows can be proposed in the same round; with arrows, the call has to wait for the result at the arrow's start. \"Hour plus minute\" has a single chain: time lookup to addition. \"19 plus 23 and the time lookup\" is two isolated nodes.",
+      "source": "7778ba9f5dc4"
+    },
+    "deep-dive-graph.paragraphs.1": {
+      "text": "The minimum number of request rounds is decided by the longest chain: each node on the chain takes one round, and one more round is needed at the end for the model to read the results and write the answer. The chain from time lookup to addition has length 2, so at least 3 requests; two isolated nodes have chain length 1, so at least 2. This lesson's lesson.json sets the round limit to 3, which is just enough for the dependent arm to finish; if the model takes one extra step, it hits the limit.",
+      "source": "306d6c00a5c4"
+    },
+    "deep-dive-graph.paragraphs.2": {
+      "text": "The book *Understanding AI Agents in Depth* (深入理解 AI Agent) uses a bigger example in its introduction to agents: the revenue of four quarters is in US dollars, euros, pounds, and yen, and the full-year total is needed. The three currency conversions do not depend on each other and can be proposed together in round 1; the sum uses all three conversion results, so it can only go in round 2; round 3 writes the answer. Three nodes side by side and one after them gives a longest chain of 2, hence 3 rounds.",
+      "source": "a952f91edecc"
+    },
+    "deep-dive-graph.paragraphs.3": {
+      "text": "The dependency graph only gives the minimum number of rounds and does not guarantee that the model follows it. The model may split calls that could be merged and use an extra round, or squeeze dependent calls into one round with guessed arguments. The former is merely slower; the latter leaves the answer without a basis, which matters more.",
+      "source": "ef4dce61ddb4"
+    },
+    "deep-dive-graph.paragraphs.4": {
+      "text": "It is also worth being clear about what is saved. This lesson's runner executes the calls of one round one by one, so merging two independent calls into one round saves one model request, not tool execution time. Tool time shortens only if the runner really executes several calls at the same time.",
+      "source": "bedc0fa7fbc3"
+    },
+    "mq-independent.independent-calls.prompt": {
+      "text": "The model proposes two independent calls, addition and time lookup, in one response. What is the most accurate description for this lesson's runner?",
+      "source": "408ca7be75ca"
+    },
+    "mq-independent.independent-calls.a.text": {
+      "text": "They can be proposed in the same round; Python executes them one by one in list order, then sends back each result",
+      "source": "49e4b40d3c24"
+    },
+    "mq-independent.independent-calls.a.feedback": {
+      "text": "Correct. The two tasks have no data dependency, so they can be proposed in the same round; run_agent executes them one by one with a for loop, then sends back each result by tool_call_id.",
+      "source": "bfcab26fa116"
+    },
+    "mq-independent.independent-calls.b.text": {
+      "text": "Being proposed in the same round means the two Python functions are executed at the same time",
+      "source": "b4ab47295bc1"
+    },
+    "mq-independent.independent-calls.b.feedback": {
+      "text": "Not quite. Proposed in the same round only means the model gave two calls at once; this lesson's runner executes them one by one.",
+      "source": "de39b89eac3f"
+    },
+    "mq-independent.independent-calls.c.text": {
+      "text": "The addition must wait for the time result, so it has to be split into two model calls",
+      "source": "1712be4abb1a"
+    },
+    "mq-independent.independent-calls.c.feedback": {
+      "text": "Not quite. 19 plus 23 does not need the time result; the two are independent and need not be split into two rounds. Only dependent calls must go in separate rounds.",
+      "source": "e9bf349c52ac"
+    },
+    "mq-independent.independent-calls.explanation": {
+      "text": "Whether calls can be proposed in the same round depends on data dependency; whether they execute at the same time depends on the runner's implementation, and in this lesson they run one by one.",
+      "source": "86a200bb6747"
+    },
+    "section-next.title": {
+      "text": "Next: what if a tool fails",
+      "source": "9899aca9afd5"
+    },
+    "section-next.paragraphs.0": {
+      "text": "Every step on a dependency chain assumes the previous step succeeded. If the time tool fails this time, the addition has no usable input; if the model proposes the addition anyway, the arguments can only be guesses. This lesson's two tools rarely fail, so the problem has not shown up yet.",
+      "source": "23e78cd254ca"
+    },
+    "section-next.paragraphs.1": {
+      "text": "A further cost is already visible: every extra round makes the request resend all the earlier messages. The round 3 messages contain the system prompt, the user question, two tool call proposals, and two tool results, four more messages than in round 1. The longer the dependency chain, the longer the later requests and the more usage. How to organize messages and which can be left out is covered in {{lesson:messages-context}}.",
+      "source": "2662d33879e5"
+    },
+    "section-next.paragraphs.2": {
+      "text": "{{lesson:fail-safely}} deals with exactly this case: when a tool fails, the runner sends the failure reason back as a tool result too, and when the model reads it, it knows this step did not get the data and it must not continue the calculation. That lesson also covers when a run must stop, and why \"the run finished\" and \"the calculation succeeded\" must be judged separately.",
+      "source": "f034811bada4"
+    },
+    "walkthrough.title": {
+      "text": "From one result to the next decision.",
+      "source": "4392a0dc77d9"
+    },
+    "walkthrough.description": {
+      "text": "\"把现在的小时和分钟相加\" (\"add the current hour and minute\") requires fetching the time first. Here we assume hour=11 and minute=33, used only to explain the data dependency; it is not the current time.",
+      "source": "3b4546fc52d1"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Look up the time",
+      "source": "c241af4152e2"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model → Python",
+      "source": "5ba89b3d183d"
+    },
+    "walkthrough.step-1.title": {
+      "text": "First fill in the missing information",
+      "source": "07aa972d4bb7"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The user did not give the hour and minute. The model should first propose get_current_time, and Python reads the local time of the machine the process runs on.",
+      "source": "f518f72e2a8e"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "Check the call name in round 1, and note the hour and minute in the actual tool_result.",
+      "source": "1d152736d834"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Pass the result",
+      "source": "96323020e48f"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner → next round",
+      "source": "546c7700fcf9"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Add the return value to the message history",
+      "source": "f0101119054c"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Suppose the tool returns 11:33. The runner adds the result as a role=tool message, and the round 2 request carries this history again. Only the fields relevant to the calculation are shown here.",
+      "source": "e5508d92e5b4"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "Expand the round 2 request and confirm that the previous round's real time result already appears in messages.",
+      "source": "01abaacbba8d"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Then add",
+      "source": "e739e7c307e3"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Model → Python",
+      "source": "5ba89b3d183d"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Decide the next arguments from the tool result",
+      "source": "f399dec8fb8d"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Only because the model has seen the tool result can it fill hour and minute into a and b. The runner executes the arguments as given and does not automatically replace placeholders or correct guessed numbers.",
+      "source": "8ac4940a1f88"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "Check one by one that a=hour and b=minute, verifying that both values come from this task's time result.",
+      "source": "c9ebfdbe028c"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Check the answer",
+      "source": "c10bca6d64a7"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Tool → model",
+      "source": "9dcb5010ae4c"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Behind the answer, the data passing must be complete",
+      "source": "6c9902d7a2e9"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The example input gives 44. You still have to check the addition tool's return and the model's answer. A real trace may differ, and the number of rounds alone cannot show that the dependency holds.",
+      "source": "83643837f22a"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "Confirm that the final answer rests on the actual addition result, then compare it with how the calls are arranged in \"Two independent tasks\".",
+      "source": "91d090091b97"
+    },
+    "references.hf-observations.title": {
+      "text": "Observations: append the result of an action to the context to decide the next step (Hugging Face Agents Course)",
+      "source": "51c04bf825f8"
+    },
+    "references.hf-actions.title": {
+      "text": "Actions: JSON actions and code agents (Hugging Face Agents Course)",
+      "source": "810ba8d34692"
+    },
+    "references.book-ch1.title": {
+      "text": "Getting started with AI agents: traces and the multi-currency total example — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "8e7d39a06bcf"
+    },
+    "references.cookbook-parallel-tools.title": {
+      "text": "Parallel tool calls: what to do when the model proposes only one call at a time (Claude Cookbooks)",
+      "source": "3d051b237273"
+    },
+    "references.cc-tools-reference.title": {
+      "text": "Tools reference: the Edit tool's exact replacement and read-before-edit (Claude Code documentation)",
+      "source": "216a946ff01f"
+    },
+    "code-dependency-prompt.n4.text": {
+      "text": "Reuses TOOLS and AVAILABLE_TOOLS from {{lesson:tool-selection}} directly. This lesson changes only the system prompt; in \"New in this lesson\" the tool definitions are shown as carried over, for easy comparison.",
+      "source": "f65cb30d3890"
+    },
+    "code-dependency-prompt.n10.text": {
+      "text": "Independent tasks may propose two calls in the same round. This is the case to observe in the \"Two independent tasks\" arm.",
+      "source": "93b3123291b2"
+    },
+    "code-dependency-prompt.n11.text": {
+      "text": "Say which machine the time comes from, so the model does not describe it as the user's local time.",
+      "source": "867abea533df"
+    },
+    "code-dependency-prompt.n13.text": {
+      "text": "Tool definitions cannot express \"b depends on a's result\", so the dependency order is written in the system prompt: fetch the time on its own first.",
+      "source": "ae54386df9bc"
+    },
+    "code-dependency-prompt.n15.text": {
+      "text": "Arguments in the same round are fixed when proposed and cannot see each other's results; for dependent calls, proposing them in the same round can only be guessing, so it is explicitly forbidden.",
+      "source": "4f914a9b0594"
+    },
+    "code-dependency-prompt.n16.text": {
+      "text": "The last sentence constrains the timing of the answer: do not write the final answer before seeing the tool results.",
+      "source": "c800adcfc93b"
+    },
+    "code-rounds.n45.text": {
+      "text": "Dependent calls are completed over multiple rounds: round 1 gets the real time, and only in round 2 can the model propose the addition using hour and minute.",
+      "source": "f7c13c987378"
+    },
+    "code-rounds.n52.text": {
+      "text": "Only when the model has both tool results and proposes no more calls is this round's content the final answer.",
+      "source": "a982f495254e"
+    },
+    "code-rounds.n56.text": {
+      "text": "Multiple tool_calls in the same round are executed one by one in order, and their arguments were all written by the model when proposing. The two calls of the independent tasks are executed one after the other right here.",
+      "source": "c067a1b0de12"
+    },
+    "code-rounds.n58.text": {
+      "text": "The result goes into the role=tool message as a JSON string. The next round's messages show hour and minute, which is the channel through which a tool result becomes the next call's arguments.",
+      "source": "17ea39a6c210"
+    },
+    "code-decision.title": {
+      "text": "Leave the dependency order to the multi-round loop and the prompt; do not hard-code it in Python",
+      "source": "2f2b5dffe7d5"
+    },
+    "code-decision.chosen": {
+      "text": "The runner stays general: each round it appends the real tool results to messages, and the model proposes the addition in the next round from hour and minute; SYSTEM_PROMPT only states the dependency rule and forbids guessing arguments.",
+      "source": "8797b52800cb"
+    },
+    "code-decision.hardcode-order.title": {
+      "text": "Hard-code in Python: call get_current_time first, then add_numbers",
+      "source": "6b983ea4ff99"
+    },
+    "code-decision.hardcode-order.why_not": {
+      "text": "It is steadier for this one question, but then the runner is no longer an agent loop; independent tasks such as \"计算 19 加 23，并告诉我现在几点\" (\"add 19 and 23, and tell me what time it is\") would also be forced into sequence.",
+      "source": "9b54cc212050"
+    },
+    "code-decision.combined-tool.title": {
+      "text": "Add a combined tool that returns \"hour plus minute\" in one call",
+      "source": "c8d44cd3499f"
+    },
+    "code-decision.combined-tool.why_not": {
+      "text": "The dependency disappears, so learners can no longer see how a tool result enters the next call, and every combination would need a new tool written.",
+      "source": "196069a82165"
+    },
+    "chain-dependency.title": {
+      "text": "One step's result decides the next step's arguments",
+      "source": "1377dc63303e"
+    },
+    "chain-dependency.hypothesis": {
+      "text": "When the addition's arguments have to come from the time tool's return value, the model first needs to call get_current_time on its own; after the result enters the message history, the next round uses the returned hour and minute as a and b of add_numbers.",
+      "source": "dafa932f13e6"
+    },
+    "chain-dependency.chain.label": {
+      "text": "Add the hour and minute: arguments come from the time result",
+      "source": "4bcf03eec1f9"
+    },
+    "chain-dependency.clock-first.text": {
+      "text": "The round 1 tool_call: get_current_time is called first, and at this point a and b do not exist yet.",
+      "source": "89d67223c0c1"
+    },
+    "chain-dependency.clock-value.text": {
+      "text": "The time tool's tool_result: note the hour and minute returned this time.",
+      "source": "360de4d4d0ac"
+    },
+    "chain-dependency.history-carries.text": {
+      "text": "messages[3] of the round 2 request: the content of the role=tool message is the time result from the previous step.",
+      "source": "cf7672643866"
+    },
+    "chain-dependency.dependent-args.text": {
+      "text": "The arguments of add_numbers in round 2: a and b should equal the hour and minute you just noted.",
+      "source": "5a0e3e57d1df"
+    },
+    "chain-dependency.sum-result.text": {
+      "text": "The addition's tool_result: the sum computed from the dependent arguments.",
+      "source": "91d99b8919a0"
+    },
+    "chain-dependency.guide.0.text": {
+      "text": "This run has to answer \"把现在的小时和分钟相加\" (\"add the current hour and minute\"). The key question: where do the addition's a and b come from?",
+      "source": "511a101c6f6f"
+    },
+    "chain-dependency.guide.1.text": {
+      "text": "Round 1 calls only the time tool. There is no time data yet, so the model cannot fill in the addition's arguments.",
+      "source": "384e80be50ef"
+    },
+    "chain-dependency.guide.2.text": {
+      "text": "Note the hour and minute here; they appear only in this tool result.",
+      "source": "d39a1734625d"
+    },
+    "chain-dependency.guide.3.text": {
+      "text": "The runner puts the time result into the round 2 request as a role=tool message, and only then can the model see it.",
+      "source": "3e31634185dc"
+    },
+    "chain-dependency.guide.4.text": {
+      "text": "Compare them one by one: does a equal hour, and does b equal minute? Only if they are equal does it show the arguments came from this tool result and were not guessed.",
+      "source": "278f8d11c449"
+    },
+    "chain-dependency.guide.5.text": {
+      "text": "The addition result comes from the dependent arguments, and the number in the final answer should match it.",
+      "source": "4e8dee6232aa"
+    },
+    "chain-dependency.conclusion.proves.0": {
+      "text": "Whether the addition arguments in this run equal the hour and minute in the previous step's time result can be checked field by field.",
+      "source": "e6008fb1d876"
+    },
+    "chain-dependency.conclusion.proves.1": {
+      "text": "The time result did enter the next round's request as a role=tool message, and the model proposed the addition after seeing it.",
+      "source": "2888085f4e01"
+    },
+    "chain-dependency.conclusion.does_not_prove.0": {
+      "text": "It does not prove that the model understood \"dependency\"; it may simply have followed the system prompt's instruction to look up the time first and then add.",
+      "source": "ba9b13bdcb46"
+    },
+    "chain-dependency.conclusion.does_not_prove.1": {
+      "text": "It does not prove that a real model will always call in two rounds; that takes repeated runs to observe.",
+      "source": "aa46a7dceadc"
+    },
+    "chain-dependency.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the addition arguments are generated by the script from the real clock result, which verifies the runner's data-passing path.",
+      "source": "ad46417d0a64"
+    },
+    "two-calls.title": {
+      "text": "Two independent tasks: proposed in one round, executed one by one",
+      "source": "1e0b283a269e"
+    },
+    "two-calls.hypothesis": {
+      "text": "When two tasks do not depend on each other, the model can propose two calls in one response; run_agent executes them one by one in list order, and the two tool results each return to the next request with their own tool_call_id.",
+      "source": "0804a3661371"
+    },
+    "two-calls.both.label": {
+      "text": "Add 19 and 23, and tell me what time it is",
+      "source": "638095b27bdd"
+    },
+    "two-calls.same-response.text": {
+      "text": "tool_calls[1] of the round 1 response: the second tool call proposal, in the same response as the first.",
+      "source": "9c630d6bfc73"
+    },
+    "two-calls.first-result.text": {
+      "text": "The first tool_result of round 1: the result of the call that was executed first.",
+      "source": "973235084ce4"
+    },
+    "two-calls.second-call.text": {
+      "text": "The second tool_call of round 1: the second call is only executed here, after the first call's result.",
+      "source": "8d08644a8b2c"
+    },
+    "two-calls.both-returned.text": {
+      "text": "messages[4] of the round 2 request: the second message with role tool; each of the two results carries its own tool_call_id.",
+      "source": "6127ab7e9bc8"
+    },
+    "two-calls.guide.0.text": {
+      "text": "This arm has only one question, but it contains two tasks that do not depend on each other.",
+      "source": "4e641448c83e"
+    },
+    "two-calls.guide.1.text": {
+      "text": "If the model proposed two calls in the same response this time, this is the second one; note its id. If the model proposed them in two rounds, this will say there is no such evidence in this run, and that is also a legitimate run.",
+      "source": "1c7060edd260"
+    },
+    "two-calls.guide.2.text": {
+      "text": "The first call in the list finishes first, and its result is recorded first.",
+      "source": "6e2d0c015171"
+    },
+    "two-calls.guide.3.text": {
+      "text": "The second call starts only now, and its id is the one you just noted: proposed in the same round does not mean executed at the same time.",
+      "source": "72dee60f6a9e"
+    },
+    "two-calls.guide.4.text": {
+      "text": "Both results go back to the next round as messages with role tool, and the model answers from both together. Compare with the dependent arm: here the arguments are known from the start, so no separate rounds are needed.",
+      "source": "c0e06fce8392"
+    },
+    "two-calls.conclusion.proves.0": {
+      "text": "Whether the two calls appeared in the same response in this run, and the order in which they were actually executed on the timeline.",
+      "source": "95cdb118a7c8"
+    },
+    "two-calls.conclusion.proves.1": {
+      "text": "Each of the two tool results maps to its own call through tool_call_id.",
+      "source": "bb3c24cba912"
+    },
+    "two-calls.conclusion.does_not_prove.0": {
+      "text": "Proposed in the same round does not prove simultaneous execution; this run's event order shows that the runner executed them one by one.",
+      "source": "eb0c61806202"
+    },
+    "two-calls.conclusion.does_not_prove.1": {
+      "text": "It does not prove that the model will always put two independent tasks in the same round; it may also propose them in two rounds.",
+      "source": "41d6d2ecd230"
+    },
+    "quiz.dependent-input.prompt": {
+      "text": "The time lookup returns hour=11, minute=33. Which follow-up call proves that the addition used this run's tool result?",
+      "source": "cbb98483735d"
+    },
+    "quiz.dependent-input.a.text": {
+      "text": "add_numbers(a=19, b=23), because the result might also look reasonable.",
+      "source": "0d72e0ba1122"
+    },
+    "quiz.dependent-input.a.feedback": {
+      "text": "19 and 23 have nothing to do with the time that was looked up; however reasonable the result looks, it cannot prove the addition used this run's tool result.",
+      "source": "f6a8fefdff54"
+    },
+    "quiz.dependent-input.b.text": {
+      "text": "add_numbers(a=11, b=33), and both values can be found in the previous round's tool message.",
+      "source": "25c16cf35ceb"
+    },
+    "quiz.dependent-input.b.feedback": {
+      "text": "Correct. The arguments 11 and 33 can be found as hour and minute in the previous round's tool message, so both the argument values and their source can be checked.",
+      "source": "2dd3708fd8b0"
+    },
+    "quiz.dependent-input.c.text": {
+      "text": "No addition call is needed; a final answer of 44 already proves it.",
+      "source": "18fe0b0a4653"
+    },
+    "quiz.dependent-input.c.feedback": {
+      "text": "The final number alone does not tell you where it came from; it may be a guess or a coincidence. Look at the call arguments and the previous round's result.",
+      "source": "695f02b5407f"
+    },
+    "quiz.dependent-input.explanation": {
+      "text": "A dependent call needs both the argument values and their source checked. A correct final number does not prove correct data passing; the previous round's actual result and this round's actual arguments in the trace are what provide checkable evidence.",
+      "source": "d6a5b22f0b13"
+    },
+    "quiz.which-needs-rounds.prompt": {
+      "text": "In which of these requests must the two calls be proposed in two rounds?",
+      "source": "36e0fbf497fc"
+    },
+    "quiz.which-needs-rounds.a.text": {
+      "text": "Check the current weather in Beijing and Shanghai",
+      "source": "37b704058376"
+    },
+    "quiz.which-needs-rounds.a.feedback": {
+      "text": "The two lookups do not depend on each other and can be proposed in the same round.",
+      "source": "0bb9b29443eb"
+    },
+    "quiz.which-needs-rounds.b.text": {
+      "text": "First look up today's date, then look up the meetings for that day",
+      "source": "73bec5be5883"
+    },
+    "quiz.which-needs-rounds.b.feedback": {
+      "text": "Correct. Looking up meetings needs the date, and that argument is only available once the first call's result comes back.",
+      "source": "2956449d0841"
+    },
+    "quiz.which-needs-rounds.c.text": {
+      "text": "Compute 19 plus 23, then compute 5 times 6",
+      "source": "7f179fae954f"
+    },
+    "quiz.which-needs-rounds.c.feedback": {
+      "text": "Both calculations have their numbers in the question and neither waits for the other, so they can be proposed in the same round.",
+      "source": "6745dc283033"
+    },
+    "quiz.which-needs-rounds.explanation": {
+      "text": "Whether calls can be proposed in the same round depends on whether the later call's arguments must come from the earlier call's actual result.",
+      "source": "9be858b0e8f9"
+    },
+    "quiz.ordering-not-enough.prompt": {
+      "text": "The model proposes the time lookup and the addition in one round, but the addition's arguments are guessed in advance as 10 and 20. If Python looks up the time first and adds afterward, does that make the dependency correct automatically?",
+      "source": "267221c79b8b"
+    },
+    "quiz.ordering-not-enough.a.text": {
+      "text": "Yes, executing in order automatically rewrites the addition's arguments.",
+      "source": "c4c50c6f9c01"
+    },
+    "quiz.ordering-not-enough.a.feedback": {
+      "text": "The runner executes arguments exactly as written and does not rewrite one call's arguments based on the previous tool's output.",
+      "source": "5a19711509b2"
+    },
+    "quiz.ordering-not-enough.b.text": {
+      "text": "Yes, as long as both tool names are correct.",
+      "source": "3f3a958ee0d5"
+    },
+    "quiz.ordering-not-enough.b.feedback": {
+      "text": "Correct tool names only show the right functions were chosen; the arguments 10 and 20 were guessed in advance, so the dependency is still wrong.",
+      "source": "fdd54b89b824"
+    },
+    "quiz.ordering-not-enough.c.text": {
+      "text": "No. The runner executes the given arguments; the real result has to be sent to the next round before the arguments are decided.",
+      "source": "8ee47063a4c2"
+    },
+    "quiz.ordering-not-enough.c.feedback": {
+      "text": "Correct. Execution order cannot stand in for passing data; the model has to see the time result first, and then in the next round propose the addition with the real values.",
+      "source": "ab7fc04672ad"
+    },
+    "quiz.ordering-not-enough.explanation": {
+      "text": "Execution order cannot stand in for passing data. The current runner does not rewrite another call's arguments based on the previous tool's output. The model should receive the time result first, then propose an addition call with the real hour and minute.",
+      "source": "d4a2c508c2b7"
+    },
+    "quiz.context-versus-learning.prompt": {
+      "text": "The round 2 request contains the previous round's time result, and the model continues the calculation from it. What does this show?",
+      "source": "da53a2ba2111"
+    },
+    "quiz.context-versus-learning.a.text": {
+      "text": "The application provided context for the current decision through the message history.",
+      "source": "c1dd688c3d72"
+    },
+    "quiz.context-versus-learning.a.feedback": {
+      "text": "Correct. The tool result in the round 2 request is the message history the application sent again, and the model makes this step's decision from it.",
+      "source": "11d4f2de6c59"
+    },
+    "quiz.context-versus-learning.b.text": {
+      "text": "The model weights were automatically trained and now remember this time permanently.",
+      "source": "5948e906f3ec"
+    },
+    "quiz.context-versus-learning.b.feedback": {
+      "text": "A request does not modify model weights; with a request that does not carry this history, the model cannot see this time.",
+      "source": "9bb206a16fbe"
+    },
+    "quiz.context-versus-learning.c.text": {
+      "text": "Every new session will automatically read this time result.",
+      "source": "562edec65987"
+    },
+    "quiz.context-versus-learning.c.feedback": {
+      "text": "A new session's messages are rebuilt by the application; without explicit saving and reading, this result will not appear. Saving information across runs is the subject of {{lesson:persistent-memory}}.",
+      "source": "541e86c06a64"
+    },
+    "quiz.context-versus-learning.explanation": {
+      "text": "messages is the history of this run, built by the application. Sending the tool result again lets the model use an existing observation; it is not the same as modifying the model weights, nor as saving the information for later runs.",
+      "source": "a156dbe898fd"
+    },
+    "check-hunt.prompt": {
+      "text": "Run the \"Add the hour and minute\" exercise and find the addition call that the model proposed only after it had the time result.",
+      "source": "b01e0330ff31"
+    },
+    "check-hunt.explanation": {
+      "text": "It is the round 2 add_numbers call: the result of get_current_time from round 1 was sent back to the model first, and only then did the model propose this call. Expand its arguments and compare them with the hour and minute in the previous round's tool_result to check where the arguments came from.",
+      "source": "4dd48a64b3df"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In the trace I can point out which field of the previous round's get_current_time each of the addition's two arguments came from.",
+      "source": "a9e33dbaa0b5"
+    },
+    "check-points.item-2.text": {
+      "text": "I ran \"Two independent tasks\" and can explain why they can be proposed in the same round and yet are still executed one by one.",
+      "source": "f5eefc1e01b8"
+    },
+    "check-points.item-3.text": {
+      "text": "I can explain why execution order cannot stand in for passing data.",
+      "source": "5646f880de48"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed the user message to \"add the current minute and 100\" and ran again, and checked which addition argument came from the time result and which from the question.",
+      "source": "2f4c5d9235d9"
+    },
+    "code_notes.SYSTEM_PROMPT.note": {
+      "text": "The system prompt in main.py, sent as the first system message; this lesson spells out here to look up the time first and never guess arguments.",
+      "source": "2a07bb0c872f"
+    },
+    "code_notes.TOOLS.note": {
+      "text": "The list of tool definitions in tools.py of {{lesson:tool-selection}}, sent as the request's tools field; this lesson reuses it unchanged.",
+      "source": "670d55c25942"
+    },
+    "code_notes.arguments.note": {
+      "text": "The arguments the model wrote in the call (a JSON string). The runner parses and executes them as written and never swaps in another tool's result.",
+      "source": "d2f6b4f0442e"
+    },
+    "code_notes.tool_result.note": {
+      "text": "The event recorded after Python executes a call; this lesson reads hour and minute from the time tool's record.",
+      "source": "9263173722e1"
+    },
+    "code_notes.completed.note": {
+      "text": "The terminal state when a run ends normally: the model gave a final answer. It does not show that the argument source or the answer is correct.",
+      "source": "53262349e55c"
+    }
+  }
+}

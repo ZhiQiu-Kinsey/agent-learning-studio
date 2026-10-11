@@ -1,0 +1,842 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "TASKS / STRUCTURED OUTPUT",
+      "source": "629efd93c8e5"
+    },
+    "hero.headline": {
+      "text": "JSON the model writes,",
+      "source": "2141f8cb47af"
+    },
+    "hero.highlight": {
+      "text": "treated as input to be checked first.",
+      "source": "393b35c13715"
+    },
+    "hero.takeaway": {
+      "text": "A lesson card written by the model has to pass three gates in order: can it be parsed as JSON, are the fields right, are the facts right. Passing one gate does not replace the next.",
+      "source": "93d228386466"
+    },
+    "concepts.01-goal.label": {
+      "text": "01 / TEXT",
+      "source": "6b3d12ef343e"
+    },
+    "concepts.01-goal.title": {
+      "text": "The output is text first",
+      "source": "99c5b5004c69"
+    },
+    "concepts.01-goal.description": {
+      "text": "However the prompt is worded, the model returns a message.content string. It may be JSON, or it may not.",
+      "source": "c88f80319977"
+    },
+    "concepts.02-check.label": {
+      "text": "02 / PARSE",
+      "source": "8d5b44236439"
+    },
+    "concepts.02-check.title": {
+      "text": "Gate 1: can it be parsed",
+      "source": "badce1d695c6"
+    },
+    "concepts.02-check.description": {
+      "text": "json.loads answers one question only: is this text valid JSON. It says nothing else.",
+      "source": "43438f7207df"
+    },
+    "concepts.03-evidence.label": {
+      "text": "03 / SCHEMA",
+      "source": "57e61b1298a2"
+    },
+    "concepts.03-evidence.title": {
+      "text": "Gate 2: field constraints",
+      "source": "4f4cfef7da29"
+    },
+    "concepts.03-evidence.description": {
+      "text": "TaskCard defines the lesson card: four fields (lesson ID, title, prerequisite, exercise) with length limits, and extra fields are rejected. A correct shape can still hold wrong content.",
+      "source": "27589b237a44"
+    },
+    "section-1.title": {
+      "text": "Model text is input to be checked",
+      "source": "53f43cf4db75"
+    },
+    "section-1.paragraphs.0": {
+      "text": "JSON the model writes exactly as asked is still just text until a program checks it. It cannot be used as data yet. {{lesson:task-contract}} accepted evidence produced by tools, and that evidence was written by Python, so its format was reliable by construction. Often, though, the thing to deliver is written by the model itself: pull a few fields out of a paragraph, arrange them into a card, and hand it to a downstream program to store or display. That program cannot read natural language. It only understands fixed fields.",
+      "source": "2de35b6ec849"
+    },
+    "section-1.paragraphs.1": {
+      "text": "This lesson practices structured output: ask the model to answer in an agreed JSON structure, then check it layer by layer in code. The course writes the lesson ID, title, and prerequisite of {{lesson:task-contract}} into the request as trusted facts and asks the model to arrange them into a lesson card. The lesson card is only practice data for this lesson. It is not the same thing as the task card in {{lesson:task-contract}}: it defines no acceptance rules, and it is itself the object being checked.",
+      "source": "b0bab0b3a971"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The prompt says \"只输出一个 JSON 对象\" (\"output only one JSON object\"), but the model still returns just a string in message.content. It may be clean JSON. It may start with \"Sure, here is the lesson card\" and wrap the JSON in code fence markers. It may miss a field or add one nobody agreed on. Or the format may be perfect while the prerequisite is written as dependent-calls. The program has to tell these cases apart and say exactly what is wrong.",
+      "source": "351d4537563f"
+    },
+    "section-1.paragraphs.3": {
+      "text": "This lesson splits the check into three layers: can it be parsed, is the shape right, are the facts right. The layers run in order. When one fails, the check stops, the later layers make no judgment, and the report does not list checks that never ran. For text that cannot be parsed, asking whether a field is missing makes no sense.",
+      "source": "df3aa18e26ee"
+    },
+    "section-2.title": {
+      "text": "Layer 1: JSON syntax",
+      "source": "df2da9f84f9d"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Layer 1 answers one question: can this text be parsed as JSON. inspect_output parses message.content with json.loads. On failure it stops immediately, writes the reason into the report, skips the other two layers, and does not quietly swap the model's answer for a preset object.",
+      "source": "6501290d4937"
+    },
+    "section-2.paragraphs.1": {
+      "text": "This layer is strict. If the text has an explanatory sentence in front or is wrapped in code fence markers, json.loads fails. This lesson does not strip that extra text for the model; it honestly judges the output as badly formatted. By default json.loads also accepts constants such as NaN and Infinity, which standard JSON does not have. This lesson uses parse_constant to reject them too, because other programs may fail when they read them.",
+      "source": "bbd77c1bf999"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Passing this layer only means you have a valid JSON value. It says nothing else: it may be an array instead of an object, fields may be missing, values may be wrong. Some providers offer a JSON output mode, or can constrain generation to a given schema, which makes this layer pass almost every time. This lesson still uses the common text interface so that the responsibility of each layer stays visible. Check each provider's documentation for the exact capabilities.",
+      "source": "1cd32356b14d"
+    },
+    "deep-dive-json-modes.title": {
+      "text": "Ways to get JSON out of a model",
+      "source": "c492c6412fc5"
+    },
+    "deep-dive-json-modes.summary": {
+      "text": "Prompt only, extract from the text, provider-constrained output, or borrowing a tool call. All four mainly secure layer 1.",
+      "source": "c53e1b04d86c"
+    },
+    "deep-dive-json-modes.paragraphs.0": {
+      "text": "The first way is to write only a prompt and parse strictly, which is what this lesson does. The second is to pull the JSON out of the text before parsing. The Claude Cookbooks show two ways to do it: take everything from the first left brace to the last right brace, or have the model put the JSON inside agreed tags and extract by tag. Extraction can rescue an answer that has an intro sentence, but it can also cut in the wrong place, for example when the answer has two objects or the explanation itself contains braces.",
+      "source": "4934495368d5"
+    },
+    "deep-dive-json-modes.paragraphs.1": {
+      "text": "The third way is the provider's JSON mode. Generation is restricted so the output must be valid JSON, and some providers can also limit fields and types to a schema you give. This blocks format errors at generation time, but which models support it, how far the support goes, and how to write it in the request differ between providers. Follow the provider's documentation.",
+      "source": "945abd9f39ec"
+    },
+    "deep-dive-json-modes.paragraphs.2": {
+      "text": "The fourth way is to borrow a tool call. The structured extraction example in the Claude Cookbooks does exactly this: define a tool, put the fields you want into its parameter schema, and have the model \"call\" it. The call's arguments are the JSON. You have already seen in {{lesson:tool-proposals}} that the arguments the model writes are a JSON string to begin with, and the first step of execute_tool in {{lesson:tool-selection}} is to parse it. Structured output and tool arguments are really the same problem.",
+      "source": "0349102391b8"
+    },
+    "deep-dive-json-modes.paragraphs.3": {
+      "text": "Claude Code's non-interactive mode offers this too. The example in the official documentation is `claude -p` with `--output-format json` and `--json-schema`, which returns a result matching the given JSON Schema in the `structured_output` field of the response. Its Agent SDK documentation is more detailed: if the output does not match the schema, the model is prompted again, and if it still fails at the retry limit, the result is marked `error_max_structured_output_retries` and no invalid data is returned. This is roughly this lesson's first two layers plus limited repair, done by the tool for you. It treats schema constraints such as `format` as comments and does not enforce them. It has no way to know whether the prerequisite is correct, so layer 3 is still yours to write. Check the Claude Code documentation for the exact parameters.",
+      "source": "027c8aba69f3"
+    },
+    "deep-dive-json-modes.paragraphs.4": {
+      "text": "The four ways mainly secure layer 1, and at most part of layer 2. Even when the format and fields are right, the facts inside can still be wrong. So whichever way you use, the last two layers cannot be skipped. Another example in the Claude Cookbooks also validates with a Pydantic model on top of the tool arguments.",
+      "source": "fc0f8b87bb20"
+    },
+    "predict-model-calls.prompt": {
+      "text": "Try it once. Before you run \"Change only the user message: ask the draft to omit prerequisite\" in the experiment, predict: how many model requests (request events) will this run send in total?",
+      "source": "85a4114d892e"
+    },
+    "mq-json-only.json-parse-only.prompt": {
+      "text": "The text the model returned can be parsed by json.loads. What can you be sure of at this point?",
+      "source": "a632aa4d1d1e"
+    },
+    "mq-json-only.json-parse-only.a.text": {
+      "text": "Only that it is valid JSON; the fields and facts have not been checked",
+      "source": "d5fa939eb868"
+    },
+    "mq-json-only.json-parse-only.a.feedback": {
+      "text": "Correct. Layer 1 covers syntax only.",
+      "source": "54b4e46621e3"
+    },
+    "mq-json-only.json-parse-only.b.text": {
+      "text": "The lesson card is ready to use",
+      "source": "f8b58fcfeff2"
+    },
+    "mq-json-only.json-parse-only.b.feedback": {
+      "text": "Not quite. Fields may be missing and facts may be wrong.",
+      "source": "d70644384803"
+    },
+    "mq-json-only.json-parse-only.c.text": {
+      "text": "The fields are certainly complete; only the facts remain to be checked",
+      "source": "703c8cff4935"
+    },
+    "mq-json-only.json-parse-only.c.feedback": {
+      "text": "Not quite. Whether the fields are complete is checked by layer 2, the field schema.",
+      "source": "1363a3070384"
+    },
+    "mq-json-only.json-parse-only.explanation": {
+      "text": "Each of the three layers checks one thing. Passing one layer does not replace the next.",
+      "source": "f4478b2a893f"
+    },
+    "section-3.title": {
+      "text": "Layer 2: Pydantic field constraints",
+      "source": "91964dc144bc"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Layer 2 checks the shape of the JSON: whether the required fields exist, whether the types are right, whether the lengths are in range, and whether there are extra fields. TaskCard is a Pydantic model with four required string fields: lesson_id up to 48 characters, lesson_title up to 60, prerequisite up to 48, and exercise between 8 and 120 characters. extra=\"forbid\" makes extra fields a failure too.",
+      "source": "a2526717652c"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Why use an existing validation library instead of writing a few ifs yourself? As fields multiply, hand-written checks easily miss a case, and each one reports errors in its own way. Pydantic returns all the problems at once, each with a location and an error type. For a missing prerequisite, the report says `prerequisite: missing`. That message is specific enough to hand straight back to the model for repair.",
+      "source": "9e41e16ad815"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Rejecting extra fields is deliberate too. The model may add a \"remarks\" or \"confidence\" field on its own. A downstream program does not know it and sometimes fails on it, sometimes silently drops it. Worse, if every draft has different fields, there is no stable way to process them. Rejecting first and having the model rewrite to the agreed format is easier than letting extra fields slip through.",
+      "source": "9e19c6b0cf71"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Passing the schema only means the shape is right. prerequisite is a string of valid length, but whether it names the correct prerequisite lesson is something the schema does not know and should not know. That has to be compared against outside facts.",
+      "source": "f0d0246935f2"
+    },
+    "section-4.title": {
+      "text": "Layer 3: independent business facts",
+      "source": "08941d6ece96"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Layer 3 compares the lesson card, item by item, against trusted facts given in advance. FACTS holds the three facts this lesson accepts: the lesson ID is task-contract, the title is \"任务目标与验收\" (the Chinese title of that lesson, \"task goals and acceptance\"), and the prerequisite is fail-safely. inspect_output compares lesson_id, lesson_title, and prerequisite one by one. If any item differs, it judges the card a failure and lists the differing items in the report.",
+      "source": "82d859e00fb3"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Take the first draft from the \"Wrong fact on purpose\" arm. It parses fine, all four fields are present and within length, so it passes the first two layers. At layer 3, prerequisite is dependent-calls, which differs from fail-safely in FACTS. The report says \"与给定资料不符\" (\"does not match the given material\") and lists prerequisite.",
+      "source": "19bcf6cfc0df"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The system prompt already says \"不得编造给定事实\" (\"do not make up the given facts\"). Why check again in code? In its discussion of coding agents, *Understanding AI Agents in Depth* (深入理解 AI Agent) calls this principle \"constraints before guidance\": a rule that code can enforce should not be written only as advice. A code check makes the mistake impossible; a \"please follow\" in a prompt only advises against it. A rule in the prompt gives the model something to understand and explain, but at the critical points a piece of deterministic code has to guard the door, so the same input gets the same verdict every time. If the model says \"verified\" in its answer, layer 3 does not let it through for that reason.",
+      "source": "942010120d60"
+    },
+    "section-4.paragraphs.3": {
+      "text": "This layer checks only what a program can check. exercise is a piece of exercise text. Whether it is well written, and whether it fits the task goal, cannot be judged by comparing three strings, and the report will not say it \"passed\". Where the facts come from matters just as much: FACTS is trusted material written into this lesson's code. If the same model first generated the facts and then checked them itself, the check would not be independent.",
+      "source": "bd02c375500f"
+    },
+    "mq-wrong-fact.wrong-fact-layer.prompt": {
+      "text": "The JSON the model produced has all fields and correct types, but prerequisite is written as dependent-calls. Where does it get stopped?",
+      "source": "b1b9f0d1977d"
+    },
+    "mq-wrong-fact.wrong-fact-layer.a.text": {
+      "text": "The business fact layer: it is compared with the trusted FACTS and judged a failure",
+      "source": "95f4f62bd2cb"
+    },
+    "mq-wrong-fact.wrong-fact-layer.a.feedback": {
+      "text": "Correct. The structure is valid, but the facts do not match.",
+      "source": "a617d4390f04"
+    },
+    "mq-wrong-fact.wrong-fact-layer.b.text": {
+      "text": "It is not stopped; the field schema already passed",
+      "source": "53485ef37cc2"
+    },
+    "mq-wrong-fact.wrong-fact-layer.b.feedback": {
+      "text": "Not quite. The schema checks only the shape, not whether the lesson ID is correct.",
+      "source": "5c1d4c013527"
+    },
+    "mq-wrong-fact.wrong-fact-layer.c.text": {
+      "text": "The JSON format layer: parsing would fail",
+      "source": "9ce107449b3d"
+    },
+    "mq-wrong-fact.wrong-fact-layer.c.feedback": {
+      "text": "Not quite. This text is valid JSON and parses fine.",
+      "source": "44437d4c6076"
+    },
+    "mq-wrong-fact.wrong-fact-layer.explanation": {
+      "text": "A valid structure does not mean correct content. Business facts have to be checked by an independent rule.",
+      "source": "1da53d547482"
+    },
+    "section-5.title": {
+      "text": "Limited repair and explicit failure",
+      "source": "9d62bd312308"
+    },
+    "section-5.paragraphs.0": {
+      "text": "When a check fails, you can hand the reason back to the model for one fix, but the number of attempts must be capped and the fix must be checked again. In this lesson a repair happens only when three conditions hold together: the draft failed, the repair switch is on, and model calls are still left. The call budget is the maximum number of model calls one run may make. It comes from max_rounds in lesson.json, which is 2 here: one for the draft, and at most one more for the repair.",
+      "source": "0f0c1200fe7f"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The repair request appends two messages after the original messages. One is an assistant message that puts the model's previous output back unchanged. The other is a user message that starts with \"上一版未通过\" (\"the previous version failed\"), followed by the specific reason from the layer that failed, and ends by asking for a complete JSON object based only on the original trusted facts. The model can fix the draft only if it sees what it wrote and what was wrong.",
+      "source": "bfe52ee336a7"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The repaired draft must be checked again from layer 1, not just at the layer that failed last time: filling in the missing field may have introduced a wrong fact. A report is published right after each draft is checked, so the lab report lets you compare the first draft and the repaired draft. If the repaired draft still fails, the run explicitly returns \"未通过校验\" (\"failed validation\"). It adds no default values and does not turn into a success. The platform checks the call budget before every model request, so even if the runner's code is wrong and tries to make one more request, it is blocked.",
+      "source": "6cd9da5bd3ac"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Also note where this lesson's failures come from. \"Missing field on purpose\" and \"Wrong fact on purpose\" work by asking the model, in the user message, to make that mistake, and the model does not always comply: it may hand back a correct lesson card, and then no repair is triggered. Whether a repair happens depends on the check result of the actual response. This differs from {{lesson:fail-safely}}, where the program constructs the fault directly. That approach is stable, but it cannot test the model.",
+      "source": "8c556d49282c"
+    },
+    "deep-dive-repair.title": {
+      "text": "What a repair request should say",
+      "source": "8cf07e1bfa2b"
+    },
+    "deep-dive-repair.summary": {
+      "text": "Hand back the original draft together with the specific failure reason, and cap the repairs.",
+      "source": "e202b9808796"
+    },
+    "deep-dive-repair.paragraphs.0": {
+      "text": "How well a repair works depends largely on how specific the failure reason is. \"Wrong format, please retry\" carries almost no information, while `prerequisite: missing` tells the model exactly which field is missing. Mini-SWE-Agent handles format errors the same way: it puts the specific error into a message, adds a description of the correct format, and hands it back to the model. When format errors repeat up to a limit (3 by default), the run ends.",
+      "source": "86ff0a081ede"
+    },
+    "deep-dive-repair.paragraphs.1": {
+      "text": "This lesson's repair message is built that way: take the detail from the layer that failed, put it after \"上一版未通过：\" (\"the previous version failed:\"), and add one sentence of instruction. For a missing field, that user message looks roughly like `上一版未通过：prerequisite: missing。只按原始可信事实输出完整 JSON 对象。`. It does not repeat all the facts. They are still in the earlier user message, and the repair request is sent with the whole history.",
+      "source": "fe64f0056aa7"
+    },
+    "deep-dive-repair.paragraphs.2": {
+      "text": "The original draft goes back in too. If you sent only the failure reason, the model would have to rewrite from scratch, and might fix this spot while breaking another. With the draft put back as an assistant message, the model can edit it in place. The cost is a longer request: both the draft and the failure reason go into the messages of request 2, so usage grows.",
+      "source": "9cfdc4a1a02c"
+    },
+    "deep-dive-repair.paragraphs.3": {
+      "text": "Repairs need a cap, for two reasons. One is cost: every repair is a full model call. The other is reliability: an output that needs several repairs before it happens to pass may not pass next time. Rather than retry again and again, go back and check whether the prompt, the schema, or the facts given to the model are the problem. This lesson repairs once; if that fails, it reports the failure honestly and keeps the original output for debugging.",
+      "source": "862641123558"
+    },
+    "misconception-schema-trust.claim": {
+      "text": "If you use the provider's JSON mode, or the schema check passes, what the model wrote can be used directly.",
+      "source": "cc7026208758"
+    },
+    "misconception-schema-trust.correction": {
+      "text": "JSON mode and a schema secure the format and shape: the output parses, the fields are complete, and types and lengths are valid. They do not know whether the facts in the fields are right. In this lesson's \"Wrong fact on purpose\" arm, the first draft passes the first two layers and is stopped only when layer 3 compares it with FACTS.",
+      "source": "6615b6b684c0"
+    },
+    "mq-repair-final.repair-final.prompt": {
+      "text": "The first draft is missing prerequisite. The repaired draft has all fields but writes prerequisite as dependent-calls. What is the conclusion for this run?",
+      "source": "48930908a8f3"
+    },
+    "mq-repair-final.repair-final.a.text": {
+      "text": "Failed: the repaired draft goes through all three layers again and fails at the business fact layer",
+      "source": "a2bdf61a9ea8"
+    },
+    "mq-repair-final.repair-final.a.feedback": {
+      "text": "Correct. The repaired draft is checked from layer 1; filling in the field only got it past the first two layers.",
+      "source": "054f80d2de08"
+    },
+    "mq-repair-final.repair-final.b.text": {
+      "text": "Passed: the repaired draft filled in the missing field",
+      "source": "9678213360d5"
+    },
+    "mq-repair-final.repair-final.b.feedback": {
+      "text": "Not quite. Filling in the field only fixed last time's problem; the facts still have to be checked.",
+      "source": "16c5e478df43"
+    },
+    "mq-repair-final.repair-final.c.text": {
+      "text": "Repair again, until it passes",
+      "source": "f53467d3c6f2"
+    },
+    "mq-repair-final.repair-final.c.feedback": {
+      "text": "Not quite. This lesson's call budget is 2, so there is at most one repair; if it fails, the run reports failure.",
+      "source": "8d01e74fdf41"
+    },
+    "mq-repair-final.repair-final.explanation": {
+      "text": "Every draft goes through all three layers in full. If repairs run out and it still fails, the run honestly reports failure.",
+      "source": "17e73e680636"
+    },
+    "section-next.title": {
+      "text": "Next: use the check results to change the prompt",
+      "source": "044fc9dc7f61"
+    },
+    "section-next.paragraphs.0": {
+      "text": "The three layers give conclusions you can verify: at which layer this output failed, and why. With that, changing the prompt no longer needs to be done by feel. {{lesson:prompt-experiments}} fixes the model and the task, changes only one thing at a time in the prompt or tool description, and then looks at whether the calls and check results changed.",
+      "source": "44aecb0b3073"
+    },
+    "section-next.paragraphs.1": {
+      "text": "You will meet the same problem again in {{lesson:text-actions}}: the model writes the tool and arguments to call in plain text, the program has to parse them out first, and a parse failure must be recorded honestly instead of guessing a result to fill in.",
+      "source": "2a6d2839b366"
+    },
+    "walkthrough.title": {
+      "text": "How a lesson card passes three gates",
+      "source": "80d3323f4344"
+    },
+    "walkthrough.description": {
+      "text": "Explains this lesson's check order step by step. The code is a simplified illustration. The evidence for this run is in the events on the lab bench.",
+      "source": "5a037b5c86c6"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Get the text",
+      "source": "f80a4ab07c12"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Receive the model's raw answer",
+      "source": "7da800db2164"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The request carries the trusted facts and the format requirement, and a piece of text comes back.",
+      "source": "f9539c29f80a"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "request and response",
+      "source": "55ec9436053d"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Gate 1",
+      "source": "09fefd03e0c4"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Parse the JSON",
+      "source": "cb0d1acd8215"
+    },
+    "walkthrough.step-2.body": {
+      "text": "If parsing fails, stop. The other two gates do not run.",
+      "source": "e2336dc758d8"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "The first check in the report",
+      "source": "699484936319"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Gate 2",
+      "source": "0c842c7895d9"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Validate the fields",
+      "source": "bd4a649cad83"
+    },
+    "walkthrough.step-3.body": {
+      "text": "TaskCard checks fields, types, and lengths, and rejects extra fields.",
+      "source": "afa01efd13c4"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "The second check in the report",
+      "source": "07eb0609a5fc"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Gate 3",
+      "source": "a345d33a6d64"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Check the facts",
+      "source": "9218bd1688fc"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Lesson ID, title, and prerequisite are compared one by one with FACTS.",
+      "source": "0f75c9b87621"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "The third check in the report",
+      "source": "7414b4abf9f1"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Report",
+      "source": "1e8ddd10bafe"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-5.title": {
+      "text": "State pass or fail clearly",
+      "source": "b2b7badf7a8c"
+    },
+    "walkthrough.step-5.body": {
+      "text": "A report is published after each response, and the repaired draft gets its own.",
+      "source": "3156323a467c"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.cookbook-extracting-json.title": {
+      "text": "Extract structured JSON with tool calls (Claude Cookbooks)",
+      "source": "118159f66e52"
+    },
+    "references.cookbook-json-mode.title": {
+      "text": "Getting JSON without a JSON mode: extraction and tags (Claude Cookbooks)",
+      "source": "74df754d8553"
+    },
+    "references.cookbook-pydantic.title": {
+      "text": "Validate tool arguments with Pydantic (Claude Cookbooks)",
+      "source": "6b6fedcc7a51"
+    },
+    "references.book-ch5.title": {
+      "text": "Constraints before guidance: rules that code can enforce are not written only as advice — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "25f5cf05aa04"
+    },
+    "references.mini-swe-agent-config.title": {
+      "text": "Default config: the feedback template for format errors (Mini-SWE-Agent)",
+      "source": "3e5ee949cdff"
+    },
+    "references.cc-structured-output.title": {
+      "text": "Getting structured output from an agent: schema validation and a retry limit (Claude Code documentation)",
+      "source": "c48fa30df4be"
+    },
+    "code-three-layers.n22.text": {
+      "text": "extra=\"forbid\": one extra field counts as a schema failure, so the model cannot sneak in undeclared content.",
+      "source": "7a65fec3d19f"
+    },
+    "code-three-layers.n36.text": {
+      "text": "json.loads accepts non-standard constants such as NaN and Infinity by default; parse_constant rejects them.",
+      "source": "a99e49f31ea7"
+    },
+    "code-three-layers.n41.text": {
+      "text": "Layer 2 uses Pydantic to validate required fields, types, and lengths.",
+      "source": "a8454d291abd"
+    },
+    "code-three-layers.n45.text": {
+      "text": "If an upstream layer failed, return right away. Later layers make no judgment, and the report has no checks that did not run.",
+      "source": "c1fd4c13b9a1"
+    },
+    "code-three-layers.n47.text": {
+      "text": "Layer 3 compares FACTS item by item. A fully valid output can still get a fact wrong; the wrong_fact scenario stops at this layer.",
+      "source": "af3c18e7f654"
+    },
+    "code-repair.n88.text": {
+      "text": "temperature=0 lowers randomness but does not guarantee identical output every time; the result is still whatever this run's response says.",
+      "source": "e0bee11b1b25"
+    },
+    "code-repair.n92.text": {
+      "text": "Repair happens only when the draft failed, repair is on, and the model call budget is at least 2, and it happens only once.",
+      "source": "892452734cfb"
+    },
+    "code-repair.n95.text": {
+      "text": "The repair request puts the original output back as an assistant message and attaches only the specific reason for the failed item.",
+      "source": "1d3debe1c67a"
+    },
+    "code-repair.n102.text": {
+      "text": "accepted requires all three layers to have run and all to have passed; two out of three does not count.",
+      "source": "e2acc1f46d8d"
+    },
+    "code-complete.n78.text": {
+      "text": "The budget is checked before every model call. Going over the max_rounds declared in lesson.json stops the run, so the repair loop cannot go on forever.",
+      "source": "b252470959e5"
+    },
+    "code-complete.n75.text": {
+      "text": "Lesson code cannot switch models on its own; the request must use the currently configured model.",
+      "source": "208670c1d76c"
+    },
+    "code-complete.n84.text": {
+      "text": "Both the request and the response are published as events, so the conclusions in the report can be traced back to the raw data.",
+      "source": "a2a011d8dc41"
+    },
+    "code-complete.n89.text": {
+      "text": "The recorded request is handed to the model connection unchanged: with Bailian it is the HTTP request body, and through LiteLLM the SDK converts it further.",
+      "source": "350af5b94462"
+    },
+    "code-decision.title": {
+      "text": "Three-layer validation (JSON → schema → facts), at most one repair",
+      "source": "d4abe6c5fe92"
+    },
+    "code-decision.chosen": {
+      "text": "Parse with json.loads first, then validate the structure with the Pydantic TaskCard, and finally compare with the given FACTS. If any layer fails, the model may rewrite once with the specific error, and the result still goes through all three layers again.",
+      "source": "e16f710a9e51"
+    },
+    "code-decision.regex-extract.title": {
+      "text": "Extract fields from the answer with a regular expression",
+      "source": "ed874fcf6672"
+    },
+    "code-decision.regex-extract.why_not": {
+      "text": "Being able to extract a value does not mean the structure is valid. Extra fields, wrong types, and non-standard constants would all slip through.",
+      "source": "f74bf063be96"
+    },
+    "code-decision.schema-only.title": {
+      "text": "Schema validation only",
+      "source": "2bdb781b454a"
+    },
+    "code-decision.schema-only.why_not": {
+      "text": "The output in the wrong_fact scenario has a fully valid structure. Only comparing with the trusted facts reveals that prerequisite is wrong.",
+      "source": "223c761d98d2"
+    },
+    "code-decision.retry-until-pass.title": {
+      "text": "Keep retrying after a failure until it passes",
+      "source": "3de456bb390e"
+    },
+    "code-decision.retry-until-pass.why_not": {
+      "text": "Cost is uncontrolled, and it is easy to mistake \"happened to pass\" for reliable. This lesson is bound by the model call budget and repairs at most once.",
+      "source": "2b15348499d9"
+    },
+    "three-layers.title": {
+      "text": "Three layers: which layer stops which error",
+      "source": "00c41fcc1293"
+    },
+    "three-layers.hypothesis": {
+      "text": "A missing field is stopped at layer 2, the field schema. A wrong fact passes the first two layers and is stopped at layer 3, the business facts. Only passing all three layers counts as passing acceptance, and the failure reason is sent back to the model with the repair request.",
+      "source": "eda6f4fd19ae"
+    },
+    "three-layers.normal.label": {
+      "text": "Normal extraction",
+      "source": "e96f916ce2c5"
+    },
+    "three-layers.missing-field.label": {
+      "text": "Change only the user message: ask the draft to omit prerequisite",
+      "source": "f907d333e483"
+    },
+    "three-layers.wrong-fact.label": {
+      "text": "Change only the user message: ask the draft to write prerequisite as dependent-calls",
+      "source": "7d01474a9567"
+    },
+    "three-layers.raw-draft.text": {
+      "text": "The raw text of the first draft: until it passes the checks, it is just a string.",
+      "source": "36a06bb537e2"
+    },
+    "three-layers.json-layer.text": {
+      "text": "Layer 1 of the first draft's report, \"JSON 格式\" (\"JSON format\"): it only answers whether the text can be parsed.",
+      "source": "190e743f175c"
+    },
+    "three-layers.schema-layer.text": {
+      "text": "Layer 2 of the first draft's report, \"字段 Schema\" (\"field schema\"): a missing field fails here, and detail says which field is missing.",
+      "source": "1e6249ae5bcd"
+    },
+    "three-layers.fact-layer.text": {
+      "text": "Layer 3 of the first draft's report, \"业务事实\" (\"business facts\"): compared with the given trusted facts. A report whose upstream layer failed has no such item.",
+      "source": "2b8d691bd6d4"
+    },
+    "three-layers.repair-request.text": {
+      "text": "The last user message of the repair request: the previous version's failure reason is written into it.",
+      "source": "b76dd065e7a7"
+    },
+    "three-layers.repaired-draft.text": {
+      "text": "The raw text of the repaired draft: it has to go through the same three layers again.",
+      "source": "370f8f66bf81"
+    },
+    "three-layers.guide.0.text": {
+      "text": "Start with the first draft the model handed back this time. Until it passes the checks, it is just text waiting to be checked.",
+      "source": "44d82f0406de"
+    },
+    "three-layers.guide.1.text": {
+      "text": "This is the original text of message.content. Compare it with the preset: does the missing-field arm really lack prerequisite? Does the wrong-fact arm write it as dependent-calls? The model does not always do as told.",
+      "source": "d9f2caa11681"
+    },
+    "three-layers.guide.2.text": {
+      "text": "Layer 1 checks JSON syntax only. Being parseable does not mean the fields are complete.",
+      "source": "0cb495fa1126"
+    },
+    "three-layers.guide.3.text": {
+      "text": "Layer 2 checks fields, types, lengths, and extra fields. A missing field fails here.",
+      "source": "14ea91ff1b07"
+    },
+    "three-layers.guide.4.text": {
+      "text": "Only layer 3 compares business facts. If the first draft already failed at layer 2, its report has no third item: when an upstream layer fails, nothing is judged downstream.",
+      "source": "303f09f38801"
+    },
+    "three-layers.guide.5.text": {
+      "text": "When the first draft fails and repair is allowed, the runner writes the failure reason into a new user message and makes another request. The normal arm has no such step.",
+      "source": "f5f2adf3cdbd"
+    },
+    "three-layers.guide.6.text": {
+      "text": "The repaired draft also goes through the three layers; see the next report for the conclusion. To see what happens without repair, turn repair off in the parameters and rerun a failing preset with a real model.",
+      "source": "141ef5bc0931"
+    },
+    "three-layers.conclusion.proves.0": {
+      "text": "At which layer this first draft failed (or that all three layers passed), and whether the failure reason was sent back to the model with the repair request.",
+      "source": "a1f378e43db2"
+    },
+    "three-layers.conclusion.proves.1": {
+      "text": "When an upstream layer fails, the report has no downstream check items; checks that did not run were not written up as passed.",
+      "source": "e36ebc2df76a"
+    },
+    "three-layers.conclusion.does_not_prove.0": {
+      "text": "A preset only asks the model to make a mistake on purpose. A real model does not always comply, and whether a repair is triggered depends on the check of the actual response.",
+      "source": "0d2c95d0c38c"
+    },
+    "three-layers.conclusion.does_not_prove.1": {
+      "text": "The business fact layer only compares lesson_id, lesson_title, and prerequisite. It cannot prove the teaching quality of exercise.",
+      "source": "db7f66742052"
+    },
+    "three-layers.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the first draft and the repaired draft are generated by a deterministic script.",
+      "source": "7db87408ce01"
+    },
+    "inputs.scenario.label": {
+      "text": "Extraction scenario",
+      "source": "dbc6cd369176"
+    },
+    "inputs.scenario.options.normal.label": {
+      "text": "Normal extraction",
+      "source": "e96f916ce2c5"
+    },
+    "inputs.scenario.options.missing_field.label": {
+      "text": "Missing field on purpose",
+      "source": "7ced1c55c1cd"
+    },
+    "inputs.scenario.options.wrong_fact.label": {
+      "text": "Wrong fact on purpose",
+      "source": "b40e864103a3"
+    },
+    "inputs.repair.label": {
+      "text": "On failure, request again with the failure reason",
+      "source": "aa75c33b7f45"
+    },
+    "quiz.q1.prompt": {
+      "text": "Does a successful JSON parse mean the business facts are correct?",
+      "source": "d1ea32c44335"
+    },
+    "quiz.q1.a.text": {
+      "text": "Yes; if JSON can be parsed, both the fields and the facts are correct.",
+      "source": "02dcd9a127f1"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "JSON parsing checks syntax only: fields may be missing, types may be wrong, and facts may be wrong. The \"Wrong fact on purpose\" exercise is exactly a case of valid structure with wrong facts.",
+      "source": "5818bcebf008"
+    },
+    "quiz.q1.b.text": {
+      "text": "No; the field schema and the business facts have to be validated separately.",
+      "source": "e6ddd4bf54ca"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Correct. This lesson checks three layers in order: JSON format, field schema, and business facts. Each layer answers a different question.",
+      "source": "2a3c7bc6ab72"
+    },
+    "quiz.q1.explanation": {
+      "text": "JSON checks syntax only; field constraints and known facts need separate validation.",
+      "source": "a76be6f429f2"
+    },
+    "quiz.q2.prompt": {
+      "text": "When the model omits the required prerequisite, which layer is the first to clearly fail?",
+      "source": "2e761064d458"
+    },
+    "quiz.q2.a.text": {
+      "text": "The field schema layer.",
+      "source": "1613ad8b60bd"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. TaskCard declares prerequisite as a required field, so Pydantic reports a missing-field error at the field schema layer.",
+      "source": "388aa3b7e20a"
+    },
+    "quiz.q2.b.text": {
+      "text": "The business fact layer; a schema cannot detect a missing field.",
+      "source": "b8c2a7823d43"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "A missing field is exactly what a schema can detect. Also, when an upstream layer fails, this lesson does not run the business fact layer.",
+      "source": "740e53483220"
+    },
+    "quiz.q2.explanation": {
+      "text": "Pydantic's required-field validation stops it first. The run cannot skip ahead and pretend the business check passed.",
+      "source": "2d80eadb0ee3"
+    },
+    "quiz.q3.prompt": {
+      "text": "The repair budget is used up but the output is still wrong. What should happen?",
+      "source": "05205073b3bc"
+    },
+    "quiz.q3.a.text": {
+      "text": "Fill in the field with a default and report success.",
+      "source": "2797d0b13cad"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Filling in a default means fabricating data the model did not give, and the reported \"success\" does not match the actual output.",
+      "source": "be2bb723e428"
+    },
+    "quiz.q3.b.text": {
+      "text": "Fail explicitly, and do not make up default data to look successful.",
+      "source": "2d600a64f24f"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Correct. There is at most one repair; if the output is still invalid, report the failure honestly and keep the original output for debugging.",
+      "source": "a3d2116f2c7a"
+    },
+    "quiz.q3.explanation": {
+      "text": "One repair is a cap, not a guarantee of success. If the final output is invalid, it must stay a failure.",
+      "source": "2b05718ea0cf"
+    },
+    "quiz.preamble-layer.prompt": {
+      "text": "The model's answer starts with \"Sure, here is the lesson card:\" and the JSON object comes after. How does this lesson judge it?",
+      "source": "d52252d77754"
+    },
+    "quiz.preamble-layer.a.text": {
+      "text": "It fails at the JSON format layer: the whole text is not valid JSON",
+      "source": "def5aad477b6"
+    },
+    "quiz.preamble-layer.a.feedback": {
+      "text": "Correct. This lesson does not strip the intro for the model, so parsing the whole text fails.",
+      "source": "315adb53c16b"
+    },
+    "quiz.preamble-layer.b.text": {
+      "text": "It fails at the field schema layer: there is an extra sentence",
+      "source": "f8b8ec8a772e"
+    },
+    "quiz.preamble-layer.b.feedback": {
+      "text": "Not quite. It never gets to the schema layer; layer 1 already fails to parse.",
+      "source": "3b6962f248ef"
+    },
+    "quiz.preamble-layer.c.text": {
+      "text": "It passes: the program automatically extracts the part inside the braces",
+      "source": "342dca9a4348"
+    },
+    "quiz.preamble-layer.c.feedback": {
+      "text": "Not quite. This lesson does no extraction and honestly judges it a format error.",
+      "source": "3fba5b9396bd"
+    },
+    "quiz.preamble-layer.explanation": {
+      "text": "Layer 1 parses the full text of message.content directly. Extra text makes parsing fail.",
+      "source": "877eb22d61a7"
+    },
+    "quiz.budget-guard.prompt": {
+      "text": "The runner makes one more request only when \"the draft failed and repair is allowed\". Why does the platform still check the call budget before every model request?",
+      "source": "34adec335437"
+    },
+    "quiz.budget-guard.a.text": {
+      "text": "The runner's code might be wrong, and this platform check guarantees the number of calls never exceeds max_rounds",
+      "source": "d14778536e3c"
+    },
+    "quiz.budget-guard.a.feedback": {
+      "text": "Correct. The platform enforces the cap, so it does not depend on every lesson's code being correct.",
+      "source": "dcfb5e15ff5b"
+    },
+    "quiz.budget-guard.b.text": {
+      "text": "So the model knows how many chances remain",
+      "source": "6388fbc5278d"
+    },
+    "quiz.budget-guard.b.feedback": {
+      "text": "Not quite. The budget check happens in the program, and the model cannot see it.",
+      "source": "020b4a06f7ec"
+    },
+    "quiz.budget-guard.c.text": {
+      "text": "So it can automatically try once more when the repair fails",
+      "source": "0375d987a7b5"
+    },
+    "quiz.budget-guard.c.feedback": {
+      "text": "Not quite. The budget limits the number of calls; it does not add retries.",
+      "source": "9948bc9af5ab"
+    },
+    "quiz.budget-guard.explanation": {
+      "text": "The call budget is the platform's stop condition: no loop can request the model forever.",
+      "source": "d2b624b60e77"
+    },
+    "check-hunt.prompt": {
+      "text": "Run the \"Missing field on purpose\" exercise and find the request where the program sends the validation failure reason back to the model to ask for a repair.",
+      "source": "e3c3390ac778"
+    },
+    "check-hunt.explanation": {
+      "text": "This is the round 2 request: at the end of messages come the model's previous raw output and a user message giving the reason after \"上一版未通过\" (\"the previous version failed\"). The repair has only this one chance, and the repaired draft must go through all three layers again.",
+      "source": "ca0364e522d1"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I can say what each of the three layers checks: JSON format, field schema, and business facts.",
+      "source": "c5c795d2becf"
+    },
+    "check-points.item-2.text": {
+      "text": "I ran a repair case and saw the second request carry the reason the previous version failed.",
+      "source": "2f05e5ce6766"
+    },
+    "check-points.item-3.text": {
+      "text": "I can explain why a failure must be reported when the repair budget is used up and the output is still invalid.",
+      "source": "c98d4183efe9"
+    },
+    "code_notes.TaskCard.note": {
+      "text": "Pydantic model of the lesson card: four required fields, length limits, and extra=\"forbid\" rejects extra fields.",
+      "source": "213b3d1abf0d"
+    },
+    "code_notes.FACTS.note": {
+      "text": "Trusted course facts hard-coded in this lesson: the lesson ID, title, and prerequisite from {{lesson:task-contract}}, which layer 3 compares item by item.",
+      "source": "0a81212a6dd5"
+    },
+    "code_notes.prerequisite.note": {
+      "text": "Lesson card field: the prerequisite lesson. The trusted fact is fail-safely; when set to be wrong on purpose it becomes dependent-calls.",
+      "source": "24522f95c968"
+    },
+    "code_notes.message.content.note": {
+      "text": "The text the model wrote in the response. This lesson treats it as raw input to be checked, and it may not be JSON at all.",
+      "source": "4caa58e7dce0"
+    },
+    "code_notes.parse_constant.note": {
+      "text": "A json.loads parameter called when it meets a non-standard constant such as NaN or Infinity; this lesson makes it raise an error.",
+      "source": "8cfaa7a3d6e9"
+    },
+    "code_notes.max_rounds.note": {
+      "text": "The cap on model requests declared in lesson.json, 2 in this lesson; the platform sets the call budget from it.",
+      "source": "b3dacd1f7d37"
+    }
+  }
+}

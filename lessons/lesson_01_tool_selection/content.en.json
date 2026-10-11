@@ -1,0 +1,918 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "TOOL CALLING / EXECUTE",
+      "source": "b1f57126154c"
+    },
+    "hero.headline": {
+      "text": "The model proposes a call,",
+      "source": "5cbe94ef135f"
+    },
+    "hero.highlight": {
+      "text": "Python runs it, and the result goes back to the model.",
+      "source": "bb289c3530ba"
+    },
+    "hero.takeaway": {
+      "text": "Run the tool call proposal against an allowlist, write the tool result into the message history under the same call id, then request the model again. That is the smallest agent loop.",
+      "source": "70aa58387c38"
+    },
+    "concepts.01-allowlist.label": {
+      "text": "01 / ALLOWLIST",
+      "source": "9195178fa48d"
+    },
+    "concepts.01-allowlist.title": {
+      "text": "Dispatch by name",
+      "source": "874ed7dbdcdb"
+    },
+    "concepts.01-allowlist.description": {
+      "text": "A tool name the model proposes is looked up only in the allowlist: AVAILABLE_TOOLS maps tool names to Python functions, and a name that is not registered is not executed.",
+      "source": "d3535188f3d6"
+    },
+    "concepts.02-result.label": {
+      "text": "02 / RESULT",
+      "source": "20bfaa0d9d51"
+    },
+    "concepts.02-result.title": {
+      "text": "Pair the result",
+      "source": "84a6f870ee59"
+    },
+    "concepts.02-result.description": {
+      "text": "Running the function gives a tool result. It goes into a message with role tool, and tool_call_id is set to the id of the tool call proposal, so the two sides match up.",
+      "source": "20632026ec8d"
+    },
+    "concepts.03-loop.label": {
+      "text": "03 / LOOP",
+      "source": "a352044f5a45"
+    },
+    "concepts.03-loop.title": {
+      "text": "Request again",
+      "source": "26f6037ca944"
+    },
+    "concepts.03-loop.description": {
+      "text": "Send another request that carries the tool result. The model answers from it, or proposes another call. Request, execute, send back, repeat: that is the agent loop.",
+      "source": "0fa0d7dc0e5a"
+    },
+    "concepts.04-harness.label": {
+      "text": "04 / HARNESS",
+      "source": "4e737082e69f"
+    },
+    "concepts.04-harness.title": {
+      "text": "The program around the model",
+      "source": "3e60c5084c9c"
+    },
+    "concepts.04-harness.description": {
+      "text": "The program that builds requests, runs tools, and maintains the message history and the round limit is called the harness. This lesson's runner is its smallest version.",
+      "source": "c37bb06e04be"
+    },
+    "section-1.title": {
+      "text": "From tool call proposal to execution",
+      "source": "b580c8d63b44"
+    },
+    "section-1.paragraphs.0": {
+      "text": "{{lesson:tool-proposals}} stopped at the tool call proposal: the model writes a tool name and JSON-string arguments in tool_calls, and nothing is executed. Without a program to take over, you would have to do it yourself: notice that the model wants 19 plus 23, work out 42, paste 42 back into the conversation, and let the model continue. After a few rounds of this you are just a messenger. This lesson replaces the messenger with a program: Python actually runs the call and hands the result back to the model. The tools and tool definitions are unchanged: still add_numbers and get_current_time.",
+      "source": "a8f00549e302"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Execution is handled by execute_tool in course/runner.py, in three steps: take the tool name from function.name; parse arguments into a dict with json.loads and confirm it is an arguments object; look up the function by name in AVAILABLE_TOOLS and call it only if it is found.",
+      "source": "53e4c53a4867"
+    },
+    "section-1.paragraphs.2": {
+      "text": "AVAILABLE_TOOLS is this lesson's allowlist: a dict with tool names on the left and the matching Python functions on the right. What can run is decided by this dict, not by the name the model writes. If the model proposes a name that is not in it, such as delete_files, the runner does not execute anything and returns a result with ok set to false.",
+      "source": "9341998bd608"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The allowlist only answers \"may this name run?\". It does not judge whether the arguments are reasonable. 19 plus 23 and a trillion plus a trillion look the same to it; whether and how arguments are checked is up to each tool function. This lesson's add_numbers rejects arguments that are not numbers or not finite numbers, and {{lesson:fail-safely}} covers those checks in full.",
+      "source": "4987e2148497"
+    },
+    "section-2.title": {
+      "text": "Send the tool result back as a tool message",
+      "source": "9cb6b800e64b"
+    },
+    "section-2.paragraphs.0": {
+      "text": "After the function returns, execute_tool wraps the return value as a tool result: {\"ok\": true, \"result\": 42} on success; when an argument or value is wrong, ok is false and the result carries error_type and error. run_agent first appends the assistant message that holds tool_calls to the message history, then appends one message with role tool for each call: its content is the JSON text of that result, and tool_call_id equals the id of the tool call proposal.",
+      "source": "c14deb07c42b"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Why hand errors back to the model instead of letting the program crash? Given an error like \"参数 a 必须是数字。\" (\"argument a must be a number\"), the model can fix the argument and propose the call again, or tell the user it cannot do it. If the program crashes, the model learns nothing, the run record holds only an exception, and the user sees just \"something went wrong\". So ok set to false is also a kind of tool result; its content is the reason for the failure.",
+      "source": "cd6db4162a97"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The call id is the only basis for pairing. One round can contain two calls, even two calls to the same tool, so matching by tool name or by order would pair them wrongly. Providers check this too: if a tool message's tool_call_id matches no earlier call, or a call has no matching tool message, the request is usually rejected.",
+      "source": "d9cf5def8c09"
+    },
+    "section-2.paragraphs.3": {
+      "text": "On the lab bench you can trace the whole line: the id of tool_calls[0] in the round 1 response, the id of the tool_call event, the tool_call_id of the tool_result, and the tool_call_id of the tool message in the round 2 request should all be the same value.",
+      "source": "afa771965b61"
+    },
+    "deep-dive-dispatch.title": {
+      "text": "Why not look up an arbitrary function by name",
+      "source": "2b501bb1e10d"
+    },
+    "deep-dive-dispatch.summary": {
+      "text": "Looking up functions dynamically by name seems convenient, but it hands the decision of what can run over to the model.",
+      "source": "4d7f948f8651"
+    },
+    "deep-dive-dispatch.paragraphs.0": {
+      "text": "Python has many ways to find a function by name, such as `globals()[name]` and `getattr(module, name)`. Any of them can run add_numbers, and any of them can also run a name you never thought of. One step further is passing text written by the model straight to `eval`: the calculator example in Claude Cookbooks uses `eval` to compute expressions the model wrote, after filtering out everything except digits and operators, and notes that this is only a demonstration and real code should use something safer. The names and arguments the model writes come from text it has read, and the user's question or content on a web page can steer it into writing dangerous things. {{lesson:prompt-injection}} covers this in detail.",
+      "source": "f111278b86ec"
+    },
+    "deep-dive-dispatch.paragraphs.1": {
+      "text": "For example, if the runner looked up functions with `getattr(os, name)`, the model could propose `remove` with a path as the argument and delete files on your computer. An explicit dict pins the scope to the two registered functions: a name that is not in the dict is just a string with no match.",
+      "source": "f7f4f675bb9b"
+    },
+    "deep-dive-dispatch.paragraphs.2": {
+      "text": "What to do when the lookup fails also matters. Some tutorials write `handlers[name]` directly, so a missing name raises KeyError and the whole run crashes. This lesson's execute_tool looks up with get; when nothing is found it returns a result with ok set to false to the model, which can still switch to another tool or tell the user honestly that it cannot do the task.",
+      "source": "8a2516d8e2d9"
+    },
+    "deep-dive-dispatch.paragraphs.3": {
+      "text": "Adding a tool means changing two places: add a tool definition to TOOLS so the model knows it exists, and register the function in AVAILABLE_TOOLS so the program can run it. Change only the first, and the model proposes the call but the program refuses to run it; change only the second, and the model never knows the tool exists. The names in the two places must match.",
+      "source": "6a1f8bad4e5e"
+    },
+    "deep-dive-dispatch.paragraphs.4": {
+      "text": "Claude Code turns this into configurable rules. According to its official docs, permission rules come in three kinds, allow, ask, and deny, matched in the order deny, ask, allow, and the first match wins. Rules can also look at arguments: `Bash(npm run *)` matches only commands that start with `npm run`. A deny rule with just a tool name, such as `Bash`, removes that tool from the list the model can see, which is like deleting the definition from TOOLS; a deny rule with an argument pattern, such as `Bash(rm *)`, leaves the tool in the list and blocks a call only when the model proposes a matching one, which is like checking the allowlist before execution. This lesson's allowlist looks at names only, not arguments. The docs also warn that command rules match the command text the model wrote, so the same program written a different way may slip through. They are not a security boundary; to really block something you need isolation at the operating system level. Follow the official docs for the exact rule syntax.",
+      "source": "772b7183c745"
+    },
+    "predict-request-count.prompt": {
+      "text": "Run it once first. In the experiment \"Addition and time: one full loop\", before you run \"Add two numbers\", guess: how many model requests (request events) will this run send?",
+      "source": "4a61512d7234"
+    },
+    "mq-call-id-pairing.call-id-pairing.prompt": {
+      "text": "How does the runner let the model know which call a result belongs to?",
+      "source": "0e1ed161178f"
+    },
+    "mq-call-id-pairing.call-id-pairing.a.text": {
+      "text": "In the message with role tool, tool_call_id equals the id of the tool call proposal",
+      "source": "7b92a29f5b07"
+    },
+    "mq-call-id-pairing.call-id-pairing.a.feedback": {
+      "text": "Correct. When one round has several calls, the id pairs them one to one.",
+      "source": "8703baf75d45"
+    },
+    "mq-call-id-pairing.call-id-pairing.b.text": {
+      "text": "Same tool name means they match",
+      "source": "a0cf6bf83fe7"
+    },
+    "mq-call-id-pairing.call-id-pairing.b.feedback": {
+      "text": "Not enough. One round can call the same tool twice, and matching by name would pair them wrongly.",
+      "source": "bac177d43d0d"
+    },
+    "mq-call-id-pairing.call-id-pairing.c.text": {
+      "text": "By the order in which results come back",
+      "source": "176a62d93c05"
+    },
+    "mq-call-id-pairing.call-id-pairing.c.feedback": {
+      "text": "Not quite. Order is not part of the protocol; the pairing key is tool_call_id.",
+      "source": "e111dee3e197"
+    },
+    "mq-call-id-pairing.call-id-pairing.explanation": {
+      "text": "tool_call_id is the only link between a call and its result.",
+      "source": "1eb71325323e"
+    },
+    "section-3.title": {
+      "text": "The second request: the first time the model sees the result",
+      "source": "7af5bc6f473f"
+    },
+    "section-3.paragraphs.0": {
+      "text": "After the tool runs, run_agent goes back to the top of the loop and sends the full messages again. The second request has two more messages than the first: the assistant message with tool_calls, and the tool result with role tool. The model does not see 42 until this request.",
+      "source": "2654701bdb06"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Two things are easy to mix up here. The tool_result event is the execution record on the Python side, written for you to read; the message with role tool goes into the message history and is sent to the model. The content is the same but the purpose differs: the first proves the program ran the call, the second lets the model know the result. With only the first and not the second, the model has received nothing.",
+      "source": "7247dba960dd"
+    },
+    "section-3.paragraphs.2": {
+      "text": "After seeing the result the model usually answers directly. The response then has no tool_calls, finish_reason is no longer tool_calls, and the loop ends. It may also propose another call, and then you execute and send back again. Everything the model had in hand when it gave this answer is in the round 2 request: system, your question, the call it proposed, and the tool result, four messages in all. To find out why it answered as it did, look there.",
+      "source": "57680960a8ca"
+    },
+    "section-3.paragraphs.3": {
+      "text": "The final answer is still written by the model; it is not the tool result copied verbatim. It will most likely report 42 faithfully, but it may also get it wrong, leave something out, or add content that is not in the tool result. So the check has to be concrete: can the number or time in the answer be found in this run's tool_result?",
+      "source": "47d6b29f7d21"
+    },
+    "misconception-result-means-correct.claim": {
+      "text": "Once there is a tool result, the model's final answer must be correct.",
+      "source": "8bf04ad300eb"
+    },
+    "misconception-result-means-correct.correction": {
+      "text": "A tool result only says what Python did in this step and what it got. The final answer is something the model wrote anew after reading the result; it may restate it wrongly, drop the time zone, or add claims the result does not contain. To judge the answer, compare it item by item against the tool_result; when the tool failed (ok is false), check even more closely whether the answer says honestly that it failed.",
+      "source": "53294d8b1d44"
+    },
+    "section-4.title": {
+      "text": "The smallest agent loop: four steps and a round limit",
+      "source": "74d385cb66d7"
+    },
+    "section-4.paragraphs.0": {
+      "text": "run_agent has only four steps: 1. Build the message history from the system prompt and the question; 2. Request the model with the message history and tools; 3. If the response has no tool_calls, return content as the answer; 4. Otherwise run each call, write the tool results back to the message history, and go back to step 2. This is the smallest form of the agent loop.",
+      "source": "20c739c71e91"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Why a loop, and not a fixed \"request, execute, request again\"? Because after seeing a result the model may need to do one more thing. Ask \"what time is it now, and what time will it be in 45 minutes?\" and the model must look up the time first, and only after seeing the result does it know what to add to; {{lesson:dependent-calls}} is exactly this case. How many steps are needed is not known in advance. The model decides each round, and the program just follows along until the model gives an answer.",
+      "source": "49b878e112df"
+    },
+    "section-4.paragraphs.2": {
+      "text": "But the model may also keep proposing calls and never answer. So steps 2 to 4 repeat at most max_tool_rounds times, which is 3 in this lesson. If the rounds run out with no answer, an error is raised and the run ends with error; a half-finished result is never passed off as an answer. The platform also limits the number of model calls with max_rounds in lesson.json. Both limits guarantee that the loop stops.",
+      "source": "a265264c6bb5"
+    },
+    "section-4.paragraphs.3": {
+      "text": "Rounds are counted like this: one round is one model request plus running all the calls it proposed. Two calls proposed in the same round still count as one round. The timeline also groups by round, putting that round's request, response, tool_call, and tool_result together.",
+      "source": "c5129d03c95d"
+    },
+    "deep-dive-loop-variants.title": {
+      "text": "The same loop in other tutorials",
+      "source": "1e059100bcbd"
+    },
+    "deep-dive-loop-variants.summary": {
+      "text": "The smallest agent loop in several tutorials is almost identical: request, check for calls, execute, write back. They differ in how they stop and how they look up tools.",
+      "source": "355360144221"
+    },
+    "deep-dive-loop-variants.paragraphs.0": {
+      "text": "Learn Claude Code opens by writing this loop as a single `while True`: each round it requests the model, exits if the response has no tool call, and otherwise executes, writes the result back, and continues. Its opening states the problem bluntly: without a loop, you are the middleman who takes the command, runs it, and pastes the output back into the chat box.",
+      "source": "bd1c1c30a038"
+    },
+    "deep-dive-loop-variants.paragraphs.1": {
+      "text": "Chapter 1 of *Understanding AI Agents in Depth* (深入理解 AI Agent) writes the same structure in pseudocode with one extra step: the harness validates the call before executing it. The Hugging Face course describes it as a \"thought, action, observation\" cycle, where the tool result is called an \"observation\" and is appended to the end of the prompt for the next decision.",
+      "source": "6efc1c740284"
+    },
+    "deep-dive-loop-variants.paragraphs.2": {
+      "text": "This lesson's run_agent has the same skeleton, with two differences. First, it uses a for loop with a round limit instead of `while True`, so the loop is sure to stop. Second, it looks up tools in the dict with get and hands the error back to the model when nothing is found, instead of raising an exception. The interface format also differs: Learn Claude Code uses Anthropic's format, while this lesson uses the OpenAI-compatible API format. The field-name mapping is in the deep-dive block of {{lesson:tool-proposals}}.",
+      "source": "0425b27cd7c4"
+    },
+    "deep-dive-loop-variants.paragraphs.3": {
+      "text": "Microsoft's course lists three things to prepare for tool calling: a model that supports tool calls, a schema describing each function, and the implementation code of each function. In its example the program runs the function and then sends a second request to get the final answer. It stresses that what the first request returns is a call, not the final answer to the question.",
+      "source": "a871e82e842d"
+    },
+    "mq-second-request.second-request-diff.prompt": {
+      "text": "When you run \"Add two numbers\", which two messages does the second request have that the first does not?",
+      "source": "920e12e130ac"
+    },
+    "mq-second-request.second-request-diff.a.text": {
+      "text": "The assistant message with tool_calls, and the tool result with role tool",
+      "source": "9e5e94216231"
+    },
+    "mq-second-request.second-request-diff.a.feedback": {
+      "text": "Correct. The first is the model's tool call proposal, the second is Python's execution result, and the two are paired by call id.",
+      "source": "63af1a052f7f"
+    },
+    "mq-second-request.second-request-diff.b.text": {
+      "text": "Two new user messages",
+      "source": "3b7f4615a96a"
+    },
+    "mq-second-request.second-request-diff.b.feedback": {
+      "text": "Not quite. The user did not speak again; the new messages come from the model and the runner.",
+      "source": "6fe3a4854b47"
+    },
+    "mq-second-request.second-request-diff.c.text": {
+      "text": "A system message and the source code of add_numbers",
+      "source": "d1a48085db41"
+    },
+    "mq-second-request.second-request-diff.c.feedback": {
+      "text": "Not quite. There is only one system message, at the start, and function source code is never sent to the model.",
+      "source": "05578ee699e9"
+    },
+    "mq-second-request.second-request-diff.explanation": {
+      "text": "The runner writes the tool call proposal and the tool result back into the message history in turn, so the next request can carry them.",
+      "source": "0bb46d6a528c"
+    },
+    "section-5.title": {
+      "text": "The harness and replay",
+      "source": "961b5e6f5ca5"
+    },
+    "section-5.paragraphs.0": {
+      "text": "The model only proposes calls and writes answers. Building requests, executing tools, maintaining the message history, and controlling the round count are all the harness's job. A simple way to remember the split: the model decides what it wants to do; the harness decides whether it may, how it is done, and what record is left afterward. This lesson's runner is the smallest version of a harness.",
+      "source": "5a6d8aed7f5c"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The harness weighs more than it looks. With the same model but a different harness, what it can do changes: which tools are registered decides what it can do, how the message history is carried decides what it can see, and the round limit decides how many steps it can take at most. Most later lessons add things to the harness, such as error handling, context management, plans, and checks, while the model itself never changes.",
+      "source": "a8e9adfab8cf"
+    },
+    "section-5.paragraphs.2": {
+      "text": "When run from the web page, the complete and execute that run_agent uses are passed in by the platform: requests and responses are recorded as request and response events, and execution is recorded as tool_call and tool_result events. The loop itself never touches events; all recording happens at the boundary of these two functions.",
+      "source": "65a81e206bad"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Replay only moves between these recorded events. It does not request the model again and does not execute tools again. The time you see in replay is the time that get_current_time read back then; replay it an hour later and you still see that same time.",
+      "source": "82d01e440dee"
+    },
+    "walkthrough.title": {
+      "text": "One call, from proposal to answer",
+      "source": "fae45decb324"
+    },
+    "walkthrough.description": {
+      "text": "Using \"19 plus 23\" as the example, four steps show what the model, the runner, and Python each do. What follows is an illustration, not this run's record.",
+      "source": "2e30ee465a2b"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Propose a call",
+      "source": "265f0c8c0465"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model → runner",
+      "source": "8e0087ca8b5d"
+    },
+    "walkthrough.step-1.title": {
+      "text": "The response holds only a tool call proposal",
+      "source": "f2fa7d0a1b24"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The model writes the tool name and arguments in tool_calls. The id shown here only illustrates the pairing; the real value comes from the model's response.",
+      "source": "b42bbed57607"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "Compare the round 1 response with the tool_call event, and check the tool name, arguments, and call id.",
+      "source": "e4360ceba9e5"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Check the allowlist",
+      "source": "0fd359a2d049"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Look up the function in AVAILABLE_TOOLS by name",
+      "source": "2576326ab7b1"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Parse arguments into a dict first, then look up by name. If nothing is found, nothing is executed, and a result with ok set to false is returned right away.",
+      "source": "c5204f541d30"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "The source is execute_tool in course/runner.py.",
+      "source": "b1ebf5ab173f"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Execute",
+      "source": "32c8d373afe0"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Python",
+      "source": "18885f27b5af"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Run the registered function on this machine",
+      "source": "a0c6f42615ec"
+    },
+    "walkthrough.step-3.body": {
+      "text": "After the function returns, the runner wraps the return value as a tool result.",
+      "source": "ab582b587dfa"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "Check ok and result in the tool_result event; the tool call proposal alone cannot establish that it was executed.",
+      "source": "872da74e35a6"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Send back",
+      "source": "c7a6b89f51dc"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Runner → model",
+      "source": "510a6bc1efb1"
+    },
+    "walkthrough.step-4.title": {
+      "text": "The tool result enters the next request",
+      "source": "dec340a21705"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The message with role tool is paired with the original call by tool_call_id and enters the round 2 request along with messages. The model writes its answer from it.",
+      "source": "509da7e8bb62"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "Find the tool message in the round 2 request, then check whether the final answer used this result.",
+      "source": "579e43a5df92"
+    },
+    "mq-replay.replay-reruns.prompt": {
+      "text": "When you replay a run of \"Look up local time\", does get_current_time execute again?",
+      "source": "3e0d3a79a3a7"
+    },
+    "mq-replay.replay-reruns.a.text": {
+      "text": "No: replay only reads recorded events, so you see the time it read back then",
+      "source": "3d96b91c0bd5"
+    },
+    "mq-replay.replay-reruns.a.feedback": {
+      "text": "Correct. Replay does not request the model and does not execute tools.",
+      "source": "6d12d16c4b91"
+    },
+    "mq-replay.replay-reruns.b.text": {
+      "text": "Yes: replay runs the whole loop again",
+      "source": "affe0b291f52"
+    },
+    "mq-replay.replay-reruns.b.feedback": {
+      "text": "Not quite. Running it again is a new run, and you have to start it explicitly on the lab bench.",
+      "source": "de105fabce10"
+    },
+    "mq-replay.replay-reruns.c.text": {
+      "text": "It only requests the model again and does not execute tools",
+      "source": "6aa490c7440b"
+    },
+    "mq-replay.replay-reruns.c.feedback": {
+      "text": "Not quite. Replay neither requests the model nor executes tools.",
+      "source": "ceb4e9c807c2"
+    },
+    "mq-replay.replay-reruns.explanation": {
+      "text": "Replay only moves a cursor; all the data comes from that earlier run.",
+      "source": "112233ca8ad0"
+    },
+    "section-6.title": {
+      "text": "What this loop still lacks",
+      "source": "402f5c6d8ae8"
+    },
+    "section-6.paragraphs.0": {
+      "text": "At this point a minimal agent is complete: the model proposes a call, the program runs it against the allowlist, the tool result is written back to the message history, and the model is requested again until it answers or the rounds run out. It can handle \"19 plus 23\" and read this machine's time, but it is far from reliable: it handles none of the following.",
+      "source": "7e871f8bf998"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Tool functions run directly in the backend process with no isolation, so this lesson registers only two small functions that change nothing; running operations with side effects, or code the model generated, requires an isolation plan first. Errors get only the most basic wrapping: a wrong name or bad arguments return ok set to false, but whether the model fixes it after seeing the error, and how many times, is not constrained. And no program checks whether the final answer is right.",
+      "source": "ba88c12677f9"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The next lessons fill these in one by one: {{lesson:dependent-calls}} lets one call's result become the next call's argument; {{lesson:fail-safely}} handles failure systematically; {{lesson:task-contract}} first writes down what counts as done, then has the program check it. Each lesson adds to this loop, and the loop's own four steps stay the same. When a new requirement comes up, ask first: is this something the model should decide, or something the harness should manage?",
+      "source": "0969611c0230"
+    },
+    "references.lcc-agent-loop.title": {
+      "text": "The agent loop: one loop is enough (Learn Claude Code)",
+      "source": "3914493a94a0"
+    },
+    "references.lcc-tool-use.title": {
+      "text": "Tool dispatch: adding a tool adds one line (Learn Claude Code)",
+      "source": "dec5e6713544"
+    },
+    "references.cookbook-calculator.title": {
+      "text": "The calculator tool: execute the call and hand the result back to the model (Claude Cookbooks)",
+      "source": "34679935bd17"
+    },
+    "references.hf-observations.title": {
+      "text": "Observations: append the result of an action back to the prompt (Hugging Face Agents Course)",
+      "source": "af76eb2aaa18"
+    },
+    "references.ms-tool-use.title": {
+      "text": "The tool use design pattern: execute the function and make a second request (Microsoft AI Agents for Beginners)",
+      "source": "ecb238bef7dc"
+    },
+    "references.ai-agent-book-ch1.title": {
+      "text": "Getting started with AI agents: model, harness, and the minimal loop — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "a9e1718d796b"
+    },
+    "references.cc-permissions.title": {
+      "text": "Configure permissions: allow, ask, and deny rules and their matching order (Claude Code documentation)",
+      "source": "f55a7505592a"
+    },
+    "code-dispatch.n16.text": {
+      "text": "Execute one tool call proposal. The parameters are the tool_call from the model and this lesson's dict of registered tools.",
+      "source": "f06d61a6b9f2"
+    },
+    "code-dispatch.n21.text": {
+      "text": "arguments is a JSON string, so parse it first; an empty string counts as no arguments.",
+      "source": "ed049359701d"
+    },
+    "code-dispatch.n25.text": {
+      "text": "Allowlist lookup: get the function by name only from the registered dict. It never searches for an arbitrary Python function by name.",
+      "source": "a59f2d910140"
+    },
+    "code-dispatch.n28.text": {
+      "text": "The actual execution happens on this line. Missing or extra arguments raise TypeError here.",
+      "source": "b497a119bc75"
+    },
+    "code-dispatch.n31.text": {
+      "text": "JSON parse errors, TypeError, and ValueError do not crash the program; they are wrapped as a result with ok set to false and handed back to the model. Other exceptions propagate as usual. {{lesson:fail-safely}} covers these errors.",
+      "source": "7b63916a6902"
+    },
+    "code-native-loop.n34.text": {
+      "text": "complete and execute are passed in by the caller. When run from the web page, these two functions are what record the request, response, tool_call, and tool_result events; the loop itself never touches events or printing.",
+      "source": "723681a1de85"
+    },
+    "code-native-loop.n41.text": {
+      "text": "Step 1: the message history is this list. system holds this lesson's rules, user holds your question, and every message appended in later rounds goes in here.",
+      "source": "aa4510505dc1"
+    },
+    "code-native-loop.n45.text": {
+      "text": "The round limit is written on the for loop: at most max_tool_rounds rounds, which is 3 in this lesson.",
+      "source": "ae79e2fa9f86"
+    },
+    "code-native-loop.n47.text": {
+      "text": "Step 2: every round sends the full messages together with tools. The model does not keep the previous round's content.",
+      "source": "c33a04cf5d42"
+    },
+    "code-native-loop.n51.text": {
+      "text": "Step 3: content is treated as the final answer only when the response has no tool_calls; if it has tool_calls, this round is just a tool call proposal.",
+      "source": "96c3f70f241a"
+    },
+    "code-native-loop.n55.text": {
+      "text": "Step 4 first appends the assistant message with tool_calls, then the tool messages. Most providers require every tool message to match some earlier call.",
+      "source": "bdbdedf32a5f"
+    },
+    "code-native-loop.n57.text": {
+      "text": "On the web page, execute is the platform's execute_proposal: it records the tool_call event, calls execute_tool, and finally records the tool_result event.",
+      "source": "2112154dd4f9"
+    },
+    "code-native-loop.n58.text": {
+      "text": "Write the tool result back into the message history: tool_call_id is taken unchanged from the tool call proposal's id, and content is the JSON text of the result.",
+      "source": "979b5e705e77"
+    },
+    "code-native-loop.n61.text": {
+      "text": "If the rounds run out with no answer, raise an error and do not return a half-finished result; the run ends with error and you can see the real reason.",
+      "source": "89b26709d851"
+    },
+    "code-tool-impl.n46.text": {
+      "text": "Exclude bool first: in Python True is a subclass of int, so without this True + 1 would be computed as 2.",
+      "source": "80469fdd00e6"
+    },
+    "code-tool-impl.n50.text": {
+      "text": "json.loads accepts NaN and Infinity by default, so arguments from the model still have to be checked for being finite numbers. The sum needs a check too: 1e308 + 1e308 overflows to infinity, which standard JSON cannot represent.",
+      "source": "a8929c4137ae"
+    },
+    "code-tool-impl.n52.text": {
+      "text": "A huge integer makes isfinite raise OverflowError, which execute_tool does not catch. Here it is also treated as an unacceptable argument, and the code below uniformly raises ValueError.",
+      "source": "4ce29d92094a"
+    },
+    "code-tool-impl.n57.text": {
+      "text": "The time comes from the machine running Python. The model cannot know \"now\" on its own and can only read the tool result.",
+      "source": "693c3e54b9fd"
+    },
+    "code-tool-impl.n66.text": {
+      "text": "The allowlist: a dict from tool names to Python functions. run_agent hands it only to execute_tool, so any other name the model proposes will not be executed.",
+      "source": "3ad8e253d09a"
+    },
+    "code-decision.title": {
+      "text": "Run only tools on the allowlist, and always hand the result back to the model",
+      "source": "01480799d437"
+    },
+    "code-decision.chosen": {
+      "text": "The tool_calls the model returns are only proposals. After parsing the arguments, execute_tool looks up a function by name only in AVAILABLE_TOOLS and runs it, wraps the outcome as a result with ok set to true or an error with ok set to false, and hands it back to the model through a message with role tool.",
+      "source": "fc136b401a99"
+    },
+    "code-decision.model-answers-directly.title": {
+      "text": "No tools; let the model answer directly",
+      "source": "8817b2d63aba"
+    },
+    "code-decision.model-answers-directly.why_not": {
+      "text": "Arithmetic and the current time are facts the model cannot give reliably. Without a tool result, the answer has nothing to check against.",
+      "source": "9570233ed47c"
+    },
+    "code-decision.dynamic-dispatch.title": {
+      "text": "Dynamically look up and call any Python function by the name the model gives",
+      "source": "5d9cce9c6a82"
+    },
+    "code-decision.dynamic-dispatch.why_not": {
+      "text": "A name generated by the model cannot be trusted; it may point to an unregistered or even dangerous function. An explicit dict limits what can run to the two functions registered in this lesson.",
+      "source": "ff9fea1336a5"
+    },
+    "code-decision.raise-on-error.title": {
+      "text": "Let the program crash when a tool fails",
+      "source": "26baed1c71b4"
+    },
+    "code-decision.raise-on-error.why_not": {
+      "text": "The model gets no reason for the failure, so it cannot retry with other arguments or explain to the user, and the run record holds only an exception.",
+      "source": "bc1421d0eeb8"
+    },
+    "one-loop.title": {
+      "text": "Addition and time: one full loop",
+      "source": "baccbedab801"
+    },
+    "one-loop.hypothesis": {
+      "text": "After the model proposes a call, Python runs it against the allowlist, and the tool result enters the second request as a message with role tool; having seen the result, the model gives an answer. One addition takes two model requests and one tool result.",
+      "source": "49b7fd60b7a7"
+    },
+    "one-loop.sum.label": {
+      "text": "Add two numbers",
+      "source": "7e2c9a15ce43"
+    },
+    "one-loop.time.label": {
+      "text": "Look up local time",
+      "source": "1e3c1591d42b"
+    },
+    "one-loop.proposal.text": {
+      "text": "tool_calls[0] of the round 1 response: the call id, tool name, and arguments. This is the tool call proposal to be executed.",
+      "source": "2becebc163f4"
+    },
+    "one-loop.started.text": {
+      "text": "The id of the tool_call event: the runner records the call it is about to execute first, and the id equals the tool call proposal's.",
+      "source": "0adf35e6d67c"
+    },
+    "one-loop.executed.text": {
+      "text": "The result of tool_result: the ok and return value after Python ran it.",
+      "source": "c1bff8b52678"
+    },
+    "one-loop.returned.text": {
+      "text": "messages[3] of the round 2 request: the message with role tool, whose tool_call_id equals the call id.",
+      "source": "fe1d26b2c07a"
+    },
+    "one-loop.finish.text": {
+      "text": "finish_reason of the round 2 response: when the model answers directly after seeing the result, it is no longer tool_calls.",
+      "source": "e61fb9d91065"
+    },
+    "one-loop.final-answer.text": {
+      "text": "The content of answer: the final answer, which should trace back to the tool result above.",
+      "source": "90f525a64aa8"
+    },
+    "one-loop.guide.0.text": {
+      "text": "What follows covers only the run you just did. First see what the model proposed in round 1.",
+      "source": "d617d6f773c8"
+    },
+    "one-loop.guide.1.text": {
+      "text": "Note the id here. The later execution and return both have to match it.",
+      "source": "dc8a8192a15d"
+    },
+    "one-loop.guide.2.text": {
+      "text": "The runner first records the call it is about to execute, with the same id as the proposal. Whether the tool is on the allowlist shows up in the ok of the next step, tool_result.",
+      "source": "23a343f47129"
+    },
+    "one-loop.guide.3.text": {
+      "text": "This is the result after Python really ran it. Look at ok first: only true shows the function returned successfully.",
+      "source": "ca575945073f"
+    },
+    "one-loop.guide.4.text": {
+      "text": "The tool result is wrapped as a message with role tool, with the same tool_call_id as the id above, and enters the round 2 request along with the message history.",
+      "source": "0e7684247b62"
+    },
+    "one-loop.guide.5.text": {
+      "text": "After seeing the result the model proposes no more calls, and the loop ends here.",
+      "source": "5d1eead58007"
+    },
+    "one-loop.guide.6.text": {
+      "text": "Finally compare the answer with the tool result: the number or time in the answer should come from this tool_result, not from the model's own guess.",
+      "source": "666f2b8729d3"
+    },
+    "one-loop.conclusion.proves.0": {
+      "text": "Whether Python executed the call the model proposed in this run, what the result was, and whether the result came back into the next request through tool_call_id.",
+      "source": "cc0f1519c82f"
+    },
+    "one-loop.conclusion.proves.1": {
+      "text": "The final answer was written after the model saw the tool result, so you can check the numbers or time it used one by one.",
+      "source": "e1e67e37424a"
+    },
+    "one-loop.conclusion.does_not_prove.0": {
+      "text": "One run is a single sample. It cannot show that the model will propose the right call for every similar question.",
+      "source": "b8416fd8c23c"
+    },
+    "one-loop.conclusion.does_not_prove.1": {
+      "text": "The time tool reads the clock of the machine running Python. It only shows the time that machine reports, not that it is correct for where the user is.",
+      "source": "d4a0d7dd930e"
+    },
+    "one-loop.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the model responses come from a deterministic script. They can only verify the runner's execution and send-back path, and say nothing about a real model's judgment.",
+      "source": "eec9700d8569"
+    },
+    "quiz.proposal-versus-execution.prompt": {
+      "text": "A call to add_numbers with arguments 19 and 23 appears in the round 1 response. What can you be sure of at this point?",
+      "source": "25b266eda95e"
+    },
+    "quiz.proposal-versus-execution.a.text": {
+      "text": "Python has already run the addition, and the result must be 42.",
+      "source": "956c114f1e51"
+    },
+    "quiz.proposal-versus-execution.a.feedback": {
+      "text": "Not yet. tool_calls is only a tool call proposal; whether Python ran it and what the result was has to be read from the tool_result that follows.",
+      "source": "9ab163c9495a"
+    },
+    "quiz.proposal-versus-execution.b.text": {
+      "text": "The model proposed a call; you must keep reading to tool_result to confirm the execution result.",
+      "source": "38952ae3eb7e"
+    },
+    "quiz.proposal-versus-execution.b.feedback": {
+      "text": "Correct. Only after the runner parses the arguments and runs the registered function does tool_result record the outcome of that execution.",
+      "source": "c474fdfde0d3"
+    },
+    "quiz.proposal-versus-execution.c.text": {
+      "text": "The model uploaded the Python function code to the provider and ran it there.",
+      "source": "ceb51abf1a77"
+    },
+    "quiz.proposal-versus-execution.c.feedback": {
+      "text": "The model does not upload or run your Python code. It only returns a function name and JSON arguments; execution happens in the local runner.",
+      "source": "9ec5933ffe2a"
+    },
+    "quiz.proposal-versus-execution.explanation": {
+      "text": "A proposal and an execution are two different things; tool_result is what records the actual execution result.",
+      "source": "70c7f4d50146"
+    },
+    "quiz.unknown-name.prompt": {
+      "text": "The model proposes a call to delete_files. What does the runner do?",
+      "source": "44dec5281ee4"
+    },
+    "quiz.unknown-name.a.text": {
+      "text": "It is not found in AVAILABLE_TOOLS, so nothing is executed and a result with ok set to false is returned",
+      "source": "ee85c5aa0862"
+    },
+    "quiz.unknown-name.a.feedback": {
+      "text": "Correct. Any name outside the allowlist is never executed, and the error is handed back to the model as a tool result.",
+      "source": "5e2fcbda47f5"
+    },
+    "quiz.unknown-name.b.text": {
+      "text": "It looks for a Python function of the same name and runs it if found",
+      "source": "551804237b1f"
+    },
+    "quiz.unknown-name.b.feedback": {
+      "text": "Not quite. The runner only looks in AVAILABLE_TOOLS and never searches for an arbitrary function by name.",
+      "source": "5f4fe6352954"
+    },
+    "quiz.unknown-name.c.text": {
+      "text": "It forwards the call to the provider to execute",
+      "source": "2dcb7affc7a6"
+    },
+    "quiz.unknown-name.c.feedback": {
+      "text": "Not quite. The provider does not execute your tools; execution happens only in the local runner.",
+      "source": "740d9d85a812"
+    },
+    "quiz.unknown-name.explanation": {
+      "text": "What can run is decided by the allowlist, not by the name the model proposes.",
+      "source": "a1c412207b65"
+    },
+    "quiz.error-goes-back.prompt": {
+      "text": "The model proposes add_numbers with argument a written as the word \"nineteen\", and the function raises ValueError. How does the runner handle it?",
+      "source": "7e458bc963ee"
+    },
+    "quiz.error-goes-back.a.text": {
+      "text": "It wraps the error as a tool result with ok set to false and writes it back to the message history for the model",
+      "source": "36848e9b716e"
+    },
+    "quiz.error-goes-back.a.feedback": {
+      "text": "Correct. The model can see why it failed, and can fix the argument or explain to the user.",
+      "source": "dfa14d1d57a4"
+    },
+    "quiz.error-goes-back.b.text": {
+      "text": "The whole run crashes immediately",
+      "source": "8a5a41c96989"
+    },
+    "quiz.error-goes-back.b.feedback": {
+      "text": "Not quite. execute_tool catches this kind of error and does not let the program crash.",
+      "source": "d9d307b4d252"
+    },
+    "quiz.error-goes-back.c.text": {
+      "text": "It skips this call and does not tell the model",
+      "source": "19d5edeb9398"
+    },
+    "quiz.error-goes-back.c.feedback": {
+      "text": "Not quite. Every call needs a matching tool message, and a failure must be handed back honestly too.",
+      "source": "1d078ff2fed7"
+    },
+    "quiz.error-goes-back.explanation": {
+      "text": "A failure is also a kind of tool result, handed back to the model under the same call id.",
+      "source": "451de43a0de3"
+    },
+    "quiz.clock-source.prompt": {
+      "text": "The tool returns 10:08 along with this machine's time zone. What should the time in the final answer be based on?",
+      "source": "b20260ee1c9f"
+    },
+    "quiz.clock-source.a.text": {
+      "text": "The current time the model memorized during training.",
+      "source": "6c3e4ff3b198"
+    },
+    "quiz.clock-source.a.feedback": {
+      "text": "The model has no reliable \"current time\"; the times in its training data are long past and cannot serve as a basis.",
+      "source": "d04db868f2a1"
+    },
+    "quiz.clock-source.b.text": {
+      "text": "The time zone of the user as guessed from the browser interface.",
+      "source": "3c84627598d0"
+    },
+    "quiz.clock-source.b.feedback": {
+      "text": "The interface never looked up the user's time zone, so a guess introduces unverified information; the tool returns the time zone of the machine running Python.",
+      "source": "9236743b0dc2"
+    },
+    "quiz.clock-source.c.text": {
+      "text": "The actual return value of this get_current_time call, with its time zone.",
+      "source": "d7d424fbf96e"
+    },
+    "quiz.clock-source.c.feedback": {
+      "text": "Correct. get_current_time reads this machine's clock and attaches the time zone; this return value goes into the next round's messages, and the answer should follow it.",
+      "source": "95386fc84f3d"
+    },
+    "quiz.clock-source.explanation": {
+      "text": "The tool result enters the next request and the answer should be based on it, keeping its source and time zone.",
+      "source": "ca0912dc907b"
+    },
+    "quiz.round-limit.prompt": {
+      "text": "If the model proposes a call every round and never answers, what does run_agent do?",
+      "source": "b666892cc946"
+    },
+    "quiz.round-limit.a.text": {
+      "text": "After 3 rounds it raises an error and the run ends with error",
+      "source": "273a4b52e367"
+    },
+    "quiz.round-limit.a.feedback": {
+      "text": "Correct. The for loop runs at most max_tool_rounds rounds, and when they are used up it reports an error and stops.",
+      "source": "6f5987370b86"
+    },
+    "quiz.round-limit.b.text": {
+      "text": "It keeps looping until the model is willing to answer",
+      "source": "67af4744d844"
+    },
+    "quiz.round-limit.b.feedback": {
+      "text": "Not quite. The round limit is written on the for loop, so the loop is sure to stop.",
+      "source": "29d47d7e6a51"
+    },
+    "quiz.round-limit.c.text": {
+      "text": "It returns the last tool result as the answer",
+      "source": "a04fdc77e0df"
+    },
+    "quiz.round-limit.c.feedback": {
+      "text": "Not quite. The runner does not pass off a half-finished result as an answer.",
+      "source": "03eef9928f26"
+    },
+    "quiz.round-limit.explanation": {
+      "text": "The round limit guarantees the loop ends; when there is no answer, it reports an error honestly.",
+      "source": "741464a4eee5"
+    },
+    "quiz.answer-vs-result.prompt": {
+      "text": "The result in tool_result is 42, but the model's final answer says 41. Which one should you trust?",
+      "source": "9ef04378394b"
+    },
+    "quiz.answer-vs-result.a.text": {
+      "text": "Trust tool_result: the answer was rewritten by the model after reading the result and may restate it wrongly",
+      "source": "c2aed2e50d47"
+    },
+    "quiz.answer-vs-result.a.feedback": {
+      "text": "Correct. To check an answer, go back to this run's tool result.",
+      "source": "eb5e4fb0635a"
+    },
+    "quiz.answer-vs-result.b.text": {
+      "text": "Trust the answer: what the model sees last is the most complete",
+      "source": "30ff07ff7003"
+    },
+    "quiz.answer-vs-result.b.feedback": {
+      "text": "Not quite. What the model saw was that tool result; the mistake is in the restating step.",
+      "source": "5cfbd6438653"
+    },
+    "quiz.answer-vs-result.c.text": {
+      "text": "Both are right: the tool and the model each calculated once",
+      "source": "dff518fc6fff"
+    },
+    "quiz.answer-vs-result.c.feedback": {
+      "text": "Not quite. Python calculated the sum once; the model only restated it.",
+      "source": "4580b90a8bce"
+    },
+    "quiz.answer-vs-result.explanation": {
+      "text": "The tool result is Python's execution record; the final answer should be traceable to it.",
+      "source": "ef06f3deb1bc"
+    },
+    "check-hunt.prompt": {
+      "text": "Find the request in which the model first gets to see Python's tool result.",
+      "source": "1a2689aa6cc1"
+    },
+    "check-hunt.explanation": {
+      "text": "It is the round 2 request: messages now contains a message with role tool and a tool_call_id, which is the result of the runner writing the tool result back into the message history. The earlier tool_result event is only Python's execution record; the model does not see it until this request.",
+      "source": "60484291387b"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I matched the tool call proposal's id to the tool_call event and to the tool_call_id of the tool_result that follows.",
+      "source": "31ab7b6e6a34"
+    },
+    "check-points.item-2.text": {
+      "text": "I can say which two messages the second request has that the first does not.",
+      "source": "84ff4707a1f8"
+    },
+    "check-points.item-3.text": {
+      "text": "In run_agent I can point out which lines hold each of the four steps and where the round limit is written.",
+      "source": "9e2eb1c80011"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed max_rounds in this lesson's lesson.json to 1, restarted the backend, ran \"Add two numbers\" again, saw the run end with error, and then changed it back to 3.",
+      "source": "77183a1faeba"
+    },
+    "code_notes.tool_calls.note": {
+      "text": "The list of tool call proposals in the model response; each item has id, function.name, and arguments. A response without it is the final answer.",
+      "source": "b6e3839c6f55"
+    },
+    "code_notes.arguments.note": {
+      "text": "The arguments the model writes, as a JSON string; execute_tool parses it into a dict with json.loads before passing it to the function.",
+      "source": "4d415b5a01b2"
+    },
+    "code_notes.tool_call_id.note": {
+      "text": "A field in the message with role tool; its value equals the id of the matching call. The provider uses it to match results to calls.",
+      "source": "04b746544f8c"
+    },
+    "code_notes.tool_call.note": {
+      "text": "The event recorded before the runner checks the allowlist and executes a call, one per call; different from the tool_calls list in the response.",
+      "source": "02dfa73a6b5c"
+    },
+    "code_notes.tool_result.note": {
+      "text": "The event the runner records after executing one call, with tool_call_id, the tool name, and the wrapped result.",
+      "source": "b7032424c44d"
+    },
+    "code_notes.ok.note": {
+      "text": "The success flag of a tool result: when true it carries result, when false it carries error_type and error.",
+      "source": "ea5520765b2e"
+    },
+    "code_notes.AVAILABLE_TOOLS.note": {
+      "text": "A dict from tool names to Python functions; the runner looks up names only here, and a name that is not registered is not executed.",
+      "source": "67309a816dd9"
+    },
+    "code_notes.execute_tool.note": {
+      "text": "Execute one tool call proposal: parse arguments, look up AVAILABLE_TOOLS by name, run it, and wrap the outcome as an ok result.",
+      "source": "52fce2104011"
+    },
+    "code_notes.max_tool_rounds.note": {
+      "text": "The round limit of run_agent; when run from the web page it comes from max_rounds in lesson.json, which is 3 in this lesson.",
+      "source": "9255717004f7"
+    }
+  }
+}

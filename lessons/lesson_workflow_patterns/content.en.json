@@ -1,0 +1,1094 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "REASONING / WORKFLOWS",
+      "source": "ad3c5bde8d55"
+    },
+    "hero.headline": {
+      "text": "Not everything needs the agent to decide.",
+      "source": "c55e4908cfbd"
+    },
+    "hero.highlight": {
+      "text": "When the flow is fixed, let the program lay it out.",
+      "source": "db59e057f112"
+    },
+    "hero.takeaway": {
+      "text": "Prompt chaining, routing, and parallelization are three kinds of workflow in which the program decides the flow and the model does each step. They are easier to predict than an agent loop, and easier to measure.",
+      "source": "392c26ea2f1a"
+    },
+    "concepts.01-chain.label": {
+      "text": "01 / CHAIN",
+      "source": "d4166481923b"
+    },
+    "concepts.01-chain.title": {
+      "text": "One step after another",
+      "source": "8eeee3ae037d"
+    },
+    "concepts.01-chain.description": {
+      "text": "One step's output is the next step's input, with a program check between steps. If a check fails, the chain stops.",
+      "source": "ef815b157b76"
+    },
+    "concepts.02-route.label": {
+      "text": "02 / ROUTE",
+      "source": "9385eb7c791f"
+    },
+    "concepts.02-route.title": {
+      "text": "Classify first, then dispatch",
+      "source": "a4109a3831fa"
+    },
+    "concepts.02-route.description": {
+      "text": "The model outputs a single label, and the program picks the next step from it. An unknown label goes to the fallback, and the original text is recorded.",
+      "source": "2ca56968002e"
+    },
+    "concepts.03-parallel.label": {
+      "text": "03 / PARALLEL",
+      "source": "99ac467e1785"
+    },
+    "concepts.03-parallel.title": {
+      "text": "Send at the same time",
+      "source": "ad0417d2a313"
+    },
+    "concepts.03-parallel.description": {
+      "text": "Subtasks that do not depend on each other can be requested at the same time, and the wall-clock time comes close to that of the slowest one.",
+      "source": "403fac2d2fca"
+    },
+    "concepts.04-measure.label": {
+      "text": "04 / MEASURE",
+      "source": "d4621c855e51"
+    },
+    "concepts.04-measure.title": {
+      "text": "Choose a pattern with data",
+      "source": "8762beb0022c"
+    },
+    "concepts.04-measure.description": {
+      "text": "Compare classification results with human annotation to get accuracy and a confusion matrix. For requests sent at the same time, look at the wall-clock time measured by the backend.",
+      "source": "1ca3995fcd97"
+    },
+    "section-1.title": {
+      "text": "When the agent does not need to decide",
+      "source": "fc4a9518f701"
+    },
+    "section-1.paragraphs.0": {
+      "text": "For a task whose steps can be written out in advance, you can fix the flow in the program and let the model only complete each step. This structure is called a workflow. In the agent loops of the earlier lessons, the model decides what to do next: which tool to call, whether to change the plan, and when to finish. That freedom has a cost. On the same task the model may take three steps this time and five the next. When something goes wrong you first have to work out which path it took this time, and tests are hard to write.",
+      "source": "4ffb0da45454"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Many tasks do not need that freedom. Classifying a support ticket for a learning platform always goes \"read the ticket, give a category\". Turning a set of notes into Q&A cards always goes \"extract the key points, rewrite as Q&A, write titles\". The steps are fixed, and only each step needs the model to write something. It is like cooking from a recipe: cut first, then stir-fry, then plate. The recipe fixes the order, and the cook only worries about doing each step well.",
+      "source": "4b8a0b0f0941"
+    },
+    "section-1.paragraphs.2": {
+      "text": "In a workflow, the order, the branches, and when to finish are all written in Python. A loop decides how many steps to take, a conditional decides which path to follow, and a thread pool decides which requests go out at the same time. The model's output is only data, and it cannot make the program skip a step or take an extra one. So the results are easier to predict, each step can be measured on its own, and when something goes wrong you can pinpoint the step directly.",
+      "source": "dab2a4cc5d1b"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The limits need stating too. A task where you must see the intermediate result before deciding the next step still needs the model to take part in the decision, as when the data source fails and you have to take another route in {{lesson:plan-and-replan}}. A practical order is to try a single call first, move to a workflow if that is not enough, and bring in an agent loop only if that is still not enough. This lesson uses no tools. It looks at the three most common workflows: splitting a task into a few steps in a fixed order, classifying first and then dispatching, and sending requests that do not depend on each other at the same time.",
+      "source": "52f3ca0024e8"
+    },
+    "section-2.title": {
+      "text": "Prompt chaining: a gate between steps",
+      "source": "74e894a49a91"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Prompt chaining splits one task into several model calls in a fixed order, where one step's output is the next step's input. This lesson's chain has three steps: extract 3 key points from a set of notes, rewrite the points as 3 Q&A pairs, and give each Q&A a title. Writing a long document by first listing an outline, checking that the outline covers the key points, and then writing the body from the outline is the same structure. With the task split up, each step's instruction is shorter and easier to write clearly. The cost is two more calls and a longer total time.",
+      "source": "ef71937a94b7"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Splitting brings a new problem: if any step gets the format wrong, every later step carries on from the error. Say the first step opens with \"Here are 3 key points:\" and then lists three lines. The second step then rewrites four lines, so the Q&A has one pair too many or too few, and the third step titles whatever it is given. The error travels all the way down, and the final output looks complete but it is hard to tell which step went wrong.",
+      "source": "2131348f2589"
+    },
+    "section-2.paragraphs.2": {
+      "text": "So there is a gate after each step. The program runs it and checks only the format that step should have. The first step must produce exactly 3 lines, each starting with \"- \". The second must produce 6 lines, 3 for Q and 3 for A. The third must parse as a JSON array of 3 strings, each no longer than 8 characters. The output above, with one extra line of opening remarks, is stopped at the first gate: 4 lines, not 3.",
+      "source": "f2d71ccd2f07"
+    },
+    "section-2.paragraphs.3": {
+      "text": "If a check fails, the chain stops at that step and records a lesson.chain_step with gate_passed set to false, and the later steps are not requested. This lesson does not retry automatically, and a failure simply stops. To retry, you can request again with the error attached, as in {{lesson:structured-output}}, subject to the call budget. One more point: each step's request carries only that step's instruction and the previous step's output, and the model cannot see any earlier steps.",
+      "source": "4d43df2ae9e7"
+    },
+    "deep-dive-gate.title": {
+      "text": "A gate checks format only: what it can and cannot stop",
+      "source": "6e3278de4c6d"
+    },
+    "deep-dive-gate.summary": {
+      "text": "A program gate costs no calls and gives a deterministic verdict, but it can only check what can be written as a rule.",
+      "source": "dbd1038c8973"
+    },
+    "deep-dive-gate.paragraphs.0": {
+      "text": "Using a program as the gate has three benefits: it costs no model call, the same output gets the same verdict every time, and the reason for the verdict can be written into the event, such as \"4 行，需要恰好 3 行且都以“- ”开头\" (4 lines; exactly 3 lines starting with \"- \" are required). The cost is that it can only check what can be written as a rule: the number of lines, a prefix, whether it parses as JSON, the length. In the second step's Q&A, a wrong answer or a question that does not match its key point is something the gate cannot see.",
+      "source": "6de19a85d469"
+    },
+    "deep-dive-gate.paragraphs.1": {
+      "text": "You can also ask a model to act as the gate, asking it \"is this Q&A faithful to the key points?\". That lets you check content, but it is one more call, and the verdict is not necessarily right. {{lesson:reflection-revision}} compared this kind of review. In practice the two are often layered: first a program stops format problems, and once the format is right, you decide whether to ask a model to look at the content.",
+      "source": "101687e1154b"
+    },
+    "deep-dive-gate.paragraphs.2": {
+      "text": "A gate has another role that is often overlooked: it limits how far an error can travel. Even if one step's output is led astray, say by a line like \"ignore the requirements above\" mixed in, it can affect what the next few steps write, but it cannot make the program skip a gate or take an extra step.",
+      "source": "dac8b1f004c4"
+    },
+    "deep-dive-gate.paragraphs.3": {
+      "text": "Claude Code's hooks are program gates installed in the agent loop. A hook is a command the user writes that runs automatically at fixed moments, such as before a tool call, after a tool runs, or when the model is about to finish. The official docs put it this way: certain actions are guaranteed to happen and do not depend on the model deciding to do them. A requirement written in `CLAUDE.md` is only a suggestion, while a hook is deterministic. A check before a tool call that ends with exit code 2 blocks that call and passes the reason to the model so it can do something else. Unlike this lesson, it does not stand between the steps of a fixed flow, but before and after each step the model decides on. When you need to judge content, a hook can also be changed to ask a model to judge, at the same cost as asking a model to be the gate, described above. Follow the official docs for the specific events and configuration.",
+      "source": "bfa084f97cbb"
+    },
+    "predict-fallback.prompt": {
+      "text": "Before you run \"Routing: 20 human-labeled tickets\", guess: how many lesson.route events will this run have?",
+      "source": "10c038310b84"
+    },
+    "mq-gate.gate-purpose.prompt": {
+      "text": "The first step output only 2 key points. What does the prompt chain do next?",
+      "source": "ddfd258ca13d"
+    },
+    "mq-gate.gate-purpose.a.text": {
+      "text": "Stops at the first step and does not pass the failed result to the second step",
+      "source": "779a8b58c3d9"
+    },
+    "mq-gate.gate-purpose.a.feedback": {
+      "text": "Correct. A gate's job is to stop an error where it happens.",
+      "source": "7dab8969bd4f"
+    },
+    "mq-gate.gate-purpose.b.text": {
+      "text": "Continues, and the second step will fill in the gap",
+      "source": "f4c985200559"
+    },
+    "mq-gate.gate-purpose.b.feedback": {
+      "text": "Not quite. The later steps would just carry on from the wrong input.",
+      "source": "695aa07d3bcd"
+    },
+    "mq-gate.gate-purpose.c.text": {
+      "text": "Automatically retries the first step until it passes",
+      "source": "f4fd8706b7a3"
+    },
+    "mq-gate.gate-purpose.c.feedback": {
+      "text": "Not quite. This lesson's gate does not retry. A failure simply stops.",
+      "source": "4843b69a1778"
+    },
+    "mq-gate.gate-purpose.explanation": {
+      "text": "The longer the chain, the more it needs checks in the middle.",
+      "source": "092e2421931b"
+    },
+    "section-3.title": {
+      "text": "Routing: the model outputs one label",
+      "source": "54268de158af"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Routing first has the model classify the input, and then the program decides who handles it by category. Online customer service often works this way: it first works out whether you are asking about a refund, shipping, or your account, and then passes you to the matching process or a human agent. This lesson's tickets are the same: some ask about course content, some cannot log in, and some report a runtime error. They need different handling, which could mean different prompts, different tools, or even models at different prices. Cramming every case into one prompt makes it longer and longer, and fixing one case breaks another. Classify first, and the follow-up for each category can be written and changed separately.",
+      "source": "5981ae77e0a2"
+    },
+    "section-3.paragraphs.1": {
+      "text": "This lesson's router does one narrow thing: it reads a ticket and outputs one of four labels: course (course content), account (account and login), error (runtime error), or other. The program takes the first line of the reply, strips quotes, backticks, and periods, lowercases it, and uses it if it is in the label list. This lesson only goes as far as classification, and the handling after dispatch is outside its scope.",
+      "source": "95cf76fd5633"
+    },
+    "section-3.paragraphs.2": {
+      "text": "The model does not always comply. It may add an explanation, or invent a label that is not in the list, such as billing. The reference example also classifies support tickets (four categories: billing, technical, account, product), and an out-of-list label raises an error that stops the whole batch. This lesson goes to the fallback instead: the label is recorded as other, fallback is true, the original text stays in raw, and fallback_reason is stated. One bad ticket does not make the other 19 wasted. The number of fallbacks and their original text are in the report, so you can see where the model is unstable.",
+      "source": "d6700fead00d"
+    },
+    "section-3.paragraphs.3": {
+      "text": "A fallback is not the same as being right. The fallback label happens to be other, so a ticket that should be other and went to the fallback still counts as matching the human annotation, while one that should be account and went to the fallback counts as wrong. Read accuracy and the number of fallbacks separately.",
+      "source": "2814dfdeaac1"
+    },
+    "section-4.title": {
+      "text": "Whether routing is good is decided by human annotation",
+      "source": "6fb1f72c9693"
+    },
+    "section-4.paragraphs.0": {
+      "text": "To tell whether a router is good, compare it against samples whose answers were labeled in advance. You cannot conclude anything from a few examples that look fine. This lesson prepares 20 tickets, each with a correct category labeled by hand by the course author, and a few are deliberately ambiguous. For example, t18, \"换了电脑以后学习进度没了，是账号没同步吗？\" (\"I switched computers and my learning progress is gone. Did my account not sync?\"), is labeled account, but it also reads like a program error.",
+      "source": "7a7f04a31439"
+    },
+    "section-4.paragraphs.1": {
+      "text": "After the 20 tickets run, the report gives three things. Accuracy is the number of tickets that match the human annotation divided by the total. The confusion matrix is a 4×4 table: rows are the human-labeled categories, columns are the categories the router gave, the diagonal holds the correct ones, and every cell off the diagonal means one category was taken for another. The last is the list of misrouted or fallback tickets, with their original text, for checking one by one.",
+      "source": "53efc2aa31bc"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Here is a made-up example. Of 20 tickets, 18 are right, so accuracy is 90%. In the confusion matrix, the account row is 0, 4, 1, 0, which means that of 5 account tickets, 1 was taken for a runtime error. The course row also has 1 ticket in the error column. Both mistakes involve \"error\", so the next step is to check whether the router prompt's description of error is too broad.",
+      "source": "8e04e09cd87d"
+    },
+    "section-4.paragraphs.3": {
+      "text": "These numbers should be read together with the sample. 20 is too few: one more mistake moves accuracy by 5 percentage points. The human annotation was done by one person, and for the ambiguous few another person might label them differently. Look at each misrouted ticket: sometimes the model is wrong, and sometimes the annotation itself is disputed.",
+      "source": "bb0198d80dec"
+    },
+    "deep-dive-confusion.title": {
+      "text": "Beyond accuracy: reading the confusion matrix by row and by column",
+      "source": "47ff919bae4d"
+    },
+    "deep-dive-confusion.summary": {
+      "text": "Accuracy is one total. The confusion matrix tells you which category is wrong and which category it is wrongly sent to.",
+      "source": "9287ad099912"
+    },
+    "deep-dive-confusion.paragraphs.0": {
+      "text": "Accuracy can hide differences between categories. Here is a made-up example: out of 100 tickets, 90 are course questions. A router that answers course no matter what it sees still has 90% accuracy, yet it did not recognize a single account problem. This lesson's 20 tickets have similar numbers in each category (6 course, 5 account, 5 error, 4 other), so the problem is not serious here, but real tickets often have one dominant category.",
+      "source": "ff5d966b08cc"
+    },
+    "deep-dive-confusion.paragraphs.1": {
+      "text": "The confusion matrix breaks this total apart. Read by row to see how many tickets of a category were recognized: the account row is 0, 4, 1, 0, so 4 of 5 were right. Read by column to see, among the tickets the router judged as a category, how many really belong to it. Using the example in the main text, the error column from top to bottom is 1, 1, 5, 0, so of the 7 judged as error, only 5 really are. When the first ratio is low, that category is often missed. When the second is low, other categories are often wrongly pushed into it.",
+      "source": "cd9ee094a0b5"
+    },
+    "deep-dive-confusion.paragraphs.2": {
+      "text": "The two kinds of mistakes often cost different amounts. A locked-account ticket misrouted to course content may leave the user waiting a day longer. An ordinary course question misrouted to error just takes one more hand-off. Which cell matters more depends on the handling flow that follows, and you should think it through when you design the router.",
+      "source": "8af163441750"
+    },
+    "mq-fallback.unknown-label.prompt": {
+      "text": "The routing model output \"billing\" for a ticket, and that label is not in the list. What should the program do?",
+      "source": "6382d65c99e3"
+    },
+    "mq-fallback.unknown-label.a.text": {
+      "text": "Use the fallback label other and record the original text billing",
+      "source": "8f7972dfa31f"
+    },
+    "mq-fallback.unknown-label.a.feedback": {
+      "text": "Correct. The fallback keeps the flow going, and the original text is kept for review.",
+      "source": "2a6d22417b58"
+    },
+    "mq-fallback.unknown-label.b.text": {
+      "text": "Raise an exception and abort the whole routing batch",
+      "source": "3b67153e2e56"
+    },
+    "mq-fallback.unknown-label.b.feedback": {
+      "text": "Not quite. One ticket's problem should not make the other 19 wasted.",
+      "source": "6f42f3b014a9"
+    },
+    "mq-fallback.unknown-label.c.text": {
+      "text": "Guess the closest label",
+      "source": "b07968e81c68"
+    },
+    "mq-fallback.unknown-label.c.feedback": {
+      "text": "Not quite. Guessing hides the error.",
+      "source": "8b76b252040c"
+    },
+    "mq-fallback.unknown-label.explanation": {
+      "text": "The fallback path needs a record, or you cannot see where the model is unstable.",
+      "source": "689cda7c7a72"
+    },
+    "section-5.title": {
+      "text": "Parallel: it saves waiting, not calls",
+      "source": "d3d9c8ba00fa"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Parallelization sends subtasks that do not depend on each other to the model at the same time, and the program then combines the results. It shortens the wait, but the number of model calls and the usage stay the same. This lesson has three recap tasks, each recapping one key point from one lesson. None needs another's result, so they can be sent one after another (serial) or all at once (parallel). A travel assistant that checks flights, hotels, and destination weather at the same time is the same case: the three queries do not depend on each other, so there is no need to queue them.",
+      "source": "34950a5edfae"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Here is a made-up example: three requests take 1.1 seconds, 0.9 seconds, and 1.4 seconds. Run serially, each waits for the one before, and the wall-clock time is about 3.4 seconds. Run in parallel, all three are in flight at once, and the wall-clock time is close to the slowest, 1.4 seconds, plus a little scheduling overhead. The sum of the branch durations is still about 3.4 seconds, which is larger than the wall-clock time, and the difference is the part that overlapped.",
+      "source": "48c07705b290"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The runner uses a thread pool to send the three requests at the same time. Each request carries a branch tag whose value is that lesson's identifier, and the response carries the same tag, which the timeline uses to pair them. All three parallel requests are recorded in round 1, and without a branch you could not tell which response belongs to which request. In the serial arm each request takes its own round and is paired by order, with no branch. The timing is measured by the backend's perf_counter and recorded in lesson.parallel.",
+      "source": "32415dfee866"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Parallelism has preconditions and limits. If subtasks depend on each other, they cannot go out together. Providers often limit how many requests are processed at once, so too many branches can end up queuing. Network and provider queuing make the measured time different each time, so one measurement describes only that one run. Parallelism has another use as well: send the same task several times at once and compare the results. The repeated runs in {{lesson:sampling-variance}} can also be sent at the same time.",
+      "source": "f2603e966f3b"
+    },
+    "deep-dive-threads.title": {
+      "text": "Why threads can wait for three answers at once",
+      "source": "daae7d4af183"
+    },
+    "deep-dive-threads.summary": {
+      "text": "Nearly all the time waiting for a model's answer is spent on the network and the provider's side, and a waiting thread uses no compute.",
+      "source": "2b65579476c2"
+    },
+    "deep-dive-threads.paragraphs.0": {
+      "text": "From the moment a model request is sent until the response arrives, the local machine does almost nothing. The time goes to network transfer, the provider's queue, and model generation. After a thread sends its request it just waits in place, uses no compute while waiting, and other threads can still send their own requests. So three threads can have three requests in flight at once, and the wall-clock time comes close to the slowest one.",
+      "source": "f173453f5817"
+    },
+    "deep-dive-threads.paragraphs.1": {
+      "text": "This lesson uses ThreadPoolExecutor, and the reference example does too. Another common approach is asynchronous programming, which waits on many requests with a single thread and suits scales of hundreds of requests. {{lesson:async-concurrency}} covers it. For three requests a thread pool is enough, and the code is more direct.",
+      "source": "ae6c6eb31d79"
+    },
+    "deep-dive-threads.paragraphs.2": {
+      "text": "Timing has to be done in the backend. The time at which the browser receives an event is affected by event delivery and rendering, and does not represent when the request really started and ended. The runner takes one perf_counter reading before and one after each request, and computes each branch's start and end in milliseconds relative to the start time. The wall-clock time runs from just before the first request is sent to when the last response returns. perf_counter is only for measuring time differences; its reading does not correspond to any time of day.",
+      "source": "b8282600a010"
+    },
+    "misconception-parallel.claim": {
+      "text": "Sending three requests in parallel saves tokens and money compared with serial.",
+      "source": "f7a0dfdb7c17"
+    },
+    "misconception-parallel.correction": {
+      "text": "Parallelism only puts the requests in flight at the same time, so what gets shorter is the wall-clock time. Each request is metered as usual, and the number of model calls and the usage are the same as serial. When the provider limits how many requests are processed at once, queuing can also eat up part of the time saved.",
+      "source": "48bcad67cfc4"
+    },
+    "mq-parallel.parallel-sum.prompt": {
+      "text": "The parallel arm's wall-clock time is 1.2 seconds, and the sum of the three branch durations is 3.1 seconds. What does that show?",
+      "source": "7060f45840bc"
+    },
+    "mq-parallel.parallel-sum.a.text": {
+      "text": "The three requests overlapped in time",
+      "source": "791a0ef95904"
+    },
+    "mq-parallel.parallel-sum.a.feedback": {
+      "text": "Correct. The more they overlap, the bigger the gap between the two numbers.",
+      "source": "c3370e75c543"
+    },
+    "mq-parallel.parallel-sum.b.text": {
+      "text": "The measurement is wrong, and the two should be equal",
+      "source": "a8fed060d06a"
+    },
+    "mq-parallel.parallel-sum.b.feedback": {
+      "text": "Not quite. The two are close to equal only in serial.",
+      "source": "a7af44675be0"
+    },
+    "mq-parallel.parallel-sum.c.text": {
+      "text": "Parallelism made each request itself faster",
+      "source": "c511d1824b43"
+    },
+    "mq-parallel.parallel-sum.c.feedback": {
+      "text": "Not quite. A single request takes no less time. They are just running at the same time.",
+      "source": "4e25b9dd209e"
+    },
+    "mq-parallel.parallel-sum.explanation": {
+      "text": "Parallelism saves waiting, not the time of a single request.",
+      "source": "2989b59da235"
+    },
+    "section-6.title": {
+      "text": "How to choose a pattern",
+      "source": "9d085d20c47d"
+    },
+    "section-6.paragraphs.0": {
+      "text": "To choose a pattern, first look at the shape of the task, then at how many extra calls and how much time you are willing to spend on it. If the steps are fixed and each step's output can be checked, use prompt chaining. If there are many kinds of input and each kind is handled differently, use routing. If the subtasks do not depend on each other, use parallelization. The three can be combined: route first, then run a prompt chain within one category, with the independent steps in the chain sent in parallel.",
+      "source": "2538af39c0bd"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Each added layer of structure adds a cost. Every extra step in a prompt chain adds a call and a wait. Routing adds a classification call for each input, and a wrong classification sends the input into the wrong flow. Parallelism saves no calls, and you also have to deal with pairing and provider limits. A workflow should also start simple: if one call can do it well, there is no need to split it.",
+      "source": "f0d343c6fa2f"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The three patterns share a precondition: what the subtasks are and how many there are is known when you write the code. This lesson's three recap tasks are hard-coded in TOPICS. If the task were \"write one question for each lesson studied this week\", you would only know how many lessons to read after reading the task. The model would have to split the task first, and the program would then assign work from the resulting list. That is the subject of {{lesson:orchestrator-evaluator}}.",
+      "source": "378fd063b9ec"
+    },
+    "compare-patterns.title": {
+      "text": "The three patterns",
+      "source": "7bb877ab283d"
+    },
+    "compare-patterns.columns.0": {
+      "text": "Pattern",
+      "source": "47a270081ab2"
+    },
+    "compare-patterns.columns.1": {
+      "text": "Who decides the flow",
+      "source": "57cb9d6fcb55"
+    },
+    "compare-patterns.columns.2": {
+      "text": "Suited to",
+      "source": "b194450a2d24"
+    },
+    "compare-patterns.columns.3": {
+      "text": "What to measure",
+      "source": "b3fd22b96560"
+    },
+    "compare-patterns.rows.0.0": {
+      "text": "Prompt chaining",
+      "source": "0842799ee254"
+    },
+    "compare-patterns.rows.0.1": {
+      "text": "The program, in a fixed order",
+      "source": "6c84e2677a18"
+    },
+    "compare-patterns.rows.0.2": {
+      "text": "Tasks with fixed steps where each step can be checked",
+      "source": "120b69831b20"
+    },
+    "compare-patterns.rows.0.3": {
+      "text": "Whether each gate passes",
+      "source": "aa3e6ede6655"
+    },
+    "compare-patterns.rows.1.0": {
+      "text": "Routing",
+      "source": "b9670c85a4ab"
+    },
+    "compare-patterns.rows.1.1": {
+      "text": "The program, by the label the model gives",
+      "source": "aaffb0a9dcbc"
+    },
+    "compare-patterns.rows.1.2": {
+      "text": "Many kinds of input, each handled differently",
+      "source": "3b01f78646e1"
+    },
+    "compare-patterns.rows.1.3": {
+      "text": "Accuracy, confusion matrix, number of fallbacks",
+      "source": "f9a530173634"
+    },
+    "compare-patterns.rows.2.0": {
+      "text": "Parallelization",
+      "source": "be050d58e9a7"
+    },
+    "compare-patterns.rows.2.1": {
+      "text": "The program, sending at the same time",
+      "source": "469df78a5714"
+    },
+    "compare-patterns.rows.2.2": {
+      "text": "Subtasks that do not depend on each other",
+      "source": "fd40650e85cc"
+    },
+    "compare-patterns.rows.2.3": {
+      "text": "Wall-clock time and branch durations",
+      "source": "76037f16b3a1"
+    },
+    "walkthrough.title": {
+      "text": "One routing pass",
+      "source": "552b539c925c"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, what happens when one ticket is routed. The code is a simplified illustration. Your run's evidence is in the events on the lab bench.",
+      "source": "9145033d78e5"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Classify",
+      "source": "515559957fd3"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Output only one label",
+      "source": "2d68ae7abd7a"
+    },
+    "walkthrough.step-1.body": {
+      "text": "system lists the four labels and asks for no explanation.",
+      "source": "b582e83b50ca"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "request / response",
+      "source": "3eefad89eb5b"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Parse",
+      "source": "fbff7b5046d9"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Take the first line as the label",
+      "source": "2ca963ff8994"
+    },
+    "walkthrough.step-2.body": {
+      "text": "If it is in the list, use it. If not, go to the fallback.",
+      "source": "9cdb283bd4a0"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "predicted and fallback of lesson.route",
+      "source": "11ec6d815d76"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Compare",
+      "source": "e182fb40a080"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Compare with the human annotation",
+      "source": "eb4433f59516"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Record whether this ticket is right.",
+      "source": "72190d3f4022"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "correct of lesson.route",
+      "source": "813d248c738c"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Summarize",
+      "source": "bd0a40247497"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Compute accuracy and the confusion matrix",
+      "source": "9f0e0fbcd765"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Summarize after all 20 have run.",
+      "source": "52ad1b20343c"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.cookbook-basic-workflows.title": {
+      "text": "Three basic workflows: prompt chaining, parallelization, and routing (Claude Cookbooks)",
+      "source": "56597424db69"
+    },
+    "references.cookbook-agents-readme.title": {
+      "text": "Building effective agents: an overview of workflow patterns (Claude Cookbooks)",
+      "source": "b839a5bd1af4"
+    },
+    "references.book-orchestration.title": {
+      "text": "Orchestration patterns: workflows versus autonomous agents — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "75e2383cd577"
+    },
+    "references.claude-code-hooks.title": {
+      "text": "Use hooks to run checks automatically at fixed moments (Claude Code docs, checked 2026-10-04)",
+      "source": "f3bf52e2000e"
+    },
+    "code-chain.n41.text": {
+      "text": "Each step has its own format requirement, and the check is done entirely by the program, with no model asked to judge.",
+      "source": "cda45452142e"
+    },
+    "code-chain.n44.text": {
+      "text": "Step 1 needs exactly 3 lines of key points, each starting with \"- \".",
+      "source": "d7ed14a2a60f"
+    },
+    "code-chain.n47.text": {
+      "text": "Step 2 needs 3 Q&A pairs: 3 lines each for Q and A, 6 lines in all.",
+      "source": "cfae3ea61f41"
+    },
+    "code-chain.n53.text": {
+      "text": "Step 3's output must parse as a JSON array, with each title at most 8 characters.",
+      "source": "71d8bad79f74"
+    },
+    "code-chain.n63.text": {
+      "text": "The order of the three steps is hard-coded in CHAIN: what to do next is decided by the program, not the model.",
+      "source": "31a88244a39b"
+    },
+    "code-chain.n65.text": {
+      "text": "Each step is an independent request carrying only that step's instruction and the previous step's output.",
+      "source": "717ed38e71b3"
+    },
+    "code-chain.n70.text": {
+      "text": "Every step records its output and its check result.",
+      "source": "033f4ea98c53"
+    },
+    "code-chain.n74.text": {
+      "text": "If the gate fails, stop. Do not pass a failed output on.",
+      "source": "72b5fea3d076"
+    },
+    "code-chain.n77.text": {
+      "text": "Once it passes, this step's output becomes the next step's input.",
+      "source": "23268020a3d8"
+    },
+    "code-route.n83.text": {
+      "text": "The four labels are four branches, and the router can only pick from these.",
+      "source": "d681c9cc3694"
+    },
+    "code-route.n84.text": {
+      "text": "The fallback label: used when the model's output is not in the list, so one ticket cannot bring down the whole batch.",
+      "source": "43297a544453"
+    },
+    "code-route.n86.text": {
+      "text": "All 20 tickets carry a human annotation, and accuracy is computed against it.",
+      "source": "bfa18494233a"
+    },
+    "code-route.n108.text": {
+      "text": "The prompt lists all the labels and asks for just one label with no explanation.",
+      "source": "584748c29c6d"
+    },
+    "code-route.n115.text": {
+      "text": "Take only the first line, strip quotes, backticks, and periods before comparing, and ignore case.",
+      "source": "3c2f587e0ba0"
+    },
+    "code-route.n116.text": {
+      "text": "Any label not in the list goes to the fallback, and the return value also marks fallback.",
+      "source": "f65e1a6c6a4b"
+    },
+    "code-route.n122.text": {
+      "text": "One request per ticket, so 20 tickets means 20 model calls.",
+      "source": "649ef871a8b8"
+    },
+    "code-route.n130.text": {
+      "text": "Each ticket records the human annotation, the prediction, the original text, and whether it went to the fallback. Fallbacks also state the reason, and misrouted ones also carry misrouted.",
+      "source": "2323851c3a3f"
+    },
+    "code-route.n134.text": {
+      "text": "Misrouted and fallback tickets are listed in the report for a person to review.",
+      "source": "b0b43ae0c6d6"
+    },
+    "code-route.n136.text": {
+      "text": "Accuracy is compared only with the human annotation. The confusion matrix is computed in the report by confusion.",
+      "source": "1ac372f94bf0"
+    },
+    "code-route.fold-1.label": {
+      "text": "Data: the other 18 human-labeled tickets (t03–t20)",
+      "source": "63dbe61b222d"
+    },
+    "code-fanout.n143.text": {
+      "text": "The three subtasks do not depend on each other, and whichever finishes first affects nothing else. This is what makes parallelism possible.",
+      "source": "907e1cbd14b5"
+    },
+    "code-fanout.n156.text": {
+      "text": "One subtask is one independent request. Parallel and serial run the same function.",
+      "source": "209d9a147435"
+    },
+    "code-fanout.n157.text": {
+      "text": "Each branch's start and end times are measured in the backend and do not depend on the browser clock.",
+      "source": "354468d52745"
+    },
+    "code-fanout.n161.text": {
+      "text": "Parallel requests carry a branch tag, and responses are paired by it. Serial requests do not carry one.",
+      "source": "c3a9c9686e06"
+    },
+    "code-fanout.n169.text": {
+      "text": "The three requests go out at the same time in threads, sharing one call budget.",
+      "source": "3d7e62331d8f"
+    },
+    "code-fanout.n173.text": {
+      "text": "The serial arm sends one after another, and the wall-clock time is about the sum of the three durations.",
+      "source": "70339b490993"
+    },
+    "code-fanout.n175.text": {
+      "text": "The wall-clock time runs from just before the first request is sent to when the last response returns.",
+      "source": "e0fea25519b0"
+    },
+    "code-fanout.n178.text": {
+      "text": "Record both the wall-clock time and the sum of the branch durations. The difference between them is the part that overlapped.",
+      "source": "97f7cd3c6af9"
+    },
+    "code-decision.title": {
+      "text": "The flow lives in the program, and the model only does each step",
+      "source": "89daaed1827a"
+    },
+    "code-decision.chosen": {
+      "text": "The control flow of all three patterns is decided by Python: prompt chaining runs in order with gates, routing dispatches by label with a fallback, and parallelization sends at the same time in threads and pairs by branch. The model does not decide what to do next.",
+      "source": "39548318195c"
+    },
+    "code-decision.agent-loop.title": {
+      "text": "Let an agent loop decide the steps",
+      "source": "6c1f73a98cd6"
+    },
+    "code-decision.agent-loop.why_not": {
+      "text": "The steps are fixed to begin with. Leaving them to the model only adds uncertainty and makes them harder to measure.",
+      "source": "c3548c462ef1"
+    },
+    "code-decision.crash-on-unknown.title": {
+      "text": "Raise an error when routing meets an unknown label",
+      "source": "8e78814ab897"
+    },
+    "code-decision.crash-on-unknown.why_not": {
+      "text": "The reference example does this, and one ticket's problem stops the whole batch. A fallback plus a record is safer.",
+      "source": "94acd0ce4ba8"
+    },
+    "code-decision.fake-timeline.title": {
+      "text": "Record events in order after the parallel requests finish",
+      "source": "f22dd8458116"
+    },
+    "code-decision.fake-timeline.why_not": {
+      "text": "The event times would become the time they were recorded, and the timeline would no longer be the order in which things really happened.",
+      "source": "d60cbed9903d"
+    },
+    "chain.title": {
+      "text": "Prompt chaining and gates",
+      "source": "ad567902cf71"
+    },
+    "chain.hypothesis": {
+      "text": "The program checks the format after each step. When the format is wrong, the chain stops at the step that failed, and later steps do not carry on from a wrong input.",
+      "source": "427de705ba9e"
+    },
+    "chain.chain.label": {
+      "text": "Prompt chaining: three steps with gates",
+      "source": "238adebef34c"
+    },
+    "chain.step-one.text": {
+      "text": "The first step's output and check result.",
+      "source": "927b4c2dacc1"
+    },
+    "chain.step-two-input.text": {
+      "text": "The second step's request: the previous step's output became its input.",
+      "source": "badcb55f3b5f"
+    },
+    "chain.chain-report.text": {
+      "text": "The results of the three gates.",
+      "source": "2b4eb0ab3e21"
+    },
+    "chain.guide.0.text": {
+      "text": "The flow of a prompt chain is hard-coded by the program. Start with the first step.",
+      "source": "e714b6b1412d"
+    },
+    "chain.guide.1.text": {
+      "text": "Right after the output comes the gate. gate_passed tells you whether the chain can continue.",
+      "source": "cb7500e0e774"
+    },
+    "chain.guide.2.text": {
+      "text": "It passed, so the first step's output is put unchanged into the second step's request.",
+      "source": "3e0742212abe"
+    },
+    "chain.guide.3.text": {
+      "text": "Finally, each gate is summarized. The chain stops at whichever step did not pass.",
+      "source": "52248170f020"
+    },
+    "chain.conclusion.proves.0": {
+      "text": "Each step's output and check result are recorded, so you can see directly which step the chain stopped at.",
+      "source": "29599ae073c4"
+    },
+    "chain.conclusion.does_not_prove.0": {
+      "text": "A gate checks only the format, not whether the content is correct. A Q&A with a perfect format can still have wrong answers.",
+      "source": "1505f7c924b4"
+    },
+    "chain.conclusion.does_not_prove.1": {
+      "text": "In offline test mode, the three steps' outputs are written by a fixed script.",
+      "source": "eeef52ebc711"
+    },
+    "routing.title": {
+      "text": "Routing accuracy and fallbacks",
+      "source": "10e85e57d2f8"
+    },
+    "routing.hypothesis": {
+      "text": "The model gives a label that matches the human annotation for most tickets, but ambiguous tickets are easy to get wrong. Out-of-list output goes to the fallback and does not interrupt the whole batch.",
+      "source": "438e099d70d9"
+    },
+    "routing.routing.label": {
+      "text": "Routing: 20 human-labeled tickets",
+      "source": "3e1dc654db64"
+    },
+    "routing.one-route.text": {
+      "text": "The first ticket's routing record: human annotation, prediction, and original text.",
+      "source": "d5399fba9562"
+    },
+    "routing.fallback-route.text": {
+      "text": "The first ticket that went to the fallback (if any): only a fallback record carries fallback_reason.",
+      "source": "7e130c4a2f4f"
+    },
+    "routing.accuracy.text": {
+      "text": "Accuracy.",
+      "source": "d1cee65d04ee"
+    },
+    "routing.misrouted.text": {
+      "text": "Misrouted or fallback tickets.",
+      "source": "077fa6061432"
+    },
+    "routing.guide.0.text": {
+      "text": "The 20 tickets are routed one by one, and each is compared with its human annotation.",
+      "source": "99b612cf20b6"
+    },
+    "routing.guide.1.text": {
+      "text": "This is the first ticket: the model's original output, the parsed label, and whether it is correct.",
+      "source": "0f8c32535ad5"
+    },
+    "routing.guide.2.text": {
+      "text": "This ticket's fallback is true: the model output something outside the list, so the program used other, and the original text stays in raw.",
+      "source": "9a3c495708e6"
+    },
+    "routing.guide.3.text": {
+      "text": "Accuracy is computed by comparing with the human annotation.",
+      "source": "05253cf6f8fb"
+    },
+    "routing.guide.4.text": {
+      "text": "The misrouted tickets deserve a close look one by one: sometimes the model is wrong, and sometimes the human annotation itself is disputed.",
+      "source": "37f3fbf9126a"
+    },
+    "routing.conclusion.proves.0": {
+      "text": "In this run, which category each of the 20 tickets was put in, whether it matches the human annotation, and which ones went to the fallback.",
+      "source": "b376d4381acd"
+    },
+    "routing.conclusion.does_not_prove.0": {
+      "text": "20 tickets are not enough to represent real traffic, and accuracy could swing widely.",
+      "source": "93403c0065fd"
+    },
+    "routing.conclusion.does_not_prove.1": {
+      "text": "The human annotation was done by the course author alone, with no independent annotation by several people to compare.",
+      "source": "f3048e0dc25b"
+    },
+    "routing.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the routing results come from a fixed script, and the misrouted tickets in it are arranged on purpose.",
+      "source": "56c11f141620"
+    },
+    "serial-vs-parallel.title": {
+      "text": "Serial versus parallel",
+      "source": "d4e2c687ce36"
+    },
+    "serial-vs-parallel.hypothesis": {
+      "text": "When three independent requests are sent at the same time, the wall-clock time is clearly shorter than serial, and a single request does not get any shorter.",
+      "source": "f7be585cd942"
+    },
+    "serial-vs-parallel.serial.label": {
+      "text": "Three subtasks, serial",
+      "source": "733da7625df3"
+    },
+    "serial-vs-parallel.parallel.label": {
+      "text": "Three subtasks, parallel",
+      "source": "43b9a890dde6"
+    },
+    "serial-vs-parallel.branch-tag.text": {
+      "text": "The branch tag that parallel requests carry.",
+      "source": "aa5e9d6d03e8"
+    },
+    "serial-vs-parallel.wall.text": {
+      "text": "The wall-clock time.",
+      "source": "27f6814b441b"
+    },
+    "serial-vs-parallel.sum.text": {
+      "text": "The sum of the branch durations.",
+      "source": "7f39fa08113f"
+    },
+    "serial-vs-parallel.branches.text": {
+      "text": "Each branch's start and end times.",
+      "source": "964e1968c093"
+    },
+    "serial-vs-parallel.guide.0.text": {
+      "text": "Both arms send the same three requests, one after another in one arm and at the same time in the other.",
+      "source": "49517eeeab5b"
+    },
+    "serial-vs-parallel.guide.1.text": {
+      "text": "Parallel requests carry a branch tag, and responses are paired by it. The serial arm has no such field.",
+      "source": "417453182547"
+    },
+    "serial-vs-parallel.guide.2.text": {
+      "text": "This is the wall-clock time: from when the first request is sent to when the last response comes back.",
+      "source": "08d60abb0bb6"
+    },
+    "serial-vs-parallel.guide.3.text": {
+      "text": "This is the three branch durations added up. In parallel it is larger than the wall-clock time, and the difference is the part that overlapped.",
+      "source": "6d9f56de7b3e"
+    },
+    "serial-vs-parallel.guide.4.text": {
+      "text": "Look at each branch's start time: the parallel arm starts almost at the same moment.",
+      "source": "bd4f43259cf8"
+    },
+    "serial-vs-parallel.conclusion.proves.0": {
+      "text": "In this run, how much wall-clock time serial and parallel each took, and when each branch started and ended.",
+      "source": "84f843756fbd"
+    },
+    "serial-vs-parallel.conclusion.does_not_prove.0": {
+      "text": "One measurement is heavily affected by the network and provider queuing, so comparing needs several runs.",
+      "source": "df8ac7e3417b"
+    },
+    "serial-vs-parallel.conclusion.does_not_prove.1": {
+      "text": "The provider may limit concurrency, so more branches are not necessarily faster.",
+      "source": "999c09a2390f"
+    },
+    "serial-vs-parallel.conclusion.does_not_prove.2": {
+      "text": "In offline test mode every request pauses a fixed 50 milliseconds, so the times do not represent a real provider.",
+      "source": "bc95a0e94a64"
+    },
+    "inputs.pattern.label": {
+      "text": "Pattern",
+      "source": "47a270081ab2"
+    },
+    "inputs.pattern.options.chain.label": {
+      "text": "Prompt chaining",
+      "source": "0842799ee254"
+    },
+    "inputs.pattern.options.routing.label": {
+      "text": "Routing",
+      "source": "b9670c85a4ab"
+    },
+    "inputs.pattern.options.serial.label": {
+      "text": "Serial",
+      "source": "f46aa4e6cafe"
+    },
+    "inputs.pattern.options.parallel.label": {
+      "text": "Parallel",
+      "source": "be050d58e9a7"
+    },
+    "quiz.q1.prompt": {
+      "text": "What kind of task suits a workflow rather than an agent loop?",
+      "source": "20d0dffbc92b"
+    },
+    "quiz.q1.a.text": {
+      "text": "A task whose steps are fixed and can be written out in advance",
+      "source": "251f75e0e4ae"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Correct. When the flow is fixed, leaving it to the program is more controllable.",
+      "source": "174a69483436"
+    },
+    "quiz.q1.b.text": {
+      "text": "Any task that needs to call a model",
+      "source": "d57de80f3169"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Not quite. When the steps depend on intermediate results, you still need an agent loop.",
+      "source": "789a2ff27310"
+    },
+    "quiz.q1.c.text": {
+      "text": "A task with only one step",
+      "source": "73acb1215d8c"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "Not quite. A one-step task needs just one request; there is no workflow to speak of.",
+      "source": "61bd8729a81d"
+    },
+    "quiz.q1.explanation": {
+      "text": "First see whether the steps can be determined in advance, then choose a pattern.",
+      "source": "ad125dc03b8d"
+    },
+    "quiz.q2.prompt": {
+      "text": "Routing accuracy is 18/20. Does that show this router has 90% accuracy on real tickets too?",
+      "source": "98662cccb6a6"
+    },
+    "quiz.q2.a.text": {
+      "text": "No. 20 samples are too few, and the human annotation was done by only one person",
+      "source": "756740041600"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. This is only a small-sample measurement.",
+      "source": "59efeecc99f8"
+    },
+    "quiz.q2.b.text": {
+      "text": "Yes. Accuracy is accuracy",
+      "source": "68b8ccb63565"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Not quite. Both the sample size and the quality of the human annotation affect the conclusion.",
+      "source": "e897c5f9c983"
+    },
+    "quiz.q2.c.text": {
+      "text": "Yes, as long as the model stays the same",
+      "source": "0812e1bb8c1b"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "Not quite. The distribution of real tickets is different from these 20.",
+      "source": "74caa0b992c8"
+    },
+    "quiz.q2.explanation": {
+      "text": "A measurement has to be read together with the sample and how the human annotation was done.",
+      "source": "0d5935c7bf75"
+    },
+    "quiz.q3.prompt": {
+      "text": "Why do parallel requests need a branch tag?",
+      "source": "48c0f23f6112"
+    },
+    "quiz.q3.a.text": {
+      "text": "Responses may not come back in the order they were sent, so pairing relies on the tag",
+      "source": "237ac7dce5ef"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Correct. Without a tag, the timeline might pair a response with the wrong request.",
+      "source": "3f4e1d6afa11"
+    },
+    "quiz.q3.b.text": {
+      "text": "The provider requires parallel requests to carry this field",
+      "source": "07a28216cdf2"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Not quite. branch is written only in the platform's events and is not sent to the provider.",
+      "source": "f49890e22e4d"
+    },
+    "quiz.q3.c.text": {
+      "text": "To make requests faster",
+      "source": "70ba13f0adbd"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "Not quite. The tag does not affect speed.",
+      "source": "5738016c919c"
+    },
+    "quiz.q3.explanation": {
+      "text": "Requests running at the same time need an explicit pairing key.",
+      "source": "3dadb033a4ae"
+    },
+    "quiz.q4.prompt": {
+      "text": "In the first step of the prompt chain, the model first replied \"Here are the key points:\" and then listed three key points on lines starting with \"- \". What does the gate do?",
+      "source": "ac98d9970430"
+    },
+    "quiz.q4.a.text": {
+      "text": "It fails: there are 4 lines in all, not exactly 3, and the chain stops at the first step",
+      "source": "6eb67a4c5b52"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Correct. The gate just counts lines by the rule, and the opening remark counts as one line.",
+      "source": "0f23cadbd3d7"
+    },
+    "quiz.q4.b.text": {
+      "text": "It passes: all three key points are there",
+      "source": "7638677c830b"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "Not quite. The rule requires exactly 3 lines, each starting with \"- \".",
+      "source": "26fc87359f72"
+    },
+    "quiz.q4.c.text": {
+      "text": "The program deletes the first line and lets it through",
+      "source": "01440b7d606f"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "Not quite. A gate does not patch the output. If it fails, it stops.",
+      "source": "136d12a9093d"
+    },
+    "quiz.q4.explanation": {
+      "text": "A gate judges by hard-coded rules and does not guess the model's intent.",
+      "source": "9f52a1f9f9e8"
+    },
+    "quiz.q5.prompt": {
+      "text": "The confusion matrix columns are course, account, error, other, in that order. The account row is 0, 4, 1, 0. What does that show?",
+      "source": "c940c7fbc929"
+    },
+    "quiz.q5.a.text": {
+      "text": "Of the 5 tickets labeled account, 4 were right and 1 was taken for a runtime error",
+      "source": "ce8d67250fe9"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Correct. Rows are the human annotation and columns are the routing result.",
+      "source": "2fb3848c848c"
+    },
+    "quiz.q5.b.text": {
+      "text": "The router once took another category for account",
+      "source": "86f8aa68a6ec"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "Not quite. For that you look at the account column, not this row.",
+      "source": "174c4ef3e102"
+    },
+    "quiz.q5.c.text": {
+      "text": "The overall accuracy is 4/5",
+      "source": "119bfce9baf2"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "Not quite. Accuracy adds up the diagonal of all four rows and divides by 20.",
+      "source": "25cb636edc11"
+    },
+    "quiz.q5.explanation": {
+      "text": "Read by row to see how many of a category were recognized, and by column to see how many of those judged as a category really are.",
+      "source": "1b89d18839b4"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Routing: 20 human-labeled tickets\" and find a ticket whose routing result does not match the human annotation.",
+      "source": "6a63163e0077"
+    },
+    "check-hunt.explanation": {
+      "text": "Only a misrouted lesson.route carries misrouted, and its correct is false: the human annotation and the model's prediction (predicted) do not match. Then read its raw to see why the model classified it that way. The annotation itself may also be disputed. A ticket that went to the fallback where the fallback category happens to equal the annotation does not count as misrouted. If all 20 are right this time, your run has no such record.",
+      "source": "20a591c72f8d"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran routing and can name the two most often confused categories from the confusion matrix.",
+      "source": "1b766e3d8db2"
+    },
+    "check-points.item-2.text": {
+      "text": "I compared the wall-clock time and the sum of branch durations in the serial and parallel runs.",
+      "source": "d6723351a6e3"
+    },
+    "check-points.item-3.text": {
+      "text": "I can say what the prompt chain's gate stops and what it does not.",
+      "source": "df7cf28085da"
+    },
+    "code_notes.lesson.chain_step.note": {
+      "text": "One event per prompt chain step: output is the model output, gate_passed says whether the gate passed, and gate_detail gives the reason.",
+      "source": "3f8fe1fda0c0"
+    },
+    "code_notes.lesson.route.note": {
+      "text": "One event per ticket: gold is the human annotation, predicted is the parsed label, fallback says whether it fell back, and raw is the original text.",
+      "source": "69d2b64b1bf5"
+    },
+    "code_notes.other.note": {
+      "text": "The fourth routing label, other, is also the fallback label: whenever the model's output is not in the label list, the program puts the ticket under other.",
+      "source": "8933c1760ffb"
+    },
+    "code_notes.branch.note": {
+      "text": "The pairing tag for parallel requests and responses, with a value like messages-context. It is recorded only in platform events, not sent to the provider, and serial requests do not carry it.",
+      "source": "f49141241835"
+    },
+    "code_notes.perf_counter.note": {
+      "text": "Python's high-resolution timer, used only to measure time differences. This lesson uses it in the backend to measure the wall-clock time and each branch's start and end.",
+      "source": "73ee82afef8a"
+    },
+    "code_notes.lesson.parallel.note": {
+      "text": "The timing result: wall_ms is the wall-clock time and sum_of_branches_ms is the sum of the branch durations, both in milliseconds.",
+      "source": "b34a945e2c9c"
+    },
+    "code_notes.TOPICS.note": {
+      "text": "Three independent recap tasks, keyed by lesson identifier. In parallel the key is also used as the request's branch.",
+      "source": "c496b87e78bd"
+    }
+  }
+}

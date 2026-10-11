@@ -1,0 +1,1106 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "CONTEXT / BUDGET",
+      "source": "bd6a1894bbc4"
+    },
+    "hero.headline": {
+      "text": "When the budget runs out,",
+      "source": "c68f0d6033b6"
+    },
+    "hero.highlight": {
+      "text": "check what got cut.",
+      "source": "e70efdca54ad"
+    },
+    "hero.takeaway": {
+      "text": "A request has a length limit. A truncation window squeezes the request into the budget; the price is that earlier tool results may be dropped as a whole group. When you truncate, a tool call and its tool result must be kept together or dropped together.",
+      "source": "8d6360fdb265"
+    },
+    "concepts.01-window.label": {
+      "text": "01 / WINDOW",
+      "source": "98e8d6cf8440"
+    },
+    "concepts.01-window.title": {
+      "text": "Context window",
+      "source": "bb074b86a98f"
+    },
+    "concepts.01-window.description": {
+      "text": "A model can process only so much in one request. The input messages and the model's output share that limit.",
+      "source": "68b4f022ddf7"
+    },
+    "concepts.02-budget.label": {
+      "text": "02 / BUDGET",
+      "source": "f70b5f513cd0"
+    },
+    "concepts.02-budget.title": {
+      "text": "Context budget",
+      "source": "195298428ccc"
+    },
+    "concepts.02-budget.description": {
+      "text": "The length limit your program sets for one request. This lesson measures it in characters; token counts and cost come from what the provider reports.",
+      "source": "7811b2a96cfa"
+    },
+    "concepts.03-cut.label": {
+      "text": "03 / CUT",
+      "source": "7475ccaed697"
+    },
+    "concepts.03-cut.title": {
+      "text": "Truncation window",
+      "source": "ffa7d949b047"
+    },
+    "concepts.03-cut.description": {
+      "text": "Fill from the newest message backward and stop when the budget is full. The earliest tool call and tool result are dropped as a group.",
+      "source": "2e061c961cee"
+    },
+    "concepts.04-pair.label": {
+      "text": "04 / PAIR",
+      "source": "2c0e3e87c9bd"
+    },
+    "concepts.04-pair.title": {
+      "text": "Call and result stay paired",
+      "source": "9f33561d8584"
+    },
+    "concepts.04-pair.description": {
+      "text": "Keeping only the last few messages can split a pair and leave a tool result with no call.",
+      "source": "7891963aea9c"
+    },
+    "section-1.title": {
+      "text": "How much fits in one request",
+      "source": "832b114150ec"
+    },
+    "section-1.paragraphs.0": {
+      "text": "A request has a length limit, but the message history keeps growing, so sooner or later you have to decide what to keep. {{lesson:multi-turn-history}} showed that every extra round of conversation adds two messages to the request; every time the agent calls a tool, it adds one more call and one more tool result. Reading a long file or running a test can produce a tool result tens of thousands of characters long. The histories in the earlier lessons were short. This lesson deals with the case where they no longer fit.",
+      "source": "b3fea0707211"
+    },
+    "section-1.paragraphs.1": {
+      "text": "The length a model can process in one request is limited. That limit is the context window, counted in tokens, and the input messages and the model's output share it. If a request exceeds the window, the provider usually rejects it outright; check the provider's documentation for specifics. If the input fills the window, little room is left for the output, and the answer may stop partway because of length. That is the finish reason `length` you saw in {{lesson:chat-request}}.",
+      "source": "49a8c34b9b19"
+    },
+    "section-1.paragraphs.2": {
+      "text": "So before each request, your program has to set a limit smaller than the window, then decide how much to give the system prompt, the history, tool results, and the question, and leave some room for the output. That program-set limit is the context budget. A made-up example: with a 32000-token window and 4000 reserved for output, you set the input budget to 28000 or less, and anything beyond that has to be dropped or rewritten.",
+      "source": "4a4c3ff86d2b"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The budget in this lesson is the input char_budget, 600 by default. The runner first performs one real read of a reference entry, then builds a history padded with side discussions. With the default parameters, that full history is about 1300 characters, which does not fit in a 600 budget. The question this lesson answers: when it does not fit, what gets cut?",
+      "source": "11b2df225b8e"
+    },
+    "section-2.title": {
+      "text": "Characters, tokens, and usage",
+      "source": "c41984fe2595"
+    },
+    "section-2.paragraphs.0": {
+      "text": "This lesson budgets with a local character count because it does not depend on any provider and comes out the same every time. But it is not a token count. message_chars serializes messages into compact JSON and counts the characters, including key names, quotes, and brackets. It can be computed locally, which makes it good for comparing which of two layouts is longer.",
+      "source": "f1ac2acd0846"
+    },
+    "section-2.paragraphs.1": {
+      "text": "A token is the unit the model splits text into, and the model's tokenizer decides how. The same number of characters of Chinese, English, and JSON produces different token counts, and the same Chinese passage can differ from one model to another. So a character count cannot be converted into an exact token count, let alone into cost.",
+      "source": "ffe2afbde188"
+    },
+    "section-2.paragraphs.2": {
+      "text": "For token counts, look at the usage the provider reports in the response, that is, the usage field ({{lesson:chat-request}} covered it). If the provider reports it, the lab report lists it as is. If not, the report says \"未报告\" (\"not reported\"); it does not record 0, and it does not pass off a character count in its place. You could also estimate tokens locally with the model's tokenizer, but this lesson does not: providers tokenize differently, and a wrong estimate misleads more than it helps.",
+      "source": "44d15e2889ac"
+    },
+    "deep-dive-chars.title": {
+      "text": "By hand: where a history's character count comes from",
+      "source": "2c51b2254803"
+    },
+    "deep-dive-chars.summary": {
+      "text": "Work through this lesson's message_chars to see how many characters are JSON structure, and why the count does not line up with tokens.",
+      "source": "fcb37da2f86d"
+    },
+    "deep-dive-chars.paragraphs.0": {
+      "text": "Use this lesson's code to count one side-discussion question. Its content, \"旁支讨论 1：请简短记下这条与本题无关的练习安排。\" (\"Side discussion 1: please briefly note this practice schedule, which has nothing to do with the task.\"), is 25 characters. Written as a JSON message, it gains `{\"role\":\"user\",\"content\":\"` in front and `\"}` at the end, 53 characters in total, so 28 of them are key names, quotes, and brackets. A question and an answer, two messages in a list, add up to 99 characters.",
+      "source": "0f3b243360b3"
+    },
+    "deep-dive-chars.paragraphs.1": {
+      "text": "Tool exchanges are longer. The message pair for the default reference entry, put in a list by itself, comes to 344 characters. The assistant message carries the call id, the tool name, and the arguments; the content of the tool message is itself a JSON string, in which every quote must be escaped as `\\\"`, one extra character each. These are exact values computed by this lesson's code, and the \"JSON 字符数\" (\"JSON characters\") column of the lab report lets you check a whole history.",
+      "source": "9e3ce976c26a"
+    },
+    "deep-dive-chars.paragraphs.2": {
+      "text": "There is no such exact value on the token side. A tokenizer often splits a common English word into one token and a Chinese character into one or two, and the brackets and quotes in JSON take tokens too, depending on the model. \"Divide characters by 4\" is a rough rule of thumb for English text and is inaccurate for both Chinese and JSON. So this lesson compares only character counts locally, and token counts always come from what the provider reports.",
+      "source": "f44b08b5a1ec"
+    },
+    "predict-tool-calls.prompt": {
+      "text": "Before you run \"Source messages-context, budget 600 characters\" on the lab bench, guess: how many tool_call events will this run produce? Hint: the assistant tool call in the full history was put there by the runner. Does it count as an execution?",
+      "source": "3ef7bf8f8c77"
+    },
+    "mq-char-budget.char-budget-unit.prompt": {
+      "text": "What does char_budget=600 in this lesson limit?",
+      "source": "5e05b2ec3ce8"
+    },
+    "mq-char-budget.char-budget-unit.a.text": {
+      "text": "The character count of the locally serialized JSON, not a token count",
+      "source": "a08f406c3895"
+    },
+    "mq-char-budget.char-budget-unit.a.feedback": {
+      "text": "Correct. It is only a metric for comparing lengths locally.",
+      "source": "97bf26eaa292"
+    },
+    "mq-char-budget.char-budget-unit.b.text": {
+      "text": "The token limit of the model's context window",
+      "source": "0d263d078db4"
+    },
+    "mq-char-budget.char-budget-unit.b.feedback": {
+      "text": "Not quite. Tokens are decided by the model's tokenizer, and characters only roughly correspond to them.",
+      "source": "9a847576234a"
+    },
+    "mq-char-budget.char-budget-unit.c.text": {
+      "text": "The cost limit on the provider's bill",
+      "source": "d23f175b4ca8"
+    },
+    "mq-char-budget.char-budget-unit.c.feedback": {
+      "text": "Not quite. Cost is computed from the usage the provider reports, and this lesson has no cost limit.",
+      "source": "3ae7d6fd412d"
+    },
+    "mq-char-budget.char-budget-unit.explanation": {
+      "text": "Be clear about the budget's unit: local characters, tokens, and cost are three different quantities.",
+      "source": "401c8f9db698"
+    },
+    "section-3.title": {
+      "text": "What the full history costs",
+      "source": "d9a9e2ab66dc"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Sending the full history is the easiest option. The cost is that every request pays in length, time, and money for all the old messages. The full history carries every message unchanged: the goal, that tool call and its tool result, the side discussions, and the final follow-up question. A side discussion is filler conversation unrelated to the task, used only to make the history longer. The runner assembles these messages: the assistant's tool call and the side-discussion replies were not generated by the model earlier, and the tool result comes from a real Python read in this run.",
+      "source": "28e4d17ff24e"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Each +1 to noise_repeats adds two messages, one question and one answer, to the history. Raise it from 8 to 20 and the full history goes from 21 messages to 45 and from about 1300 characters to about 2500, without a single piece of useful information added. In a real agent the effect is stronger: without caching, the provider reprocesses all of the input on every request, so the longer the input, the longer the wait for the first token and the higher the per-token cost.",
+      "source": "f96ce16013f5"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Length also affects answer quality. The phenomenon is called context rot: the longer the context, the worse the model gets at finding an earlier piece of information, and being in the window does not mean it will be used. A key fact from early on, buried among lots of irrelevant content, is even harder to find. The context management example in the Claude Cookbooks describes this phenomenon. This lesson does not test it; it only compares length and whether the request contains the source.",
+      "source": "129e39b1def8"
+    },
+    "deep-dive-cumulative.title": {
+      "text": "By hand: how total usage grows when every round resends the history",
+      "source": "375cc915b577"
+    },
+    "deep-dive-cumulative.summary": {
+      "text": "Resending the whole history every round makes each request grow linearly with the round count, but cumulative usage grows roughly with the square of the round count.",
+      "source": "3ebc95b32b97"
+    },
+    "deep-dive-cumulative.paragraphs.0": {
+      "text": "A made-up example: the system prompt is 200 tokens and the round-1 question is 100 tokens. After that, each round adds the previous answer plus the new question, another 100 tokens. The round-1 request has 300 tokens of input, round 2 has 400, and round 10 has 1200: a single request grows linearly with the round count.",
+      "source": "f7866cdaa5b0"
+    },
+    "deep-dive-cumulative.paragraphs.1": {
+      "text": "Accumulated, it looks different. The input over 10 rounds is the sum of ten numbers from 300 to 1200, 7500 tokens in all. If each round carried only the system prompt and the latest 100 tokens of conversation, every round would be 300, for a total of 3000 over 10 rounds. Double the rounds to 20 and the full history totals 25000, against 6000 for the recent-only approach. Doubling the rounds more than triples the first and only doubles the second.",
+      "source": "9ab41505aa5e"
+    },
+    "deep-dive-cumulative.paragraphs.2": {
+      "text": "This is the most common source of cost in long tasks, and another reason to set a context budget: even if the window can hold it all, there is no need to pay every round for old messages that stopped mattering long ago. Providers also discount a beginning that stays identical from round to round through caching; that is the subject of {{lesson:prompt-caching}} and is not covered here.",
+      "source": "e201ccbe096b"
+    },
+    "deep-dive-cumulative.paragraphs.3": {
+      "text": "The Claude Code cost documentation describes exactly this kind of growth. Every request carries the whole conversation, and every tool use means another request carrying that batch of tool results. So even a very short question in a session that has been open all day is metered against the whole conversation, at the cached price when there is a cache hit. The documentation's advice: use `/clear` to start a fresh conversation when you switch to an unrelated task, and use `/context` to see what is taking up the context window. Compared with this lesson, it looks at the token usage the provider reports, not local character counts. It also has no fixed truncation window; when the conversation is nearly full, it rewrites it into a summary, which is what {{lesson:context-compaction}} does. Treat the official documentation as authoritative.",
+      "source": "bfd7033bcc86"
+    },
+    "misconception-big-window.claim": {
+      "text": "Models now have windows of several hundred thousand or even a million tokens. If everything fits, just send everything. There is no need for a context budget.",
+      "source": "ac2db7313a61"
+    },
+    "misconception-big-window.correction": {
+      "text": "A big window only means everything fits. Every request still pays for and waits on all the input, and cumulative usage grows roughly with the square of the round count. A key early fact buried in a long history is harder for the model to find, and a full input crowds out room for the output. The budget decides what each request should carry, not just whether it fits.",
+      "source": "c31de8283a66"
+    },
+    "section-4.title": {
+      "text": "Truncation window: fill from the newest message backward",
+      "source": "4a0f20d35666"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A truncation window first secures the system message and the current question, then fills group by group from the newest message backward, and stops when something no longer fits. fit_window's first step checks whether those two even fit: in this lesson, the system message plus the follow-up are only a bit over a hundred characters. If the budget cannot hold even those, it raises an error directly rather than send a request that is missing the rules or the question.",
+      "source": "4b719fe1cda9"
+    },
+    "section-4.paragraphs.1": {
+      "text": "In the second step, message_groups groups the history in between: a tool message joins the group of the assistant call before it, and every other message is its own group. Then it tries groups from the newest backward: if adding a group stays within the budget, it goes in; if not, it stops. A tool call and its tool result are in the same group, so they either both go in or both get dropped, and the truncated history is therefore always valid under the protocol.",
+      "source": "388222b26c0c"
+    },
+    "section-4.paragraphs.2": {
+      "text": "It stops when something does not fit, rather than skipping that group to fit earlier, smaller messages. Skipping around would leave a hole in the middle of the window; the conversation the model sees would not connect from one part to the next, and it could not tell what is missing. With the default budget of 600, the window keeps 11 messages: the system message, the most recent rounds of side discussion, and the follow-up. The tool exchange is at the start of the history and gets dropped; the goal's user message is even earlier and goes too.",
+      "source": "e4c4390014d9"
+    },
+    "section-4.paragraphs.3": {
+      "text": "One more detail: grouping protects only tool pairing, not question-and-answer pairing. With the default follow-up, the first message after system in the window is an assistant reply (for example, \"已记下旁支讨论 4。\", \"Noted side discussion 4.\") whose question has already been cut. That is valid under the protocol but reads as if it starts mid-conversation. Some systems group by turn and treat a question and its answer as a unit, at the price of coarser cuts.",
+      "source": "46f961c7a16e"
+    },
+    "mq-window-loss.window-loss.prompt": {
+      "text": "A truncation window drops the earlier tool call and tool result as a whole group. What happens?",
+      "source": "4e79603238c3"
+    },
+    "mq-window-loss.window-loss.a.text": {
+      "text": "The request is still valid under the protocol, but the source and the facts are no longer visible",
+      "source": "e7cd1ec54de8"
+    },
+    "mq-window-loss.window-loss.a.feedback": {
+      "text": "Correct. Dropping the whole group preserves the protocol and loses the evidence.",
+      "source": "849498a37040"
+    },
+    "mq-window-loss.window-loss.b.text": {
+      "text": "The request is rejected because of an orphaned tool message",
+      "source": "6dfe8b24c861"
+    },
+    "mq-window-loss.window-loss.b.feedback": {
+      "text": "Not quite. Dropping the whole group is exactly what avoids leaving an orphaned tool result.",
+      "source": "f4f3e9fece84"
+    },
+    "mq-window-loss.window-loss.c.text": {
+      "text": "No information is lost; the history is just shorter",
+      "source": "5dab1ff9f9b9"
+    },
+    "mq-window-loss.window-loss.c.feedback": {
+      "text": "Not quite. What was dropped is precisely the source and the facts, and this request no longer has them.",
+      "source": "330da56c3f6c"
+    },
+    "mq-window-loss.window-loss.explanation": {
+      "text": "Truncation has to hold two things at once: a valid protocol, and knowing which evidence was cut.",
+      "source": "b6b2b0c35168"
+    },
+    "section-5.title": {
+      "text": "Truncating by message count splits the pair",
+      "source": "d361ee2fa851"
+    },
+    "section-5.paragraphs.0": {
+      "text": "If you truncate only by message count, the cut point can land between a tool call and its tool result and leave an orphaned tool result. \"Keep only the last N messages\" is the simplest thing to write, and naive_tail does exactly that: it keeps system and the last keep messages. The count has nothing to do with length: 10 short messages and 10 long tool results are very different. The bigger problem is the cut point.",
+      "source": "a61f48a2c2d4"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The \"Split a tool call from its result\" experiment puts the tool exchange at the end of the history: after the side discussions come the assistant call, the tool result, and the follow-up. Keep only the last 2 messages and you are left with the tool result and the follow-up, so in the request a tool message follows system directly, and the call it answers is gone. When pair_aware_tail sees that the start is a tool message, it adds one to the count and keeps that assistant call too.",
+      "source": "bc1f21f8f740"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The protocol check in {{lesson:messages-context}} would reject this kind of history. This experiment deliberately only records the check's verdict and does not block, so both truncations are sent as they are. Some providers return HTTP 400 and some accept it and answer anyway; go by this run's record. Being accepted does not mean there is no problem either: when the model sees a tool result with no call, it may not understand it correctly.",
+      "source": "0303771d673d"
+    },
+    "section-5.paragraphs.3": {
+      "text": "When the provider rejects the request, the runner records the status code, the error type, and the original text as lesson.provider_error, without retrying or rewriting. Only a 4xx about this set of messages counts as a rejection; authentication failures, model not found, timeouts, rate limits, and 5xx describe the configuration or the provider's state at the time and are reported as errors as usual. Offline test mode has no real provider, so the 400 there is simulated by a fixture, and the source in the event is offline_fixture.",
+      "source": "4c37595e8117"
+    },
+    "deep-dive-real-systems.title": {
+      "text": "How real systems truncate: protect the pair, do the cheap things first",
+      "source": "542a6da15972"
+    },
+    "deep-dive-real-systems.summary": {
+      "text": "The truncation implementations in open-source tutorials all protect tool pairing, and they put operations that lose information or cost extra money later.",
+      "source": "14d3029ca331"
+    },
+    "deep-dive-real-systems.paragraphs.0": {
+      "text": "In the Learn Claude Code section on context housekeeping, once there are more than 50 messages, it first writes the full history to a file, then keeps only the first 3 and the latest 46 messages, replacing the middle with a note saying how many were archived and where they are stored. When choosing the cut point, it specifically checks both sides of the cut, and if the cut would split a call from its result, it moves the cut. It also estimates length by JSON character count.",
+      "source": "2443b9f9381c"
+    },
+    "deep-dive-real-systems.paragraphs.1": {
+      "text": "Truncating by count is only one step in its whole housekeeping flow. The flow is ordered by cost: operations that do not call the model and whose originals can be recovered from a file come first, and the summary, which needs an extra request and loses detail, comes last. {{lesson:context-compaction}} covers this in detail.",
+      "source": "167f3f441d96"
+    },
+    "deep-dive-real-systems.paragraphs.2": {
+      "text": "In the context management example in the Claude Cookbooks, when old tool results are cleared, the call record is kept and only the result content is swapped out, so the model still knows it called that tool and with what arguments. The two sources do it differently but hold the same line: the pairing of call and result must not break. This lesson's truncation window is the simplest of these. It has no archive and no placeholder note, so the model sees nothing at all of the dropped messages in this run. {{lesson:context-compaction}} compares several ways of rewriting old content.",
+      "source": "4d51350f08ea"
+    },
+    "mq-broken.split-pair-fix.prompt": {
+      "text": "When truncating a history, the cut point lands exactly between an assistant call and its tool result. What should you do?",
+      "source": "1f3aa8a0ee63"
+    },
+    "mq-broken.split-pair-fix.a.text": {
+      "text": "Move the cut point so the call and the tool result are kept together or dropped together",
+      "source": "eef7643164f4"
+    },
+    "mq-broken.split-pair-fix.a.feedback": {
+      "text": "Correct. Both pair-aware truncation and the truncation window do it this way.",
+      "source": "e3dba5db8ef2"
+    },
+    "mq-broken.split-pair-fix.b.text": {
+      "text": "Keep only the tool result; the provider will fill in the call",
+      "source": "916557b44132"
+    },
+    "mq-broken.split-pair-fix.b.feedback": {
+      "text": "Not quite. The provider does not fill in the call. Some reject the request outright and some accept it anyway, but the request itself already violates the protocol.",
+      "source": "dcb8da997ad1"
+    },
+    "mq-broken.split-pair-fix.c.text": {
+      "text": "Turn the tool result into a user message and send it",
+      "source": "d2fe8e86dc40"
+    },
+    "mq-broken.split-pair-fix.c.feedback": {
+      "text": "That gets past the protocol check, but the model can then no longer tell whether it is a tool result or something the user said.",
+      "source": "b44c147aaab0"
+    },
+    "mq-broken.split-pair-fix.explanation": {
+      "text": "A tool call and its tool result are a single unit and must not be split when truncating.",
+      "source": "070d448e2ce4"
+    },
+    "section-6.title": {
+      "text": "How to read the lab report",
+      "source": "58d8aa6f8bd3"
+    },
+    "section-6.paragraphs.0": {
+      "text": "The lab report puts the two layouts side by side: message count, JSON characters, whether it is within budget, and whether the source and the fact are present are all checked item by item against the request that was actually sent. Provider usage is shown only when the response really has it.",
+      "source": "f210320d675f"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The \"有来源\" (\"has source\") and \"有事实\" (\"has fact\") columns are local string checks: they look for the source name and the original fact text verbatim in the messages that were sent, and count it as present if found. They do not look at the model's answer. What they tell you is whether this request contained that evidence. Whether the answer used the evidence, you have to read the answer itself: when the request has no source, did the model say it lacked grounds, or did it make up a conclusion?",
+      "source": "01eab07a37ca"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Two different answers may also be just variation in the model's output: even with sampling temperature set to 0 the output is not guaranteed to be the same every time, and one comparison cannot show typical behavior.",
+      "source": "2f1476e81741"
+    },
+    "section-what-to-keep.title": {
+      "text": "The most recent is not always the most important",
+      "source": "642a234e5885"
+    },
+    "section-what-to-keep.paragraphs.0": {
+      "text": "A truncation window decides only by recency and does not know which message matters. With this lesson's default budget, what the window keeps is the most recent rounds of side discussion unrelated to the task, and what it drops is the goal, the constraints, and the only piece of reference material. The window did not miscalculate. The assumption that newer means more important does not hold here.",
+      "source": "3672820ccfcd"
+    },
+    "section-what-to-keep.paragraphs.1": {
+      "text": "Truncation decides only what this request carries; the full history in your program is not deleted. There are two ways to keep key information within the budget. One is to put the important things outside the messages and have the program keep them: the goal, evidence, and progress in {{lesson:application-state}} are not in the messages, so no matter how the messages are cut they are not lost, and when needed they are turned into text and put back into the request. The other is to rewrite old content shorter: {{lesson:context-compaction}} compares several compression approaches and uses probe questions to check what was lost after compression.",
+      "source": "adc215dbbf9d"
+    },
+    "walkthrough.title": {
+      "text": "Two layouts in one run",
+      "source": "a59df7590f7a"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, how the exercise \"Full history vs. truncation window\" is built. The code is a simplified illustration. For real requests and answers, go by the run events.",
+      "source": "e4a352ba227f"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Local tool",
+      "source": "a0a4e13a8af6"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Read the reference material",
+      "source": "09f234457978"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The runner calls lookup_lesson and gets a tool result with a source and a fact.",
+      "source": "edbb44113215"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "tool_call / tool_result",
+      "source": "8e890aed9bfe"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Build the full history",
+      "source": "601b5f010f78"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The tool call and the tool result go at the start, followed by the side discussions and the follow-up question.",
+      "source": "d5624e85108a"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "request.messages",
+      "source": "41e04924de16"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Truncate to the budget",
+      "source": "4af4730480be"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Fill from the newest group backward and stop when something does not fit; a tool call and its tool result go in or out as a group.",
+      "source": "021f2dd906f2"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.context_variant",
+      "source": "30886f6d3004"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Ask once each",
+      "source": "a7725b6057b8"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The same follow-up question is sent once per layout, and the answers and usage are compared item by item.",
+      "source": "2a7dd6724b29"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "response / lesson.report",
+      "source": "18c9fa3b245a"
+    },
+    "references.lcc-context-compact.title": {
+      "text": "Context always fills up: truncation that protects tool pairing, and step-by-step housekeeping (Learn Claude Code)",
+      "source": "2bd48f3d3087"
+    },
+    "references.cookbook-context-engineering.title": {
+      "text": "Context management for long-running agents: the cost of growing context and clearing old tool results (Claude Cookbooks)",
+      "source": "6cb8da8fbc91"
+    },
+    "references.book-ch2-shrink.title": {
+      "text": "Context engineering: why subtract from the context — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "beb7ffec929c"
+    },
+    "references.cc-costs.title": {
+      "text": "Managing costs: why usage grows faster and faster in a long session (Claude Code docs)",
+      "source": "c975663690d3"
+    },
+    "code-cut.n45.text": {
+      "text": "A tool message joins the previous group, that is, the group of the assistant call it belongs to.",
+      "source": "571c8e560985"
+    },
+    "code-cut.n56.text": {
+      "text": "The system message and the current question are the minimum; if even they do not fit, raise an error rather than send an incomplete request.",
+      "source": "7507a749556c"
+    },
+    "code-cut.n60.text": {
+      "text": "Fill from the newest group backward: the more recent a message, the earlier it enters the window.",
+      "source": "7e4877b1f4df"
+    },
+    "code-cut.n62.text": {
+      "text": "Stop when it does not fit. Do not skip this group to fit earlier messages, so the window is always a continuous stretch of recent history.",
+      "source": "9b0e115c255c"
+    },
+    "code-cut.n69.text": {
+      "text": "Truncating by count only counts messages and ignores pairing, so the cut can land between a call and its tool result.",
+      "source": "2497840a2ec4"
+    },
+    "code-cut.n75.text": {
+      "text": "Pair-aware truncation: if the start is a tool message, keep one more message toward the front, until its assistant call is kept too.",
+      "source": "73b17c6d3322"
+    },
+    "code-layouts.n94.text": {
+      "text": "Full history: the tool call and tool result at the start, the side discussions after them, the follow-up last.",
+      "source": "ff04a0d414bf"
+    },
+    "code-layouts.n97.text": {
+      "text": "The truncation window is cut from the same full history, so the two layouts differ only in this step.",
+      "source": "adb42a76d232"
+    },
+    "code-layouts.n99.text": {
+      "text": "Both layouts run the protocol check before being sent; truncation must not leave an orphaned tool result.",
+      "source": "2ca1dc5e0645"
+    },
+    "code-layouts.n105.text": {
+      "text": "The runner really reads the reference material once, and both layouts use the same tool result.",
+      "source": "f54a62940d71"
+    },
+    "code-layouts.n110.text": {
+      "text": "How many messages the window kept and dropped, and whether the tool result is still there, are recorded as an event that appears on the timeline before the two requests.",
+      "source": "610d5b24e523"
+    },
+    "code-layouts.n119.text": {
+      "text": "The same follow-up question is sent once per layout; the platform records the requests and responses as they are.",
+      "source": "45a40777a1dd"
+    },
+    "code-layouts.n122.text": {
+      "text": "The lab report is assembled in _layout_report and is not expanded here.",
+      "source": "b46d8f8ed6ca"
+    },
+    "code-layouts.fold-variant-data.label": {
+      "text": "Data of lesson.context_variant: the budget, the counts of kept and dropped messages, and the construction notes",
+      "source": "12c707509d28"
+    },
+    "code-broken-pair.n155.text": {
+      "text": "This time the tool exchange goes last, so keeping only the last 2 messages puts the cut right in the middle of the pair.",
+      "source": "2e8a42674899"
+    },
+    "code-broken-pair.n158.text": {
+      "text": "The same history, two truncations, one request each.",
+      "source": "f368fc9e3fe4"
+    },
+    "code-broken-pair.n165.text": {
+      "text": "The local protocol check only records its verdict and does not block: this experiment is about seeing how the provider responds.",
+      "source": "255c66b52821"
+    },
+    "code-broken-pair.n171.text": {
+      "text": "The request is sent as is, without rewriting.",
+      "source": "536daca8c703"
+    },
+    "code-broken-pair.n174.text": {
+      "text": "Only a request-level 4xx (excluding authentication, model not found, timeout, and rate limit) counts as a provider rejection; it is recorded without retry, and other errors are raised as usual.",
+      "source": "e3f9c1913ab1"
+    },
+    "code-broken-pair.n177.text": {
+      "text": "lesson.provider_error records the status code, the error type, the original text, and the source; offline, the source is offline_fixture.",
+      "source": "e702e956b749"
+    },
+    "code-broken-pair.n183.text": {
+      "text": "The local protocol check verdicts and the provider results for the two requests go into the lab report side by side.",
+      "source": "d60cac7522db"
+    },
+    "code-decision.title": {
+      "text": "Cut the window by character budget, with a call and its tool result going in or out as a group",
+      "source": "2484d2c0054c"
+    },
+    "code-decision.chosen": {
+      "text": "Fill from the newest message backward and stop when the character budget is full; a tool message and its assistant call count as one group. Run the protocol check before sending, and take token counts only from the usage the provider reports.",
+      "source": "f20de041c14e"
+    },
+    "code-decision.last-n.title": {
+      "text": "Keep only the last N messages",
+      "source": "2172f0664d2e"
+    },
+    "code-decision.last-n.why_not": {
+      "text": "The count has nothing to do with length, so how much fits is uncertain; the cut can also land between a call and its tool result and leave a request that violates the protocol.",
+      "source": "1b7f822a1fc2"
+    },
+    "code-decision.token-count.title": {
+      "text": "Compute the budget in tokens locally",
+      "source": "7a500a19b4ec"
+    },
+    "code-decision.token-count.why_not": {
+      "text": "Providers tokenize differently, so locally only the character count can be computed accurately; token counts show only the usage actually returned in the response.",
+      "source": "191bff29cd96"
+    },
+    "code-decision.trim-result.title": {
+      "text": "Cut a tool result in half when it does not fit",
+      "source": "5172f49e83ac"
+    },
+    "code-decision.trim-result.why_not": {
+      "text": "Half a JSON document may no longer be valid, and the model cannot tell which part was removed. To keep key information within the budget, {{lesson:context-compaction}} compares several compression approaches.",
+      "source": "ed218496c50c"
+    },
+    "full-vs-window.title": {
+      "text": "Full history vs. truncation window",
+      "source": "3b525f62b02c"
+    },
+    "full-vs-window.hypothesis": {
+      "text": "When the character budget cannot hold the full history, the truncation window fills from the newest message backward, and the earliest tool call and tool result are dropped as a group, so the source and the fact become invisible. When the budget is widened until the whole history fits, the window is the same as the full history.",
+      "source": "c986fcc18b1e"
+    },
+    "full-vs-window.compare.label": {
+      "text": "Source messages-context, budget 600 characters",
+      "source": "09965d8c5c0a"
+    },
+    "full-vs-window.wide-budget.label": {
+      "text": "Budget widened to 4000 characters, everything else unchanged",
+      "source": "7fb21e672b1d"
+    },
+    "full-vs-window.lookup-result.text": {
+      "text": "What the local lookup_lesson actually returned: source and fact.",
+      "source": "e050d47f94b5"
+    },
+    "full-vs-window.window-event.text": {
+      "text": "How many messages the truncation window kept and dropped, and whether the tool result is still there.",
+      "source": "b86de964b84c"
+    },
+    "full-vs-window.full-tool-result.text": {
+      "text": "messages[3] of the full history: the tool result is still there, with its tool_call_id.",
+      "source": "6babae7c25e2"
+    },
+    "full-vs-window.window-messages.text": {
+      "text": "messages of the truncation window: after system come the most recent rounds of side discussion, and the follow-up is last.",
+      "source": "825c9fc03603"
+    },
+    "full-vs-window.window-answer.text": {
+      "text": "The original answer text for the truncation window request.",
+      "source": "2bf78fd328c0"
+    },
+    "full-vs-window.usage-field.text": {
+      "text": "usage in the response: present only when the provider actually returned it.",
+      "source": "666463c11d25"
+    },
+    "full-vs-window.guide.0.text": {
+      "text": "Both layouts answer the same follow-up question. First look at where the reference material comes from.",
+      "source": "f10155dc2a4a"
+    },
+    "full-vs-window.guide.1.text": {
+      "text": "The reference material comes from one real local Python read; the source and the fact are both here.",
+      "source": "9ac84e9d14d2"
+    },
+    "full-vs-window.guide.2.text": {
+      "text": "The truncation window is worked out before the request is sent: see how many messages it kept and dropped, and whether the tool result is still there. Run each budget once and compare the numbers here.",
+      "source": "f3cf8609756d"
+    },
+    "full-vs-window.guide.3.text": {
+      "text": "The full history carries the tool call and the tool result, so the source and the fact are both visible, at the cost of length.",
+      "source": "2241acc19fbd"
+    },
+    "full-vs-window.guide.4.text": {
+      "text": "With a budget of 600, only the most recent rounds of side discussion remain in the window; the tool call and tool result are gone as a group, and the protocol is still valid.",
+      "source": "37cfab99512e"
+    },
+    "full-vs-window.guide.5.text": {
+      "text": "Read the answer from the truncation window request: with no source, did the model say it lacked grounds?",
+      "source": "a0f4ba8f5594"
+    },
+    "full-vs-window.guide.6.text": {
+      "text": "Finally, look at usage: this is the usage the provider reported in the response. When it is not returned, the report says \"未报告\" (\"not reported\") and does not pass off a character count. In offline test mode, usage is roughly generated by the fixture.",
+      "source": "216189e761de"
+    },
+    "full-vs-window.conclusion.proves.0": {
+      "text": "What information the messages actually sent in the two layouts contained in this run, and the answer each got.",
+      "source": "ede1124ac595"
+    },
+    "full-vs-window.conclusion.proves.1": {
+      "text": "Which messages the truncation window kept and dropped, whether it is within budget, and whether the source is still present are all computed by the program from the actual request.",
+      "source": "9a6665a0d46c"
+    },
+    "full-vs-window.conclusion.does_not_prove.0": {
+      "text": "A character count is not a token count and is not cost; only the usage returned in the response is usage reported by the provider.",
+      "source": "e446764ea417"
+    },
+    "full-vs-window.conclusion.does_not_prove.1": {
+      "text": "In a single comparison, a difference in answers may also come from variation in the model's output, so it cannot prove the truncation window is worse in general.",
+      "source": "7d9ebe11574d"
+    },
+    "full-vs-window.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the answers and usage are generated by the fixture and are not provider data.",
+      "source": "0087385b2cd6"
+    },
+    "noise-growth.title": {
+      "text": "Add side-discussion history: what gets longer",
+      "source": "c0537dc95327"
+    },
+    "noise-growth.hypothesis": {
+      "text": "When only noise_repeats goes from 8 to 20, the length of the full history grows with it, while the length of the truncation window never exceeds the character budget.",
+      "source": "f5abb2a71aa0"
+    },
+    "noise-growth.compare.label": {
+      "text": "Side discussion repeated 8 times",
+      "source": "a7c47b40dd9d"
+    },
+    "noise-growth.more-noise.label": {
+      "text": "Side discussion repeated 20 times, everything else unchanged",
+      "source": "bf2d9fe62156"
+    },
+    "noise-growth.noise-setting.text": {
+      "text": "This run's input: how many times the side discussion repeats.",
+      "source": "5c79b193d31c"
+    },
+    "noise-growth.full-messages.text": {
+      "text": "messages of the full history: the count grows with the side discussion.",
+      "source": "0be34b3a6763"
+    },
+    "noise-growth.full-chars.text": {
+      "text": "The full history's JSON characters in the lab report.",
+      "source": "5ce5e275de17"
+    },
+    "noise-growth.window-chars.text": {
+      "text": "The truncation window's JSON characters in the lab report.",
+      "source": "87bd00512eec"
+    },
+    "noise-growth.guide.0.text": {
+      "text": "The two arms differ in one input only: how many times the side discussion repeats. Confirm that first.",
+      "source": "4d1969402514"
+    },
+    "noise-growth.guide.1.text": {
+      "text": "This is the noise_repeats of your run.",
+      "source": "f9b9443426ba"
+    },
+    "noise-growth.guide.2.text": {
+      "text": "The full history carries every round of side discussion, so its message count goes up.",
+      "source": "12e8139a836c"
+    },
+    "noise-growth.guide.3.text": {
+      "text": "Note the full history's character count, then compare it with the other arm.",
+      "source": "ea1db26bb199"
+    },
+    "noise-growth.guide.4.text": {
+      "text": "The truncation window fills to the budget; no matter how much side discussion there is, it does not exceed char_budget. The character count is only a local length metric, not a token count.",
+      "source": "11077975e632"
+    },
+    "noise-growth.conclusion.proves.0": {
+      "text": "Whether the full history's message count and character count grow with the side discussion in the two runs, and whether the truncation window stays within the budget throughout.",
+      "source": "7023abd233ee"
+    },
+    "noise-growth.conclusion.does_not_prove.0": {
+      "text": "It cannot prove that a longer context necessarily makes answers worse; only length is compared here.",
+      "source": "d64e6010bb48"
+    },
+    "noise-growth.conclusion.does_not_prove.1": {
+      "text": "Growth in character count cannot be converted directly into token counts or cost.",
+      "source": "0a6adaa2ab2a"
+    },
+    "broken-pair.title": {
+      "text": "Splitting a tool call from its result: how the provider responds",
+      "source": "506afd3e8dbb"
+    },
+    "broken-pair.hypothesis": {
+      "text": "Truncating by count makes the request begin with an orphaned tool message; the local protocol check will reject it, and the provider may reject it too. A request truncated by pair gets an answer normally.",
+      "source": "bac6ecb4503e"
+    },
+    "broken-pair.broken-pair.label": {
+      "text": "The same history: truncate by count, then by pair",
+      "source": "5ee2aaf2ae50"
+    },
+    "broken-pair.naive-messages.text": {
+      "text": "The request after truncating by count: a tool message comes directly after system.",
+      "source": "039d0533c374"
+    },
+    "broken-pair.local-check.text": {
+      "text": "The verdict of the local protocol check: validate_tool_history in {{lesson:messages-context}} will reject this history.",
+      "source": "a13833571b6f"
+    },
+    "broken-pair.provider-error.text": {
+      "text": "The provider's response: the status code, the error type, the original text, and the source (provider or offline fixture).",
+      "source": "6c4a469bb850"
+    },
+    "broken-pair.naive-outcome.text": {
+      "text": "The provider result on the by-count row of the lab report: rejected (with a status code) or accepted.",
+      "source": "28294eaac470"
+    },
+    "broken-pair.pair-messages.text": {
+      "text": "The request truncated by pair: it kept one more message, the assistant call.",
+      "source": "667971d0f7e3"
+    },
+    "broken-pair.pair-answer.text": {
+      "text": "The answer to the request with the pair intact.",
+      "source": "04fc1a6d8f5f"
+    },
+    "broken-pair.guide.0.text": {
+      "text": "First make the problem really happen: truncate the history by count and see what the request becomes.",
+      "source": "0e4f0637878c"
+    },
+    "broken-pair.guide.1.text": {
+      "text": "When the last 2 messages are kept, the cut lands between the call and the tool result, and nothing before the tool result matches it as a call.",
+      "source": "fb2be52e1bf4"
+    },
+    "broken-pair.guide.2.text": {
+      "text": "The local protocol check can recognize this kind of history. Here we deliberately do not block it and send the request as is.",
+      "source": "28254e7390a4"
+    },
+    "broken-pair.guide.3.text": {
+      "text": "When the provider rejects, the status code, the original text, and the source are recorded here; if the source is offline_fixture, this 400 is simulated by a fixture. If this run has no such event, the provider did not reject.",
+      "source": "58804880a6fa"
+    },
+    "broken-pair.guide.4.text": {
+      "text": "The lab report puts this run's result in one cell: rejected or accepted. Being accepted does not mean there is no problem; read the round-1 answer to see how the model understood the tool result that has no call.",
+      "source": "5173dcb24b4f"
+    },
+    "broken-pair.guide.5.text": {
+      "text": "The fix is to move the cut point so the call and the tool result are kept together.",
+      "source": "d914dc7978d9"
+    },
+    "broken-pair.guide.6.text": {
+      "text": "Read this answer: whether the request with the pair intact is accepted is determined by this run's record.",
+      "source": "339238319a01"
+    },
+    "broken-pair.conclusion.proves.0": {
+      "text": "The two requests differ only in where the cut falls, and the first begins with an orphaned tool message.",
+      "source": "2ed1267ef1dc"
+    },
+    "broken-pair.conclusion.proves.1": {
+      "text": "How the provider handled the two requests is recorded as is: lesson.provider_error when rejected, response when accepted.",
+      "source": "97b8adde86c9"
+    },
+    "broken-pair.conclusion.does_not_prove.0": {
+      "text": "The 400 in offline test mode is simulated by a fixture, not returned by a provider. To see a real rejection, run with a real model.",
+      "source": "bad986986b9b"
+    },
+    "broken-pair.conclusion.does_not_prove.1": {
+      "text": "That one provider accepted an orphaned tool message does not show that doing so is fine; the model may not be able to read the tool result.",
+      "source": "6ccc6f42b0ec"
+    },
+    "broken-pair.conclusion.does_not_prove.2": {
+      "text": "Only one way of splitting was tested, \"keep only the tool result\"; \"keep only the call and not the tool result\" was not tested.",
+      "source": "db8c7e6d1ec0"
+    },
+    "inputs.experiment.label": {
+      "text": "Experiment",
+      "source": "5e42855db36d"
+    },
+    "inputs.experiment.options.layouts.label": {
+      "text": "Two layouts: full history and truncation window",
+      "source": "08dea6429646"
+    },
+    "inputs.experiment.options.broken_pair.label": {
+      "text": "Split a tool call from its result",
+      "source": "0cff595bf630"
+    },
+    "inputs.source_key.label": {
+      "text": "Reference source",
+      "source": "36ca458a92bd"
+    },
+    "inputs.source_key.options.messages-context.label": {
+      "text": "Material from {{lesson:messages-context}}",
+      "source": "e0ade096a370"
+    },
+    "inputs.source_key.options.application-state.label": {
+      "text": "Material from {{lesson:application-state}}",
+      "source": "8dad0f17ef27"
+    },
+    "inputs.noise_repeats.label": {
+      "text": "Side discussion repeats",
+      "source": "6dc3cff82c55"
+    },
+    "inputs.char_budget.label": {
+      "text": "Character budget",
+      "source": "9848e13c7284"
+    },
+    "inputs.char_budget.help": {
+      "text": "The maximum JSON characters the truncation window allows; used only in the two-layout comparison.",
+      "source": "41f9e8ffafe1"
+    },
+    "quiz.unit.prompt": {
+      "text": "Can the JSON characters in the lab report be used directly as a token count?",
+      "source": "46453e84ab06"
+    },
+    "quiz.unit.a.text": {
+      "text": "Yes, the units are the same",
+      "source": "6efc053ed087"
+    },
+    "quiz.unit.a.feedback": {
+      "text": "Not quite. Characters and tokens are different units, and the conversion ratio varies with language, content, and tokenizer.",
+      "source": "e03a70dd93ae"
+    },
+    "quiz.unit.b.text": {
+      "text": "No. For token counts, look at the usage the provider reports or the model's tokenizer",
+      "source": "0db5e48c8174"
+    },
+    "quiz.unit.b.feedback": {
+      "text": "Correct. The character count is a reproducible local length metric; token counts are decided by the model's tokenization and the provider's accounting.",
+      "source": "b217734b260e"
+    },
+    "quiz.unit.c.text": {
+      "text": "Dividing by four gives the exact token count",
+      "source": "81e6485ae1ec"
+    },
+    "quiz.unit.c.feedback": {
+      "text": "Not quite. \"Divide by four\" is only a rough rule of thumb for English text, inaccurate for both Chinese and JSON, and certainly not an exact value.",
+      "source": "601a111b6e07"
+    },
+    "quiz.unit.explanation": {
+      "text": "A character count is only a local length metric; token counts are decided by the model's tokenization and the provider's accounting.",
+      "source": "843ae0320a80"
+    },
+    "quiz.pair.prompt": {
+      "text": "When the truncation window cannot fit an earlier tool exchange, what should you do with that pair of messages?",
+      "source": "f8baf677f5bf"
+    },
+    "quiz.pair.a.text": {
+      "text": "Keep only the tool result",
+      "source": "2e77598b9b71"
+    },
+    "quiz.pair.a.feedback": {
+      "text": "Not quite. Keeping only the tool result leaves an orphaned message with no matching assistant call before it, which violates the protocol.",
+      "source": "bf4ae3336fef"
+    },
+    "quiz.pair.b.text": {
+      "text": "Drop the call and the tool result together",
+      "source": "9d41842cf9f4"
+    },
+    "quiz.pair.b.feedback": {
+      "text": "Correct. A call and its tool result are either both kept or both dropped; this lesson's truncation window fills by group.",
+      "source": "0b3445454c6a"
+    },
+    "quiz.pair.c.text": {
+      "text": "Keep only the assistant call",
+      "source": "bf9cbedc3976"
+    },
+    "quiz.pair.c.feedback": {
+      "text": "Not quite. With only the call kept, the matching tool result is missing afterward, which is also an invalid tool history.",
+      "source": "d45d81bebcd2"
+    },
+    "quiz.pair.explanation": {
+      "text": "A call and its tool result must stay paired; keeping either side alone makes the protocol invalid.",
+      "source": "61f36eaf3ea1"
+    },
+    "quiz.loss.prompt": {
+      "text": "The answer from the truncation window request reads smoothly and sounds confident, but the window no longer has the tool result. How should you judge this answer?",
+      "source": "acacae3158bb"
+    },
+    "quiz.loss.a.text": {
+      "text": "It reads smoothly, so the model still remembers the earlier material",
+      "source": "7413d60c48df"
+    },
+    "quiz.loss.a.feedback": {
+      "text": "Not quite. The model sees only the messages in this request, and it cannot see material that is not in the window.",
+      "source": "517d0135d715"
+    },
+    "quiz.loss.b.text": {
+      "text": "Check whether it gives a source; a conclusion without a source cannot be treated as fact",
+      "source": "f7560f087b2d"
+    },
+    "quiz.loss.b.feedback": {
+      "text": "Correct. The source and the fact have been cut, so what's in the answer is either a statement that it lacks grounds, or a guess.",
+      "source": "f55509905a65"
+    },
+    "quiz.loss.c.text": {
+      "text": "As long as it is within the budget, the answer is reliable",
+      "source": "9184d492bfa4"
+    },
+    "quiz.loss.c.feedback": {
+      "text": "Not quite. Being within budget only shows the request is short enough, not that the needed evidence is still there.",
+      "source": "9a8045e39e2b"
+    },
+    "quiz.loss.explanation": {
+      "text": "After truncation, first check whether the evidence is still there, then look at the answer; smooth wording is not the same as having grounds.",
+      "source": "8c47080c2de2"
+    },
+    "quiz.usage.prompt": {
+      "text": "When the provider does not return usage, what should the lab report show?",
+      "source": "0e654b6239c8"
+    },
+    "quiz.usage.a.text": {
+      "text": "prompt_tokens=0",
+      "source": "939b17237b71"
+    },
+    "quiz.usage.a.feedback": {
+      "text": "Not quite. Writing 0 disguises \"no data\" as \"zero usage\", and every later statistic goes wrong.",
+      "source": "45994b7d705d"
+    },
+    "quiz.usage.b.text": {
+      "text": "\"未报告\" (\"not reported\"), with the local character count listed separately as another metric",
+      "source": "1f34ca6aa797"
+    },
+    "quiz.usage.b.feedback": {
+      "text": "Correct. With no measured value, mark it not reported, and keep the local character count separately with its unit noted.",
+      "source": "02730bfeb3af"
+    },
+    "quiz.usage.c.text": {
+      "text": "Work out the exact cost from the answer length",
+      "source": "926bbabba266"
+    },
+    "quiz.usage.c.feedback": {
+      "text": "Not quite. The answer length cannot give the input's token count, let alone an exact cost.",
+      "source": "63b519ab86d9"
+    },
+    "quiz.usage.explanation": {
+      "text": "Without a measured value you cannot record zero, and any estimate must be labeled separately.",
+      "source": "b756ea0a43ae"
+    },
+    "quiz.window-stop.prompt": {
+      "text": "The truncation window fills from the newest message backward and stops when a group does not fit, instead of skipping it to fit earlier, shorter messages. Why?",
+      "source": "4ef7bd94609f"
+    },
+    "quiz.window-stop.a.text": {
+      "text": "The window should be a continuous stretch of recent history; skipping around leaves a hole in the middle of the conversation",
+      "source": "6615346680cf"
+    },
+    "quiz.window-stop.a.feedback": {
+      "text": "Correct. Skipping around could squeeze in a few more messages, but the conversation the model sees would not connect.",
+      "source": "ea223f404586"
+    },
+    "quiz.window-stop.b.text": {
+      "text": "Skipping around would violate the message protocol",
+      "source": "f09832e8e659"
+    },
+    "quiz.window-stop.b.feedback": {
+      "text": "Not quite. Skipping by group does not split a pair, so the protocol is still valid; the problem is that a stretch in the middle is missing.",
+      "source": "b6797d6e587f"
+    },
+    "quiz.window-stop.c.text": {
+      "text": "Earlier messages are certainly useless",
+      "source": "780fb53a2ad4"
+    },
+    "quiz.window-stop.c.feedback": {
+      "text": "Not quite. Earlier messages may well hold the goal and the evidence, which is exactly the price of a truncation window.",
+      "source": "d091ceb14d4b"
+    },
+    "quiz.window-stop.explanation": {
+      "text": "A truncation window keeps a continuous stretch of recent history; it decides only by recency and does not judge which message matters.",
+      "source": "68f28c228844"
+    },
+    "quiz.big-window.prompt": {
+      "text": "The model's window is 1 million tokens, enough for the whole history. Do you still need a context budget?",
+      "source": "f3a5a9a9d9b1"
+    },
+    "quiz.big-window.a.text": {
+      "text": "Yes: every request pays for and waits on all the input, and a key early fact is harder to find",
+      "source": "336d2ee23a03"
+    },
+    "quiz.big-window.a.feedback": {
+      "text": "Correct. A big window only means everything fits, not that everything should be carried every time.",
+      "source": "fc2761f9ecb6"
+    },
+    "quiz.big-window.b.text": {
+      "text": "No, carrying everything when it fits is the safest",
+      "source": "238a1a226b62"
+    },
+    "quiz.big-window.b.feedback": {
+      "text": "Not quite. Cumulative usage grows roughly with the square of the round count, and a long history can bury key facts.",
+      "source": "5607de90e63a"
+    },
+    "quiz.big-window.c.text": {
+      "text": "Only when the provider rejects the request",
+      "source": "d7d1c7eba746"
+    },
+    "quiz.big-window.c.feedback": {
+      "text": "Not quite. If you wait until a rejection, every earlier round has already paid extra for length and cost.",
+      "source": "3d1c2ee9c04b"
+    },
+    "quiz.big-window.explanation": {
+      "text": "The budget decides what each request should carry, not just whether it fits.",
+      "source": "b8192314b82a"
+    },
+    "check-hunt.prompt": {
+      "text": "Find the request that still carries a tool call paired with its tool result (a tool message with a tool_call_id).",
+      "source": "aa3f50d79e24"
+    },
+    "check-hunt.explanation": {
+      "text": "This is the full-history request: the assistant's tool_calls is followed directly by a tool result with the same tool_call_id. With a budget of 600, the truncation window dropped that pair as a group and kept only the most recent side discussions; both requests passed the protocol check.",
+      "source": "c38af05a67b1"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I compared the message count and character count of the full-history and truncation-window requests, and whether each has the source.",
+      "source": "bd8a0de1ebc8"
+    },
+    "check-points.item-2.text": {
+      "text": "I can explain why the character count and the token count in the provider's usage cannot be swapped.",
+      "source": "32fbaad520d6"
+    },
+    "check-points.item-3.text": {
+      "text": "I ran \"Split a tool call from its result\" with a real model and saw the provider's actual response to an orphaned tool message: the status code and original text when it rejects, or the answer when it accepts (a 400 from offline test mode does not count).",
+      "source": "d4266a9603bc"
+    },
+    "check-points.item-4.text": {
+      "text": "Small extension: set char_budget to 1200 and run both layouts again; in lesson.context_variant, confirm how many more rounds of side discussion the window now holds, and whether the tool call and tool result are still dropped as a group.",
+      "source": "57c60532082b"
+    },
+    "check-points.item-5.text": {
+      "text": "Small extension: switch the reference source to the material from {{lesson:application-state}} and run again; confirm that the source and the fact in the lab report changed with it.",
+      "source": "a7921575bd16"
+    },
+    "code_notes.char_budget.note": {
+      "text": "This lesson's input: the maximum JSON characters the truncation window allows; not a token count.",
+      "source": "18fa494ac38f"
+    },
+    "code_notes.noise_repeats.note": {
+      "text": "This lesson's input: how many rounds the side discussion repeats; it only lengthens the full history, while the truncation window fills to the budget.",
+      "source": "93175f040202"
+    },
+    "code_notes.lookup_lesson.note": {
+      "text": "This lesson's local tool: returns the source and fact of a piece of reference material by source_key, really executed each time.",
+      "source": "66a8825f70a9"
+    },
+    "code_notes.lesson.context_variant.note": {
+      "text": "The truncation window's event: the budget, the counts of kept and dropped messages, and whether the tool result is still in the window.",
+      "source": "bfec37c85f63"
+    },
+    "code_notes.lesson.provider_error.note": {
+      "text": "The event for when the provider rejects a request: records the status code, error type, original text, and whether the source is the provider or an offline fixture.",
+      "source": "ed7e37108485"
+    },
+    "code_notes.offline_fixture.note": {
+      "text": "A source value of lesson.provider_error: this rejection was simulated by an offline fixture, not returned by a provider.",
+      "source": "33bf18e1eebc"
+    }
+  }
+}

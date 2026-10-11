@@ -1,0 +1,1034 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "REASONING / REFLECTION",
+      "source": "9e281a48f755"
+    },
+    "hero.headline": {
+      "text": "Let the model check itself,",
+      "source": "43ede69bfe96"
+    },
+    "hero.highlight": {
+      "text": "but give it evidence it cannot change.",
+      "source": "80c78c8d87f9"
+    },
+    "hero.takeaway": {
+      "text": "A revision loop is driven by review. The review can come from the model itself or from real tests. Both need an iteration limit and a clear stop reason, and the final version is always checked with the same set of tests.",
+      "source": "ae13de94f2c8"
+    },
+    "concepts.01-draft.label": {
+      "text": "01 / DRAFT",
+      "source": "e39b86c1019e"
+    },
+    "concepts.01-draft.title": {
+      "text": "Drafts have versions",
+      "source": "74315dc6cad2"
+    },
+    "concepts.01-draft.description": {
+      "text": "Each version of the regex is recorded as a lesson.draft and carries the previous version, so you can see what changed.",
+      "source": "f64c600368bc"
+    },
+    "concepts.02-self.label": {
+      "text": "02 / SELF",
+      "source": "06e2024d13f9"
+    },
+    "concepts.02-self.title": {
+      "text": "Model self-review",
+      "source": "61100ddbed53"
+    },
+    "concepts.02-self.description": {
+      "text": "The model reads the requirement and its own regex and outputs pass or revise. It sees no run results.",
+      "source": "2a7d4a962a8a"
+    },
+    "concepts.03-tests.label": {
+      "text": "03 / TESTS",
+      "source": "cf2a157f4918"
+    },
+    "concepts.03-tests.title": {
+      "text": "Test review",
+      "source": "4bb8fe35e2b6"
+    },
+    "concepts.03-tests.description": {
+      "text": "The fixed cases are run for real with re.fullmatch, and the failing cases become the review comments.",
+      "source": "e1a691be1e3e"
+    },
+    "concepts.04-stop.label": {
+      "text": "04 / STOP",
+      "source": "4e6efe9b636d"
+    },
+    "concepts.04-stop.title": {
+      "text": "Stop reason",
+      "source": "56b06a031877"
+    },
+    "concepts.04-stop.description": {
+      "text": "The review passes, the review output has the wrong format, the iteration limit is reached, or the revision made no change. Every stop says which one it was.",
+      "source": "2a78ebe6c655"
+    },
+    "section-1.title": {
+      "text": "Something written in one shot needs a second look",
+      "source": "a979972537fb"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Reflection has an agent go back and check its own output, then revise it according to the problems found. What this lesson sets out to clarify is where the basis for the check comes from. In {{lesson:plan-and-replan}}, the plan changed because a tool really returned a failure: the primary data source raised an error, an external signal anyone could see. But many outputs raise no error. A wrong regular expression still compiles and still matches most inputs, and only shows itself on particular inputs. Without an error, the program has no way to know it should change anything.",
+      "source": "70f3f8f0aeae"
+    },
+    "section-1.paragraphs.1": {
+      "text": "People who write code know this well. Reading your own code from the top can catch a misspelled variable name, but you often miss a reversed boundary condition. Run the tests, and it is immediately clear which input, what was expected, and what you actually got. Coding agents do the same: after tools like Claude Code and Cursor change code, they often run the tests or a build command in the terminal themselves, read the failure output, and keep editing. Claude Code's official best practices list \"give it a check it can run itself\" as the first item. This lesson shrinks that practice to its smallest form and sets it against \"have the model read it once more\".",
+      "source": "16be00dc65f4"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The smallest reflection loop has three steps. Write a draft. Review that draft and give a verdict and comments. If the verdict is to revise, hand the previous version and the comments back and write the next version. In this lesson each draft is recorded as a lesson.draft and each review as a lesson.review. The loop itself is not hard to write. Two things are hard: what basis the review uses to reach a verdict, and when the loop stops. This lesson answers them with two experiments.",
+      "source": "3638f1a1e656"
+    },
+    "section-2.title": {
+      "text": "This lesson's task: a regex that is easy to get wrong",
+      "source": "812af06a1d61"
+    },
+    "section-2.paragraphs.0": {
+      "text": "This lesson's task is to write a regular expression that matches student IDs. It was chosen because a wrong version looks so much like a right one. A student ID looks like s-1042: a lowercase letter `s`, a hyphen, and four digits, where the first digit cannot be 0, and the whole string must match. The tests are 9 cases hard-coded in runtime.py: 3 should match, such as s-1042 and s-1000, and 6 should not, such as s-0420, S-1042, s-104, and s1042.",
+      "source": "7d2f6b14bb81"
+    },
+    "section-2.paragraphs.1": {
+      "text": "A very common wrong version is `s-\\d{4}`. Check it against the 9 cases one by one: 8 are right, and only s-0420 is wrong. It should not match but it does, because `\\d` accepts any digit, including 0. It is easy to let it through when reading, because \"four digits\" looks like it has been covered. What the real model's first version looks like depends on your own run.",
+      "source": "d432d1a95930"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The tests run with Python's re.fullmatch: the whole string has to match from start to end, which is like having built-in start and end anchors, so the writer's prompt tells the model it does not need ^ and $. The program only compiles the model's string as a regex and never runs any code the model wrote. An empty string, a string over 200 characters, or one that fails to compile makes all 9 cases count as failed.",
+      "source": "a4a9efb22a72"
+    },
+    "section-3.title": {
+      "text": "Model self-review: reading the same information again",
+      "source": "cb334f52b2bf"
+    },
+    "section-3.paragraphs.0": {
+      "text": "In the self-review arm, the same model reads its own regex once more. It has not run any case, so its verdict can only come from \"reading\". The runner gives the model the requirement and the regex, and the system prompt tells it to output JSON only: verdict is pass or revise, and issues lists the problems. If verdict is pass, the loop stops. If it is revise, the model revises using issues. Each self-review is one extra model request.",
+      "source": "8093786b2d77"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The problem is that the reviewer has no new information. The requirement it sees is word for word what the writer saw, and it is the same model with the same temperature=0. The writer did not notice that `\\d` lets 0 through, and when the reviewer reads the same line it probably will not notice either. It is like asking an author to proofread their own manuscript: typos can be caught, but a wrong premise stays invisible.",
+      "source": "04d3e43db493"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Self-review is not useless. If a condition that is spelled out in the requirement was missed, such as leaving out the lowercase `s`, it has a chance of catching that. But it may also call something right wrong and demand changes for no reason. So this lesson does not take the self-review verdict as the result. After the loop ends, the runner checks the final version against the same 9 cases and records it as a lesson.tests with version set to final. What the self-review said and what the tests found sit side by side in the same report.",
+      "source": "220a7dd2895e"
+    },
+    "deep-dive-self-correct.title": {
+      "text": "How research views self-correction by a model",
+      "source": "3290dc25e68c"
+    },
+    "deep-dive-self-correct.summary": {
+      "text": "Without external feedback, having a model check and edit its own answer is not necessarily better than leaving it alone.",
+      "source": "d9af21a568e8"
+    },
+    "deep-dive-self-correct.paragraphs.0": {
+      "text": "Around 2023, quite a few studies systematically tried having a model check its answer and then fix it. Self-Refine has the same model take turns writing a draft, giving feedback, and revising, and reported improvements on tasks such as dialogue responses and code optimization. Reflexion takes a different approach: it has the model first write the environment's success or failure signals, such as whether this attempt succeeded and whether the tests passed, into a text summary, stores it, and carries it into the next attempt.",
+      "source": "4273688058d2"
+    },
+    "deep-dive-self-correct.paragraphs.1": {
+      "text": "Other studies compare directly with and without external feedback. A paper by Huang et al., published at ICLR 2024, found that on reasoning questions, with no external feedback and only the model checking and editing itself, accuracy actually dropped: the model changed right answers to wrong more often than wrong to right. The CRITIC paper from the same year had the model verify its own answers with a search engine or a Python interpreter, and the results improved clearly. With the tool checks removed and the model judging by itself, most of the improvement disappeared. *Understanding AI Agents in Depth* (深入理解 AI Agent) cites both studies in its section on collaboration patterns and sums such results up in a table: when the same model rereads its own output, it is \"usually ineffective or even harmful\"; when the reviewer gets test execution results, rendered screenshots, or facts looked up by a tool, the effect improves significantly.",
+      "source": "994107564497"
+    },
+    "deep-dive-self-correct.paragraphs.2": {
+      "text": "The reason is easy to understand. For a review to change a verdict, it has to know something that was not known when the draft was written. Test results, compiler errors, facts found by a tool, and rendered screenshots are all new signals that did not exist when the draft was written. The same model reading the same input again brings no new signal. This lesson's two arms map onto these two kinds: the test arm's comments come from execution, and the self-review arm's comments come from rereading.",
+      "source": "60ede05af62d"
+    },
+    "deep-dive-self-correct.paragraphs.3": {
+      "text": "The models and tasks in these studies differ from this lesson's, and the conclusions may also change as models get stronger. This lesson's experiment only lets you see the difference once with your own eyes on one small task. One run neither backs up these studies nor refutes them.",
+      "source": "fb9879e60a8c"
+    },
+    "predict-reviews.prompt": {
+      "text": "Before you run \"Test results drive revision\", guess: how many lesson.review events will this run have?",
+      "source": "15b99f192d31"
+    },
+    "mq-self.self-review-evidence.prompt": {
+      "text": "The self-review arm's reviewer said pass, but the final tests have 1 failing case. What does that show?",
+      "source": "52d458f6d972"
+    },
+    "mq-self.self-review-evidence.a.text": {
+      "text": "The model's self-review did not execute the cases, and missed an error it could not find by reading",
+      "source": "ad2319d560dc"
+    },
+    "mq-self.self-review-evidence.a.feedback": {
+      "text": "Correct. Self-review reads, and tests run.",
+      "source": "d156aba674e4"
+    },
+    "mq-self.self-review-evidence.b.text": {
+      "text": "The tests are wrong, and the review should be trusted",
+      "source": "ea83c3b1ac9f"
+    },
+    "mq-self.self-review-evidence.b.feedback": {
+      "text": "Not quite. The cases are the fixed requirement, and the test results come from real execution.",
+      "source": "53130026b548"
+    },
+    "mq-self.self-review-evidence.c.text": {
+      "text": "Another self-review would surely catch it",
+      "source": "35d1fc9c08b7"
+    },
+    "mq-self.self-review-evidence.c.feedback": {
+      "text": "Not necessarily. The same model reading the same way again may still not see it.",
+      "source": "c0928e553129"
+    },
+    "mq-self.self-review-evidence.explanation": {
+      "text": "A review with no external basis is just looking again in a different role.",
+      "source": "ea3873e5bb85"
+    },
+    "section-4.title": {
+      "text": "Test review: failing cases are the comments",
+      "source": "ce03305820fd"
+    },
+    "section-4.paragraphs.0": {
+      "text": "The test arm does not ask the model to review. The failing cases themselves are the review comments. In each round the runner first runs the current version against the 9 cases for real and records a lesson.tests. Then failures_of writes each failing case as a sentence, such as \"s-0420 应该不匹配，实际匹配\" (\"s-0420 should not match, but it does\"), and records it as a lesson.review with source set to tests. If all cases pass, the verdict is pass. If one fails, it is revise. This step calls no model and spends no tokens.",
+      "source": "3227def54b1c"
+    },
+    "section-4.paragraphs.1": {
+      "text": "In the revision request, the model gets three things: the requirement, the previous regex, and the list of failing cases. Compared with the self-review's comments, these comments are specific down to the input and the expected result, so the model does not have to guess what is wrong. The program generates them, so the same failure is worded the same way every time, with no guesswork mixed in. In the `s-\\d{4}` example, the failing case points straight at the student ID starting with 0, and changing the first digit to `[1-9]` fixes it.",
+      "source": "e183d1efc39d"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Test review has limits too: it only checks the situations written into the cases. For example, Python's `\\d` also matches full-width digits by default, so `s-[1-9]\\d{3}` accepts strings like `s-1０４２`, and passing all 9 cases will not reveal it. If a case is wrong, the review is wrong with it, so the cases should be reviewed as part of the requirement. One more rule to hold on to: inside the loop the model can only change the regex, never the cases.",
+      "source": "e7486685fbdb"
+    },
+    "compare-reviewers.title": {
+      "text": "Two kinds of review",
+      "source": "7cb4097a8a70"
+    },
+    "compare-reviewers.columns.0": {
+      "text": "Review source",
+      "source": "a30a28886311"
+    },
+    "compare-reviewers.columns.1": {
+      "text": "Basis",
+      "source": "2e9f01174398"
+    },
+    "compare-reviewers.columns.2": {
+      "text": "Extra model requests",
+      "source": "6f339da2859a"
+    },
+    "compare-reviewers.columns.3": {
+      "text": "What it may miss",
+      "source": "a4ae488a606d"
+    },
+    "compare-reviewers.rows.0.0": {
+      "text": "Model self-review",
+      "source": "61100ddbed53"
+    },
+    "compare-reviewers.rows.0.1": {
+      "text": "Reads the requirement and the regex",
+      "source": "68806c1b6c41"
+    },
+    "compare-reviewers.rows.0.2": {
+      "text": "1 per round",
+      "source": "36274ec59d90"
+    },
+    "compare-reviewers.rows.0.3": {
+      "text": "Edge cases that cannot be found by reading",
+      "source": "c2c741806bd8"
+    },
+    "compare-reviewers.rows.1.0": {
+      "text": "Test results",
+      "source": "b91effb8d31c"
+    },
+    "compare-reviewers.rows.1.1": {
+      "text": "Really executes the 9 cases",
+      "source": "5bb1052eb6e4"
+    },
+    "compare-reviewers.rows.1.2": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "compare-reviewers.rows.1.3": {
+      "text": "Situations the cases do not cover",
+      "source": "67f3b3d741a5"
+    },
+    "section-5.title": {
+      "text": "Four reasons to stop",
+      "source": "dcf18c967174"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A revision loop has to be able to stop. This lesson spells out four stop reasons, and each run ends with exactly one of them. The first is that the review passes. The second is that the review output has the wrong format: in the self-review arm, the model gave neither pass nor revise, the verdict is recorded as invalid, and the program cannot tell what to do next, so it has to stop. The third is reaching the iteration limit max_iters, which can be set from 1 to 3 in this lesson. The fourth is that the revision made no change: the new version is word for word the same as the previous one, and reviewing it again would only give the same verdict.",
+      "source": "18712d2c5003"
+    },
+    "section-5.paragraphs.1": {
+      "text": "To understand the iteration limit, look at how the code counts. Each round reviews first. In the last round, even if the review verdict is revise, no further revision is requested and the loop wraps up. So with max_iters=3, there are at most 3 reviews and 3 draft versions (versions 0 to 2). The test arm makes at most 3 model calls, all spent on writing drafts. The self-review arm makes one extra review request per round, so at most 6. With the limit set to 1, there is only the first draft and one review, with no chance to revise.",
+      "source": "0de95c1febb1"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Why should \"no change\" also stop the loop? The requirement, the previous version, and the comments in the request have not changed, and with temperature=0 the model will most likely hand back the same version again. The test arm's comments come from the same set of cases and will not change either. Another turn would just cost one more call. This rule stops earlier than the iteration limit, and what it saves is exactly those idle rounds.",
+      "source": "6783790597cf"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Stopping and passing are two different things. When the limit is reached, the last version may still be wrong. When a revision makes no change, that version may have been right all along. The report keeps \"停止原因\" (stop reason) and the check \"最终版本通过全部用例\" (\"the final version passes all cases\") as two separate items, so that \"the process finished\" is not reported as \"the task is done\". This is the same distinction as between a run finishing and acceptance passing in {{lesson:task-contract}}. The report also accumulates total_tokens, adding up only the numbers the provider reported in its responses. If a call did not report one, it says how many calls did not, and does not fill the gap with an estimate.",
+      "source": "172fad230f4a"
+    },
+    "mq-stop.stop-unchanged.prompt": {
+      "text": "Version 2 of the regex is identical to version 1. What should happen?",
+      "source": "e285e05bdbb2"
+    },
+    "mq-stop.stop-unchanged.a.text": {
+      "text": "Stop, and record the reason as \"修订后没有变化\" (the revision made no change)",
+      "source": "ec0456f27e79"
+    },
+    "mq-stop.stop-unchanged.a.feedback": {
+      "text": "Correct. A revision that changes nothing does not improve the result.",
+      "source": "0346af755f1d"
+    },
+    "mq-stop.stop-unchanged.b.text": {
+      "text": "Continue until the iteration limit is used up",
+      "source": "790c12f58299"
+    },
+    "mq-stop.stop-unchanged.b.feedback": {
+      "text": "Not quite. The same input will most likely give the same output, so the calls are wasted.",
+      "source": "937392cd50b0"
+    },
+    "mq-stop.stop-unchanged.c.text": {
+      "text": "Change the review verdict to pass",
+      "source": "bd249fcc98b6"
+    },
+    "mq-stop.stop-unchanged.c.feedback": {
+      "text": "Not quite. Stopping and passing are two different things, and the verdict has to be reported truthfully.",
+      "source": "c683a97582c3"
+    },
+    "mq-stop.stop-unchanged.explanation": {
+      "text": "Every stop needs a clear reason, and it does not change the review verdict.",
+      "source": "fab7185f58ca"
+    },
+    "walkthrough.title": {
+      "text": "One round of revision",
+      "source": "f8efc4a43a35"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, one round of revision in the test arm. The code is a simplified illustration. Your run's evidence is in the events on the lab bench.",
+      "source": "435a64afcad6"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Draft",
+      "source": "2a2fd29bd27a"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Write a version of the regex",
+      "source": "91e33c44b3e7"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Outputs JSON, and the runner extracts the regex field.",
+      "source": "b7d4b408c293"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.draft",
+      "source": "5bdb322036d5"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Test",
+      "source": "6aa8f49cc992"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Run the fixed cases",
+      "source": "6089a20c619c"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Compile the regex and run re.fullmatch for each case.",
+      "source": "a1f4f6d17502"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.tests",
+      "source": "81f687342a87"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Review",
+      "source": "66faf426cb2b"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Failing cases are the comments",
+      "source": "d0569862f86c"
+    },
+    "walkthrough.step-3.body": {
+      "text": "No failures means pass.",
+      "source": "04fb18945110"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.review (source=tests)",
+      "source": "2016ec7cc9c9"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Revise",
+      "source": "3c2e8a4c055a"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Revise once, given the failing cases",
+      "source": "2842651314cc"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The prompt contains the previous regex and the review comments.",
+      "source": "97bbaa978465"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "previous of the next lesson.draft",
+      "source": "9c113e45e035"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Wrap up",
+      "source": "3615b021b8af"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Stop and run the final check",
+      "source": "edbcef5412d2"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Record the stop reason and check the final version against the same cases.",
+      "source": "b646b12c2d2d"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.tests (version=final)",
+      "source": "68d17c932e72"
+    },
+    "section-6.title": {
+      "text": "Review evidence ranges from strong to weak",
+      "source": "21d9b20b25a6"
+    },
+    "section-6.paragraphs.0": {
+      "text": "The closer the review's basis is to real execution, the more reliable it is. This lesson's two arms are just the two ends of that spectrum. The strongest basis is an execution result: running tests, compiling, actually calling an API and looking at what comes back. Next is external fact, such as data found with a tool. Below that is another model judging against items written in advance. The weakest is the same model reading the same input again.",
+      "source": "88c714db3bcd"
+    },
+    "section-6.paragraphs.1": {
+      "text": "To choose among them, first ask whether the task can be written as a program check. Regexes, code, and data formats can mostly have tests written for them, and tests should come first. For tasks like writing quiz questions, summaries, or titles, it is hard to write a program that decides right from wrong, so you fall back to asking a model to review against a list of items. {{lesson:orchestrator-evaluator}} splits writing and reviewing between two roles. The reviewer judges against three items written in advance, again with an iteration limit.",
+      "source": "33979d1b97aa"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Whichever kind of review you use, do not let the party being reviewed change the exam paper. If the side doing the revising can edit the cases, relax the items, or rewrite the verdict directly, then \"pass\" becomes self-approval. This lesson's cases are hard-coded in the source, and the final check does not look at what the review said, only at the cases. {{lesson:workflow-patterns}} goes on to look at a different approach: the steps are fixed in advance, and the program checks between steps.",
+      "source": "c5554e6e66de"
+    },
+    "section-6.paragraphs.3": {
+      "text": "{{lesson:task-contract}} covered how Claude Code turns a check into a gate: give it a check it can run itself, or set up a Stop hook that runs a check script when it is about to finish and blocks it if the script fails. Seen inside this lesson's revision loop, the difference between the two is who controls the loop. If you only write in the prompt \"run the tests after editing and keep fixing if they fail\", the basis comes from real execution, but how many times to go around and when to stop is up to the model. A Stop hook leaves the decision to stop to a script, and even if the model says it is done, it has to pass the check first. The hook also needs a fallback: the docs say that after being blocked several times in a row with no progress, it lets the model through. That does the same job as this lesson's iteration limit and the \"revision made no change\" rule, which is to keep the loop from spinning idle. Follow the official docs for the exact count and mechanism.",
+      "source": "6f43715870c5"
+    },
+    "deep-dive-judge.title": {
+      "text": "What to watch for when another model reviews and there are no tests",
+      "source": "043d2d377b80"
+    },
+    "deep-dive-judge.summary": {
+      "text": "Reviewing against a rubric is convenient, but the judge model makes mistakes too, so first check whether it judges accurately.",
+      "source": "c74648616556"
+    },
+    "deep-dive-judge.paragraphs.0": {
+      "text": "For tasks where tests cannot be written, a common approach is to ask a judge model to decide item by item against a rubric. A rubric is a list of judging items written in advance, such as \"the question tests the given key points\" and \"only one of the four options is correct\". The more specific the items and the easier each is to check, the steadier the review. If you only write \"is the question good\", the judge can only go by feel.",
+      "source": "11746d414588"
+    },
+    "deep-dive-judge.paragraphs.1": {
+      "text": "Judge models have several known biases. They tend to rate longer, more detailed answers higher even when the content is no more correct. The same output reviewed twice can get different verdicts, and {{lesson:sampling-variance}} covered how answers fluctuate to begin with. When the judge and the writer are the same model, it may also favor its own way of writing.",
+      "source": "5a3ec6c745e4"
+    },
+    "deep-dive-judge.paragraphs.2": {
+      "text": "The bar for passing also needs to be clear. Some examples require the judge to have \"no suggestions for improvement\" before passing, which is almost impossible: you can always find something more to say about an output, and the loop keeps turning. The bar should be that every item in the rubric is satisfied, not that it is \"perfect\", with an iteration limit as a backstop.",
+      "source": "c591aa06f0c8"
+    },
+    "deep-dive-judge.paragraphs.3": {
+      "text": "So the judge model itself also has to be checked. Take a batch of samples that people have annotated as \"should pass\" or \"should not pass\", let it judge them all, see what share agrees with the people, and use it only if that share is high enough. Anything that can be written as a program check, such as whether there are exactly four options, should not be left to the judge model. {{lesson:orchestrator-evaluator}} also does the format check first and asks for a review only when the format is right.",
+      "source": "67e678e59b2d"
+    },
+    "misconception-more-rounds.claim": {
+      "text": "The more rounds of revision, the better the result. Give it a few more rounds and the model will always get it right.",
+      "source": "7021c7714f3a"
+    },
+    "misconception-more-rounds.correction": {
+      "text": "Without new information, extra rounds may just go in circles, or even change right to wrong. Extra rounds only help if every round's review brings new, reliable comments, such as failing cases. That is why there is an iteration limit, the loop stops when a revision makes no change, and the final version is checked separately with tests.",
+      "source": "3945a07cb9b8"
+    },
+    "mq-evidence.evidence-strength.prompt": {
+      "text": "The first version of the regex also matches s-0420. Which of the following reviews is most likely to point this out?",
+      "source": "b584fc6b4367"
+    },
+    "mq-evidence.evidence-strength.a.text": {
+      "text": "Actually run the 9 cases and hand the failing cases back",
+      "source": "bcd06dc3665f"
+    },
+    "mq-evidence.evidence-strength.a.feedback": {
+      "text": "Correct. s-0420 fails as soon as it runs, and the comment points straight at student IDs starting with 0.",
+      "source": "673fd1d17796"
+    },
+    "mq-evidence.evidence-strength.b.text": {
+      "text": "Have the same model read it again, with \"please check carefully\" added to the prompt",
+      "source": "e0120e8f2041"
+    },
+    "mq-evidence.evidence-strength.b.feedback": {
+      "text": "Not necessarily. An extra reminder brings no new information. What the writer missed, the reviewer may miss too.",
+      "source": "2f8949128efe"
+    },
+    "mq-evidence.evidence-strength.c.text": {
+      "text": "Ask the model how confident it is in this regex",
+      "source": "32b22b2c6a75"
+    },
+    "mq-evidence.evidence-strength.c.feedback": {
+      "text": "Not quite. A model's self-reported confidence is not a check result, and a model that says it is very sure can still be wrong.",
+      "source": "3d1a50518020"
+    },
+    "mq-evidence.evidence-strength.explanation": {
+      "text": "A check that can be executed brings new information. Reading again does not.",
+      "source": "f4d1b6f0b467"
+    },
+    "references.ms-metacognition.title": {
+      "text": "Metacognition: how an agent checks and adjusts its own approach (Microsoft AI Agents for Beginners)",
+      "source": "593db5c0b0c3"
+    },
+    "references.book-proposer-reviewer.title": {
+      "text": "Proposer and reviewer: why a review should read independent evidence — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "06289059de78"
+    },
+    "references.book-rubric-judge.title": {
+      "text": "Rubrics and judge model bias — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "ffbfd64b10d9"
+    },
+    "references.hello-agents-ch4.title": {
+      "text": "Building the classic agent paradigms: the Reflection section (Hello-Agents, CC BY-NC-SA 4.0)",
+      "source": "4867af421fc4"
+    },
+    "references.claude-code-verify.title": {
+      "text": "Best practices: give Claude a check it can run itself (Claude Code docs, checked 2026-10-04)",
+      "source": "18c8828820d8"
+    },
+    "references.claude-code-stop-cap.title": {
+      "text": "The cap on consecutive Stop hook blocks (Claude Code docs, checked 2026-10-04)",
+      "source": "85c6c51cccd3"
+    },
+    "code-tests.n24.text": {
+      "text": "9 fixed cases, including easy-to-miss ones like \"the first digit is 0\".",
+      "source": "1e2f84cecdf5"
+    },
+    "code-tests.n27.text": {
+      "text": "The writer outputs only a JSON object with a regex field. The program matches with fullmatch, so ^ and $ are not needed.",
+      "source": "f2b094c1d49c"
+    },
+    "code-tests.n29.text": {
+      "text": "The self-review reviewer gets only the requirement and the regex, and its verdict is limited to pass or revise.",
+      "source": "77acf56dc09e"
+    },
+    "code-tests.n36.text": {
+      "text": "Limit the length first: an empty or overlong output is judged as failing every case, without compiling.",
+      "source": "deca1b4d01bf"
+    },
+    "code-tests.n40.text": {
+      "text": "Only the string the model wrote is compiled as a regex. No code the model wrote is executed.",
+      "source": "2a27496ba406"
+    },
+    "code-tests.n44.text": {
+      "text": "Every case really runs re.fullmatch, and the actual result is recorded next to the expected one.",
+      "source": "b4cfa0d4b4d9"
+    },
+    "code-tests.n49.text": {
+      "text": "The test arm's review comments are the list of failing cases, for example \"s-0420 应该不匹配，实际匹配\" (\"s-0420 should not match, but it does\").",
+      "source": "79c8e11c70be"
+    },
+    "code-review.n91.text": {
+      "text": "Drafting and revising share draft: each version is published as a lesson.draft, with the previous version attached for comparison.",
+      "source": "638cab04b1d1"
+    },
+    "code-review.n95.text": {
+      "text": "If regex cannot be read, record an empty string and a parse error. Do not repair it for the model. An empty string fails every case in the tests.",
+      "source": "d8dd8b5a0ddd"
+    },
+    "code-review.n101.text": {
+      "text": "unchanged marks in the event that this version is word for word the same as the previous one, and the loop uses the same comparison to decide whether to stop.",
+      "source": "42a8838f4ed2"
+    },
+    "code-review.n106.text": {
+      "text": "Test review calls no model: run the fixed cases, and the failing cases are the comments.",
+      "source": "78d9aa2073bf"
+    },
+    "code-review.n111.text": {
+      "text": "In the test arm the cases decide the verdict, and only passing all of them is pass.",
+      "source": "0af6d6af18b1"
+    },
+    "code-review.n117.text": {
+      "text": "The self-review arm makes one extra model request, and the reviewer sees no run results.",
+      "source": "3bec3a594ad7"
+    },
+    "code-review.n119.text": {
+      "text": "The reviewer sees only the requirement and the regex, so it knows as much as the writer.",
+      "source": "c7f388c4efbd"
+    },
+    "code-review.n123.text": {
+      "text": "The review verdict accepts only pass or revise. Any other output is recorded as the wrong format.",
+      "source": "88429d8e83fa"
+    },
+    "code-review.n128.text": {
+      "text": "Both kinds of review publish lesson.review, and source says whether the comments came from tests or the model.",
+      "source": "2b5692755781"
+    },
+    "code-loop.n137.text": {
+      "text": "The first draft gets only the requirement, and its version number is 0.",
+      "source": "8f1c0e0c3e06"
+    },
+    "code-loop.n139.text": {
+      "text": "The number of loop iterations is decided by max_iters, so revision cannot go on forever.",
+      "source": "33552b3c2e8d"
+    },
+    "code-loop.n141.text": {
+      "text": "The two arms diverge only here: the review source differs, and every other step is identical.",
+      "source": "43effb22f3c5"
+    },
+    "code-loop.n148.text": {
+      "text": "Stop reason 1: the review passes.",
+      "source": "e1bae9403820"
+    },
+    "code-loop.n151.text": {
+      "text": "Stop reason 2: the review output has the wrong format, so there are no usable comments.",
+      "source": "93fae0f8ff8a"
+    },
+    "code-loop.n154.text": {
+      "text": "Stop reason 3: the iteration limit is reached, so no more revisions are requested.",
+      "source": "816b03aa6ec5"
+    },
+    "code-loop.n158.text": {
+      "text": "The revision request carries the requirement, the previous version, and the review comments.",
+      "source": "436f47aa352d"
+    },
+    "code-loop.n160.text": {
+      "text": "Stop reason 4: the revision made no change, and reviewing again would not give a new verdict.",
+      "source": "cec82788a482"
+    },
+    "code-loop.n164.text": {
+      "text": "Whichever review source was used, the final version is checked with the same set of cases.",
+      "source": "2f35216c320d"
+    },
+    "code-decision.title": {
+      "text": "Handle the review basis and the stop conditions separately",
+      "source": "46e394592243"
+    },
+    "code-decision.chosen": {
+      "text": "Both arms share one revision loop and differ only in the review source. The loop has an iteration limit and four explicit stop reasons. The final version, in either arm, is checked against the same set of real cases.",
+      "source": "333f7ddd084b"
+    },
+    "code-decision.self-only.title": {
+      "text": "Use only model self-review and run no tests",
+      "source": "c4ccdabe63f3"
+    },
+    "code-decision.self-only.why_not": {
+      "text": "When the self-review says it passes, there is nothing to check it against, so the experiment could not tell whether the self-review was right.",
+      "source": "64ebd844b08b"
+    },
+    "code-decision.loop-until-pass.title": {
+      "text": "Keep revising until it passes",
+      "source": "b36c5babea6d"
+    },
+    "code-decision.loop-until-pass.why_not": {
+      "text": "The model may never get it right, or may hand back the same version every round. Without a limit there is no stop condition.",
+      "source": "5483574ffbd3"
+    },
+    "code-decision.llm-judge.title": {
+      "text": "Use a stronger model as the reviewer",
+      "source": "ab89aa4decd2"
+    },
+    "code-decision.llm-judge.why_not": {
+      "text": "The basis is still \"reading\", just with a different reader. Whether the judge model itself judges accurately must be checked against human-annotated samples, which this lesson does not do.",
+      "source": "b7b16d6a8762"
+    },
+    "reviewer-source.title": {
+      "text": "Self-review versus test review",
+      "source": "a1581204a8dd"
+    },
+    "reviewer-source.hypothesis": {
+      "text": "A model's self-review sees no run results and may let through errors it cannot find by reading. When real test results are the review basis, a revision has specific failing cases to check against. The final versions of both arms are checked with the same set of tests.",
+      "source": "04d0b3f386a1"
+    },
+    "reviewer-source.self.label": {
+      "text": "Model self-review drives revision",
+      "source": "0dc4a8fc7ee8"
+    },
+    "reviewer-source.tests.label": {
+      "text": "Test results drive revision",
+      "source": "70e77a97287c"
+    },
+    "reviewer-source.first-draft.text": {
+      "text": "The first version of the regex.",
+      "source": "08d8eca5a860"
+    },
+    "reviewer-source.review.text": {
+      "text": "The first review: source, verdict, and comments.",
+      "source": "3c61c73958e0"
+    },
+    "reviewer-source.revised-draft.text": {
+      "text": "The revised regex and its previous version.",
+      "source": "a1ea3c383cf3"
+    },
+    "reviewer-source.final-tests.text": {
+      "text": "The report check \"最终版本通过全部用例\" (\"the final version passes all cases\"): how many real cases the final version passed.",
+      "source": "1e3d86e8d3cd"
+    },
+    "reviewer-source.stop-reason.text": {
+      "text": "The stop reason.",
+      "source": "28c96ca606c1"
+    },
+    "reviewer-source.tokens.text": {
+      "text": "Accumulated total_tokens, from provider reports only.",
+      "source": "395799f5ef4b"
+    },
+    "reviewer-source.guide.0.text": {
+      "text": "Both arms use the same revision loop and differ only in the review source. Start with the first version of the regex.",
+      "source": "3a268e2545e8"
+    },
+    "reviewer-source.guide.1.text": {
+      "text": "This is the model's first version. The rule \"the first digit cannot be 0\" is the one most easily missed.",
+      "source": "20d7f2c02ef0"
+    },
+    "reviewer-source.guide.2.text": {
+      "text": "See where the review comes from: whether source is model or tests, and what the verdict is.",
+      "source": "56300c9396dd"
+    },
+    "reviewer-source.guide.3.text": {
+      "text": "The test arm revised once after getting the failing cases. previous is the version that was replaced.",
+      "source": "db41a5d23415"
+    },
+    "reviewer-source.guide.4.text": {
+      "text": "After the loop ends, the final version is always checked with the same set of cases. For the arm whose self-review said pass, how many of the 9 cases passed?",
+      "source": "8768eb27875b"
+    },
+    "reviewer-source.guide.5.text": {
+      "text": "Every stop states its reason.",
+      "source": "a28dd7f1c0b5"
+    },
+    "reviewer-source.guide.6.text": {
+      "text": "Finally, look at the cost. Usage takes only the numbers the provider reported.",
+      "source": "1e896d56dfcb"
+    },
+    "reviewer-source.conclusion.proves.0": {
+      "text": "In this run, every version of the regex, the source and verdict of every review, and why the loop stopped can all be checked in the events.",
+      "source": "c2ddff553dfb"
+    },
+    "reviewer-source.conclusion.proves.1": {
+      "text": "Both arms' final test results come from the same set of real cases and can be compared directly.",
+      "source": "76897cf793be"
+    },
+    "reviewer-source.conclusion.does_not_prove.0": {
+      "text": "One run cannot show that model self-review is generally unreliable, nor that it is generally reliable.",
+      "source": "abdcb3d8d3f8"
+    },
+    "reviewer-source.conclusion.does_not_prove.1": {
+      "text": "Test review covers only 9 cases. Passing them all shows only that these situations are fine.",
+      "source": "90fd16e17cc5"
+    },
+    "reviewer-source.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the drafts, self-reviews, and usage are generated by a fixed script.",
+      "source": "6b245b3e225a"
+    },
+    "iteration-limit.title": {
+      "text": "Iteration limit",
+      "source": "37d9488d54e2"
+    },
+    "iteration-limit.hypothesis": {
+      "text": "With a limit of 1 there is no chance to revise, and the loop stops after the first review. If the first version does not pass, the report's stop reason is that the iteration limit was reached; if it passes, the stop reason is that the review passed.",
+      "source": "8e45c09f7a35"
+    },
+    "iteration-limit.three.label": {
+      "text": "Test-driven, up to 3 rounds",
+      "source": "51815d7bf31a"
+    },
+    "iteration-limit.one.label": {
+      "text": "Test-driven, up to 1 round",
+      "source": "bd3eb80748b0"
+    },
+    "iteration-limit.limit-input.text": {
+      "text": "This run's iteration limit.",
+      "source": "c32cdcc55eab"
+    },
+    "iteration-limit.limit-reason.text": {
+      "text": "The stop reason.",
+      "source": "28c96ca606c1"
+    },
+    "iteration-limit.limit-calls.text": {
+      "text": "The number of model calls.",
+      "source": "934a7faf27b3"
+    },
+    "iteration-limit.guide.0.text": {
+      "text": "The two arms differ only in the iteration limit.",
+      "source": "afe26d50aec9"
+    },
+    "iteration-limit.guide.1.text": {
+      "text": "This is the limit you set this time.",
+      "source": "10ca713bee81"
+    },
+    "iteration-limit.guide.2.text": {
+      "text": "With a limit of 1, the loop stops after the first review. If the first version did not pass, the stop reason is that the iteration limit was reached.",
+      "source": "8e995ef08340"
+    },
+    "iteration-limit.guide.3.text": {
+      "text": "The number of calls drops with it. The limit is a trade-off between cost and quality.",
+      "source": "ccb340eddd6a"
+    },
+    "iteration-limit.conclusion.proves.0": {
+      "text": "The number of loop iterations is decided by the limit, and the stop reason is reported truthfully in the report.",
+      "source": "8fd480f47055"
+    },
+    "iteration-limit.conclusion.does_not_prove.0": {
+      "text": "It cannot show how many rounds is best. That depends on how hard the task is and what each round costs.",
+      "source": "e51355b44124"
+    },
+    "inputs.reviewer.label": {
+      "text": "Review source",
+      "source": "a30a28886311"
+    },
+    "inputs.reviewer.options.self.label": {
+      "text": "Model self-review",
+      "source": "61100ddbed53"
+    },
+    "inputs.reviewer.options.tests.label": {
+      "text": "Test results",
+      "source": "b91effb8d31c"
+    },
+    "inputs.max_iters.label": {
+      "text": "Iteration limit",
+      "source": "37d9488d54e2"
+    },
+    "inputs.max_iters.help": {
+      "text": "1 to 3 rounds.",
+      "source": "561f85fb9ed4"
+    },
+    "quiz.q1.prompt": {
+      "text": "Where do the test arm's review comments come from?",
+      "source": "7b97012fcc61"
+    },
+    "quiz.q1.a.text": {
+      "text": "The real execution results of the failing cases",
+      "source": "a453fb20f73f"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Correct. This is evidence the model cannot change.",
+      "source": "fd0858dbaae1"
+    },
+    "quiz.q1.b.text": {
+      "text": "The model's own judgment of its regex",
+      "source": "d7ce7cfc0daf"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Not quite. That is the self-review arm.",
+      "source": "7466cac6a116"
+    },
+    "quiz.q1.c.text": {
+      "text": "Suggestions the runner picks at random",
+      "source": "4f997d99998c"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "Not quite. The comments are generated entirely from the failing cases.",
+      "source": "8be41750cae9"
+    },
+    "quiz.q1.explanation": {
+      "text": "External evidence comes from real execution.",
+      "source": "f032f3886844"
+    },
+    "quiz.q2.prompt": {
+      "text": "The self-review arm stopped when it said pass. Why still run a final test?",
+      "source": "9524f2824508"
+    },
+    "quiz.q2.a.text": {
+      "text": "To check the self-review's verdict and compare the two arms by the same standard",
+      "source": "c942c79df01f"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. Without the check, there is no way to know whether the self-review was right.",
+      "source": "a98d8486e3be"
+    },
+    "quiz.q2.b.text": {
+      "text": "To let the self-review arm revise once more",
+      "source": "afbb44d49283"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Not quite. The final test only checks and does not revise again.",
+      "source": "e712d3e5a6fb"
+    },
+    "quiz.q2.c.text": {
+      "text": "Because the review output had the wrong format",
+      "source": "36c59a218568"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "Not quite. That has nothing to do with the review format.",
+      "source": "7025c73c8ba7"
+    },
+    "quiz.q2.explanation": {
+      "text": "The review verdict itself also needs to be verified.",
+      "source": "4f8e9c0f7757"
+    },
+    "quiz.q3.prompt": {
+      "text": "One response has no usage field. How should the accumulated total_tokens be reported?",
+      "source": "8742ff2d1d1c"
+    },
+    "quiz.q3.a.text": {
+      "text": "Add up the parts that were reported and note how many calls did not report",
+      "source": "953bddce7d28"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Correct. State what is missing and do not fill it with an estimate.",
+      "source": "95aaff1d58da"
+    },
+    "quiz.q3.b.text": {
+      "text": "Estimate from the answer length and fill it in",
+      "source": "6ac18a0f0bfb"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Not quite. An estimate is not usage reported by the provider.",
+      "source": "7945e7929c0c"
+    },
+    "quiz.q3.c.text": {
+      "text": "Record it as 0",
+      "source": "ea34ce2e6ac8"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "Not quite. No data does not mean zero usage.",
+      "source": "abd5b32defd5"
+    },
+    "quiz.q3.explanation": {
+      "text": "Usage comes only from provider reports.",
+      "source": "d4a7114976ea"
+    },
+    "quiz.q4.prompt": {
+      "text": "With max_iters set to 3, the test arm's third review still says revise. What happens next?",
+      "source": "787fa1d8f913"
+    },
+    "quiz.q4.a.text": {
+      "text": "No more revisions are requested, the stop reason is that the iteration limit was reached, and the final version is checked against the cases once more",
+      "source": "f496de333f95"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Correct. After the last round's review it wraps up and writes no new version.",
+      "source": "da390221361d"
+    },
+    "quiz.q4.b.text": {
+      "text": "Request one more revision and review once more",
+      "source": "c6a5892d109c"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "Not quite. At the limit there is no further revision, or the limit would mean nothing.",
+      "source": "c481cf1f732c"
+    },
+    "quiz.q4.c.text": {
+      "text": "Change the verdict to pass and wrap up as if the review had passed",
+      "source": "f09f2a1c7bf6"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "Not quite. The stop reason is reported truthfully as the limit being reached, and the verdict is not changed.",
+      "source": "f1df87511029"
+    },
+    "quiz.q4.explanation": {
+      "text": "The limit decides the maximum number of review rounds. After stopping, the final version is still checked against the same set of cases.",
+      "source": "d5db4a6eb323"
+    },
+    "quiz.q5.prompt": {
+      "text": "Why does the same model's self-review often fail to find the errors it wrote itself?",
+      "source": "20ac78b5a405"
+    },
+    "quiz.q5.a.text": {
+      "text": "The reviewer gets the same requirement and regex as the writer, with no new information such as execution results",
+      "source": "b01e0a968df2"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Correct. Reading the same input again makes it easy to miss the same spot.",
+      "source": "acef186d361a"
+    },
+    "quiz.q5.b.text": {
+      "text": "The self-review request's sampling temperature is too low",
+      "source": "9119e0141652"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "Not quite. Temperature only affects sampling and gives the reviewer no extra information.",
+      "source": "46d4181ecc7b"
+    },
+    "quiz.q5.c.text": {
+      "text": "The reviewer cannot see the requirement",
+      "source": "f78502de1aad"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "Not quite. The self-review request includes the full requirement.",
+      "source": "993ddbe4853a"
+    },
+    "quiz.q5.explanation": {
+      "text": "For a review to change a verdict, it has to know something that was not known when the draft was written, such as test results.",
+      "source": "a18485db822c"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Test results drive revision\" and find the step where the model first gets real failing cases as review comments.",
+      "source": "16e59f5b58b1"
+    },
+    "check-hunt.explanation": {
+      "text": "This lesson.review has source set to tests, and issues holds the failing cases, for example \"s-0420 应该不匹配，实际匹配\" (\"s-0420 should not match, but it does\"). The next request hands those comments to the model unchanged for revision. If the first version passes every case, there is no review with comments.",
+      "source": "0dd820dc8466"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran both review sources and compared the test results of the two arms' final versions.",
+      "source": "e5ddfb357ed7"
+    },
+    "check-points.item-2.text": {
+      "text": "I can name this lesson's four stop reasons and found one of them in my own run.",
+      "source": "fb750cdf06a8"
+    },
+    "check-points.item-3.text": {
+      "text": "I can explain why tests are still needed to check after the self-review says pass.",
+      "source": "85db99431dd3"
+    },
+    "check-points.item-4.text": {
+      "text": "I checked the first version of the regex in my run against the 9 cases one by one and found the cases it let through or wrongly blocked (if any).",
+      "source": "e56d52623515"
+    },
+    "code_notes.re.fullmatch.note": {
+      "text": "A Python regex function that requires the whole string to match from start to end, like having ^ and $ built in. Matching only a part counts as no match.",
+      "source": "ed160dbb4c7c"
+    },
+    "code_notes.lesson.draft.note": {
+      "text": "One event per regex version: version is the version number (0 for the first), previous is the previous version, and unchanged marks whether it is exactly the same.",
+      "source": "e60bc432f783"
+    },
+    "code_notes.lesson.tests.note": {
+      "text": "The real execution results of the cases (passed, failed, cases). The one with version set to final is the final check after the loop ends.",
+      "source": "d3881c082f67"
+    },
+    "code_notes.lesson.review.note": {
+      "text": "One event per review: source is where the comments came from, verdict is the conclusion, and issues is the list of comments.",
+      "source": "e78a2a0f46c1"
+    },
+    "code_notes.source.note": {
+      "text": "Review source: model means model self-review (\"Model self-review\" on the lab bench), and tests means the comments are generated from failing cases.",
+      "source": "fe601112a2ac"
+    },
+    "code_notes.verdict.note": {
+      "text": "Review verdict: pass stops, and revise revises again with the comments. Any other self-review output is recorded as invalid and stops as a wrong-format review output.",
+      "source": "0d4836e0702b"
+    },
+    "code_notes.total_tokens.note": {
+      "text": "The total token count the provider reports in each response's usage. This lesson adds up only the reported ones and states the number of missing calls separately.",
+      "source": "1b2c19a22aab"
+    },
+    "code_notes.failures_of.note": {
+      "text": "Writes each failing case as a one-sentence review comment. All the comments the test arm hands back to the writer come from here.",
+      "source": "5d8914dc8863"
+    },
+    "code_notes.max_iters.note": {
+      "text": "Iteration limit: the maximum number of review rounds, 1 to 3 in this lesson. After the last round's review, no revision is requested.",
+      "source": "cf50bf2141d6"
+    }
+  }
+}

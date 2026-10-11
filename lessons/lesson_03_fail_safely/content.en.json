@@ -1,0 +1,890 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "ERRORS / FAIL SAFELY",
+      "source": "fcb08987eb7f"
+    },
+    "hero.headline": {
+      "text": "Let failures be seen,",
+      "source": "cdb2388cc680"
+    },
+    "hero.highlight": {
+      "text": "let boundaries hold.",
+      "source": "963daa518bf3"
+    },
+    "hero.takeaway": {
+      "text": "The loop ending does not mean the tool succeeded. An error should also become a tool result that can be understood and checked.",
+      "source": "83ee1465bfa2"
+    },
+    "concepts.01-boundary.label": {
+      "text": "01 / BOUNDARY",
+      "source": "a3ea62fe374b"
+    },
+    "concepts.01-boundary.title": {
+      "text": "Keep the authority in the program",
+      "source": "6f1e3d01fe54"
+    },
+    "concepts.01-boundary.description": {
+      "text": "The schema describes the argument format, and Python validates the real input. Only names in AVAILABLE_TOOLS are allowed to run.",
+      "source": "baf466eff1b0"
+    },
+    "concepts.02-feedback.label": {
+      "text": "02 / FEEDBACK",
+      "source": "b52cfe4ea497"
+    },
+    "concepts.02-feedback.title": {
+      "text": "Say clearly what failed",
+      "source": "e4cc4d916fc1"
+    },
+    "concepts.02-feedback.description": {
+      "text": "ok=false, error_type, and error go back together, so the model sees the reason for the failure instead of making up a quotient.",
+      "source": "d55121d2ae2a"
+    },
+    "concepts.03-lifecycle.label": {
+      "text": "03 / LIFECYCLE",
+      "source": "023391a93a90"
+    },
+    "concepts.03-lifecycle.title": {
+      "text": "Tell two statuses apart",
+      "source": "0d9f761d5be2"
+    },
+    "concepts.03-lifecycle.description": {
+      "text": "The done event records the run's terminal state; completed only means the loop ended normally. Whether the division succeeded is still read from the tool's ok, and explaining the error correctly is also worth something.",
+      "source": "623326f87207"
+    },
+    "section-why.title": {
+      "text": "The earlier lessons walked only the happy path",
+      "source": "409347308ac0"
+    },
+    "section-why.paragraphs.0": {
+      "text": "Tools fail, and the reason should go back to the model as it is, instead of crashing the program or making up a result to fill the gap. Every question in the earlier lessons went through: the addition had two numbers, and the time tool could always read the clock. In real runs the model may write the divisor as 0, misspell a tool name, or produce arguments that cannot be parsed; the provider's API may also time out or return an error. This lesson uses a division tool to lay these cases out one by one.",
+      "source": "ebe3ee104fff"
+    },
+    "section-why.paragraphs.1": {
+      "text": "When an error occurs, the program has three ways to go. The first lets the exception propagate and the whole run is interrupted: the user sees only \"run failed\", and the model does not know what happened and cannot explain it to the user. The second swallows the error and returns a default value, say a quotient of 0: the model reports that 0 as a real result, which is worse than an interruption. The third writes the failure as an ordinary tool result and hands it back to the model, saying what went wrong and how to fix it. This lesson uses the third.",
+      "source": "2e2c18de4364"
+    },
+    "section-why.paragraphs.2": {
+      "text": "Look at where a failure comes from, too. *Understanding AI Agents in Depth* (深入理解 AI Agent) sorts faults into layers by where they occur, and two layers matter here. One is on the tool side: invalid arguments, a tool name that does not exist, an error raised during execution. The other is on the provider API side: a network drop, a timeout, an HTTP error. Failures in the first layer go back to the model; failures in the second stop the run and leave the judgment to a person. The following sections explain why.",
+      "source": "22ed0de9fc49"
+    },
+    "section-1.title": {
+      "text": "The schema describes the interface; Python holds the boundary",
+      "source": "c4f07e6b0e43"
+    },
+    "section-1.paragraphs.0": {
+      "text": "The parameter descriptions in a tool definition are written for the model; what actually blocks invalid input is the checks in Python. The tool definition of divide_numbers says a and b are numbers and b must not be 0. That helps the model write a suitable call, but it grants no permission to execute and does not guarantee the model follows it every time: the model may still propose b=0, or write a number as a string.",
+      "source": "6804e116f299"
+    },
+    "section-1.paragraphs.1": {
+      "text": "So there are two layers of checks, both in the program. The first is in the runner: execute_tool first parses arguments with json.loads and confirms it is an arguments object, then looks up the function by name in AVAILABLE_TOOLS and refuses if it is not found. AVAILABLE_TOOLS is this lesson's allowlist and registers only divide_numbers; no other name the model writes will be executed. The second is in the tool function: divide_numbers checks that both arguments are numbers, that they are finite (excluding NaN and infinity), and that the divisor is not 0, and after computing it checks whether the result overflowed.",
+      "source": "59861e61579f"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Both layers refuse when they find a problem and do not correct things for the model. The runner does not change b=0 into b=1, and does not complete a broken JSON. Quietly correcting may look considerate, but in effect the program does something the model did not ask for: the user asks for 12 divided by 0, the program computes 12 divided by 1 for them, and the answer is no longer to the question they asked.",
+      "source": "ebf2c2af73cf"
+    },
+    "section-2.title": {
+      "text": "A failure is also returned as a structured error",
+      "source": "750f9c954419"
+    },
+    "section-2.paragraphs.0": {
+      "text": "When a tool fails, the runner returns three fields, ok=false, error_type, and error; this is called a structured error. On success it returns ok=true and result. The tool result for 12 divided by 0 is {\"ok\": false, \"error_type\": \"ValueError\", \"error\": \"除数不能为 0；请提供非零除数。\"} (the error reads \"the divisor cannot be 0; please provide a non-zero divisor\"). Like a successful result, it is wrapped in a message with role tool, paired by the same call id, and appended to messages, so the model can read it in the next round.",
+      "source": "7053b3253524"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Each of the three fields has a job. ok tells the model and the program whether it succeeded without reading any text. error_type says what kind of problem it is: JSONDecodeError means the argument text is broken, ValueError means a value breaks the rules or the tool name is not registered, and TypeError usually means arguments are missing or extra. error is the wording written for the model; ideally it says both what is wrong and how to fix it. \"请提供非零除数\" (\"please provide a non-zero divisor\") gives the model what it needs to explain the problem to the user.",
+      "source": "02a4774bcc0b"
+    },
+    "section-2.paragraphs.2": {
+      "text": "execute_tool turns only these three kinds of exceptions into structured errors and lets all other exceptions propagate as usual. This is deliberate. A wrong argument or a rule violation is an expected failure, and the model can handle it once it gets it back. A defect in the tool code itself, such as reading a field that does not exist, should not be disguised as \"the arguments were wrong this time\"; the run should end with error so that a person fixes the code.",
+      "source": "773fe44d3554"
+    },
+    "section-2.paragraphs.3": {
+      "text": "So the appearance of a tool_result event only shows that a result came back, not that the computation succeeded. Expand the content and look at ok, then decide whether quotient can be reported. For 12 divided by 0, a good follow-up is to state the error honestly and ask the user for a non-zero divisor, never to make up a quotient. What the model should do after reading ok=false is spelled out in the system prompt: report a computed result only when ok=true; when ok=false, state the error honestly, ask the user to fix the input, and do not make up a quotient.",
+      "source": "7313c23668fe"
+    },
+    "deep-dive-error-message.title": {
+      "text": "Who the error message is written for",
+      "source": "72755ef601fa"
+    },
+    "deep-dive-error-message.summary": {
+      "text": "The failure reason ultimately has to be understood by the model and relayed to the user, so how it is written directly affects the model's next step.",
+      "source": "12858f5859d0"
+    },
+    "deep-dive-error-message.paragraphs.0": {
+      "text": "The error in a structured error is not a log for programmers; it is input to the model's next round. When the model reads \"除数不能为 0；请提供非零除数\" (\"the divisor cannot be 0; please provide a non-zero divisor\"), it learns two things: there is no result this time, and the next step is to ask the user for a different divisor. If error only says \"something went wrong\", or is a long stack trace, the model can only guess: it may retry with other arguments, or simply make up an answer. error is also sent to the provider with the next request, so it should not contain local paths, keys, or similar information. That is another benefit of execute_tool wrapping only three expected kinds of exceptions instead of passing arbitrary exception text back to the model.",
+      "source": "d7e5fb46c829"
+    },
+    "deep-dive-error-message.paragraphs.1": {
+      "text": "Mini-SWE-Agent, a very small open-source coding agent, makes a useful comparison. When the model's output is in the wrong format, calls a tool it does not know, or has arguments that fail to parse, it does not end the run. It puts an error note back into the message history as a new message, saying where the mistake is and what the correct format is, and lets the model fix it on the next step. When format errors occur 3 times in a row (the default), it gives no more chances and ends the run, giving repeated format errors as the reason.",
+      "source": "42be4b2d102e"
+    },
+    "deep-dive-error-message.paragraphs.2": {
+      "text": "Both paths can be seen in Claude Code as well. According to the official docs, if you answer \"no\" at a permission prompt and add a note, that note is given to the model as the reason for the refusal and the model carries on working; if you answer \"no\" without a note, this turn stops and waits for you to speak. The former is like this lesson writing the failure as a tool result and handing it back to the model; the latter is like handing the run back to a person. Its command tool also tells failure from a normal result: when `grep` finds nothing the exit code is 1, and Claude Code recognizes this as \"not found\" and does not report it to the model as a failure; for most other commands an exit code of 1 counts as failure. These details change between versions; follow the official docs.",
+      "source": "d1d433c990bc"
+    },
+    "deep-dive-error-message.paragraphs.3": {
+      "text": "*Understanding AI Agents in Depth* sums up the lesson like this: an error at the tool layer does not end the session but becomes input to the model, and the more specific the error fed back, the easier it is for the model to correct itself. This lesson's error is the exception message itself, so every raise in a tool function is a sentence written to the model. When you read divide_numbers, notice that each error names the argument and says why it is not accepted.",
+      "source": "6c6555cb25c8"
+    },
+    "deep-dive-error-message.paragraphs.4": {
+      "text": "Conversely, a tool that quietly changes the model's input creates errors the model cannot track down. In its discussion of tool design, the book gives an example it attributes to a replacement tool in one version of Cursor: the argument-passing layer silently turned Chinese curly quotes into straight quotes. The model matched against the original text it saw in the file, the tool kept saying it could not find it, and the model retried over and over without working out why. The same book also notes that a malformed argument structure (a string where an object is expected) can be repaired by the program before execution. Whether to repair is a design trade-off. This lesson refuses and does not change arguments for the model, so every failure stays in the record with a clear reason.",
+      "source": "73f0d1b89fbe"
+    },
+    "predict-divide-attempts.prompt": {
+      "text": "Try it once. Before you run \"Only the divisor changed: 12 divided by 0\" in the experiment, predict: how many tool_result events for divide_numbers will this run have?",
+      "source": "9d541d70025a"
+    },
+    "mq-result-event.result-event-meaning.prompt": {
+      "text": "A tool_result event appears in the run record. What can you be sure of from that alone?",
+      "source": "96ee13507847"
+    },
+    "mq-result-event.result-event-meaning.a.text": {
+      "text": "A result came back; success or failure still has to be read from the ok inside it",
+      "source": "8e3ba9f8c2c9"
+    },
+    "mq-result-event.result-event-meaning.a.feedback": {
+      "text": "Correct. tool_result only shows that there is a result, and a failure produces this event too.",
+      "source": "3ecbf296cfd3"
+    },
+    "mq-result-event.result-event-meaning.b.text": {
+      "text": "The division definitely succeeded",
+      "source": "0612a296d89b"
+    },
+    "mq-result-event.result-event-meaning.b.feedback": {
+      "text": "Not quite. Division by zero also produces a tool_result, only with ok=false.",
+      "source": "3b19ec36de8b"
+    },
+    "mq-result-event.result-event-meaning.c.text": {
+      "text": "The model has already given a correct answer based on the result",
+      "source": "af39523a58a0"
+    },
+    "mq-result-event.result-event-meaning.c.feedback": {
+      "text": "Not quite. The answer is produced after the next request, and whether it is correct has to be checked separately.",
+      "source": "256e6236b417"
+    },
+    "mq-result-event.result-event-meaning.explanation": {
+      "text": "An event appearing and an operation succeeding are two different things; expand the content and look at ok.",
+      "source": "1c54a9690f7c"
+    },
+    "section-3.title": {
+      "text": "Judge the loop ending and the computation's success separately",
+      "source": "ccfa7a081630"
+    },
+    "section-3.paragraphs.0": {
+      "text": "The run's terminal state and the tool's success or failure are two questions, to be answered separately. When a run ends, the platform emits a done event that records the run's terminal state: completed means the runner went through normally and gave an answer, error means it stopped partway on an error, and cancelled means you stopped the run manually. Whether the division worked is read from the ok in tool_result. A typical run of 12 divided by 0 is: the tool result is ok=false, the model states the error honestly, and the run ends as completed.",
+      "source": "453f0be8f625"
+    },
+    "section-3.paragraphs.1": {
+      "text": "These two signals do not contradict each other. completed only says the runner reached the end; it does not say the division succeeded, nor that the answer is necessarily right. ok=false does not say this run failed either. For a divide-by-zero question, recognizing the error and explaining it clearly to the user is exactly the acceptable behavior.",
+      "source": "d0339560169b"
+    },
+    "section-3.paragraphs.2": {
+      "text": "When a run ends is decided by the stop condition. This lesson's runner has three: the model gives an answer with no calls, and it ends normally; 2 rounds are used up with no answer, run_agent raises an error, and the run ends as error; the provider API fails, for example a network drop or an HTTP error, the request is not resent automatically, and the run also ends as error. In addition, if the tool code raises an exception outside the three kinds (covered in the previous section), the run also ends as error; and you can stop it manually at any time.",
+      "source": "284ed1e89694"
+    },
+    "section-3.paragraphs.3": {
+      "text": "The second is the easiest to overlook. Suppose the model proposes 12 divided by 0 again in round 2: the runner executes it all the same and returns the failure all the same, then finds the rounds used up and raises an error. Retrying as is cannot change the rules of mathematics; it only uses up the last round, and the round limit ensures such repetition cannot go on forever. So if the \"Zero divisor\" arm ends as error, first look on the timeline at what the model proposed in round 2.",
+      "source": "612c4265b3ee"
+    },
+    "deep-dive-retry.title": {
+      "text": "Which failures are worth retrying",
+      "source": "e59e1734d4ad"
+    },
+    "deep-dive-retry.summary": {
+      "text": "Whether to retry depends on whether trying again could give a different result, and on whether the last attempt actually took effect.",
+      "source": "a12d4fd554a5"
+    },
+    "deep-dive-retry.paragraphs.0": {
+      "text": "Retrying helps on the premise that trying again may give a different result. A network blip or a momentary provider overload is a failure unrelated to the request content, and sending again a little later may succeed. A divisor of 0, a tool name that does not exist, or arguments that are not valid JSON are failures determined by the input; retrying a hundred times as is gives the same error, and the only way out is to change the input or the approach.",
+      "source": "715b34bac3d6"
+    },
+    "deep-dive-retry.paragraphs.1": {
+      "text": "This lesson retries neither kind automatically, for different reasons. Tool-layer failures go back to the model, which decides the next step, and the system prompt explicitly says \"不要重复同一个无效请求\" (\"do not repeat the same invalid request\"). Provider API failures stop the run: the course's model connection sets the number of automatic retries to 0. When a request times out, you do not know whether the provider never received it, or processed it and only the reply was lost. Blindly resending may bill you twice, and an operation that changes the outside world may run twice.",
+      "source": "019d2839e77a"
+    },
+    "deep-dive-retry.paragraphs.2": {
+      "text": "Production systems draw finer lines: they separate retryable errors from non-retryable ones, retry the retryable ones a few times at growing intervals, and cap every retry path. In its discussion of failure recovery, *Understanding AI Agents in Depth* gives a Claude Code example: on the recovery path \"compress the context automatically when it gets too long\", one session failed more than three thousand times in a row. The cap on this path was then set to give up after 3 consecutive failures, based on statistics from real sessions. This lesson's round limit is the smallest version of the same idea: whatever the model does, the loop will stop. Claude Code's official docs also describe a cap on this path: when a single file or tool output is too large, or the context fills up again right after each compression, it tries a few times, then stops automatic compression and shows an error instead of looping forever.",
+      "source": "de6e8a7d38e7"
+    },
+    "mq-done-vs-ok.done-versus-ok.prompt": {
+      "text": "The run shows done=completed, while the only tool result is ok=false. Which understanding is right?",
+      "source": "81695da2786e"
+    },
+    "mq-done-vs-ok.done-versus-ok.a.text": {
+      "text": "The loop ended normally; the division failed, and honestly explaining the error can still be acceptable behavior",
+      "source": "cc9fc7b1358f"
+    },
+    "mq-done-vs-ok.done-versus-ok.a.feedback": {
+      "text": "Correct. The two statuses answer different questions.",
+      "source": "cecf442049d7"
+    },
+    "mq-done-vs-ok.done-versus-ok.b.text": {
+      "text": "The two contradict each other, so the run record must be wrong",
+      "source": "e449f4b27fb9"
+    },
+    "mq-done-vs-ok.done-versus-ok.b.feedback": {
+      "text": "They do not contradict. After a tool fails the model gives an explanation, and the loop still ends normally.",
+      "source": "dfe2bcd57193"
+    },
+    "mq-done-vs-ok.done-versus-ok.c.text": {
+      "text": "completed means the division eventually succeeded",
+      "source": "42ccd81cd61e"
+    },
+    "mq-done-vs-ok.done-versus-ok.c.feedback": {
+      "text": "Not quite. completed does not override the ok in the tool result.",
+      "source": "18217f037b07"
+    },
+    "mq-done-vs-ok.done-versus-ok.explanation": {
+      "text": "done describes the run loop; ok describes this one tool execution.",
+      "source": "e7f12f770423"
+    },
+    "section-4.title": {
+      "text": "Fault injection: testing the paths a model rarely takes",
+      "source": "e36fb98382ad"
+    },
+    "section-4.paragraphs.0": {
+      "text": "An unregistered tool name and broken arguments are hard to wait for reliably from a real model, so the runner builds them directly. A model usually proposes only tools on the allowlist, and its arguments are usually valid JSON. Ask it to \"deliberately call a tool that does not exist\" and it may do it or may refuse; even if it does, it is hard to say whether that call is the model's mistake or what the prompt asked for.",
+      "source": "52c3bc739723"
+    },
+    "section-4.paragraphs.1": {
+      "text": "This lesson's approach is fault injection: FAULTS in runtime.py holds two faulty calls, one with the name unregistered_tool and one named divide_numbers whose arguments are text that cannot be parsed. context.submit_call hands them as they are to execute_tool, which takes the same checking path as a call proposed by the model. These two arms do not call the model, and the answer is written by the program from the real check results.",
+      "source": "91f3350b7ea6"
+    },
+    "section-4.paragraphs.2": {
+      "text": "These calls carry origin=course_program in the event, and the interface shows them as \"Program calls tool\". That marker tells you the call was not proposed by the model, so it cannot prove that \"the model calls tools that do not exist\"; it can only prove \"what the runner does when it meets such a call\". This lesson therefore has two kinds of evidence: runs with a real model show how the model handled the error this time, and the injected faults show where the program's boundary is.",
+      "source": "f0946e9d1b9c"
+    },
+    "misconception-prompt-guard.claim": {
+      "text": "The system prompt already says to call only divide_numbers, so the model will not propose other tools, and the program does not need to check names.",
+      "source": "08603b0d6088"
+    },
+    "misconception-prompt-guard.correction": {
+      "text": "A prompt is only a request to the model; the model may not follow it, or may be led astray by the user's words. What blocks unregistered tools is the runner: it looks up functions by name only in AVAILABLE_TOOLS, and if none is found it returns ok=false and no function is executed.",
+      "source": "06ef022a7d34"
+    },
+    "mq-injected-origin.injected-origin.prompt": {
+      "text": "The tool_call in the \"Unregistered tool\" arm carries origin=course_program. What can this run prove?",
+      "source": "ff56de091324"
+    },
+    "mq-injected-origin.injected-origin.a.text": {
+      "text": "The runner refuses to execute an unregistered name and returns a structured error",
+      "source": "0a990ffb694a"
+    },
+    "mq-injected-origin.injected-origin.a.feedback": {
+      "text": "Correct. The call was built by the program, so it tests the runner's boundary.",
+      "source": "f83165c561e1"
+    },
+    "mq-injected-origin.injected-origin.b.text": {
+      "text": "A real model will call tools that do not exist",
+      "source": "08be30d4b7a2"
+    },
+    "mq-injected-origin.injected-origin.b.feedback": {
+      "text": "Not quite. This call was built by the runner, not proposed by the model.",
+      "source": "00be2c3f85e8"
+    },
+    "mq-injected-origin.injected-origin.c.text": {
+      "text": "After reading the reason for the refusal, the model will explain honestly",
+      "source": "e5aaeb771c80"
+    },
+    "mq-injected-origin.injected-origin.c.feedback": {
+      "text": "Not quite. This arm does not call the model, so you cannot see the model's reaction; to see how the model handles a failure, go to the divide-by-zero arm.",
+      "source": "7cabb4414e9e"
+    },
+    "mq-injected-origin.injected-origin.explanation": {
+      "text": "An injected fault only shows the program's boundary, not what the model will do.",
+      "source": "39f226eb3655"
+    },
+    "section-next.title": {
+      "text": "Next: who judges that the task is done",
+      "source": "8f05c75ea703"
+    },
+    "section-next.paragraphs.0": {
+      "text": "This lesson kept separating three things: the run ending, the tool succeeding, and the answer being acceptable. The first two have fields to check: the terminal state of done, and the ok of tool_result. For the third there is not yet a program to judge it; whether \"honestly explained the error\" counts as acceptable can for now only be judged by you reading the answer.",
+      "source": "d8029c3aee84"
+    },
+    "section-next.paragraphs.1": {
+      "text": "{{lesson:task-contract}} hands this over to the program too: before execution, write down what the task must deliver and what evidence counts as done, then have a separate piece of code check against the actual record, instead of taking the executor's word that it is done.",
+      "source": "7c00b3698eee"
+    },
+    "walkthrough.title": {
+      "text": "When the divisor is zero, how should the agent continue?",
+      "source": "2db4ddbdda25"
+    },
+    "walkthrough.description": {
+      "text": "Follow the refusal path of \"12 divided by 0\" and observe input validation, the structured error, and the follow-up explanation. All the snippets are illustrations.",
+      "source": "2b0448e21c37"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Propose division",
+      "source": "a2cd858956b9"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model → runner",
+      "source": "8e0087ca8b5d"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Valid JSON arguments can still be invalid",
+      "source": "b6729a85b2e9"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The model may propose a=12, b=0. Arguments that parse do not necessarily satisfy the rules of mathematics, nor guarantee that the tool can run successfully.",
+      "source": "a9ae95cea5c3"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "Check the name and arguments of tool_call; tell apart well-formed JSON from what the business rules allow.",
+      "source": "c60c92083214"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Hold the boundary",
+      "source": "503dd90871e0"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Python tool",
+      "source": "b87f8a0cdfce"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Python explicitly refuses division by zero",
+      "source": "b5e0870c8224"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The tool checks number types, finite values, and a non-zero divisor. A call the model proposes cannot bypass these checks, and the name to execute must also be on the allowlist.",
+      "source": "349deed0b452"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "Compare the tool source with the actual result and confirm the error comes from validation on the execution path.",
+      "source": "d24c793c4812"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Return the failure",
+      "source": "03abab3683a5"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Runner → model",
+      "source": "510a6bc1efb1"
+    },
+    "walkthrough.step-3.title": {
+      "text": "An error is also a structured result",
+      "source": "4fd4f8e9bd05"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The runner catches ValueError and wraps the failure, still sending it back through role=tool. A tool_result event only shows that a result came back; keep going and check ok.",
+      "source": "c5e834619390"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "Find ok=false, match it to the original call by tool_call_id, then check whether the error entered the next round's request.",
+      "source": "c13e4647b04b"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Respond honestly",
+      "source": "1aa83270dace"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Model → user",
+      "source": "03a3f57eb654"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Explain the problem and ask for valid input",
+      "source": "c5d738a01840"
+    },
+    "walkthrough.step-4.body": {
+      "text": "A suitable follow-up is to say that division by zero is not possible and ask for a non-zero divisor. Ending normally does not turn a failure into a success; retrying as is cannot change the rules of mathematics either.",
+      "source": "5486808af54f"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "Check that the final answer handles the error honestly, with no made-up quotient, no arbitrary change of numbers, and no repeat of the same failing request.",
+      "source": "23aea594bcde"
+    },
+    "references.book-ch5.title": {
+      "text": "Faults and error recovery: four layers of faults, judging retryability, and failure caps — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "3a1b5480e213"
+    },
+    "references.book-ch4.title": {
+      "text": "Tools: input validation and fidelity of argument passing — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "ca9a56f7fb0d"
+    },
+    "references.mini-swe-agent-default.title": {
+      "text": "The default agent: format errors go back into the message history, and it exits with a reason when a limit is exceeded (Mini-SWE-Agent)",
+      "source": "4d4ed264bdac"
+    },
+    "references.ms-tool-use.title": {
+      "text": "The tool use design pattern: error handling and argument validation (Microsoft AI Agents for Beginners)",
+      "source": "4a7e3d6e33b5"
+    },
+    "references.cc-permissions.title": {
+      "text": "Configure permissions: attach a reason when denying so the model can carry on (Claude Code documentation)",
+      "source": "e1d408403891"
+    },
+    "references.cc-tools-reference.title": {
+      "text": "Tools reference: which exit codes of a command count as failure (Claude Code documentation)",
+      "source": "2b02cd907810"
+    },
+    "code-divide-guard.n32.text": {
+      "text": "Check each argument's type in turn and exclude bool; the error message names which argument is wrong.",
+      "source": "f0bd59d4722b"
+    },
+    "code-divide-guard.n37.text": {
+      "text": "Converting a huge integer to a float makes math.isfinite raise OverflowError; here it becomes a clear out-of-range error, so no unexpected exception escapes the tool.",
+      "source": "a386ed176552"
+    },
+    "code-divide-guard.n43.text": {
+      "text": "A divisor of 0 raises ValueError, and the message states the fix directly. This text goes back to the model unchanged, for it to explain to the user.",
+      "source": "61a432e6448a"
+    },
+    "code-divide-guard.n49.text": {
+      "text": "Floating-point arithmetic can overflow to infinity without raising, so the result is checked once more too.",
+      "source": "bfea0ea6f81e"
+    },
+    "code-error-wrapping.n21.text": {
+      "text": "The arguments the model gives is a JSON string; a format error raises JSONDecodeError, which is turned into a tool failure below.",
+      "source": "439cf9c2bb1b"
+    },
+    "code-error-wrapping.n26.text": {
+      "text": "An unregistered tool name is also handled as ValueError and returns ok=false, instead of crashing the whole run.",
+      "source": "d9ea0f2519d2"
+    },
+    "code-error-wrapping.n29.text": {
+      "text": "Catch only argument and validation exceptions. Other exceptions keep propagating and the run ends as error; they are not disguised as an ordinary tool failure.",
+      "source": "ece8d09cc4ef"
+    },
+    "code-error-wrapping.n31.text": {
+      "text": "The failure result contains ok=false, error_type, and error. What the model reads in the next round is a specific reason, not a blank.",
+      "source": "83a31c39e9a6"
+    },
+    "code-fault-injection.n-unknown-name.text": {
+      "text": "An unregistered tool name: it is not in AVAILABLE_TOOLS and the model may not propose it, so the program builds it directly.",
+      "source": "a268e665192c"
+    },
+    "code-fault-injection.n-broken-json.text": {
+      "text": "The name is the registered divide_numbers, but the argument text is not valid JSON, and the refusal happens at the parsing step.",
+      "source": "dfe17339e165"
+    },
+    "code-fault-injection.n-native-loop.text": {
+      "text": "The two division exercises still go through the native tool loop, with at most two model requests.",
+      "source": "3abe22e5d616"
+    },
+    "code-fault-injection.n-submit.text": {
+      "text": "Handed to the runner as it is: it goes through the same execute_tool as a call proposed by the model, and the event is marked as program-issued.",
+      "source": "de1a92b3c51f"
+    },
+    "code-fault-injection.n-program-answer.text": {
+      "text": "There is no model; the answer is written by the program from the real check results and does not pass itself off as a model answer.",
+      "source": "ab196abd1e4a"
+    },
+    "code-decision.title": {
+      "text": "Return expected tool failures as structured results instead of interrupting the run",
+      "source": "fd7cf4dca0e9"
+    },
+    "code-decision.chosen": {
+      "text": "execute_tool wraps argument errors and business-rule errors as {ok: false, error_type, error} and still returns them as a role=tool message; SYSTEM_PROMPT requires that a result be reported only when ok=true, and that when ok=false the model state the error honestly and ask the user to fix the input.",
+      "source": "e8d8124a25e2"
+    },
+    "code-decision.abort-on-error.title": {
+      "text": "End the whole run as soon as a tool raises an exception",
+      "source": "c63dbebb0419"
+    },
+    "code-decision.abort-on-error.why_not": {
+      "text": "The model gets no reason for the failure, and the user sees only a failed run, with no fix suggestion like \"请提供非零除数\" (\"please provide a non-zero divisor\").",
+      "source": "ce91948d7188"
+    },
+    "code-decision.default-value.title": {
+      "text": "Return a default value on failure (such as 0 or None)",
+      "source": "d0ffe9d1e687"
+    },
+    "code-decision.default-value.why_not": {
+      "text": "The model would report the default value as a real result, which is exactly the \"made-up quotient\" this lesson sets out to avoid.",
+      "source": "bc8234da2820"
+    },
+    "zero-divisor.title": {
+      "text": "Change only the divisor: a failure is still paired and returned",
+      "source": "0543bcccdb16"
+    },
+    "zero-divisor.hypothesis": {
+      "text": "When only the divisor changes from 3 to 0, the Python tool refuses to compute and returns ok=false; the runner still pairs this failure result and returns it to the model. When the model answers directly in round 2, the run ends normally.",
+      "source": "96642199f214"
+    },
+    "zero-divisor.divide.label": {
+      "text": "Control: 12 divided by 3",
+      "source": "23c655c0fb1a"
+    },
+    "zero-divisor.zero.label": {
+      "text": "Only the divisor changed: 12 divided by 0",
+      "source": "cb4da18d9788"
+    },
+    "zero-divisor.arguments.text": {
+      "text": "The arguments of tool_call: the two arms differ only in b.",
+      "source": "612f3d1cb647"
+    },
+    "zero-divisor.ok-flag.text": {
+      "text": "The ok of tool_result: true for the control arm, false for the divide-by-zero arm.",
+      "source": "c089b278f3fc"
+    },
+    "zero-divisor.quotient.text": {
+      "text": "The quotient on success: it appears only in a result with ok=true.",
+      "source": "acdf09ffb572"
+    },
+    "zero-divisor.error-detail.text": {
+      "text": "The error on failure: the specific reason given by Python's validation.",
+      "source": "1dde66a8855c"
+    },
+    "zero-divisor.error-returned.text": {
+      "text": "The role=tool message of the second round's request: the result, including the failure reason, handed to the model as it is.",
+      "source": "119a5f5d10a1"
+    },
+    "zero-divisor.run-status.text": {
+      "text": "The terminal state recorded by the done event: whether the run loop ended normally, which is a separate matter from whether the tool succeeded.",
+      "source": "6a893aef37e1"
+    },
+    "zero-divisor.guide.0.text": {
+      "text": "This experiment changes only one variable: the divisor. Confirm that first.",
+      "source": "bb035230d638"
+    },
+    "zero-divisor.guide.1.text": {
+      "text": "Look at b in arguments: 3 in the control arm, 0 in the divide-by-zero arm, everything else the same.",
+      "source": "e1e209a57a47"
+    },
+    "zero-divisor.guide.2.text": {
+      "text": "The appearance of tool_result only shows that a result came back; success or failure is read from ok.",
+      "source": "a6b823f44860"
+    },
+    "zero-divisor.guide.3.text": {
+      "text": "quotient exists only when ok=true. If you ran the divide-by-zero arm, this will say there is no such evidence in this run.",
+      "source": "3bae2377e6d5"
+    },
+    "zero-divisor.guide.4.text": {
+      "text": "When ok=false, error states the reason. It comes from Python's input validation, not from something the model made up.",
+      "source": "7b5c798dde49"
+    },
+    "zero-divisor.guide.5.text": {
+      "text": "A failure result is likewise paired and returned as a role=tool message, so the model can state the error honestly in the next round.",
+      "source": "33c9a9efdee1"
+    },
+    "zero-divisor.guide.6.text": {
+      "text": "done shows the state of the run loop. The loop ending normally does not mean the division succeeded.",
+      "source": "e774ab09c03b"
+    },
+    "zero-divisor.conclusion.proves.0": {
+      "text": "Whether the divide-by-zero input was refused by Python's validation in this run, and whether the failure result was paired and returned as ok=false and entered the next round's request.",
+      "source": "53398582c6ed"
+    },
+    "zero-divisor.conclusion.proves.1": {
+      "text": "completed in done only says the loop ended; whether the tool succeeded is read from the ok of tool_result.",
+      "source": "5c0bc7d042ab"
+    },
+    "zero-divisor.conclusion.does_not_prove.0": {
+      "text": "It does not prove that the model will state every error honestly; you have to read and check the wording of the final answer yourself.",
+      "source": "905c6804dd87"
+    },
+    "zero-divisor.conclusion.does_not_prove.1": {
+      "text": "It tested only one kind of illegal input, a zero divisor, and does not prove the tool covers all illegal inputs.",
+      "source": "10422052b224"
+    },
+    "zero-divisor.conclusion.does_not_prove.2": {
+      "text": "The run ends as completed only if the model answers directly in round 2; if it proposes another call, the round limit makes the run end as error.",
+      "source": "66950c6bd08e"
+    },
+    "injected-faults.title": {
+      "text": "Fault injection: an unregistered tool and malformed arguments",
+      "source": "182fe7e4ac3a"
+    },
+    "injected-faults.hypothesis": {
+      "text": "When this lesson's runner hands execute_tool an unregistered tool name or a piece of arguments that cannot be parsed, it refuses before calling any function, wraps error_type and error into a result with ok=false, and pairs it with this call's id.",
+      "source": "4734748edab2"
+    },
+    "injected-faults.unknown.label": {
+      "text": "Program-built: call the unregistered unregistered_tool",
+      "source": "af7397dec0af"
+    },
+    "injected-faults.malformed.label": {
+      "text": "Program-built: the arguments of divide_numbers are not valid JSON",
+      "source": "2b091c9c5712"
+    },
+    "injected-faults.program-origin.text": {
+      "text": "This tool_call was built by the runner: the event marks it as program-issued, and it does not come from a model response.",
+      "source": "545767d1cadb"
+    },
+    "injected-faults.unknown-name.text": {
+      "text": "The unregistered tool name unregistered_tool: it is not in AVAILABLE_TOOLS.",
+      "source": "9d0200671d20"
+    },
+    "injected-faults.broken-arguments.text": {
+      "text": "The arguments of divide_numbers: a piece of JSON text that cannot be parsed.",
+      "source": "f25ffdc0d7f3"
+    },
+    "injected-faults.error-type.text": {
+      "text": "The error_type of the failure result: ValueError for the unregistered name, JSONDecodeError for the broken arguments.",
+      "source": "09fe0c3458bb"
+    },
+    "injected-faults.paired-result.text": {
+      "text": "The tool_call_id of the failure result: the same as this call's id, so the refusal is paired all the same.",
+      "source": "77ac3ec7063e"
+    },
+    "injected-faults.guide.0.text": {
+      "text": "These two arms do not call the model: this lesson's runner builds a faulty call directly and hands it to execute_tool to check.",
+      "source": "f6867641e972"
+    },
+    "injected-faults.guide.1.text": {
+      "text": "First look at the origin: this call was built by the runner, labeled \"Program calls tool\" in the interface, and not proposed by the model.",
+      "source": "3ce462a933c1"
+    },
+    "injected-faults.guide.2.text": {
+      "text": "If you ran the unregistered tool arm, this is that name. The runner looks up functions only in the allowlist and executes nothing when none is found.",
+      "source": "470972c8d4a0"
+    },
+    "injected-faults.guide.3.text": {
+      "text": "If you ran the malformed arguments arm, this is the argument text that cannot be parsed. When parsing fails, the division function is likewise never called.",
+      "source": "40bc4117265f"
+    },
+    "injected-faults.guide.4.text": {
+      "text": "Both refusals are wrapped as results with ok=false, and error_type states the failure category.",
+      "source": "a41b34f8b8e6"
+    },
+    "injected-faults.guide.5.text": {
+      "text": "The result carries the same id as the call: a refusal is also recorded as a pair, and does not get mixed up with other calls.",
+      "source": "537b5bf01b56"
+    },
+    "injected-faults.conclusion.proves.0": {
+      "text": "The allowlist and argument parsing take effect before any function is called: the program-built call ends with ok=false, error_type states the failure category, and the result is paired with the call id.",
+      "source": "e0244ca006ed"
+    },
+    "injected-faults.conclusion.does_not_prove.0": {
+      "text": "This call was built by the runner and cannot be taken as a call a real model once proposed.",
+      "source": "557d4ee741f6"
+    },
+    "injected-faults.conclusion.does_not_prove.1": {
+      "text": "This arm does not call the model, so you cannot see how the model answers after reading the refusal reason; how a failure result returns to the next round's request can be seen in the divide-by-zero arm of \"Change only the divisor: a failure is still paired and returned\".",
+      "source": "a80cf1110be5"
+    },
+    "injected-faults.conclusion.does_not_prove.2": {
+      "text": "It covers only the two cases of an unregistered name and broken JSON, and does not prove that all abnormal inputs will be blocked.",
+      "source": "839af19e8db2"
+    },
+    "quiz.completion-not-success.prompt": {
+      "text": "The tool_result for the divide-by-zero is ok=false, the model then explains the error, and finally done=completed. How should this be read?",
+      "source": "3c34b1b917ef"
+    },
+    "quiz.completion-not-success.a.text": {
+      "text": "The division succeeded, and completed can override ok=false.",
+      "source": "1a59cd2d732e"
+    },
+    "quiz.completion-not-success.a.feedback": {
+      "text": "completed only says the run has reached a terminal state; the ok=false of the tool result is still the fact that this division failed, and it is not overridden.",
+      "source": "a7f328d0da36"
+    },
+    "quiz.completion-not-success.b.text": {
+      "text": "The model explained the error, so the tool result no longer needs checking.",
+      "source": "7a593cd4a05b"
+    },
+    "quiz.completion-not-success.b.feedback": {
+      "text": "Whether the model's explanation is accurate is exactly what you judge against the tool_result; you cannot skip the check because it said something.",
+      "source": "0fa33916bc55"
+    },
+    "quiz.completion-not-success.c.text": {
+      "text": "The run has ended, but the division failed; whether it is acceptable depends on whether the model handled the error honestly.",
+      "source": "f0d09bf4831c"
+    },
+    "quiz.completion-not-success.c.feedback": {
+      "text": "Correct. done and ok are two different signals: the run ended, but the division failed; acceptability depends on whether the model explained the error honestly.",
+      "source": "780f8bdd45a2"
+    },
+    "quiz.completion-not-success.explanation": {
+      "text": "done records the run's terminal state, and ok describes the tool execution result. An error explanation that ends normally does not turn a failure into a success; this exercise asks you to recognize the error and return and explain it correctly.",
+      "source": "e7960f4b1765"
+    },
+    "quiz.invalid-retry.prompt": {
+      "text": "12 divided by 0 has been refused. What is the most reasonable next behavior?",
+      "source": "f75834649c20"
+    },
+    "quiz.invalid-retry.a.text": {
+      "text": "Say the divisor cannot be zero and ask the user for a non-zero divisor.",
+      "source": "6c364eefa1d4"
+    },
+    "quiz.invalid-retry.a.feedback": {
+      "text": "Correct. A zero divisor violates a business rule, so keep the failure reason and ask the user for valid input.",
+      "source": "9a83d62b9db3"
+    },
+    "quiz.invalid-retry.b.text": {
+      "text": "Retry with the same arguments over and over until a result comes back.",
+      "source": "755fa8959c04"
+    },
+    "quiz.invalid-retry.b.feedback": {
+      "text": "This is not a transient failure like a network blip; the same arguments give the same error however many times you retry, and only waste calls.",
+      "source": "10e098d018ab"
+    },
+    "quiz.invalid-retry.c.text": {
+      "text": "To finish the task, change the divisor to 1 without asking and report the quotient.",
+      "source": "d18180456635"
+    },
+    "quiz.invalid-retry.c.feedback": {
+      "text": "Changing the number arbitrarily changes the user's task, and the quotient reported is not the answer the user wanted.",
+      "source": "17ab7d90bdae"
+    },
+    "quiz.invalid-retry.explanation": {
+      "text": "The input violates a business rule; this is not a transient network failure. Retrying as is cannot fix it, and changing the number arbitrarily changes the user's task; keep the failure reason and ask for valid input.",
+      "source": "78571a7bd79a"
+    },
+    "quiz.allowlist-boundary.prompt": {
+      "text": "The model asks to execute an unregistered tool, even though its name looks reasonable. What should the runner do?",
+      "source": "8a157eb9d5b1"
+    },
+    "quiz.allowlist-boundary.a.text": {
+      "text": "Automatically find and run a Python function of the same name, so the task is not interrupted.",
+      "source": "502b2f79285e"
+    },
+    "quiz.allowlist-boundary.a.feedback": {
+      "text": "The runner looks only in the AVAILABLE_TOOLS allowlist and never searches for an arbitrary Python function by name; otherwise the model could extend its own execution permissions.",
+      "source": "fda99d355376"
+    },
+    "quiz.allowlist-boundary.b.text": {
+      "text": "Refuse to execute, return a structured error, and let the model continue within the allowed capabilities.",
+      "source": "c823cc2b208c"
+    },
+    "quiz.allowlist-boundary.b.feedback": {
+      "text": "Correct. An unregistered name is refused with a structured error of ok=false, and the model can only continue within the allowed capabilities.",
+      "source": "1c1eadfb3bab"
+    },
+    "quiz.allowlist-boundary.c.text": {
+      "text": "As long as arguments is valid JSON, it has the right to execute that name.",
+      "source": "cf06b8a8fc36"
+    },
+    "quiz.allowlist-boundary.c.feedback": {
+      "text": "Valid JSON only shows the arguments can be parsed; it does not mean the tool is authorized to run.",
+      "source": "4dddf735ff99"
+    },
+    "quiz.allowlist-boundary.explanation": {
+      "text": "Valid JSON only means the arguments are parseable, not that the tool is authorized. AVAILABLE_TOOLS is the explicit execution allowlist; an unknown name must be refused, and the model's proposal cannot extend what the program executes.",
+      "source": "31d075ba2a4c"
+    },
+    "quiz.round-limit-error.prompt": {
+      "text": "This lesson allows at most 2 rounds. In the divide-by-zero arm, the model proposes 12 divided by 0 again in round 2. How does the run end?",
+      "source": "0fc369cdce7f"
+    },
+    "quiz.round-limit-error.a.text": {
+      "text": "This call is executed all the same and the failure returned, then the rounds run out and the run ends as error",
+      "source": "59525eb377ce"
+    },
+    "quiz.round-limit-error.a.feedback": {
+      "text": "Correct. The runner does not compare arguments and executes anyway; when 2 rounds are used up with no answer, it raises an error and stops.",
+      "source": "0de4f167b910"
+    },
+    "quiz.round-limit-error.b.text": {
+      "text": "The runner sees the arguments are the same as last time, refuses to execute, and the run ends as completed",
+      "source": "4797e6c54c02"
+    },
+    "quiz.round-limit-error.b.feedback": {
+      "text": "Not quite. The runner does not compare arguments between two calls.",
+      "source": "9940141de39c"
+    },
+    "quiz.round-limit-error.c.text": {
+      "text": "The runner keeps requesting until the model gives an answer",
+      "source": "e6a6f55f7f4b"
+    },
+    "quiz.round-limit-error.c.feedback": {
+      "text": "Not quite. The round limit is 2; when it is reached it stops and does not request endlessly.",
+      "source": "58804c7c90ad"
+    },
+    "quiz.round-limit-error.explanation": {
+      "text": "The round limit is one of the stop conditions: repeated invalid calls can go at most up to the limit, and the run ends as error.",
+      "source": "e926f4ba3b24"
+    },
+    "quiz.catch-scope.prompt": {
+      "text": "Why does execute_tool not turn all exceptions into ok=false?",
+      "source": "e599cce2bd12"
+    },
+    "quiz.catch-scope.a.text": {
+      "text": "A defect in the tool code itself should not be disguised as an argument problem; the run should end as error so a person fixes it",
+      "source": "3f8c85b2328c"
+    },
+    "quiz.catch-scope.a.feedback": {
+      "text": "Correct. Only failures about arguments and rules are handed back to the model.",
+      "source": "1ed0d8336845"
+    },
+    "quiz.catch-scope.b.text": {
+      "text": "Other exceptions would go to the model, which would be even worse at fixing them",
+      "source": "f51db67c0520"
+    },
+    "quiz.catch-scope.b.feedback": {
+      "text": "Not quite. The reason is not whether the model can fix them, but that code defects have to be found and fixed by a person.",
+      "source": "68c06356a664"
+    },
+    "quiz.catch-scope.c.text": {
+      "text": "Python does not allow catching all exceptions",
+      "source": "e9ddfaad6020"
+    },
+    "quiz.catch-scope.c.feedback": {
+      "text": "Not quite. It can be done; here only three kinds are caught on purpose.",
+      "source": "0238e26e2e75"
+    },
+    "quiz.catch-scope.explanation": {
+      "text": "Expected failures go back to the model; unexpected errors stop the run, and the two are not mixed together.",
+      "source": "3bb1ffb303b0"
+    },
+    "check-hunt.prompt": {
+      "text": "Run the \"Zero divisor\" exercise and find the step where Python refuses to execute and returns a structured error.",
+      "source": "d9119f55a629"
+    },
+    "check-hunt.explanation": {
+      "text": "It is the tool_result of divide_numbers: in result, ok is false, with error_type and error. The error was turned into a structured result and returned to the model, and the program did not crash; the run may still end as completed afterward, but this step records a failure.",
+      "source": "187a01e0af58"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran the \"Zero divisor\" exercise and saw ok=false and error_type in tool_result.",
+      "source": "5e5e830bd1ec"
+    },
+    "check-points.item-2.text": {
+      "text": "I can tell what completed in done and ok=false in the tool result each say.",
+      "source": "65b1db9ee5e8"
+    },
+    "check-points.item-3.text": {
+      "text": "I can say why an unregistered tool name is refused.",
+      "source": "d211838c945c"
+    },
+    "code_notes.ok.note": {
+      "text": "The success flag of a tool result: when true it carries result, when false it carries error_type and error.",
+      "source": "ea5520765b2e"
+    },
+    "code_notes.error_type.note": {
+      "text": "The failure category, taken from the exception class name: ValueError, TypeError, or JSONDecodeError.",
+      "source": "27a5b91d1e81"
+    },
+    "code_notes.error.note": {
+      "text": "The exception message as is, e.g. \"除数不能为 0；请提供非零除数。\" (\"the divisor cannot be 0; please provide a non-zero divisor\"), returned to the model unchanged.",
+      "source": "d3b72b27ed28"
+    },
+    "code_notes.quotient.note": {
+      "text": "The quotient divide_numbers returns on success; it appears only in a result with ok=true.",
+      "source": "3e5fe6eebffb"
+    },
+    "code_notes.AVAILABLE_TOOLS.note": {
+      "text": "A dict from tool names to functions, which is this lesson's allowlist; only divide_numbers is registered here.",
+      "source": "dacf15396f3c"
+    },
+    "code_notes.execute_tool.note": {
+      "text": "The runner's function that executes tools: it wraps only argument and validation exceptions as ok=false, and lets other exceptions keep propagating.",
+      "source": "cb4f443e36a5"
+    },
+    "code_notes.done.note": {
+      "text": "The run-end event, recording the run's terminal state (completed, error, and so on); it does not reflect whether the tool succeeded.",
+      "source": "1321dd4e1568"
+    },
+    "code_notes.completed.note": {
+      "text": "The terminal state when a run ends normally: the model gave a final answer. Explaining honestly after a tool failure is also completed.",
+      "source": "6d4bc173239a"
+    },
+    "code_notes.FAULTS.note": {
+      "text": "The two program-built faulty calls in runtime.py: an unregistered tool name, and argument text that cannot be parsed.",
+      "source": "e3aa137e5146"
+    }
+  }
+}

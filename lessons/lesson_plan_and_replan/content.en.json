@@ -1,0 +1,978 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "REASONING / PLAN & REPLAN",
+      "source": "d66ff2c332d9"
+    },
+    "hero.headline": {
+      "text": "Write the plan down first,",
+      "source": "3ea4cf005efb"
+    },
+    "hero.highlight": {
+      "text": "so you know which step to fix when something fails.",
+      "source": "3c96c381d455"
+    },
+    "hero.takeaway": {
+      "text": "Plan-and-execute separates thinking from doing: the model writes a plan, and the program carries it out. When a step fails, go back to the plan with the real error, revise it, and record the reason and the diff.",
+      "source": "96e2c9885f83"
+    },
+    "concepts.01-plan.label": {
+      "text": "01 / PLAN",
+      "source": "ed01aeb5a748"
+    },
+    "concepts.01-plan.title": {
+      "text": "A plan is data",
+      "source": "cfb93296cc63"
+    },
+    "concepts.01-plan.description": {
+      "text": "The planner is a model role that only writes the plan and calls no tools. It outputs JSON, and each step names the tool, the arguments, and the purpose. After the program validates the plan, an executor calls the tools in order.",
+      "source": "c6a984812e31"
+    },
+    "concepts.02-static.label": {
+      "text": "02 / STATIC",
+      "source": "7cea355651ce"
+    },
+    "concepts.02-static.title": {
+      "text": "Static plan",
+      "source": "bad762f03ef2"
+    },
+    "concepts.02-static.description": {
+      "text": "The plan is never changed once written. If a step fails, the later steps run as usual, and the missing data stays missing.",
+      "source": "484c592ca980"
+    },
+    "concepts.03-replan.label": {
+      "text": "03 / REPLAN",
+      "source": "432ed3d24412"
+    },
+    "concepts.03-replan.title": {
+      "text": "Revise after a failure",
+      "source": "137e1e495af3"
+    },
+    "concepts.03-replan.description": {
+      "text": "Hand the failed step and its real error back to the planner, replace only the steps that have not run yet, and record the reason and the diff.",
+      "source": "e383647f13ca"
+    },
+    "concepts.04-react.label": {
+      "text": "04 / REACT",
+      "source": "559aa468fda5"
+    },
+    "concepts.04-react.title": {
+      "text": "ReAct baseline",
+      "source": "ea14d31ada49"
+    },
+    "concepts.04-react.description": {
+      "text": "A baseline for comparison: no plan up front. The model uses native tool calls and decides each next step after seeing the result.",
+      "source": "c84fa7f8ad61"
+    },
+    "section-1.title": {
+      "text": "Why write a plan first",
+      "source": "f7f108abf328"
+    },
+    "section-1.paragraphs.0": {
+      "text": "An agent that thinks as it goes is flexible, but you only learn what it meant to do after it has done it. In the earlier lessons the model decided step by step: it saw a tool result, then proposed the next call. That is the ReAct pattern from {{lesson:text-actions}}. {{lesson:todo-planning}} had the model write a checklist, but the checklist was free text, and execution still depended on the model proposing one call per round, so the checklist and what was actually done could disagree.",
+      "source": "a23faf490152"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Plan-and-execute splits \"thinking\" and \"doing\" between two roles. The planner is a model. It writes the whole plan first, and each step says which tool to use and which arguments to pass. The executor is a program. It calls the tools step by step as the plan says and makes no decisions of its own. A navigation app works the same way: it computes the whole route before you leave and you follow it. If the road ahead is closed or you miss a turn, it recomputes the rest of the route from where you are now, and you do not drive the part you already covered again.",
+      "source": "9b2f0fddfbf1"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Writing the plan down has two benefits. First, you can check it before anything runs: is the tool on the allowlist, are the arguments a JSON object? If not, no step runs. Second, when something fails you have a reference: which step failed and what the plan became afterward can both be read off the version numbers. This lesson's task is a weekly learning report for a learner named lin, which needs the learning progress and the quiz score for each lesson.",
+      "source": "b4fa4ebf23a3"
+    },
+    "section-plan-data.title": {
+      "text": "A plan is data you can validate",
+      "source": "c86a429dfef1"
+    },
+    "section-plan-data.paragraphs.0": {
+      "text": "The plan the planner outputs is a JSON object. The program validates it first and executes it afterward. It has two fields: reason says why the plan looks this way, and steps is the list of steps. Each step has id, tool, arguments, and purpose. Here is a made-up example. Version 1 of the plan might have just two steps. Step 1 calls fetch_progress with learner set to lin, to find out which lessons are done. Step 2 calls fetch_quiz_scores with learner set to lin and source set to primary, to get the score for each lesson.",
+      "source": "61b0b0e23ae2"
+    },
+    "section-plan-data.paragraphs.1": {
+      "text": "Before execution, parse_plan checks the plan item by item: a JSON object can be read, steps is not an empty list, no two steps share an id, each tool is in the allowlist AVAILABLE_TOOLS, and arguments is a JSON object. If any check fails, it records a lesson.plan_error with the planner's original text and the error, then stops without running a single tool. Like the parser in {{lesson:text-actions}}, it is only tolerant in a limited way: it starts reading a JSON object at the first left brace, ignores any explanatory text and code fences around the JSON, and repairs nothing else.",
+      "source": "e24cdefa20ad"
+    },
+    "section-plan-data.paragraphs.2": {
+      "text": "This is where it differs from the checklist in {{lesson:todo-planning}}. Each checklist item is a sentence written for humans, so the program cannot execute it. Each plan step is a tool and arguments that the program can call directly, so it has to be validated first. A plan that passes validation only shows that it can be executed, not that it can finish the task: a step with valid arguments can still fail.",
+      "source": "9466cb1a7cee"
+    },
+    "section-2.title": {
+      "text": "A step that always fails",
+      "source": "59384c1a079e"
+    },
+    "section-2.paragraphs.0": {
+      "text": "In this lesson the primary score source is set to always fail, so all three strategies face the same fault. Scores come from two data sources: primary is the main one and backup is the spare, with identical data. Every time fetch_quiz_scores uses primary, it raises the error \"成绩主数据源暂时不可用（受控故障：本课固定失败）。可以改用 source=backup。\" (\"The primary score source is temporarily unavailable (controlled fault: fails by design in this lesson). You can switch to source=backup.\"). This is hard-coded in the lesson's source. It is not a network problem and it is not the model's fault.",
+      "source": "5a86eb689a0b"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Why hard-code it? If the fault were random, some arms would hit it and others would not, and you could not tell whether a difference in results came from the strategy or from luck. A fixed fault makes strategy the only difference. The error message also deliberately says \"可以改用 source=backup\" (switch to backup), and that is the sentence the planner reads when it revises the plan. Error messages in real systems are rarely this helpful; we come back to this when we discuss the limits.",
+      "source": "0b9d94934872"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The planner will most likely pick primary the first time, because it is listed first in the prompt and is called the main source. But that is only likely: the planner may pick backup right away, and then you will not see a revision this time. The three strategies respond differently. The static plan runs as written to the end. Replan after failure hands the error back to the planner. The ReAct baseline lets the model decide the next step itself after it sees the error.",
+      "source": "761cf7a1f4fc"
+    },
+    "predict-revisions.prompt": {
+      "text": "Before you run \"Replan after failure\", guess: how many fetch_quiz_scores tool_result events will this run have (successes and failures both count)? Think about whether the revised plan will try the primary source again.",
+      "source": "c4076bcabe3c"
+    },
+    "mq-fixture.fixture-failure.prompt": {
+      "text": "fetch_quiz_scores(source=\"primary\") fails every time in this lesson. What does that tell you?",
+      "source": "6a6fb8aa93ec"
+    },
+    "mq-fixture.fixture-failure.a.text": {
+      "text": "It is a fault hard-coded by the lesson so that the three strategies face the same failure",
+      "source": "3b22c2595446"
+    },
+    "mq-fixture.fixture-failure.a.feedback": {
+      "text": "Correct. With the fault fixed, the comparison is fair.",
+      "source": "b620bf1d79f0"
+    },
+    "mq-fixture.fixture-failure.b.text": {
+      "text": "The primary data source's server is really down",
+      "source": "a552daa45c2b"
+    },
+    "mq-fixture.fixture-failure.b.feedback": {
+      "text": "Not quite. This tool does not touch the network. The failure is written into the code.",
+      "source": "b171afb7ae15"
+    },
+    "mq-fixture.fixture-failure.c.text": {
+      "text": "The model called the tool the wrong way",
+      "source": "1c1b9856a4da"
+    },
+    "mq-fixture.fixture-failure.c.feedback": {
+      "text": "Not quite. The arguments are completely valid. The failure comes from the tool itself.",
+      "source": "ccfa74129bd4"
+    },
+    "mq-fixture.fixture-failure.explanation": {
+      "text": "A controlled fault lets the different strategies be compared under the same conditions.",
+      "source": "851f18891c8a"
+    },
+    "section-3.title": {
+      "text": "Static plan: run it to the end",
+      "source": "9e4897d0866f"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A static plan is never changed once written, and execution continues even after a failure. It calls the planner only once. The executor calls each step in order, marks a failed step as failed, and moves on to the next. When all steps have run, the runner makes one more model request to write the weekly report, giving it only the data that was fetched successfully. After primary fails, nobody tries backup, so the report has no scores. The report-writing prompt says to state plainly what is missing and not to make anything up.",
+      "source": "e7b83244ad1a"
+    },
+    "section-3.paragraphs.1": {
+      "text": "After each step, the runner publishes a lesson.plan event containing every step of this plan version and its status. The first event has event set to created, and after that each finished step produces a progress event. A static plan only ever has version 1. When the plan is valid, the number of model calls is fixed at 2: one to plan and one to write the report.",
+      "source": "20037a9df978"
+    },
+    "section-3.paragraphs.2": {
+      "text": "A static plan also has strengths. The number of calls is known in advance, a person can review the plan before execution, and the execution is fully predictable. It suits tasks with fixed steps that rarely go wrong. This lesson deliberately gives it the case it handles worst: one step in the middle is guaranteed to fail, and the fix is only visible once you see the error.",
+      "source": "6feb9a5f868a"
+    },
+    "section-4.title": {
+      "text": "Replan after failure: go back with the error",
+      "source": "87300ae5bae3"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Replan after failure pauses when a step fails, goes back to the plan with the real error, and replaces only the steps that have not run yet. Two things go back to the planner: the current status of every step, and the real error message of the failed step. The planner only needs to write the steps that still have to run, and explain in reason why it changed them.",
+      "source": "853a585c983c"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The runner keeps the completed and failed steps as they are, replaces the unexecuted part with the new steps, and increments the version number. It then publishes a lesson.plan event with event set to revised, carrying the revision reason and a diff: removed is the unexecuted steps that were replaced, added is the new steps, and failed_step is the step that triggered the revision.",
+      "source": "e43ec8742a2a"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Let's work through the made-up example above. Step 1 fetches the progress and succeeds, so it is marked done. Step 2 fetches scores with primary and fails, so it is marked failed. There are no unexecuted steps after it, so removed is empty. The planner reads \"可以改用 source=backup\" (\"you can switch to source=backup\") in the error and writes version 2: it adds step 3, which fetches scores from backup. The diff records that step 3 was added and that the revision was caused by step 2 failing. Step 3 succeeds, then the report is written, and the number of model calls is 3: one each for planning, revision, and the report.",
+      "source": "9b755f5b7180"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The number of revisions is capped, at 2 in this lesson. Version 1 fails and is revised once, version 2 fails again and is revised once more, and if a step in version 3 fails, it is only marked failed and not revised again. The remaining steps run to the end, and then the report is written with the data collected so far. In the worst case the number of model calls is 4: one to plan, two to revise, and one for the report. Without a cap, the planner could propose the same failing approach over and over. The planner has its own message history, and every plan version and every failure stays in it, so when it revises it can see how things got here.",
+      "source": "6bc7c912f1d6"
+    },
+    "deep-dive-replan-scope.title": {
+      "text": "Change only what has not run yet",
+      "source": "37857ced4462"
+    },
+    "deep-dive-replan-scope.summary": {
+      "text": "Steps that already ran have real results and may have side effects. A revision only touches what has not happened yet.",
+      "source": "d11f1e1096ad"
+    },
+    "deep-dive-replan-scope.paragraphs.0": {
+      "text": "The easiest thing to do after a failure is to have the planner rewrite the whole plan from scratch. The trouble is the steps that already ran. Repeating a query step is just a waste, but repeating a step with side effects, such as sending an email or charging a payment, is an incident. So this lesson replaces only the part after the failure that has not run, and steps that are already done or failed stay in the plan as they are.",
+      "source": "e8ff793c1d21"
+    },
+    "deep-dive-replan-scope.paragraphs.1": {
+      "text": "In its part on long-horizon planning, *Understanding AI Agents in Depth* (深入理解 AI Agent) applies the same principle to a robot tidying a desk: if a grasp fails, only the current step is retried; if someone moves an object, only the affected later steps are replanned, instead of redoing the whole old plan. The planning design lesson of Microsoft AI Agents for Beginners says that when one subtask's result affects later steps, iterative planning is needed, and that a user changing their mind can also trigger a partial replan.",
+      "source": "6049059c24bf"
+    },
+    "deep-dive-replan-scope.paragraphs.2": {
+      "text": "What goes back to the planner also matters. This lesson hands back the raw error returned by the tool, not a paraphrase by the program and not a one-line message like \"step 2 failed\". Whether the planner can fix the plan depends largely on whether the error contains a usable clue. This lesson's error names backup. In real systems the error is often just a status code, and then the planner can only guess.",
+      "source": "709e57e14bda"
+    },
+    "deep-dive-planner-history.title": {
+      "text": "What the planner sees when it revises",
+      "source": "3f19e82f7ed5"
+    },
+    "deep-dive-planner-history.summary": {
+      "text": "The planner has its own message history. A revision appends one execution status message to the end of that history.",
+      "source": "c6e9d465d7bd"
+    },
+    "deep-dive-planner-history.paragraphs.0": {
+      "text": "The planner does not share a message history with the executor. At the first revision, its request has four messages. The system prompt states the available tools and the plan format. The first user message is the task. The assistant message is the version 1 plan it wrote. The last user message, appended at the end, is the execution status (it starts with \"执行情况\", \"execution status\"): it lists the id, tool, and status of every step, followed by the original error text of the failed step, and then asks the planner to list only the steps that still need to run and to give the revision reason in reason.",
+      "source": "42408686f445"
+    },
+    "deep-dive-planner-history.paragraphs.1": {
+      "text": "The observation point \"message 4 of request 2\" in the experiment looks at exactly this execution status message. The planner does not see the successful data the tools returned, only the statuses and the error. Deciding the next step does not need that data; it is handed to the writer only when the report is written. A second revision appends another plan version and another execution status message after these, so the history keeps growing, but every plan version and every failure is in it, and the planner does not forget that primary has already failed.",
+      "source": "20d2f1e46209"
+    },
+    "mq-replan.replan-input.prompt": {
+      "text": "When the plan is revised, where does the failure information given to the planner come from?",
+      "source": "ae4495fe114a"
+    },
+    "mq-replan.replan-input.a.text": {
+      "text": "The real error in the failed step's tool_result",
+      "source": "9c6edade9040"
+    },
+    "mq-replan.replan-input.a.feedback": {
+      "text": "Correct. A revision needs evidence, and the evidence is the real execution result.",
+      "source": "43c1aa49dfde"
+    },
+    "mq-replan.replan-input.b.text": {
+      "text": "The planner's own guess about which step might fail",
+      "source": "2206d686ba04"
+    },
+    "mq-replan.replan-input.b.feedback": {
+      "text": "Not quite. A guess cannot replace a real result.",
+      "source": "743393ae0048"
+    },
+    "mq-replan.replan-input.c.text": {
+      "text": "An alternative the executor picks at random",
+      "source": "c9e4a0bf9149"
+    },
+    "mq-replan.replan-input.c.feedback": {
+      "text": "Not quite. The executor only follows the plan and does not plan.",
+      "source": "046b1792c1c0"
+    },
+    "mq-replan.replan-input.explanation": {
+      "text": "The revision reason has to match a real failure record.",
+      "source": "aa91aa98b73e"
+    },
+    "section-5.title": {
+      "text": "One validator for all three strategies",
+      "source": "dab1f7fbfebe"
+    },
+    "section-5.paragraphs.0": {
+      "text": "All three strategies are judged by the same validator, and how well the plan is written earns no points. The validator verify looks at only two things: this run's successful tool results, and the final report text. It makes three checks: the learning progress comes from a successful fetch_progress, the quiz scores come from a successful fetch_quiz_scores, and the report states every real score. The last check is a keyword screening that only checks whether the numbers 82, 67, and 91 appear. It does not judge whether the report is well written.",
+      "source": "588dab4a582f"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The report also records the cost: the number of model calls, tool calls, plan versions, and revisions. A static plan makes 2 model calls. Replan after failure makes one more for each revision. The ReAct baseline makes one request per round, and the last round writes the report directly. ReAct has no plan to look at, but it also sees that error, switches to backup on its own, and may pass the acceptance check too.",
+      "source": "bd12c27b199b"
+    },
+    "section-5.paragraphs.2": {
+      "text": "So more than one arm may pass acceptance. What this experiment looks at is what each strategy leaves behind when the failure happens. The static plan leaves an unchanged plan and a report with missing data. Replanning leaves several versions, and each revision can be matched to a real error. ReAct leaves a round-by-round record of calls, and what it meant to do can only be inferred backward from the calls.",
+      "source": "1d869db83f59"
+    },
+    "section-6.title": {
+      "text": "When a plan up front is worth it",
+      "source": "2747ac1e44a9"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Writing a plan first is worth it when the steps can be worked out in advance, when someone needs to review before execution, or when some steps are expensive. If you are about to send a mass notification or change a database, showing someone a plan first is much safer than changing course as you go. Coding agents use it this way too. In Claude Code's plan mode, the model can read files and run commands to understand the code but does not change the source. It first writes down how it intends to make the change, and acts only after the user approves. Its official best practices also remind you that a plan has extra overhead, and that if the change can be described in one sentence, just do it. A plan also makes cost predictable: you know in advance how many steps there are.",
+      "source": "4935dd3a2426"
+    },
+    "section-6.paragraphs.1": {
+      "text": "ReAct fits better when the environment is unfamiliar and the next step depends on the result of the previous one. When researching, you only know whether to search for a second article after reading the first. Many real systems mix the two: write a rough plan first, act and observe as you go within each step, and go back to the plan level to revise when a step fails. This lesson runs the three approaches separately so you can see what evidence each leaves.",
+      "source": "284af6d5a68f"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Keep the limits of plan-and-execute in mind. A plan that passes validation only shows that the format is right and the tools exist. The planner can still write wrong arguments or leave out steps. Replanning relies on the error containing a clue, and on an alternative actually existing: if backup is also broken, revising a few times is just rephrasing. The next lesson, {{lesson:reflection-revision}}, applies \"go back with evidence and fix it\" to the output itself: write a draft, then revise it according to review comments, with a cap on the number of revision rounds as well.",
+      "source": "d36c2615b956"
+    },
+    "deep-dive-history.title": {
+      "text": "ReAct, Plan-and-Solve, and hybrids",
+      "source": "2098cea894ab"
+    },
+    "deep-dive-history.summary": {
+      "text": "The two patterns have different origins. Real products often give a rough plan first and then act and observe as they go within each step.",
+      "source": "3d1b84f1b242"
+    },
+    "deep-dive-history.paragraphs.0": {
+      "text": "The name ReAct comes from a 2022 paper that argued for having the model alternate between writing reasoning and actions, moving forward step by step on observed results. The idea of planning before executing is older. For large language models, the one most often cited is the 2023 Plan-and-Solve prompt: first have the model list a plan for solving the problem, then solve it step by step, with the goal of reducing steps skipped midway. The two address different problems: ReAct is about how to act on feedback from the environment, and writing a plan first is about how not to lose direction midway.",
+      "source": "3d571fad7cce"
+    },
+    "deep-dive-history.paragraphs.1": {
+      "text": "When Hello-Agents covers building the classic paradigms, it puts the two together, covering ReAct first and then Plan-and-Solve. The ReAct limitations it lists include: one task needs several model calls, it depends on a carefully designed prompt format, and deciding one step at a time makes it easy to focus only on what is right in front of it. Writing a plan first targets the last one. The cost is that once the plan is wrong, the executor follows the wrong plan to the end, so it also needs to be revisable. This lesson's \"Replan after failure\" is the smallest version of the hybrid described in the previous section: the planner owns the plan, and a revision happens only on failure.",
+      "source": "c9f25325c391"
+    },
+    "deep-dive-history.paragraphs.2": {
+      "text": "Claude Code's plan mode can be seen as a product version of this hybrid, and it differs from this lesson in three ways. The plan is text for humans, reviewed by the user: the user can approve it, edit it directly in an editor with `Ctrl+G`, or choose to keep planning and say what to change, and there is no program validation like parse_plan. After approval, the model still calls tools step by step to make the changes, rather than a program executing the steps. What usually triggers a revision is the user's feedback, not a real error returned by a step. How you enter plan mode and which options it offers change from version to version, so follow the official docs.",
+      "source": "4f80d9314e47"
+    },
+    "misconception-replan.claim": {
+      "text": "As long as replanning after a failure is allowed, the agent can always work around the fault.",
+      "source": "155730c691c2"
+    },
+    "misconception-replan.correction": {
+      "text": "Replanning only gives the planner another chance to think. Whether it gets it right depends on whether the error contains a clue, whether an alternative really exists, and whether the planner understood the error. This lesson's error says to switch to backup, which is deliberate. Errors in real systems are often vague. The number of revisions must also be capped, or the planner may propose the same failing approach again and again.",
+      "source": "9458c0796a64"
+    },
+    "mq-verify.plan-quality.prompt": {
+      "text": "The static plan is very complete, with a stated purpose for every step, but the report has no scores. What is the acceptance result?",
+      "source": "121a8aca141e"
+    },
+    "mq-verify.plan-quality.a.text": {
+      "text": "Fail: the scores did not come from a successful tool result",
+      "source": "a63d1a0acaac"
+    },
+    "mq-verify.plan-quality.a.feedback": {
+      "text": "Correct. Acceptance looks at the deliverable and the evidence, not at the plan.",
+      "source": "7751da7ea1b0"
+    },
+    "mq-verify.plan-quality.b.text": {
+      "text": "Pass: there is nothing wrong with the plan itself",
+      "source": "c7d757a29d5c"
+    },
+    "mq-verify.plan-quality.b.feedback": {
+      "text": "Not quite. A plan is only an intention, not a result.",
+      "source": "3ac2f9522a31"
+    },
+    "mq-verify.plan-quality.c.text": {
+      "text": "Cannot tell: it depends on the planner's reasons",
+      "source": "c72a067d12cc"
+    },
+    "mq-verify.plan-quality.c.feedback": {
+      "text": "Not quite. The validator does not need reasons, only evidence.",
+      "source": "e3776bb3f06f"
+    },
+    "mq-verify.plan-quality.explanation": {
+      "text": "Having a plan and completing the task are two different things.",
+      "source": "9717a55ceca7"
+    },
+    "compare-strategies.title": {
+      "text": "The three strategies",
+      "source": "d50f8d49faa9"
+    },
+    "compare-strategies.columns.0": {
+      "text": "Strategy",
+      "source": "9c8eb75c7e58"
+    },
+    "compare-strategies.columns.1": {
+      "text": "Model calls",
+      "source": "72926dfb7314"
+    },
+    "compare-strategies.columns.2": {
+      "text": "When a failure happens",
+      "source": "5e0d13f130f6"
+    },
+    "compare-strategies.columns.3": {
+      "text": "Evidence left behind",
+      "source": "27e1d534bdc4"
+    },
+    "compare-strategies.rows.0.0": {
+      "text": "Static plan",
+      "source": "bad762f03ef2"
+    },
+    "compare-strategies.rows.0.1": {
+      "text": "1 planner call + 1 report call",
+      "source": "eef29c232de9"
+    },
+    "compare-strategies.rows.0.2": {
+      "text": "Marked failed, later steps keep running",
+      "source": "d765ea44856c"
+    },
+    "compare-strategies.rows.0.3": {
+      "text": "Only the version 1 plan",
+      "source": "531e9b27a600"
+    },
+    "compare-strategies.rows.1.0": {
+      "text": "Replan after failure",
+      "source": "a7089807ec6e"
+    },
+    "compare-strategies.rows.1.1": {
+      "text": "1 planner call + number of revisions + 1 report call",
+      "source": "fb1432472a80"
+    },
+    "compare-strategies.rows.1.2": {
+      "text": "The real error goes back to the planner, which replaces the unexecuted steps",
+      "source": "ff842d6a1a42"
+    },
+    "compare-strategies.rows.1.3": {
+      "text": "Several versions, with revision reasons and diffs",
+      "source": "c287071c1d61"
+    },
+    "compare-strategies.rows.2.0": {
+      "text": "ReAct baseline",
+      "source": "ea14d31ada49"
+    },
+    "compare-strategies.rows.2.1": {
+      "text": "1 per step",
+      "source": "e9354ba99fcf"
+    },
+    "compare-strategies.rows.2.2": {
+      "text": "The model sees the error and decides on its own",
+      "source": "82fa8419ecc9"
+    },
+    "compare-strategies.rows.2.3": {
+      "text": "No plan, only a round-by-round record of calls",
+      "source": "486868b454dd"
+    },
+    "walkthrough.title": {
+      "text": "One plan revision",
+      "source": "41699382719c"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, what the runner does when the \"Replan after failure\" arm hits a failure. The code is a simplified illustration. Your run's evidence is in the events on the lab bench.",
+      "source": "d02eaecd65c2"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Plan",
+      "source": "29d38fc5d43c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Planner",
+      "source": "b8f00e10c4ea"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Write the version 1 plan",
+      "source": "59da83872f6e"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Outputs JSON, and the program validates the tool names and arguments.",
+      "source": "fcab2d2dcdfb"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.plan (event=created)",
+      "source": "1816fc1405a6"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Execute",
+      "source": "32c8d373afe0"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Executor",
+      "source": "7f688924a07b"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Call the tools step by step",
+      "source": "35abb5b57975"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Each step's status becomes done or failed according to the real result.",
+      "source": "60c153be1be7"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "tool_result and lesson.plan",
+      "source": "0f2acac8b378"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Feedback",
+      "source": "8b2106ca1371"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Hand the error back to the planner",
+      "source": "5bd76056f12f"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Attach the current step statuses and the failed step's error message.",
+      "source": "9f7405bfbdfe"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "Request 2",
+      "source": "5377aa2a3b54"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Revise",
+      "source": "3c2e8a4c055a"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Planner",
+      "source": "b8f00e10c4ea"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Write only the steps still to run",
+      "source": "291a54f4809e"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Keep the steps that already ran, replace the unexecuted part, and increment the version.",
+      "source": "43687d065658"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "reason and diff of lesson.plan (event=revised)",
+      "source": "0ee2fa66df6b"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Accept",
+      "source": "7acb62b7d929"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Validator",
+      "source": "99e95a054a1b"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Judge by the same standard",
+      "source": "e41ce71d2ce2"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Looks only at the real tool results and the scores in the report.",
+      "source": "8cbc1bdebe16"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.ms-planning-design.title": {
+      "text": "Planning design: task decomposition, structured plans, and iterative planning (Microsoft AI Agents for Beginners, planning design lesson)",
+      "source": "ebc5e11b9eff"
+    },
+    "references.hello-agents-ch4.title": {
+      "text": "Building the classic agent paradigms: ReAct and Plan-and-Solve (Hello-Agents, CC BY-NC-SA 4.0)",
+      "source": "2dfee7fdf8bf"
+    },
+    "references.book-ch6-planning.title": {
+      "text": "Interaction: long-horizon planning and task decomposition — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "eadbe9ba392a"
+    },
+    "references.book-ch1-react.title": {
+      "text": "Getting started with AI agents: the ReAct loop and stop conditions — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "7a136a474379"
+    },
+    "references.claude-code-plan-mode.title": {
+      "text": "Plan mode: analyze first, then act (Claude Code docs, checked 2026-10-04)",
+      "source": "e5be052a3e60"
+    },
+    "references.claude-code-explore-plan-code.title": {
+      "text": "Best practices: explore first, then plan, then write code (Claude Code docs, checked 2026-10-04)",
+      "source": "c081383dafd2"
+    },
+    "code-tools-plan.n34.text": {
+      "text": "Scores have two data sources, and the planner must say in the plan which one to use.",
+      "source": "d943406468f7"
+    },
+    "code-tools-plan.n38.text": {
+      "text": "The primary source always fails in this lesson. It is a hard-coded controlled fault and is the same on every run.",
+      "source": "67fda3efc6c1"
+    },
+    "code-tools-plan.n39.text": {
+      "text": "The error says you can switch to backup. This is the sentence the planner reads when it revises the plan.",
+      "source": "66044d6ec366"
+    },
+    "code-tools-plan.n47.text": {
+      "text": "The planner only writes the plan and does not execute tools. Its output is fixed to JSON with reason and steps.",
+      "source": "1e0a3f04710c"
+    },
+    "code-tools-plan.n53.text": {
+      "text": "A revision lists only the steps that still have to run. Steps that already ran are not redone.",
+      "source": "305c8df01504"
+    },
+    "code-tools-plan.n58.text": {
+      "text": "Explanatory text or code fences around the JSON are allowed. This is the parser's only tolerance.",
+      "source": "ad240aecbe38"
+    },
+    "code-tools-plan.n67.text": {
+      "text": "Step ids must be unique: the revision diff and the \"Plan and checklist\" view both use the id to find a step.",
+      "source": "215bfab838c5"
+    },
+    "code-tools-plan.n69.text": {
+      "text": "A tool in the plan must be on the allowlist, so a nonexistent tool is caught before execution.",
+      "source": "b0b405dff1b2"
+    },
+    "code-planner.n118.text": {
+      "text": "Planner and executor are separate: the model only writes the plan, and the program calls the tools.",
+      "source": "da79cb5084b4"
+    },
+    "code-planner.n123.text": {
+      "text": "The planner has its own message history, and every plan version and every failure stays in it.",
+      "source": "fbb7543e1da2"
+    },
+    "code-planner.n129.text": {
+      "text": "The planner's request carries no tools: it outputs plan text only and never proposes a call directly.",
+      "source": "3f3f9730a5be"
+    },
+    "code-planner.n134.text": {
+      "text": "If the plan has the wrong format, record the original text and the error, then stop. Do not fill in the plan for the planner.",
+      "source": "2f69ea560a12"
+    },
+    "code-planner.n137.text": {
+      "text": "A revision is a new user message: the current step statuses plus the failed step's error.",
+      "source": "46de2da204f0"
+    },
+    "code-planner.n141.text": {
+      "text": "What goes back to the planner is the raw error returned by the tool, not the program's paraphrase.",
+      "source": "33b857d54a75"
+    },
+    "code-planner.n145.text": {
+      "text": "The executor makes no decisions: no retries, no changing arguments. On failure it hands the result back unchanged.",
+      "source": "fad7bcf73513"
+    },
+    "code-planner.n155.text": {
+      "text": "The program initiates the call, and the event is marked course_program. The call id carries the step id.",
+      "source": "9efaf0d184dd"
+    },
+    "code-planner.n158.text": {
+      "text": "Only successful results are saved, so the report can only use data that was really obtained.",
+      "source": "d5aa305d1d2e"
+    },
+    "code-replan.n167.text": {
+      "text": "Plan first: execution starts only once there is a validated plan.",
+      "source": "5d990a6fecaa"
+    },
+    "code-replan.n169.text": {
+      "text": "If the plan has the wrong format, stop here and execute no tools.",
+      "source": "52de05823c52"
+    },
+    "code-replan.n171.text": {
+      "text": "The version 1 plan is published as created, and the \"Plan and checklist\" view starts displaying from here.",
+      "source": "3ba0cdeeb561"
+    },
+    "code-replan.n174.text": {
+      "text": "Use while rather than for: a revision replaces the later steps, so the list length may change.",
+      "source": "9cd8e770d07f"
+    },
+    "code-replan.n179.text": {
+      "text": "A step's status is decided only by the real tool result.",
+      "source": "8b6f21fb30c3"
+    },
+    "code-replan.n183.text": {
+      "text": "On success, for a static plan, or when the revision cap is reached, run the next step directly.",
+      "source": "1d33b9467cb7"
+    },
+    "code-replan.n187.text": {
+      "text": "What goes back to the planner is the step statuses and the failed step's real error.",
+      "source": "f8b3721b903e"
+    },
+    "code-replan.n192.text": {
+      "text": "Steps that already ran are kept as they are. Only the unexecuted part is replaced, and the version number goes up by one.",
+      "source": "1290641fe423"
+    },
+    "code-replan.n193.text": {
+      "text": "The diff records which unexecuted steps were removed, which were added, and which step's failure caused the revision.",
+      "source": "dd0fd59c3a09"
+    },
+    "code-replan.n197.text": {
+      "text": "The last request writes the report using only the successful tool results.",
+      "source": "e1ab25b50b97"
+    },
+    "code-decision.title": {
+      "text": "The plan is validated data, and a revision relies only on real failures",
+      "source": "b4edc457fddb"
+    },
+    "code-decision.chosen": {
+      "text": "The planner outputs a JSON plan, and the tools and arguments are validated before execution. The executor only calls tools as the plan says and makes no decisions. On failure, the real error goes back to the planner, only the unexecuted steps are replaced, and the number of revisions is capped.",
+      "source": "af27bfacef11"
+    },
+    "code-decision.executor-improvises.title": {
+      "text": "Let the executor change arguments and retry on its own when a step fails",
+      "source": "b0e3374f5182"
+    },
+    "code-decision.executor-improvises.why_not": {
+      "text": "Once the executor starts making decisions, the plan is no longer the plan, and there is no record to check the revision against.",
+      "source": "9bc1e6c5dd3b"
+    },
+    "code-decision.replan-everything.title": {
+      "text": "After a failure, have the planner rewrite the whole plan",
+      "source": "c56be9e3923a"
+    },
+    "code-decision.replan-everything.why_not": {
+      "text": "Steps that already succeeded might run again, and re-running a tool with side effects (such as sending a message) causes problems.",
+      "source": "8fd11385471d"
+    },
+    "code-decision.unbounded-replan.title": {
+      "text": "Keep revising after each failure until it succeeds",
+      "source": "f0a591a6df62"
+    },
+    "code-decision.unbounded-replan.why_not": {
+      "text": "The planner might propose the same failing approach again and again. Without a cap there is no stop condition.",
+      "source": "cb12d5cf69b1"
+    },
+    "three-strategies.title": {
+      "text": "One fault, three strategies",
+      "source": "3110ecd315e8"
+    },
+    "three-strategies.hypothesis": {
+      "text": "When the primary source always fails, the static plan cannot get the scores. Replan after failure revises the plan based on the real error and may switch to the backup. The ReAct baseline lets the model handle it itself. The same validator judges all three strategies.",
+      "source": "99926c72606e"
+    },
+    "three-strategies.static.label": {
+      "text": "Static plan",
+      "source": "bad762f03ef2"
+    },
+    "three-strategies.replan.label": {
+      "text": "Replan after failure",
+      "source": "a7089807ec6e"
+    },
+    "three-strategies.react.label": {
+      "text": "ReAct baseline",
+      "source": "ea14d31ada49"
+    },
+    "three-strategies.first-plan.text": {
+      "text": "The version 1 plan: the tool and arguments of each step.",
+      "source": "30fe841c2b8b"
+    },
+    "three-strategies.failure.text": {
+      "text": "The real error returned by the primary source.",
+      "source": "63fecd9a21b0"
+    },
+    "three-strategies.replan-request.text": {
+      "text": "Message 4 of request 2: this is where the replan arm hands the execution status and the error back to the planner.",
+      "source": "f549643958e7"
+    },
+    "three-strategies.revision-reason.text": {
+      "text": "The revision reason in the version 2 plan.",
+      "source": "5c8b35a11936"
+    },
+    "three-strategies.revision-diff.text": {
+      "text": "The revision diff: what was removed, what was added, and which step's failure caused it.",
+      "source": "d5651a9ca5e9"
+    },
+    "three-strategies.verdict.text": {
+      "text": "The validator's three checks.",
+      "source": "6c87bbfbb3fd"
+    },
+    "three-strategies.cost.text": {
+      "text": "This arm's number of model calls.",
+      "source": "202671d7b8e1"
+    },
+    "three-strategies.guide.0.text": {
+      "text": "All three arms face the same fault: the primary score source always fails. Start with the plan the planner wrote.",
+      "source": "453f4e2fc754"
+    },
+    "three-strategies.guide.1.text": {
+      "text": "The plan is a JSON object: each step names a tool and arguments. The program validates it before execution.",
+      "source": "74e3f6d264fd"
+    },
+    "three-strategies.guide.2.text": {
+      "text": "This is the real error from the primary source. It is a hard-coded controlled fault, the same every time.",
+      "source": "3f50bf9966d9"
+    },
+    "three-strategies.guide.3.text": {
+      "text": "The \"Replan after failure\" arm hands the step statuses and this error back to the planner. The static arm has no such step. The ReAct arm has no planner. Here, the previous round's tool result goes straight back to the model as a tool message.",
+      "source": "d26e833fedb0"
+    },
+    "three-strategies.guide.4.text": {
+      "text": "The planner writes the revision reason in the version 2 plan. Arms with no revision have no such version.",
+      "source": "46170dd2e39f"
+    },
+    "three-strategies.guide.5.text": {
+      "text": "The diff records which step's failure caused the revision. Steps that already ran are kept as they are.",
+      "source": "b518fe625094"
+    },
+    "three-strategies.guide.6.text": {
+      "text": "All three arms are judged by the same validator: the data must come from successful tool results.",
+      "source": "93e25047d0d7"
+    },
+    "three-strategies.guide.7.text": {
+      "text": "Finally, compare the cost: the number of model calls for each strategy.",
+      "source": "f510068e2ff2"
+    },
+    "three-strategies.conclusion.proves.0": {
+      "text": "In this run, how many versions the plan had, which real error each revision was based on, and which steps were changed.",
+      "source": "06e6cefc7d83"
+    },
+    "three-strategies.conclusion.proves.1": {
+      "text": "Each arm's acceptance result is computed from the real tool results and the report content, regardless of how well the plan was written.",
+      "source": "a1464345cb9e"
+    },
+    "three-strategies.conclusion.does_not_prove.0": {
+      "text": "One kind of fault and one run cannot show which strategy is more reliable in general.",
+      "source": "e8bf989971bf"
+    },
+    "three-strategies.conclusion.does_not_prove.1": {
+      "text": "A real model's planner may pick backup right away, and then you will not see a revision. That is not a bug; the revision just wasn't triggered this time.",
+      "source": "2fc16047f053"
+    },
+    "three-strategies.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the plans and reports are written by a fixed script.",
+      "source": "a862aeb32b12"
+    },
+    "inputs.strategy.label": {
+      "text": "Strategy",
+      "source": "9c8eb75c7e58"
+    },
+    "inputs.strategy.options.static.label": {
+      "text": "Static plan",
+      "source": "bad762f03ef2"
+    },
+    "inputs.strategy.options.replan.label": {
+      "text": "Replan after failure",
+      "source": "a7089807ec6e"
+    },
+    "inputs.strategy.options.react.label": {
+      "text": "ReAct baseline",
+      "source": "ea14d31ada49"
+    },
+    "quiz.q1.prompt": {
+      "text": "When a plan is revised, why replace only the steps that have not run yet?",
+      "source": "bc9af24ef1ef"
+    },
+    "quiz.q1.a.text": {
+      "text": "Steps that already ran have real results, and repeating them can waste work or, with side effects, cause errors",
+      "source": "74b1ad9a4f1a"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Correct. Keeping the steps that already ran keeps the plan's history coherent.",
+      "source": "b4d09a8810cc"
+    },
+    "quiz.q1.b.text": {
+      "text": "Because the planner can only write one step",
+      "source": "5c0df540ec87"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Not quite. The planner can write several steps.",
+      "source": "1ed2c714e1ec"
+    },
+    "quiz.q1.c.text": {
+      "text": "To keep the plan version number lower",
+      "source": "e3d0d2a3b9f6"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "Not quite. The version number goes up by one on every revision.",
+      "source": "d7b4b7670025"
+    },
+    "quiz.q1.explanation": {
+      "text": "A revision adjusts the next actions on top of facts that already exist.",
+      "source": "54b738e85015"
+    },
+    "quiz.q2.prompt": {
+      "text": "What should a lesson.plan event with event set to revised contain at minimum?",
+      "source": "63f86064a401"
+    },
+    "quiz.q2.a.text": {
+      "text": "The new version's steps, the revision reason, and which step's failure caused the revision",
+      "source": "1f2de79333de"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. Version, reason, and diff are all required.",
+      "source": "e2456ea4c679"
+    },
+    "quiz.q2.b.text": {
+      "text": "Only the new version's steps",
+      "source": "00ba447b0e58"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Not quite. Without a reason and a diff, you cannot see why it changed.",
+      "source": "336365fe43a4"
+    },
+    "quiz.q2.c.text": {
+      "text": "The planner's complete thought process",
+      "source": "85a75f9daf42"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "Not quite. What you need is a reason you can check, not a long chain of thought.",
+      "source": "72ff289e0d87"
+    },
+    "quiz.q2.explanation": {
+      "text": "A revision record has to answer \"what changed and why\".",
+      "source": "dfeda45f9ddc"
+    },
+    "quiz.q3.prompt": {
+      "text": "After the primary source fails the first time, the planner proposes \"try the primary source again\" in both revisions. What does this lesson's runner do?",
+      "source": "0d4c45366c1c"
+    },
+    "quiz.q3.a.text": {
+      "text": "It stops revising once the cap is reached and leaves the validator to judge it as failed",
+      "source": "57a59d78f846"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Correct. The number of revisions is capped.",
+      "source": "980f00eaf925"
+    },
+    "quiz.q3.b.text": {
+      "text": "It keeps revising until the planner changes its approach",
+      "source": "325830f94b32"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Not quite. That would leave no stop condition.",
+      "source": "3f9001eeb854"
+    },
+    "quiz.q3.c.text": {
+      "text": "The executor switches to backup on its own",
+      "source": "a7941d2f0fb3"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "Not quite. The executor only follows the plan.",
+      "source": "8e43a3d12788"
+    },
+    "quiz.q3.explanation": {
+      "text": "Every loop needs a cap, and the revision loop is no exception.",
+      "source": "a78f98925ca7"
+    },
+    "quiz.q4.prompt": {
+      "text": "The version 1 plan has only two steps. After step 2 fails, version 2 adds step 3. Why is diff.removed empty for this revision?",
+      "source": "cec3ecc1c2cc"
+    },
+    "quiz.q4.a.text": {
+      "text": "There are no unexecuted steps after the failed step 2, so there is nothing to replace",
+      "source": "4541465816c8"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Correct. removed records only the unexecuted steps that were replaced. Steps that already ran are kept as they are and do not count as removed.",
+      "source": "eb69898aea4b"
+    },
+    "quiz.q4.b.text": {
+      "text": "The planner forgot to write removed in the plan",
+      "source": "0bbf21233dc9"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "Not quite. The diff is computed by the runner from the old and new steps, not written by the planner.",
+      "source": "8936d9568ed2"
+    },
+    "quiz.q4.c.text": {
+      "text": "A failed step is deleted outright, so it does not need to be recorded",
+      "source": "26acb1da826f"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "Not quite. A failed step stays in the plan with status failed, and diff.failed_step points to it.",
+      "source": "41835d23ecbd"
+    },
+    "quiz.q4.explanation": {
+      "text": "A revision replaces only the part that has not run yet, and the diff records only that part.",
+      "source": "81e2712c4e97"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Replan after failure\" and find the step where the plan was revised.",
+      "source": "2ec85b73fc0e"
+    },
+    "check-hunt.explanation": {
+      "text": "This lesson.plan event has event set to revised, diff.failed_step points to the failed step, and reason is the revision reason the planner wrote. The event before it is the tool_result of that failure, and the events after it are the calls made under the new plan. If your run has no revision, the planner picked backup the first time.",
+      "source": "89a09566380f"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran all three strategies once and compared their acceptance results and numbers of model calls.",
+      "source": "5bf9463db338"
+    },
+    "check-points.item-2.text": {
+      "text": "In the \"Replan after failure\" arm I found the revision reason and matched it to the real error that triggered it.",
+      "source": "d5dc0ad05d1a"
+    },
+    "check-points.item-3.text": {
+      "text": "I can explain why the executor does not change arguments and retry on its own.",
+      "source": "2fa0658a2c2d"
+    },
+    "code_notes.lesson.plan.note": {
+      "text": "Plan event: the version number plus each step's tool call and status. A revision also carries the revision reason in reason and the diff.",
+      "source": "702c429d796b"
+    },
+    "code_notes.event.note": {
+      "text": "The type of lesson.plan: created is version 1, progress is a step status change, revised is the new version after a revision.",
+      "source": "7544c0062751"
+    },
+    "code_notes.diff.note": {
+      "text": "The revision diff: removed is the replaced unexecuted steps, added is the new steps, and failed_step is the step that triggered the revision.",
+      "source": "dfb5ce309f32"
+    },
+    "code_notes.verify.note": {
+      "text": "This lesson's acceptance function: it looks only at this run's successful tool results and the report text, makes three checks, and does not read the plan.",
+      "source": "4a7d2bd86e94"
+    }
+  }
+}

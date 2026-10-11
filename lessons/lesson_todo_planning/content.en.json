@@ -1,0 +1,958 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "REASONING / TODO PLANNING",
+      "source": "04d62357cb2e"
+    },
+    "hero.headline": {
+      "text": "Where the checklist lives",
+      "source": "c38f7f4b0c1d"
+    },
+    "hero.highlight": {
+      "text": "decides whether progress is visible.",
+      "source": "d5d698bd7e3c"
+    },
+    "hero.takeaway": {
+      "text": "todo_write lets the model write its plan as a checklist that can be replayed, and the harness adds a nudge when the model forgets to update it. The model writes the checklist itself; whether the task is done is still decided by the validator.",
+      "source": "4c7b0f495654"
+    },
+    "concepts.01-todo.label": {
+      "text": "01 / TODO",
+      "source": "ebc264c00d0b"
+    },
+    "concepts.01-todo.title": {
+      "text": "The checklist is a tool",
+      "source": "3076d41017f2"
+    },
+    "concepts.01-todo.description": {
+      "text": "The TODO list is maintained by the model itself. In this lesson the model writes it with todo_write: each call hands in the complete list, replaces the old one as a whole, and gets back a new version number. This tool does no actual work.",
+      "source": "50846af106a6"
+    },
+    "concepts.02-snapshot.label": {
+      "text": "02 / SNAPSHOT",
+      "source": "a0168dcc7c73"
+    },
+    "concepts.02-snapshot.title": {
+      "text": "Snapshots and diffs",
+      "source": "3caea46bef47"
+    },
+    "concepts.02-snapshot.description": {
+      "text": "A snapshot is a complete copy of one version of the list. Every update is recorded as a lesson.todo: the version number, the full list, and the diff from the previous version, so you can replay it version by version.",
+      "source": "fbdddccd071b"
+    },
+    "concepts.03-reminder.label": {
+      "text": "03 / REMINDER",
+      "source": "b866c18c49ce"
+    },
+    "concepts.03-reminder.title": {
+      "text": "The harness inserts a reminder",
+      "source": "e4742a034b22"
+    },
+    "concepts.03-reminder.description": {
+      "text": "When the list hasn't been updated for several rounds in a row, the harness inserts a reminder. The program wrote it; neither the model nor the user said it.",
+      "source": "4927bf9f150c"
+    },
+    "concepts.04-verify.label": {
+      "text": "04 / VERIFY",
+      "source": "0d8e0e845850"
+    },
+    "concepts.04-verify.title": {
+      "text": "A checklist is not completion",
+      "source": "e4a1cad397ad"
+    },
+    "concepts.04-verify.description": {
+      "text": "Even if the model marks every item done, that is only its own claim. The validator looks only at the review card and this run's lookup results.",
+      "source": "d38d88f351fa"
+    },
+    "section-1.title": {
+      "text": "Why long tasks need a checklist",
+      "source": "c20f7259bccb"
+    },
+    "section-1.paragraphs.0": {
+      "text": "The longer a task gets, the easier it is for the model to skip steps, because the whole plan exists only in the text it wrote in earlier rounds. This lesson's task is to make one review card: look up the key points of {{lesson:messages-context}}, {{lesson:application-state}}, and {{lesson:context-budget}} separately, and save the three points, together with their point IDs, into the card. Not counting the checklist, that takes at least four tool calls: three lookups and one save, then a final sentence. The model may look up two lessons and go straight to saving, or, after one lookup fails, forget which lesson is still missing.",
+      "source": "848e4a76f6ef"
+    },
+    "section-1.paragraphs.1": {
+      "text": "The reason is that in every round the model rereads the complete message history from the start before deciding the next step. The task statement sits at the very front, and each round piles new calls and tool results behind it. The longer the history, the farther the original instruction to look up all three lessons sits from where the model is about to write, and the easier it is for later content to drown it out. If the plan lives only in the model's head, there is nowhere to check which step is still missing.",
+      "source": "9385ba90ceb9"
+    },
+    "section-1.paragraphs.2": {
+      "text": "In {{lesson:application-state}}, the program maintained the state: the goal, steps, and evidence were written into application state, and the program updated them. This lesson takes a different approach: give the model a todo_write tool and let it write its own plan as a checklist, updating it after each step. The checklist is written in tool calls, so every version becomes an event, and during replay you can see how the plan moves forward. Of the three tools, lookup_note looks up key points and save_card saves the card; they do the actual work. todo_write only changes the list. In tool arguments, these three lessons are written as messages-context, application-state, and context-budget.",
+      "source": "382d071ba4f5"
+    },
+    "section-2.title": {
+      "text": "todo_write: replace as a whole, with a version",
+      "source": "94fea43f4f29"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Each time, todo_write receives the complete list and replaces the old one as a whole, rather than adding or removing single items. Each item has id, content, and status. status is pending (not started), in_progress, or done (finished), and at most one item can be in_progress at a time. If validation fails, a structured error is returned and the list stays as it was; if it passes, the version number goes up by one. The list has at least 1 and at most 12 items, each item may have only these three fields, and writing an extra field is rejected as well. The rules are hard-coded in the tool, so when the model writes something wrong it learns immediately from the tool result.",
+      "source": "ac51dea67822"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Replacing as a whole looks wordy, since every call rewrites the items that didn't change, but it has two benefits. One is simplicity: the model doesn't have to remember which item to delete or change; it just writes the whole picture as it sees it now, and you never get a half-edited list. The other is restating: each time it writes, the whole list appears at the latest position in the message history, closest to where the model will write next. A made-up example: version 1 has four items, item 1 look up messages-context, item 2 look up application-state, item 3 look up context-budget, item 4 save the review card, all pending. After the first lesson is looked up, version 2 changes item 1 to done and item 2 to in_progress.",
+      "source": "0a8544f89a0c"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The program computes the version number and the diff; the model doesn't report them. After a successful todo_write, the runner emits a lesson.todo event: the complete list for this version, plus which items were added, which were removed, and which items changed status from what to what, compared with the previous version. In the example above, the diff is item 1 going from pending to done and item 2 going from pending to in_progress. Going through these events one by one during replay shows how the plan moved forward.",
+      "source": "063dc14038c2"
+    },
+    "section-conditions.title": {
+      "text": "Three arms: one addition at a time",
+      "source": "f2fdd7fcb707"
+    },
+    "section-conditions.paragraphs.0": {
+      "text": "Each arm adds exactly one thing to the one before it, so any difference can be traced to its source. The \"No TODO\" arm has only lookup_note and save_card, and its system prompt only describes the task. It can neither see nor execute todo_write, which is absent from both the tool definitions and the allowlist. The \"TODO, no reminder\" arm adds todo_write, with a paragraph of checklist rules in the system prompt: list the steps before starting, and update the status after each step. The \"TODO, with reminder\" arm builds on that: the harness inserts a reminder when the model hasn't updated the list for several rounds in a row.",
+      "source": "2ae100f46458"
+    },
+    "section-conditions.paragraphs.1": {
+      "text": "The first two arms compare having a checklist against not having one, and the last two compare having a reminder against not having one. The second arm actually changes two things at once: one more tool, and one more paragraph in the system prompt. Give the tool without the rules and the model may not use it at all, so here the tool and the rules are compared as one package. All three arms use the same model, the same task, and the same validator, with temperature 0 and a cap of 10 model calls.",
+      "source": "97d91d6e0c74"
+    },
+    "section-conditions.paragraphs.2": {
+      "text": "When reading the results, look at the acceptance verdict first and the process second. If all three pass, that mostly means this four-step task isn't hard for the model you used, and the effect of the checklist and reminder can't be seen in this run. If one arm fails, go back to the events and find where it went off track: it missed looking up a lesson, filled in a wrong ID, or left the list at version 1 and never touched it again.",
+      "source": "2d554f10f3d0"
+    },
+    "deep-dive-restate.title": {
+      "text": "Why have the model write out the whole checklist again and again",
+      "source": "9c8ea68bcd95"
+    },
+    "deep-dive-restate.summary": {
+      "text": "A checklist at the end of the message history puts the plan back in front of the model.",
+      "source": "4115f085975f"
+    },
+    "deep-dive-restate.paragraphs.0": {
+      "text": "When the model reads its context, it doesn't automatically boil information scattered everywhere down to a sentence like \"which step is still missing\". To know the progress, it has to look back over every earlier call and tool result and count for itself. The longer the history, the easier this is to get wrong: miss one lookup and it may think all three lessons have been looked up.",
+      "source": "3354e6ad33c9"
+    },
+    "deep-dive-restate.paragraphs.1": {
+      "text": "Having the model write out the whole checklist periodically distills \"where are we now\" into a few lines and puts them at the end of the message history. When the next request goes out, the thing closest to where the model is about to write is this list. In its part on context engineering, *Understanding AI Agents in Depth* (深入理解 AI Agent) cites the Manus team's idea of \"manipulating attention through recitation\", and files the checklist and tool-call counts under an \"agent status bar\": information the harness organizes and puts at the end of the context.",
+      "source": "904659b5aa9b"
+    },
+    "deep-dive-restate.paragraphs.2": {
+      "text": "The book reports an experiment: an agent with the checklist enabled finished its tasks in 15 iterations on average, against 21 without it, and the agent without it often skipped subtasks. That result comes from the book's own tasks and model. In this lesson each arm runs only once, which can't prove that a checklist raises the completion rate; all it can confirm is what each version of the checklist said and in which round it was written.",
+      "source": "cdc36a2e3fcf"
+    },
+    "deep-dive-statuses.title": {
+      "text": "Why only three statuses",
+      "source": "7566abe70286"
+    },
+    "deep-dive-statuses.summary": {
+      "text": "This lesson's checklist has no \"cancelled\"; when a step can't be done, the model can only delete it or let it wait forever.",
+      "source": "2814f84821cf"
+    },
+    "deep-dive-statuses.paragraphs.0": {
+      "text": "The checklist tool described in *Understanding AI Agents in Depth* has four statuses: not started, in progress, done, and cancelled, and each item also carries a timestamp. \"Cancelled\" lets the model say plainly that it is dropping a step and add an item for a replacement approach, so the list can adjust to the situation. The Learn Claude Code example has only three statuses, like this lesson.",
+      "source": "034ee6edcb19"
+    },
+    "deep-dive-statuses.paragraphs.1": {
+      "text": "This lesson's task is fixed at four steps, with no step that needs to be abandoned, so only three statuses are kept. The cost: when a step truly can't be done, the model can only delete it from the list or leave it in pending forever. Deleting shows up in the \"which items were removed\" part of the lesson.todo diff; leaving it untouched means the list always shows a step not yet done. To let the checklist express \"abandoned\" and \"switched to another approach\", you would add one more status, and then say clearly in acceptance whether a cancelled step counts as complete.",
+      "source": "300d994f2fc8"
+    },
+    "deep-dive-statuses.paragraphs.2": {
+      "text": "Claude Code's to-do list also has three statuses: `pending`, `in_progress`, and `completed`; to drop an item you no longer need, set its status to `deleted`. Press `Ctrl+T` to expand or collapse the list. It differs from this lesson in two ways. First, how updates work: by default it provides a set of task tools, where `TaskCreate` creates an item and `TaskUpdate` changes the status of one item, rather than replacing the whole list each time like todo_write. Second, it isn't always on: the official documentation says newer models can track multi-step work without writing a list, and since the definitions and reminders of these tools take up context, they are provided by default only for some models. So a product, too, has to weigh per model whether a checklist is worth keeping on all the time; in this lesson each arm runs once, which likewise can't prove the checklist is always useful. For which models get it by default, see the official documentation.",
+      "source": "ba155e7e1412"
+    },
+    "predict-reminders.prompt": {
+      "text": "Before you run \"TODO, with reminder (2 rounds)\", guess how many reminders the harness will insert, that is, how many lesson.harness_injected events this run will produce.",
+      "source": "16394060800d"
+    },
+    "mq-todo-work.todo-does-work.prompt": {
+      "text": "The model calls todo_write to mark \"look up the key points of {{lesson:context-budget}}\" as done. Have the key points of {{lesson:context-budget}} been looked up?",
+      "source": "662d3a31243a"
+    },
+    "mq-todo-work.todo-does-work.a.text": {
+      "text": "Not necessarily; it depends on whether there is a successful lookup_note result",
+      "source": "b23413b0d595"
+    },
+    "mq-todo-work.todo-does-work.a.feedback": {
+      "text": "Correct. todo_write only changes the list and does no actual work.",
+      "source": "a64f0961e270"
+    },
+    "mq-todo-work.todo-does-work.b.text": {
+      "text": "Yes, the list already says it is done",
+      "source": "eccaff31adfd"
+    },
+    "mq-todo-work.todo-does-work.b.feedback": {
+      "text": "Not quite. The model wrote the list itself, and marking done takes no evidence.",
+      "source": "4fb6acd42bce"
+    },
+    "mq-todo-work.todo-does-work.c.text": {
+      "text": "Yes, otherwise todo_write would raise an error",
+      "source": "a36427f4eed4"
+    },
+    "mq-todo-work.todo-does-work.c.feedback": {
+      "text": "Not quite. todo_write checks only the list's format and doesn't know whether any other tool was called.",
+      "source": "fd477adf96c5"
+    },
+    "mq-todo-work.todo-does-work.explanation": {
+      "text": "The list records the progress the model believes it has made; the facts are in the tool results.",
+      "source": "436f5d850019"
+    },
+    "section-3.title": {
+      "text": "Harness reminders: who is speaking",
+      "source": "0101e1cf0a4b"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A model may write a checklist and then never update it. The harness can count for it and insert a reminder when the count is reached. In the \"with reminder\" arm, the runner counts how many rounds in a row have passed without a successful todo_write update and keeps the count in since_update. When it reaches the threshold reminder_after, the runner inserts a user message after all the tool messages of this round, \"已经 N 轮没有更新 TODO……\" (\"the TODO hasn't been updated for N rounds…\"), and resets the count to zero.",
+      "source": "8064c1e95e10"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Work through it by hand with the default threshold of 2. In round 1 the model writes the checklist and the count is 0. In round 2 it looks up only one lesson and the count becomes 1. In round 3 it again looks up only one lesson, the count reaches 2, the harness inserts a reminder after this round's tool results, and the count resets to zero. If the model updates the list in round 4, the count stays 0. A failed todo_write call does not count as an update: the list didn't change, so the count still goes up by one. Set the threshold to 1 and every round without an update gets a reminder; the model may keep editing the list just to satisfy the reminders, and the real work slows down. Set it too large and the reminder comes too late. This lesson defaults to 2, and you can adjust it between 1 and 5.",
+      "source": "e952b4cc8a3b"
+    },
+    "section-3.paragraphs.2": {
+      "text": "This message is written by the program; it comes neither from the user nor from the model. It borrows the user message role, because the API has no role meant for the harness. The runner also emits a lesson.harness_injected event, whose source is harness, so during replay you can tell which text the harness inserted. The reminder must come after the tool messages: the message protocol requires a tool message to follow its call immediately, and an OpenAI-compatible API will reject the request outright if something is inserted in between.",
+      "source": "25e0ab7eb510"
+    },
+    "deep-dive-reminder-placement.title": {
+      "text": "Where the reminder goes: the trade-offs of several approaches",
+      "source": "4da485e3e3ec"
+    },
+    "deep-dive-reminder-placement.summary": {
+      "text": "For the same harness reminder, putting it in a tool result, in a separate message, or in the system prompt each has a different cost.",
+      "source": "cdd0081ea13c"
+    },
+    "deep-dive-reminder-placement.paragraphs.0": {
+      "text": "The Learn Claude Code example uses Anthropic's message format, where tool results already sit inside one user message. After 3 rounds in a row without seeing a list update, it attaches a line of reminder text to that message, next to the tool results. This lesson goes through an OpenAI-compatible API, where tool results are separate messages with role tool that must immediately follow the assistant message carrying the calls. So the reminder can only be a separate user message placed after them.",
+      "source": "7cf4b60879d8"
+    },
+    "deep-dive-reminder-placement.paragraphs.1": {
+      "text": "Editing the system prompt looks more formal but costs the most. {{lesson:prompt-caching}} explained that once the start changes, nothing after it can reuse the cache; the premise of the whole conversation changes too, and during replay you can't see in which round the reminder appeared. Appending at the end leaves what has already been sent untouched.",
+      "source": "1e7bb887508f"
+    },
+    "deep-dive-reminder-placement.paragraphs.2": {
+      "text": "There are two ways to append as well. In this lesson, a reminder stays in the message history once sent, the next reminder is appended as another message, and earlier content is never changed. The other way is to delete the previous status each round and append the latest one, so only one copy stays in the history. The former is friendliest to the cache, but old reminders pile up; the latter is cleaner, but every deletion invalidates the cache after that message. *Understanding AI Agents in Depth* estimates the cost of both approaches and notes that the system reminders Claude Code inserts use the former. This lesson also uses only the former.",
+      "source": "de9d0ce09254"
+    },
+    "mq-reminder.reminder-position.prompt": {
+      "text": "The harness wants to insert a reminder in a round where the model called two tools. Where does the reminder go?",
+      "source": "44c75101ffc8"
+    },
+    "mq-reminder.reminder-position.a.text": {
+      "text": "After the two tool messages, as a separate user message",
+      "source": "5bb374327781"
+    },
+    "mq-reminder.reminder-position.a.feedback": {
+      "text": "Correct. Place the calls and tool results as pairs first, then insert the reminder.",
+      "source": "bf5fe6d22f09"
+    },
+    "mq-reminder.reminder-position.b.text": {
+      "text": "Between the assistant call message and the tool messages",
+      "source": "90b41ff114c2"
+    },
+    "mq-reminder.reminder-position.b.feedback": {
+      "text": "Not quite. A tool message must immediately follow its call, and the provider rejects any other message inserted between them.",
+      "source": "c0e200861a15"
+    },
+    "mq-reminder.reminder-position.c.text": {
+      "text": "Rewritten into the system prompt",
+      "source": "2f9598fd2a97"
+    },
+    "mq-reminder.reminder-position.c.feedback": {
+      "text": "Not quite. That changes the premise of the whole conversation, and during replay you couldn't see in which round the reminder was added.",
+      "source": "3dc748f34b94"
+    },
+    "mq-reminder.reminder-position.explanation": {
+      "text": "Messages inserted by the harness must also follow the message protocol.",
+      "source": "f57fce65e93d"
+    },
+    "section-4.title": {
+      "text": "The validator decides completion",
+      "source": "e953f1b6a780"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A done on the checklist is the model's claim; whether the task is finished has to be decided by the validator from what the task produced. All three arms end with the same validator, verify_card. It looks at only two things: which lessons the review card has and the point ID of each, and which IDs lookup_note actually returned in this run. There are three checks: the card is saved, it covers all three lessons, and every ID matches this run's lookups.",
+      "source": "3d9859bd6081"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The point IDs are deliberately irregular: mc-31, as-12, cb-47. Without looking them up you can't fill them in correctly. A made-up example: the model looks up only the first two lessons and fills in an ID for the third from vague memory. save_card succeeds all the same, all four checklist items are marked done, and the model says at the end that everything is complete. The validator compares the card against this run's lookup results; context-budget was never looked up, so the third check fails. The validator also doesn't judge how well the summary on the card is written. That field is the model's paraphrase, and the program can't check it word for word; it checks only the lessons and the IDs, the two things that can be matched against the lookup results.",
+      "source": "e76549fba38a"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The model's closing \"everything is complete\" and the done marks on the checklist are both written into the report, but they take no part in the verdict. This follows the acceptance-criteria approach of {{lesson:task-contract}}: the conclusion is computed from evidence, not read off a claim. The three arms have the same model, task, and validator, and differ only in whether there is a checklist and whether there is a reminder, so their verdicts can be compared side by side.",
+      "source": "f20402428145"
+    },
+    "section-5.title": {
+      "text": "What a checklist can and can't prove",
+      "source": "54edb6a5b1c8"
+    },
+    "section-5.paragraphs.0": {
+      "text": "What a checklist can prove is which step the model believed it had reached in each round. Every version of lesson.todo is a real event, and you can compare it with the tool_call and tool_result before and after in the same round. If the list says item 2 is already done, was there a successful lookup_note for application-state before that? If the two don't match, the model's judgment of its progress was off, and that is useful evidence in itself.",
+      "source": "2549bd5288a3"
+    },
+    "section-5.paragraphs.1": {
+      "text": "A checklist can't prove that the task is complete, and it can't prove the plan is sound. The model can tick off items it didn't do, or leave out an item from the start; the checklist can be perfectly formatted and the task still fail. Running each arm once also can't show that \"the arm with a checklist passes more easily\"; comparing completion rates takes many runs. This lesson's task has only four steps. In a task of dozens of steps a checklist may matter far more, or it may bring new problems, such as the list itself growing longer and longer.",
+      "source": "9cfcb9f2081a"
+    },
+    "section-5.paragraphs.2": {
+      "text": "One more point: this checklist is free text. What content says is up to the model, and the program can't execute from it. The next lesson, {{lesson:plan-and-replan}}, turns the plan into data the program can execute: each step names a tool and its arguments and is validated before execution; the program then runs the steps one by one, and on failure the plan goes back for revision with the real error.",
+      "source": "7c260966abb2"
+    },
+    "misconception-program-tracks.claim": {
+      "text": "With todo_write, the program knows how far the task has gotten.",
+      "source": "f939996705b9"
+    },
+    "misconception-program-tracks.correction": {
+      "text": "The program knows only what the model wrote on the list. todo_write only validates the format and saves the list; it doesn't know whether any other tool was called or whether it succeeded. Real progress is in the tool results of lookup_note and save_card; whether the task is complete is decided by the validator from the review card and this run's lookup results.",
+      "source": "292aa0031720"
+    },
+    "mq-verify.verify-ignores-claim.prompt": {
+      "text": "The model marks all four checklist items done and says \"all complete\", but the review card contains only {{lesson:messages-context}} and {{lesson:application-state}}. What is the verdict?",
+      "source": "97641c5bb215"
+    },
+    "mq-verify.verify-ignores-claim.a.text": {
+      "text": "Not passed: the card doesn't cover {{lesson:context-budget}}",
+      "source": "d079868a0f36"
+    },
+    "mq-verify.verify-ignores-claim.a.feedback": {
+      "text": "Correct. The checklist and the \"all complete\" line are both the model's own claims; the review card is the result the task asks for.",
+      "source": "5e6cc27adf10"
+    },
+    "mq-verify.verify-ignores-claim.b.text": {
+      "text": "Passed: the checklist shows everything complete",
+      "source": "bc6fedb5badf"
+    },
+    "mq-verify.verify-ignores-claim.b.feedback": {
+      "text": "Not quite. The checklist is not evidence.",
+      "source": "e4395e9c86a2"
+    },
+    "mq-verify.verify-ignores-claim.c.text": {
+      "text": "Partially passed: two thirds done",
+      "source": "4b1243e0d43e"
+    },
+    "mq-verify.verify-ignores-claim.c.feedback": {
+      "text": "Not quite. The validator judges by the task's definition, and there is no partial pass.",
+      "source": "680e85919aa4"
+    },
+    "mq-verify.verify-ignores-claim.explanation": {
+      "text": "Acceptance looks only at the deliverable and the real tool results.",
+      "source": "9474969117a4"
+    },
+    "compare-conditions.title": {
+      "text": "The three arms",
+      "source": "6e50ac53ba4a"
+    },
+    "compare-conditions.columns.0": {
+      "text": "Condition",
+      "source": "16bb1d2b098c"
+    },
+    "compare-conditions.columns.1": {
+      "text": "Tools",
+      "source": "5ca6730d4415"
+    },
+    "compare-conditions.columns.2": {
+      "text": "Rules in the system prompt",
+      "source": "4d7a0eb865db"
+    },
+    "compare-conditions.columns.3": {
+      "text": "Harness reminder",
+      "source": "6016dfb1559e"
+    },
+    "compare-conditions.rows.0.0": {
+      "text": "No TODO",
+      "source": "8385ffcedeca"
+    },
+    "compare-conditions.rows.0.1": {
+      "text": "lookup_note, save_card",
+      "source": "d5c164c43e14"
+    },
+    "compare-conditions.rows.0.2": {
+      "text": "Only describes the task",
+      "source": "837623c5a0b0"
+    },
+    "compare-conditions.rows.0.3": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "compare-conditions.rows.1.0": {
+      "text": "TODO, no reminder",
+      "source": "3bbea6f6e60c"
+    },
+    "compare-conditions.rows.1.1": {
+      "text": "Plus todo_write",
+      "source": "208389cd55a0"
+    },
+    "compare-conditions.rows.1.2": {
+      "text": "Asks to list the steps first and update step by step",
+      "source": "53663dffd594"
+    },
+    "compare-conditions.rows.1.3": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "compare-conditions.rows.2.0": {
+      "text": "TODO, with reminder",
+      "source": "0addd3222b20"
+    },
+    "compare-conditions.rows.2.1": {
+      "text": "Plus todo_write",
+      "source": "208389cd55a0"
+    },
+    "compare-conditions.rows.2.2": {
+      "text": "Asks to list the steps first and update step by step",
+      "source": "53663dffd594"
+    },
+    "compare-conditions.rows.2.3": {
+      "text": "Insert one after N rounds without an update",
+      "source": "79d961f0e135"
+    },
+    "walkthrough.title": {
+      "text": "What happens in one round",
+      "source": "77e16ebe3526"
+    },
+    "walkthrough.description": {
+      "text": "A step-by-step account of what the runner does each round; the code is a simplified illustration. Your run's evidence is in the events on the lab bench.",
+      "source": "10796c8639dc"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Request",
+      "source": "393e1241552b"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Send the request with this arm's tools",
+      "source": "d5190830904f"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The No TODO arm doesn't offer todo_write.",
+      "source": "2c2d0ec77468"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "request.body.tools",
+      "source": "a40b96d08a3c"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Execute",
+      "source": "32c8d373afe0"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Execute the calls the model proposed",
+      "source": "3313bf47a665"
+    },
+    "walkthrough.step-2.body": {
+      "text": "lookup_note and save_card do the actual work; todo_write only changes the list.",
+      "source": "614a6f9b221c"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "tool_call and tool_result",
+      "source": "023bc05a7bab"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Snapshot",
+      "source": "699ea2523018"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Record a version when the list changes",
+      "source": "3d4957aeea9c"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Emit the complete list and the diff.",
+      "source": "74361d0460da"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.todo",
+      "source": "9ace8b74d195"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Count",
+      "source": "21179deb9a74"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Count how many rounds without an update",
+      "source": "99872f7d983f"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Reset to zero if a todo_write updated the list successfully this round; otherwise add one.",
+      "source": "fbb9587a6e05"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Remind",
+      "source": "8f29b3132ccf"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Insert a reminder at the threshold",
+      "source": "a184cec2323d"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Place it after this round's tool messages and record it as a harness-inserted event.",
+      "source": "ed20ce539588"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.harness_injected",
+      "source": "94241404dbf7"
+    },
+    "references.lcc-todo-write.title": {
+      "text": "TodoWrite: list the steps before acting, remind after several rounds without an update (Learn Claude Code)",
+      "source": "7806e8861e9f"
+    },
+    "references.book-ch2-status-bar.title": {
+      "text": "Context engineering: the agent status bar and the TODO list — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "fd7e6bfdddf3"
+    },
+    "references.ms-planning-design.title": {
+      "text": "Planning design: set the overall goal and break the task into subtasks (Microsoft AI Agents for Beginners, the planning design lesson)",
+      "source": "3b7d5d37f229"
+    },
+    "references.claude-code-todo-tracking.title": {
+      "text": "Tracking to-dos: task list statuses and lifecycle (Claude Code docs, checked 2026-10-04)",
+      "source": "5150625c3de3"
+    },
+    "references.claude-code-task-tools.title": {
+      "text": "Which models get the task tools by default (Claude Code docs, checked 2026-10-04)",
+      "source": "07221f5cc3b9"
+    },
+    "code-workspace.n42.text": {
+      "text": "A new Workspace is created for each run; neither the list nor the review card carries over between runs.",
+      "source": "4f0339f2f4df"
+    },
+    "code-workspace.n47.text": {
+      "text": "todo_write receives the complete list and replaces it as a whole; there is no \"add one item\" operation, so the model writes out the whole picture every time.",
+      "source": "cd81e0dcb971"
+    },
+    "code-workspace.n53.text": {
+      "text": "Each item may have only the three fields id, content, and status; extra fields are rejected.",
+      "source": "dbfd4a8a1b84"
+    },
+    "code-workspace.n60.text": {
+      "text": "There are only three statuses: pending (not started), in_progress, and done (finished).",
+      "source": "51db011c228b"
+    },
+    "code-workspace.n65.text": {
+      "text": "At most one item is in progress at a time, so the list doesn't turn into a pile of half-finished work.",
+      "source": "75307008e1c7"
+    },
+    "code-workspace.n67.text": {
+      "text": "The list is replaced only after all validation passes; a failed update leaves the list unchanged.",
+      "source": "faf8d822d753"
+    },
+    "code-loop.n125.text": {
+      "text": "The No TODO arm can neither see nor execute todo_write; it is absent from both the tool definitions and the allowlist.",
+      "source": "edfb2119ec18"
+    },
+    "code-loop.n127.text": {
+      "text": "The two TODO arms add the checklist rules to the system prompt; the task is identical in all three arms.",
+      "source": "c4d6ba678b3b"
+    },
+    "code-loop.n131.text": {
+      "text": "The round limit is this lesson's model-call budget, so no arm can loop forever.",
+      "source": "ebdc1ca5b669"
+    },
+    "code-loop.n133.text": {
+      "text": "Every round carries the full message history and this arm's tool definitions.",
+      "source": "94db20ca798d"
+    },
+    "code-loop.n139.text": {
+      "text": "No proposed call ends the loop. The model saying \"done\" is only a claim; acceptance comes after.",
+      "source": "b4b7a1bfa093"
+    },
+    "code-loop.n148.text": {
+      "text": "execute_proposal executes the proposed call and records tool_call and tool_result as a pair.",
+      "source": "dc468c4edfa6"
+    },
+    "code-loop.n150.text": {
+      "text": "Only successful lookups are recorded into looked_up, and the validator uses it to check the IDs on the card.",
+      "source": "09962344873e"
+    },
+    "code-loop.n154.text": {
+      "text": "Each time the list changes, a snapshot and diff (lesson.todo) are emitted, so during replay you can see how the plan moves forward.",
+      "source": "1ec178a343d6"
+    },
+    "code-reminder.n156.text": {
+      "text": "Reset to zero if a todo_write updated the list successfully this round; otherwise add one. A failed call doesn't count as an update.",
+      "source": "39e972e8b6e9"
+    },
+    "code-reminder.n157.text": {
+      "text": "Only the \"with reminder\" arm inserts reminders, and the threshold comes from the input reminder_after.",
+      "source": "aea91eab615b"
+    },
+    "code-reminder.n160.text": {
+      "text": "The reminder is a separate user message, placed after all of this round's tool messages.",
+      "source": "af6c4adebd60"
+    },
+    "code-reminder.n161.text": {
+      "text": "It also emits lesson.harness_injected with source set to harness, so during replay you can tell who is speaking.",
+      "source": "7f4b692355fc"
+    },
+    "code-reminder.n166.text": {
+      "text": "Whichever arm it is, the same validator makes the final judgment.",
+      "source": "69fdd108d949"
+    },
+    "code-reminder.n170.text": {
+      "text": "The validator's input is only the review card and the real lookup results, not the model's claim and not the checklist.",
+      "source": "c2c11af28d9f"
+    },
+    "code-reminder.n174.text": {
+      "text": "The ID must match what lookup_note returned in this run; for a lesson that wasn't looked up, no ID counts.",
+      "source": "8aa865bb73a6"
+    },
+    "code-reminder.n178.text": {
+      "text": "All three lessons must be on the card; if one is missing, this check fails.",
+      "source": "d8667ef5319e"
+    },
+    "code-decision.title": {
+      "text": "The model maintains the checklist, and the validator decides completion",
+      "source": "595117ff76b7"
+    },
+    "code-decision.chosen": {
+      "text": "todo_write only saves the list the model wrote and emits a snapshot; the harness inserts reminders by count; whether the task is complete is decided only by verify_card from the review card and the real lookup results.",
+      "source": "d9eb15060e40"
+    },
+    "code-decision.program-plan.title": {
+      "text": "Have the program maintain progress, with no checklist written by the model",
+      "source": "8586acd2d410"
+    },
+    "code-decision.program-plan.why_not": {
+      "text": "{{lesson:application-state}} already did it that way. What this lesson wants to see is what happens when the model plans for itself, and whether reminders help.",
+      "source": "edaf3d4b3cd7"
+    },
+    "code-decision.trust-todo.title": {
+      "text": "Count the task as done once every checklist item is done",
+      "source": "c4d31c0720fb"
+    },
+    "code-decision.trust-todo.why_not": {
+      "text": "Marking done takes no evidence, and the model can tick off the list before it has finished.",
+      "source": "c145f7aa2f22"
+    },
+    "code-decision.reminder-in-system.title": {
+      "text": "Rewrite the reminder into the system prompt",
+      "source": "8ab076e0a696"
+    },
+    "code-decision.reminder-in-system.why_not": {
+      "text": "It changes the premise of the whole conversation, and during replay you can't see in which round the reminder appeared.",
+      "source": "e61a1cb8d1dc"
+    },
+    "todo-conditions.title": {
+      "text": "No TODO, with TODO, with reminder",
+      "source": "e8eb3bdd549b"
+    },
+    "todo-conditions.hypothesis": {
+      "text": "If todo_write is provided and the model is reminded when it forgets to update, the checklist advances along with the task. But whether the task is complete can only be decided by the validator from the review card and the real lookup results, and each of the three arms can pass or fail on its own.",
+      "source": "0b3fd7bc1725"
+    },
+    "todo-conditions.no-todo.label": {
+      "text": "No TODO",
+      "source": "8385ffcedeca"
+    },
+    "todo-conditions.todo.label": {
+      "text": "TODO, no reminder",
+      "source": "3bbea6f6e60c"
+    },
+    "todo-conditions.todo-reminder.label": {
+      "text": "TODO, with reminder (2 rounds)",
+      "source": "929bbcfbc31f"
+    },
+    "todo-conditions.tools-offered.text": {
+      "text": "The tools offered in request 1: the No TODO arm has no todo_write.",
+      "source": "9a5e9f337c26"
+    },
+    "todo-conditions.first-plan.text": {
+      "text": "The first version of the checklist.",
+      "source": "449d87965e96"
+    },
+    "todo-conditions.plan-diff.text": {
+      "text": "The first time an item's status changes in the list: diff.changed says which item changed from which status to which.",
+      "source": "996406b89a3b"
+    },
+    "todo-conditions.reminder.text": {
+      "text": "The reminder the harness inserted, with source set to harness.",
+      "source": "2d55a3ea6b17"
+    },
+    "todo-conditions.card.text": {
+      "text": "The result of save_card.",
+      "source": "09eebd3347a3"
+    },
+    "todo-conditions.verdict.text": {
+      "text": "The validator's three checks.",
+      "source": "6c87bbfbb3fd"
+    },
+    "todo-conditions.self-report.text": {
+      "text": "The model's closing claim: recorded only, and not part of the verdict.",
+      "source": "3550880c55d9"
+    },
+    "todo-conditions.guide.0.text": {
+      "text": "All three arms use the same task and the same validator; the difference is only whether there is a checklist and whether there is a reminder. First see which tools are offered.",
+      "source": "dd65224350b5"
+    },
+    "todo-conditions.guide.1.text": {
+      "text": "The No TODO arm has only the two tools that do work; the other two arms have one more, todo_write.",
+      "source": "45fe8bf24c7f"
+    },
+    "todo-conditions.guide.2.text": {
+      "text": "In the arms with a checklist, the model usually writes a plan first. This version is its own.",
+      "source": "11f3b33be080"
+    },
+    "todo-conditions.guide.3.text": {
+      "text": "Every later update is compared with the previous version, recording which item went from which status to which. The arm without reminders may never update at all.",
+      "source": "7da5d64211a1"
+    },
+    "todo-conditions.guide.4.text": {
+      "text": "When several rounds passed without an update, the harness inserted a reminder. The program wrote it; neither the model nor you did.",
+      "source": "3e55c7f5f150"
+    },
+    "todo-conditions.guide.5.text": {
+      "text": "The review card is the real deliverable of this task.",
+      "source": "18d10b3d1f51"
+    },
+    "todo-conditions.guide.6.text": {
+      "text": "The validator looks only at the card and the real lookup results.",
+      "source": "3ba109b56b3d"
+    },
+    "todo-conditions.guide.7.text": {
+      "text": "The model's claim is recorded here, next to the acceptance verdict for comparison. Saying it is done does not mean it passed.",
+      "source": "2dd240ef038e"
+    },
+    "todo-conditions.conclusion.proves.0": {
+      "text": "How the checklist changed version by version in this run, and in which rounds the harness inserted reminders, can all be checked in the events.",
+      "source": "668c9fd6f55d"
+    },
+    "todo-conditions.conclusion.proves.1": {
+      "text": "The acceptance verdict is computed from the review card and this run's lookup_note results; the model's claim and the checklist statuses took no part in it.",
+      "source": "5ec28f7a1fd2"
+    },
+    "todo-conditions.conclusion.does_not_prove.0": {
+      "text": "Each arm runs once, which can't show that checklists or reminders generally raise the completion rate; comparing completion rates takes many runs.",
+      "source": "994e960fde89"
+    },
+    "todo-conditions.conclusion.does_not_prove.1": {
+      "text": "This task has only four steps, and the effect of a checklist in a longer task could be completely different.",
+      "source": "f3a13ae23f5f"
+    },
+    "todo-conditions.conclusion.does_not_prove.2": {
+      "text": "In offline test mode, the behavior of the three arms comes from fixed scripts; for example, the No TODO arm missing {{lesson:context-budget}} is written in the script.",
+      "source": "d6ddb6e30041"
+    },
+    "inputs.condition.label": {
+      "text": "Condition",
+      "source": "16bb1d2b098c"
+    },
+    "inputs.condition.options.no_todo.label": {
+      "text": "No TODO",
+      "source": "8385ffcedeca"
+    },
+    "inputs.condition.options.todo.label": {
+      "text": "TODO, no reminder",
+      "source": "3bbea6f6e60c"
+    },
+    "inputs.condition.options.todo_reminder.label": {
+      "text": "TODO, with reminder",
+      "source": "0addd3222b20"
+    },
+    "inputs.reminder_after.label": {
+      "text": "Reminder threshold (rounds)",
+      "source": "baaef3da92e6"
+    },
+    "inputs.reminder_after.help": {
+      "text": "Insert a reminder after this many rounds in a row without a successful list update; takes effect only under the \"with reminder\" condition.",
+      "source": "7e736e40284e"
+    },
+    "quiz.q1.prompt": {
+      "text": "What does a lesson.harness_injected event tell you?",
+      "source": "a67f00b0912a"
+    },
+    "quiz.q1.a.text": {
+      "text": "The message was inserted by the harness; it didn't come from the user or the model",
+      "source": "9201774643ee"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Correct. In replay, it is how you tell who was speaking.",
+      "source": "a2ee2dbf3c65"
+    },
+    "quiz.q1.b.text": {
+      "text": "The model requested a reminder",
+      "source": "0fe754e33dd3"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Not quite. The harness decides on a reminder by count; the model didn't request it.",
+      "source": "aecc108fc99d"
+    },
+    "quiz.q1.c.text": {
+      "text": "The user added a sentence during the run",
+      "source": "00a59fd8054d"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "Not quite. The user can't interject during a run.",
+      "source": "0c93605494be"
+    },
+    "quiz.q1.explanation": {
+      "text": "Content inserted by the harness must be labeled with its source separately.",
+      "source": "a6f7fc01bb2b"
+    },
+    "quiz.q2.prompt": {
+      "text": "todo_write receives two items that are in_progress. What happens?",
+      "source": "6db925528eae"
+    },
+    "quiz.q2.a.text": {
+      "text": "It returns an error, and the list stays at the previous version",
+      "source": "3b304d3971b7"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Correct. A failed validation doesn't change the list.",
+      "source": "47e1e3c36ae7"
+    },
+    "quiz.q2.b.text": {
+      "text": "It accepts and keeps only the first item as in_progress",
+      "source": "b84a73028982"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Not quite. The program doesn't edit the list for the model.",
+      "source": "3b75f731a180"
+    },
+    "quiz.q2.c.text": {
+      "text": "It accepts, and the last status wins",
+      "source": "c8c98ae02d26"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "Not quite. An update that violates the constraint is rejected as a whole.",
+      "source": "c8c4b7851c78"
+    },
+    "quiz.q2.explanation": {
+      "text": "The tool validates its input before executing, and returns the error honestly on failure.",
+      "source": "ebd19cf0a1d2"
+    },
+    "quiz.q3.prompt": {
+      "text": "Why use the same validator for all three arms?",
+      "source": "78e7e5f77227"
+    },
+    "quiz.q3.a.text": {
+      "text": "Only with the same criteria can the results of the three arms be compared",
+      "source": "54fe89dddc4a"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Correct. Only the experimental condition should change.",
+      "source": "0c32ac28fb98"
+    },
+    "quiz.q3.b.text": {
+      "text": "Because the arms with a checklist don't need acceptance",
+      "source": "3aa7f5633ff8"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Not quite. The model wrote the checklist itself, so it needs acceptance just the same.",
+      "source": "33277e98ddf5"
+    },
+    "quiz.q3.c.text": {
+      "text": "To write less code",
+      "source": "f729823264d6"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "Not quite. The reason is the requirement of a controlled experiment.",
+      "source": "f7f732dd28f0"
+    },
+    "quiz.q3.explanation": {
+      "text": "A controlled experiment changes only one condition and keeps the judging method the same.",
+      "source": "5de66ece48c0"
+    },
+    "quiz.q4.prompt": {
+      "text": "Version 3 of the checklist marks \"look up the context-budget key points\" as done, but this run has no successful lookup_note for context-budget. Which side should you trust?",
+      "source": "7d1e11de0998"
+    },
+    "quiz.q4.a.text": {
+      "text": "Trust the tool results: the checklist is the model's claim, and when it doesn't match the real calls, the tool results win",
+      "source": "ed0ea9474458"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Correct. The checklist records the progress the model believes it has made; the facts are in tool_result.",
+      "source": "a0b07e96f663"
+    },
+    "quiz.q4.b.text": {
+      "text": "Trust the checklist: todo_write passed validation, so the step must have been done",
+      "source": "93feaf8cf69c"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "Not quite. todo_write checks only the format of the list and doesn't know whether any other tool was called.",
+      "source": "b9447074dd17"
+    },
+    "quiz.q4.c.text": {
+      "text": "Trust neither; this run is void",
+      "source": "f9606c89c574"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "Not quite. The mismatch is itself useful evidence; the validator still judges by the review card and the lookup results as usual.",
+      "source": "c02d79a5f24b"
+    },
+    "quiz.q4.explanation": {
+      "text": "A checklist shows how the model sees its progress; it can't replace the tool results.",
+      "source": "637ed0a8eb7d"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"TODO, with reminder\" and find the step where the harness inserts a reminder for the first time.",
+      "source": "6af503369682"
+    },
+    "check-hunt.explanation": {
+      "text": "This event records the reminder text the harness inserted and the count at the time it fired; only the first reminder carries first. Compare it with the messages of the next request, and you can see it placed after the tool messages as a user message. Later reminders fire again when the list goes several more rounds without an update. If your run has no such event, either the model updated the list every few rounds, or the task ended before the count reached the threshold.",
+      "source": "0d271703fce1"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare against your own run and this lesson's source, and tick each item once you've done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I went through lesson.todo version by version and can say what changed in the list in which round.",
+      "source": "c914416265d7"
+    },
+    "check-points.item-2.text": {
+      "text": "I can find the reminder the harness inserted in the request's messages, and explain why it comes after the tool messages.",
+      "source": "45b08c528fbb"
+    },
+    "check-points.item-3.text": {
+      "text": "I compared the model's closing claim with the acceptance verdict, and either found at least one mismatch or can explain why they agree this time.",
+      "source": "4d9d45cba645"
+    },
+    "code_notes.todo_write.note": {
+      "text": "This lesson's checklist tool: receives a complete list of 1–12 items and replaces the old one as a whole; the version number goes up by one after validation passes; does no actual work.",
+      "source": "560696593566"
+    },
+    "code_notes.lesson.todo.note": {
+      "text": "Emitted after a successful todo_write: the version number, the complete list, and the items added, removed, or changed in status.",
+      "source": "9c700d1b5dc6"
+    },
+    "code_notes.in_progress.note": {
+      "text": "The checklist item status \"in progress\". If two appear at once, todo_write rejects the whole call and the list stays at the previous version.",
+      "source": "e6d0caa5102b"
+    },
+    "code_notes.lesson.harness_injected.note": {
+      "text": "Emitted when the harness inserts a reminder: the reminder text, the source harness, and how many rounds in a row the list went without an update.",
+      "source": "11086a6dedcc"
+    },
+    "code_notes.source.note": {
+      "text": "The source tag of an inserted message; harness means it was written by the harness, not by the user or the model.",
+      "source": "f9ed6a6aac80"
+    },
+    "code_notes.since_update.note": {
+      "text": "How many rounds in a row without a successful todo_write update; reset on an update, and also reset after a reminder is inserted.",
+      "source": "3d7d3022e3e8"
+    },
+    "code_notes.reminder_after.note": {
+      "text": "This lesson's input: insert a reminder after this many rounds in a row without a successful list update; default 2, selectable 1–5.",
+      "source": "b6ce7e4cb210"
+    },
+    "code_notes.verify_card.note": {
+      "text": "This lesson's acceptance function: reads only the review card and the real lookup_note returns of this run, and gives three checks.",
+      "source": "5289c4caeba1"
+    }
+  }
+}
