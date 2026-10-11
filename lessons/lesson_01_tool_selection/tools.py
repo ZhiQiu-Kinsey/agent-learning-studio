@@ -1,74 +1,86 @@
-"""工具定义和实现：“工具定义与调用提议”只把 TOOLS 发给模型，“执行工具与回传结果”再用 AVAILABLE_TOOLS 执行。"""
+"""Tool definitions and implementations: tool-proposals only sends the definitions to the model; tool-selection also runs the functions."""
 
 import math
 from datetime import datetime
+from functools import partial
+
+from lessons.lesson_01_tool_selection.locales.tools import texts_for
 
 
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "add_numbers",
-            "description": "把两个数字相加。需要计算两个数的和时调用。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "a": {"type": "number", "description": "第一个数字"},
-                    "b": {"type": "number", "description": "第二个数字"},
+def tool_definitions(locale):
+    """The tools sent with every request. Names are code; the descriptions come in the run's language."""
+    t = texts_for(locale)
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "add_numbers",
+                "description": t.add_numbers,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "a": {"type": "number", "description": t.add_numbers_a},
+                        "b": {"type": "number", "description": t.add_numbers_b},
+                    },
+                    "required": ["a", "b"],
+                    "additionalProperties": False,
                 },
-                "required": ["a", "b"],
-                "additionalProperties": False,
             },
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_current_time",
-            "description": (
-                "读取运行 Python 程序的机器当前本地日期和时间。"
-                "返回 local_datetime、timezone、hour、minute 字段。"
-                "询问现在几点或今天日期时调用。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-                "additionalProperties": False,
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_time",
+                "description": t.get_current_time,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
             },
         },
-    },
-]
+    ]
 
 
-def add_numbers(a, b):
-    """校验两个有限数字后求和；和也必须是有限数字。"""
+def add_numbers(t, /, a, b):
+    """Check that both numbers are finite, then add them; the sum must be finite too.
+
+    t holds the error messages of the run's language. It is positional-only, so the
+    arguments the model sends (always by name) can never replace it.
+    """
     if isinstance(a, bool) or not isinstance(a, (int, float)):
-        raise ValueError("参数 a 必须是数字。")
+        raise ValueError(t.not_a_number.format(name="a"))
     if isinstance(b, bool) or not isinstance(b, (int, float)):
-        raise ValueError("参数 b 必须是数字。")
+        raise ValueError(t.not_a_number.format(name="b"))
     try:
         finite = math.isfinite(a) and math.isfinite(b) and math.isfinite(a + b)
     except OverflowError:
-        # 10**400 这样的超大整数转不成浮点数；不拦下来，异常会越过 execute_tool 让运行崩溃。
+        # A huge integer like 10**400 cannot become a float. Without this check the exception
+        # would escape execute_tool and crash the run.
         finite = False
     if not finite:
-        raise ValueError("参数和两数之和都必须是有限数字，且不超出浮点数范围。")
+        raise ValueError(t.not_finite)
     return a + b
 
 
 def get_current_time():
-    """读取 Python 进程所在机器的本地时钟和时区。"""
+    """Read the local clock and time zone of the machine running the Python process."""
     local_now = datetime.now().astimezone()
+    # The time zone as a UTC offset: tzname() is worded in the operating system's display
+    # language, so the same tool would answer in different languages on different machines.
+    offset = local_now.strftime("%z")
     return {
         "local_datetime": local_now.isoformat(timespec="seconds"),
-        "timezone": local_now.tzname() or "local time zone",
+        "timezone": f"UTC{offset[:3]}:{offset[3:]}",
         "hour": local_now.hour,
         "minute": local_now.minute,
     }
 
 
-AVAILABLE_TOOLS = {
-    "add_numbers": add_numbers,
-    "get_current_time": get_current_time,
-}
+def available_tools(locale):
+    """The allowlist for one run: the only names execute_tool will run, each mapped to its Python function."""
+    return {
+        "add_numbers": partial(add_numbers, texts_for(locale)),
+        "get_current_time": get_current_time,
+    }

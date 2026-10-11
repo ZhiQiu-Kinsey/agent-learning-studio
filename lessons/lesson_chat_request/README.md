@@ -1,27 +1,31 @@
-# 一次模型请求（`chat-request`）
+# One model request (`chat-request`)
 
-**目标：**发出一次不带工具的真实模型请求，读懂请求体里的 `model` 与 `messages`、响应里的回答、结束原因 `finish_reason` 和用量 `usage`。
+English · [简体中文](README.zh-CN.md)
 
-本课是独立运行器（`runtime.py`），只调用一次 `context.complete`：
+**Goal:** send one real model request without tools, and read `model` and `messages` in the request body, then the answer, the finish reason `finish_reason` and the usage `usage` in the response.
 
-1. `build_request` 拼请求体：可选的 system 消息、user 问题，以及可选的 `max_tokens`。
-2. `context.complete` 发出请求；平台补上 `model`，把请求和响应原样记成 `request`、`response` 事件。密钥由 `course/api_client.py` 的 `send_bailian` 放进 HTTP 请求头，不进请求体。
-3. `read_reply` 从响应取回答、结束原因和用量；服务商没有报告的用量写“未报告”。
+This lesson is a custom runner (`runtime.py`) that calls `context.complete` once:
 
-练习：
+1. `build_request` builds the body: an optional system message, the user question, and an optional `max_tokens`.
+2. `context.complete` sends the request; the platform adds `model` and records the request and response unchanged as `request` and `response` events. `send_bailian` in `course/api_client.py` puts the key into the HTTP header, never into the body.
+3. `read_reply` takes the answer, finish reason and usage from the response; usage the provider did not report says "not reported".
 
-| 练习 | 改了什么 | 看什么 |
+Exercises:
+
+| Exercise | What changes | What to look at |
 | --- | --- | --- |
-| `basic` 带系统提示词 | 默认设置 | messages 的两条消息、回答、usage |
-| `no-system` 去掉系统提示词 | `system_prompt` 留空 | messages 只剩 user，提示 Token 的变化 |
-| `short-limit` 把输出上限设得很小 | `max_tokens` 设为 16 | `finish_reason` 是否为 `length`，回答是否被截断 |
+| `basic` With system prompt | Defaults | The two messages in messages, the answer, usage |
+| `no-system` Remove the system prompt | `system_prompt` left empty | messages has only the user message; how prompt tokens change |
+| `short-limit` Set a tiny output limit | `max_tokens` set to 16 | Whether `finish_reason` is `length` and the answer is cut off |
 
-推理模型（响应里有 `reasoning_content`）把推理也算进 `completion_tokens`；部分服务商让推理同样受 `max_tokens` 限制，上限很小时 content 可能是空的；实验报告会列出推理 Token。
+Reasoning models (with `reasoning_content` in the response) count their reasoning in `completion_tokens`; some providers also cap reasoning with `max_tokens`, so with a tiny limit content may be empty. The lab report lists reasoning tokens.
 
-在网页课程导航中进入本课，可以查看源码、真实运行事件和回放。离线测试：
+**Run language:** this lesson runs in Chinese and in English. Runtime text such as the report labels and what each finish reason means is in `locales/zh_CN.py` and `locales/en.py`; the exercise questions and the default system prompt are written per language in `lesson.json`. The web page picks the language from the UI language, and every run record states the language it ran in.
+
+Open this lesson from the course navigation on the web page to see the source, real run events and replay. Offline tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_chat_request.test_lesson -v
 ```
 
-`fixtures.py` 只服务自动化测试，回答和用量都是固定的假数据。
+`fixtures.py` serves automated tests only; its answer and usage are fixed fake data.

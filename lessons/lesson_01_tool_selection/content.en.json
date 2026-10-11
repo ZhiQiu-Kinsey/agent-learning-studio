@@ -27,8 +27,8 @@
       "source": "874ed7dbdcdb"
     },
     "concepts.01-allowlist.description": {
-      "text": "A tool name the model proposes is looked up only in the allowlist: AVAILABLE_TOOLS maps tool names to Python functions, and a name that is not registered is not executed.",
-      "source": "d3535188f3d6"
+      "text": "A tool name the model proposes is looked up only in the allowlist: the dict available_tools returns maps tool names to Python functions, and a name that is not registered is not executed.",
+      "source": "b9a848a6a580"
     },
     "concepts.02-result.label": {
       "text": "02 / RESULT",
@@ -75,12 +75,12 @@
       "source": "a8f00549e302"
     },
     "section-1.paragraphs.1": {
-      "text": "Execution is handled by execute_tool in course/runner.py, in three steps: take the tool name from function.name; parse arguments into a dict with json.loads and confirm it is an arguments object; look up the function by name in AVAILABLE_TOOLS and call it only if it is found.",
-      "source": "53e4c53a4867"
+      "text": "Execution is handled by execute_tool in course/runner.py, in three steps: take the tool name from function.name; parse arguments into a dict with json.loads and confirm it is an arguments object; look up the function by name in the allowlist and call it only if it is found.",
+      "source": "fdb91435f428"
     },
     "section-1.paragraphs.2": {
-      "text": "AVAILABLE_TOOLS is this lesson's allowlist: a dict with tool names on the left and the matching Python functions on the right. What can run is decided by this dict, not by the name the model writes. If the model proposes a name that is not in it, such as delete_files, the runner does not execute anything and returns a result with ok set to false.",
-      "source": "9341998bd608"
+      "text": "available_tools in tools.py returns this lesson's allowlist: a dict with tool names on the left and the matching Python functions on the right. What can run is decided by this dict, not by the name the model writes. If the model proposes a name that is not in it, such as delete_files, the runner does not execute anything and returns a result with ok set to false.",
+      "source": "7cdc36b9f43f"
     },
     "section-1.paragraphs.3": {
       "text": "The allowlist only answers \"may this name run?\". It does not judge whether the arguments are reasonable. 19 plus 23 and a trillion plus a trillion look the same to it; whether and how arguments are checked is up to each tool function. This lesson's add_numbers rejects arguments that are not numbers or not finite numbers, and {{lesson:fail-safely}} covers those checks in full.",
@@ -95,7 +95,7 @@
       "source": "c14deb07c42b"
     },
     "section-2.paragraphs.1": {
-      "text": "Why hand errors back to the model instead of letting the program crash? Given an error like \"参数 a 必须是数字。\" (\"argument a must be a number\"), the model can fix the argument and propose the call again, or tell the user it cannot do it. If the program crashes, the model learns nothing, the run record holds only an exception, and the user sees just \"something went wrong\". So ok set to false is also a kind of tool result; its content is the reason for the failure.",
+      "text": "Why hand errors back to the model instead of letting the program crash? Given an error like \"Argument a must be a number.\", the model can fix the argument and propose the call again, or tell the user it cannot do it. If the program crashes, the model learns nothing, the run record holds only an exception, and the user sees just \"something went wrong\". So ok set to false is also a kind of tool result; its content is the reason for the failure.",
       "source": "cd6db4162a97"
     },
     "section-2.paragraphs.2": {
@@ -127,12 +127,12 @@
       "source": "8a2516d8e2d9"
     },
     "deep-dive-dispatch.paragraphs.3": {
-      "text": "Adding a tool means changing two places: add a tool definition to TOOLS so the model knows it exists, and register the function in AVAILABLE_TOOLS so the program can run it. Change only the first, and the model proposes the call but the program refuses to run it; change only the second, and the model never knows the tool exists. The names in the two places must match.",
-      "source": "6a1f8bad4e5e"
+      "text": "Adding a tool means changing two places: add a tool definition to tool_definitions (its description goes into the runtime text, one per run language) so the model knows it exists, and register the function in available_tools so the program can run it. Change only the first, and the model proposes the call but the program refuses to run it; change only the second, and the model never knows the tool exists. The names in the two places must match.",
+      "source": "c877bc96476f"
     },
     "deep-dive-dispatch.paragraphs.4": {
-      "text": "Claude Code turns this into configurable rules. According to its official docs, permission rules come in three kinds, allow, ask, and deny, matched in the order deny, ask, allow, and the first match wins. Rules can also look at arguments: `Bash(npm run *)` matches only commands that start with `npm run`. A deny rule with just a tool name, such as `Bash`, removes that tool from the list the model can see, which is like deleting the definition from TOOLS; a deny rule with an argument pattern, such as `Bash(rm *)`, leaves the tool in the list and blocks a call only when the model proposes a matching one, which is like checking the allowlist before execution. This lesson's allowlist looks at names only, not arguments. The docs also warn that command rules match the command text the model wrote, so the same program written a different way may slip through. They are not a security boundary; to really block something you need isolation at the operating system level. Follow the official docs for the exact rule syntax.",
-      "source": "772b7183c745"
+      "text": "Claude Code turns this into configurable rules. According to its official docs, permission rules come in three kinds, allow, ask, and deny, matched in the order deny, ask, allow, and the first match wins. Rules can also look at arguments: `Bash(npm run *)` matches only commands that start with `npm run`. A deny rule with just a tool name, such as `Bash`, removes that tool from the list the model can see, which is like deleting the definition from tool_definitions; a deny rule with an argument pattern, such as `Bash(rm *)`, leaves the tool in the list and blocks a call only when the model proposes a matching one, which is like checking the allowlist before execution. This lesson's allowlist looks at names only, not arguments. The docs also warn that command rules match the command text the model wrote, so the same program written a different way may slip through. They are not a security boundary; to really block something you need isolation at the operating system level. Follow the official docs for the exact rule syntax.",
+      "source": "95d8637974d6"
     },
     "predict-request-count.prompt": {
       "text": "Run it once first. In the experiment \"Addition and time: one full loop\", before you run \"Add two numbers\", guess: how many model requests (request events) will this run send?",
@@ -331,8 +331,8 @@
       "source": "5d95b5424c18"
     },
     "walkthrough.step-2.title": {
-      "text": "Look up the function in AVAILABLE_TOOLS by name",
-      "source": "2576326ab7b1"
+      "text": "Look up the function in the allowlist by name",
+      "source": "963f6536c33c"
     },
     "walkthrough.step-2.body": {
       "text": "Parse arguments into a dict first, then look up by name. If nothing is found, nothing is executed, and a result with ok set to false is returned right away.",
@@ -459,8 +459,8 @@
       "source": "f55a7505592a"
     },
     "code-dispatch.n16.text": {
-      "text": "Execute one tool call proposal. The parameters are the tool_call from the model and this lesson's dict of registered tools.",
-      "source": "f06d61a6b9f2"
+      "text": "Execute one tool call proposal. The parameters are the tool_call from the model and this run's dict of registered tools; locale is the run language that error messages are written in.",
+      "source": "d3bbc8b4b07b"
     },
     "code-dispatch.n21.text": {
       "text": "arguments is a JSON string, so parse it first; an empty string counts as no arguments.",
@@ -514,6 +514,10 @@
       "text": "If the rounds run out with no answer, raise an error and do not return a half-finished result; the run ends with error and you can see the real reason.",
       "source": "89b26709d851"
     },
+    "code-tool-impl.n-signature.text": {
+      "text": "t holds the error messages in the run language. It comes before /, so it can only be passed by position; the model's arguments always arrive by name and can never replace it.",
+      "source": "e58e21352bbd"
+    },
     "code-tool-impl.n46.text": {
       "text": "Exclude bool first: in Python True is a subclass of int, so without this True + 1 would be computed as 2.",
       "source": "80469fdd00e6"
@@ -531,16 +535,20 @@
       "source": "693c3e54b9fd"
     },
     "code-tool-impl.n66.text": {
-      "text": "The allowlist: a dict from tool names to Python functions. run_agent hands it only to execute_tool, so any other name the model proposes will not be executed.",
-      "source": "3ad8e253d09a"
+      "text": "The allowlist: a dict from tool names to Python functions, built for each run. run_agent hands it only to execute_tool, so any other name the model proposes will not be executed.",
+      "source": "e53ffbd9f54e"
+    },
+    "code-tool-impl.n-bind.text": {
+      "text": "partial fills the first parameter of add_numbers with this run language's messages in advance. get_current_time raises no argument errors, so it is registered as is.",
+      "source": "c93546fd0d55"
     },
     "code-decision.title": {
       "text": "Run only tools on the allowlist, and always hand the result back to the model",
       "source": "01480799d437"
     },
     "code-decision.chosen": {
-      "text": "The tool_calls the model returns are only proposals. After parsing the arguments, execute_tool looks up a function by name only in AVAILABLE_TOOLS and runs it, wraps the outcome as a result with ok set to true or an error with ok set to false, and hands it back to the model through a message with role tool.",
-      "source": "fc136b401a99"
+      "text": "The tool_calls the model returns are only proposals. After parsing the arguments, execute_tool looks up a function by name only in the allowlist that available_tools returns and runs it, wraps the outcome as a result with ok set to true or an error with ok set to false, and hands it back to the model through a message with role tool.",
+      "source": "e34f84dd5b54"
     },
     "code-decision.model-answers-directly.title": {
       "text": "No tools; let the model answer directly",
@@ -691,8 +699,8 @@
       "source": "44dec5281ee4"
     },
     "quiz.unknown-name.a.text": {
-      "text": "It is not found in AVAILABLE_TOOLS, so nothing is executed and a result with ok set to false is returned",
-      "source": "ee85c5aa0862"
+      "text": "It is not found in the allowlist, so nothing is executed and a result with ok set to false is returned",
+      "source": "fa838e5335a9"
     },
     "quiz.unknown-name.a.feedback": {
       "text": "Correct. Any name outside the allowlist is never executed, and the error is handed back to the model as a tool result.",
@@ -703,8 +711,8 @@
       "source": "551804237b1f"
     },
     "quiz.unknown-name.b.feedback": {
-      "text": "Not quite. The runner only looks in AVAILABLE_TOOLS and never searches for an arbitrary function by name.",
-      "source": "5f4fe6352954"
+      "text": "Not quite. The runner only looks in the allowlist dict and never searches for an arbitrary function by name.",
+      "source": "fc6829bc0f45"
     },
     "quiz.unknown-name.c.text": {
       "text": "It forwards the call to the provider to execute",
@@ -902,13 +910,13 @@
       "text": "The success flag of a tool result: when true it carries result, when false it carries error_type and error.",
       "source": "ea5520765b2e"
     },
-    "code_notes.AVAILABLE_TOOLS.note": {
-      "text": "A dict from tool names to Python functions; the runner looks up names only here, and a name that is not registered is not executed.",
-      "source": "67309a816dd9"
+    "code_notes.available_tools.note": {
+      "text": "Returns this run's allowlist: a dict from tool names to Python functions. The runner looks up names only here; an unregistered name never runs.",
+      "source": "6cee966f211a"
     },
     "code_notes.execute_tool.note": {
-      "text": "Execute one tool call proposal: parse arguments, look up AVAILABLE_TOOLS by name, run it, and wrap the outcome as an ok result.",
-      "source": "52fce2104011"
+      "text": "Execute one tool call proposal: parse arguments, look up the name in the allowlist, run it, and wrap the outcome as an ok result.",
+      "source": "16079c543092"
     },
     "code_notes.max_tool_rounds.note": {
       "text": "The round limit of run_agent; when run from the web page it comes from max_rounds in lesson.json, which is 3 in this lesson.",

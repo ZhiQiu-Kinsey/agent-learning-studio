@@ -1,6 +1,7 @@
 """工具失败时如实说明，不猜测结果。"""
 
-from course.runner import run_cli
+from course.i18n import SOURCE_LOCALE
+from course.runner import AgentSetup, run_cli
 from lessons.lesson_03_fail_safely.tools import AVAILABLE_TOOLS, TOOLS
 
 
@@ -12,16 +13,19 @@ SYSTEM_PROMPT = (
 )
 
 
-def main():
+def setup(locale):
+    """One native run's system prompt, tools and allowlist. This lesson only speaks zh-CN so far."""
+    return AgentSetup(SYSTEM_PROMPT, TOOLS, AVAILABLE_TOOLS)
+
+
+def main(locale=None):
     run_cli(
+        setup(SOURCE_LOCALE),
         title="错误处理与安全边界",
         examples=[
             "12 除以 3 等于多少？",
             "12 除以 0 等于多少？请说明处理过程。",
         ],
-        system_prompt=SYSTEM_PROMPT,
-        tools=TOOLS,
-        available_tools=AVAILABLE_TOOLS,
         max_tool_rounds=2,
     )
 

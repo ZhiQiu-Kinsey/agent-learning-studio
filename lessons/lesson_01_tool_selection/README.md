@@ -1,22 +1,27 @@
-# 执行工具与回传结果（`tool-selection`）
+# Executing tools and returning results (`tool-selection`)
 
-**目标：**让 Python 按白名单执行模型提出的调用，把工具结果用同一个调用 id 写回消息历史，再请求一次模型，形成最小的 Agent 循环。
+English · [简体中文](README.zh-CN.md)
 
-调用提议本身（工具定义、`tool_calls`、JSON 字符串参数）在上一课“工具定义与调用提议”里已经看过；本课接着执行它。
+**Goal:** have Python execute the calls the model proposes, checked against an allowlist, write each tool result back into the message history with the same call id, and request the model again. That is the smallest agent loop.
 
-阅读顺序：
+The call proposal itself (tool definitions, `tool_calls`, JSON string arguments) was covered in the previous lesson, "Tool definitions and call proposals"; this lesson executes it.
 
-1. `course/runner.py` 的 `execute_tool`：解析 `arguments`，只在 `AVAILABLE_TOOLS`（白名单）里按名字找函数，执行后包成 `{"ok": true, "result": ...}`，出错时是 `ok: false` 加 `error_type`、`error`。
-2. `course/runner.py` 的 `run_agent`：四步循环——建立消息历史、请求模型、没有 `tool_calls` 就返回回答、有就执行并把 `role: tool` 消息（带 `tool_call_id`）写回历史；最多 `max_tool_rounds` 轮。
-3. `tools.py`：`add_numbers`、`get_current_time` 的实现和 `AVAILABLE_TOOLS`。
-4. `main.py`：本课的系统提示词和命令行入口。
+Reading order:
 
-练习：`sum`（计算加法）、`time`（查询本地时间）。同一轮提出两个独立调用的情况放在“依赖式多轮调用”一课。
+1. `execute_tool` in `course/runner.py`: parse `arguments`, look the function up by name only in the allowlist (the dict `available_tools` returns), run it and wrap the outcome as `{"ok": true, "result": ...}`; on failure it is `ok: false` with `error_type` and `error`.
+2. `run_agent` in `course/runner.py`: a four-step loop — build the message history, request the model, return the answer when there are no `tool_calls`, otherwise execute them and write `role: tool` messages (with `tool_call_id`) back into the history; at most `max_tool_rounds` rounds.
+3. `tools.py`: `tool_definitions` (the tool definitions sent to the model), the implementations of `add_numbers` and `get_current_time`, and `available_tools`.
+4. `main.py`: `setup(locale)` returns one run's system prompt, tool definitions and allowlist; `main` is the command-line entry.
 
-命令行运行（在项目根目录）：
+Exercises: `sum` (add two numbers) and `time` (look up local time). Two independent calls in the same round come in the lesson "Dependent multi-round calls".
+
+**Run language:** the system prompt, tool descriptions and tool error messages are in `locales/` (`locales/tools/` holds the part for `tools.py`, which the call-proposal and dependent-call lessons share), one file each for Chinese and English. Tool and parameter names are code and the same in both languages. The web page picks the run language from the UI language.
+
+Command-line run (from the project root):
 
 ```powershell
-.\.venv\Scripts\python.exe -m lessons.lesson_01_tool_selection.main
+.\.venv\Scripts\python.exe -m lessons.lesson_01_tool_selection.main             # Chinese
+.\.venv\Scripts\python.exe -m lessons.lesson_01_tool_selection.main --locale en # English
 ```
 
-百炼请求需要本机的 `local_config.py` 和 `DASHSCOPE_API_KEY`。终端打印的每轮请求体不包含 API Key。也可以在网页课程导航中进入本课，查看源码、真实运行事件和回放；回放只读已记录的事件，不会再请求模型或执行工具。
+Bailian requests need `local_config.py` on this machine and `DASHSCOPE_API_KEY`. The request body printed each round never contains the API key. You can also open this lesson from the course navigation on the web page to see the source, real run events and replay; replay only reads recorded events and never requests the model or runs tools again.

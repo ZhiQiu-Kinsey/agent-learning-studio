@@ -1,7 +1,8 @@
 """先读取本地时间，再用返回值做加法。"""
 
-from course.runner import run_cli
-from lessons.lesson_01_tool_selection.tools import AVAILABLE_TOOLS, TOOLS
+from course.i18n import SOURCE_LOCALE
+from course.runner import AgentSetup, run_cli
+from lessons.lesson_01_tool_selection.tools import available_tools, tool_definitions
 
 
 SYSTEM_PROMPT = (
@@ -17,16 +18,19 @@ SYSTEM_PROMPT = (
 )
 
 
-def main():
+def setup(locale):
+    """One native run's system prompt and the tools shared with tool-selection. This lesson only speaks zh-CN so far."""
+    return AgentSetup(SYSTEM_PROMPT, tool_definitions(locale), available_tools(locale))
+
+
+def main(locale=None):
     run_cli(
+        setup(SOURCE_LOCALE),
         title="根据工具结果继续调用",
         examples=[
             "把现在的小时和分钟相加。",
             "计算 19 加 23，并告诉我现在几点。",
         ],
-        system_prompt=SYSTEM_PROMPT,
-        tools=TOOLS,
-        available_tools=AVAILABLE_TOOLS,
         max_tool_rounds=3,
     )
 

@@ -5,9 +5,9 @@
 """
 from course.execution import RunContext
 from lessons.lesson_03_fail_safely import main
-# 提示词与工具页从入口模块读这两项，与 main.py 用的是同一份。
-from lessons.lesson_03_fail_safely.main import SYSTEM_PROMPT  # noqa: F401
-from lessons.lesson_03_fail_safely.tools import AVAILABLE_TOOLS, TOOLS  # noqa: F401
+# 提示词与工具页从入口模块的 setup(locale) 读取，与 main.py 用的是同一份。
+from lessons.lesson_03_fail_safely.main import setup  # noqa: F401
+from lessons.lesson_03_fail_safely.tools import AVAILABLE_TOOLS
 
 # 练习 id → 程序构造的调用：未登记的工具名，或无法解析的参数文本。
 FAULTS = {

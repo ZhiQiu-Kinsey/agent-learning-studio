@@ -57,7 +57,7 @@
           "title": "一次请求就是一个 JSON 对象",
           "paragraphs": [
             "Agent 的每一步都从一次模型请求开始，而一次请求就是程序发出去的一个 JSON 对象。导学里说过，Agent 由模型决定下一步、由程序去执行。那“问一次模型”到底发生了什么？在聊天网页里，你打一句话，回答一段一段冒出来，看上去像在和一个人对话。换到程序这边，它是一次普通的 HTTP 请求：程序把一个 JSON 对象发给服务商，服务商算完，再返回一个 JSON 对象。网页上回答一段段冒出来，是服务商边写边发；本课等它写完，一次收回。",
-            "本课把这一步单独拿出来看：不带工具，只发一次请求，看清发出去什么、收回来什么。后面每一课的请求，都是在这个对象上加字段。先把它读懂，以后看到 tools、tool_calls 这些新字段，你就知道它们加在哪里、为什么加。",
+            "本课把这一步单独拿出来看：不带工具，只发一次请求，看清发出去什么、收回来什么。后面每一课的请求，都是在这个对象上加字段。先把它读懂，以后看到 `tools`、`tool_calls` 这些新字段，你就知道它们加在哪里、为什么加。",
             "请求体是一个 JSON 对象。本课的 build_request 只写 messages：一个列表，按顺序放消息，每条消息有 role 和 content。model 不用自己写，平台会按当前连接补上。所以在实验台 request 事件的 body 里，你会看到 model 和 messages 两个字段；设了输出上限时，还会多一个 max_tokens。",
             "请求体就是模型这一次能拿到的全部材料。你在网页别处写的说明、上一次运行的回答、你电脑上的文件，只要没写进这个对象，模型就看不到。所以读一次运行，先问一句：这次模型被告诉了什么？答案全在 request 事件里。"
           ]
@@ -131,7 +131,7 @@
           "paragraphs": [
             "响应也是一个 JSON 对象：回答在 choices[0].message.content，旁边的 finish_reason 说明输出为什么停下。choices 是候选回答的列表。有的服务商允许一次要几个候选，默认只有一个，所以本课的 read_reply 只读第一个。其中 message 的 role 是 assistant，content 是回答的文字。",
             "只读 content，你分不出一句话是写完了还是被截断了。举个编的例子：content 是“Agent 是一种能根据目标自己决定”，读起来像没说完，可也说不定模型就这么写。finish_reason 把这件事说清楚：stop 表示模型自己写完了；length 表示写到了输出上限，被截断了。这个上限通常就是请求里的 max_tokens；请求没写时，用的是服务商的默认上限。",
-            "练习“把输出上限设得很小”把 max_tokens 设成 16，运行后看 response 里的 finish_reason 是不是 length，再看 content 剩下多少。到了{{lesson:tool-proposals}}，你还会看到第三个值 tool_calls，表示模型提出了调用。有的服务商还有别的值，比如内容被安全策略拦下，以服务商文档为准；实验报告遇到不认识的值，会照原样显示，并标为“其他”。",
+            "练习“把输出上限设得很小”把 max_tokens 设成 16，运行后看 response 里的 finish_reason 是不是 length，再看 content 剩下多少。到了{{lesson:tool-proposals}}，你还会看到第三个值 tool_calls，表示模型提出了调用。有的服务商还有别的值，比如内容被安全策略拦下，以服务商文档为准；实验报告遇到不认识的值，会照原样显示，含义一栏写“其他，见服务商文档”。",
             "结束原因只说明输出为什么停下，不评价内容。stop 不代表回答正确，length 也不代表请求失败：这两种情况下，请求都成功返回了。读响应时可以按这个顺序：先看 finish_reason，确认输出是否完整；再读 content；最后看和 choices 并列的 usage，知道这次花了多少。"
           ]
         },
@@ -215,7 +215,7 @@
               "actor": "本课代码",
               "title": "build_request 只写 messages",
               "body": "system 规则在前，user 问题在后；没设输出上限时不放 max_tokens。",
-              "code": "{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"你是编程课的助教。……\"},\n    {\"role\": \"user\", \"content\": \"用一句话解释什么是 Agent。\"}\n  ]\n}",
+              "code": "{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"……\"},\n    {\"role\": \"user\", \"content\": \"……\"}\n  ]\n}",
               "language": "json",
               "evidence": "展开 request 事件的 body.messages，核对条数和每条的 role。"
             },
@@ -317,48 +317,48 @@
           "id": "code-build-request",
           "type": "annotated-source",
           "path": "lessons/lesson_chat_request/runtime.py",
-          "start": 6,
-          "end": 34,
+          "start": 5,
+          "end": 31,
           "notes": [
             {
               "id": "n9",
-              "line": 9,
-              "anchor": "FINISH_REASONS = {\"stop\"",
-              "text": "只列最常见的两个结束原因，实验报告用它把 finish_reason 翻成中文；别的值照原样显示。"
+              "line": 5,
+              "anchor": "from lessons.lesson_chat_request.locales import texts_for",
+              "text": "报告标签、结束原因的解释这些运行时文本不写在这里，按运行语言各放一份（zh_CN.py、en.py）；texts_for 取这次运行的那一份。"
             },
             {
               "id": "n14",
-              "line": 14,
-              "anchor": "system_prompt: str = Field(default=DEFAULT_SYSTEM",
-              "text": "系统提示词是一个输入参数。练习“去掉系统提示词”把它设成空字符串。"
+              "line": 11,
+              "anchor": "system_prompt: str = Field(max_length=400)",
+              "text": "系统提示词是一个输入参数，这里不给默认值：预设写在 lesson.json 里，每种运行语言一份。练习“去掉系统提示词”把它设成空字符串。"
             },
             {
               "id": "n16",
-              "line": 16,
+              "line": 13,
               "anchor": "max_tokens: int = Field(default=0, ge=0, le=1024)",
               "text": "用 0 表示“不设上限”。这样表单里只有一个数字框，不必再加开关。"
             },
             {
               "id": "n22",
-              "line": 22,
+              "line": 19,
               "anchor": "def build_request(question: str, system_prompt: str, max_tokens: int)",
               "text": "这个函数只做一件事：把问题和设置拼成请求体。它不发请求，也碰不到密钥。"
             },
             {
               "id": "n25",
-              "line": 25,
+              "line": 22,
               "anchor": "if system_prompt.strip():",
               "text": "只有系统提示词非空时才放 system 消息。全是空格也算空，免得发出一条没有内容的规则。"
             },
             {
               "id": "n29",
-              "line": 29,
+              "line": 26,
               "anchor": "messages.append({\"role\": \"user\", \"content\": question})",
               "text": "user 消息永远在最后。messages 的顺序就是模型读到的顺序。"
             },
             {
               "id": "n31",
-              "line": 31,
+              "line": 28,
               "anchor": "if max_tokens:",
               "text": "max_tokens 为 0 时请求体里就没有这个字段，输出上限交给服务商的默认值。"
             }
@@ -368,60 +368,60 @@
           "id": "code-read-reply",
           "type": "annotated-source",
           "path": "lessons/lesson_chat_request/runtime.py",
-          "start": 37,
-          "end": 68,
+          "start": 34,
+          "end": 66,
           "notes": [
             {
               "id": "n39",
-              "line": 39,
+              "line": 36,
               "anchor": "choices = response.get(\"choices\")",
               "text": "回答在 choices 列表里。先确认它存在，响应格式不对就报错，而不是把空字符串当成回答。"
             },
             {
               "id": "n46",
-              "line": 46,
+              "line": 43,
               "anchor": "\"content\": message.get(\"content\") or \"\",",
               "text": "content 可能是 null 或空字符串。这里统一成空字符串，回答长度就是 0。"
             },
             {
               "id": "n48",
-              "line": 48,
+              "line": 45,
               "anchor": "\"reasoning\": message.get(\"reasoning_content\"),",
               "text": "推理内容单独取出，不混进回答。没有这个字段的模型，这里是 None。"
             },
             {
               "id": "n49",
-              "line": 49,
+              "line": 46,
               "anchor": "\"finish_reason\": choices[0].get(\"finish_reason\"),",
               "text": "结束原因和 message 并列，都在 choices[0] 里。"
             },
             {
               "id": "n50",
-              "line": 50,
+              "line": 47,
               "anchor": "\"prompt_tokens\": usage.get(\"prompt_tokens\"),",
               "text": "用 get 取用量：服务商没报告时得到 None，报告里显示“未报告”，而不是 0。"
             },
             {
               "id": "n54",
-              "line": 54,
+              "line": 51,
               "anchor": "\"reasoning_tokens\": details.get(\"reasoning_tokens\"),",
               "text": "推理 Token 在 completion_tokens_details 里。它是 completion_tokens 的一部分，不是另加的。"
             },
             {
               "id": "n58",
-              "line": 58,
+              "line": 55,
               "anchor": "def run(context: RunContext) -> str:",
               "text": "运行入口。整个流程只有三步，每一步都有编号注释。"
             },
             {
               "id": "n64",
-              "line": 64,
+              "line": 62,
               "anchor": "response = context.complete(body)",
               "text": "只调用一次 context.complete，所以这次运行只有一对 request 和 response 事件。lesson.json 的 max_rounds 设为 1，多发一次就会被平台拦下。"
             },
             {
               "id": "n68",
-              "line": 68,
+              "line": 66,
               "anchor": "return reply[\"content\"] or",
               "text": "返回值记为最终回答。content 为空时不编一句话填上，而是如实说明它是空的。"
             }
@@ -429,8 +429,8 @@
           "folds": [
             {
               "id": "fold-report",
-              "start": 67,
-              "end": 67,
+              "start": 65,
+              "end": 65,
               "label": "平台：发布实验报告（_report）"
             }
           ]
@@ -439,30 +439,30 @@
           "id": "code-send",
           "type": "annotated-source",
           "path": "course/api_client.py",
-          "start": 32,
-          "end": 48,
+          "start": 19,
+          "end": 35,
           "notes": [
             {
               "id": "n32",
-              "line": 32,
-              "anchor": "def send_bailian(request_body, api_key, timeout_seconds=60):",
-              "text": "后端发送百炼请求的函数。请求体和密钥分成两个参数传进来，事件只记录前一个。"
+              "line": 19,
+              "anchor": "def send_bailian(request_body, api_key, timeout_seconds=60, *, locale=SOURCE_LOCALE):",
+              "text": "后端发送百炼请求的函数。请求体和密钥分成两个参数传进来，事件只记录前一个；locale 只决定出错时提示用哪种语言。"
             },
             {
               "id": "n38",
-              "line": 38,
+              "line": 25,
               "anchor": "data=json.dumps(request_body).encode(\"utf-8\"),",
               "text": "HTTP 正文就是 request 事件里记录的那份请求体。"
             },
             {
               "id": "n40",
-              "line": 40,
+              "line": 27,
               "anchor": "\"Authorization\": \"Bearer \" + api_key,",
               "text": "密钥只在这里出现：放进 Authorization 请求头，不进请求体，也不进运行记录。"
             },
             {
               "id": "n48",
-              "line": 48,
+              "line": 35,
               "anchor": "return json.loads(response.read().decode(\"utf-8\"))",
               "text": "响应正文解析成字典原样返回，response 事件记录的就是它。"
             }

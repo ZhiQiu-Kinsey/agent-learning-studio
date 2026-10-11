@@ -1,1 +1,1 @@
-"""执行工具与回传结果：模型提出调用，Python 按白名单执行，再把工具结果交回模型。"""
+"""Executing tools and returning results: the model proposes a call, Python runs it from an allowlist, the result goes back to the model."""

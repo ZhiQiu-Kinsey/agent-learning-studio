@@ -2,7 +2,7 @@
 import json
 
 from course.execution import RunContext
-from lessons.lesson_01_tool_selection.tools import TOOLS
+from lessons.lesson_01_tool_selection.tools import tool_definitions
 
 DEFAULT_QUESTION = "帮我计算 19 加 23。"
 SYSTEM_PROMPT = (
@@ -31,7 +31,7 @@ def run(context: RunContext) -> str:
     question = context.question.strip() or DEFAULT_QUESTION
     # 1. 请求体比“一次模型请求”多了 tools 和 tool_choice：工具定义随请求一起发给模型。
     body = {"messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}],
-            "tools": TOOLS, "tool_choice": "auto"}
+            "tools": tool_definitions(context.locale), "tool_choice": "auto"}
     # 2. 只发这一次请求。
     response = context.complete(body)
     choices = response.get("choices")

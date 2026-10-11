@@ -36,14 +36,14 @@ class ProposalTests(unittest.TestCase):
     def test_request_carries_the_tool_definitions(self):
         _, events = run_case("sum")
         body = of(events, "request")[0]["body"]
-        self.assertEqual(body["tools"], tools.TOOLS)
+        self.assertEqual(body["tools"], tools.tool_definitions("zh-CN"))
         self.assertEqual(body["tool_choice"], "auto")
         self.assertEqual([m["role"] for m in body["messages"]], ["system", "user"])
 
     def test_sum_proposal_is_recorded_but_never_executed(self):
-        # 换掉白名单字典里的函数：真有地方按名字执行工具，测试就会失败。
-        never = lambda **_: self.fail("不应执行工具")
-        with patch.dict(tools.AVAILABLE_TOOLS, {"add_numbers": never, "get_current_time": never}):
+        # 换掉白名单里的函数：真有地方按名字执行工具，测试就会失败。
+        never = lambda *_, **__: self.fail("不应执行工具")
+        with patch.object(tools, "add_numbers", never), patch.object(tools, "get_current_time", never):
             answer, events = run_case("sum")
         self.assertEqual(of(events, "tool_call"), [])
         self.assertEqual(of(events, "tool_result"), [])
