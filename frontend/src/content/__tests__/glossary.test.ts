@@ -119,6 +119,17 @@ describe("English prose", () => {
     expect(termsIn("toolbox, tokenizer, finish_reason", en)).toEqual([]);
   });
 
+  it("ignores Latin-only Chinese aliases in English prose but keeps Chinese forms", () => {
+    const schema = {
+      ...english("json-schema", "JSON Schema", "JSON Schema", "JSON Schema"),
+      aliases: ["Schema", "结构定义"],
+    };
+    const matcher = buildMatcher([schema], "en")!;
+    expect(termsIn("The tool schema lists its parameters.", matcher)).toEqual([]);
+    expect(termsIn("A JSON Schema describes it.", matcher)).toEqual(["json-schema"]);
+    expect(termsIn("回落段落里的结构定义", matcher)).toEqual(["json-schema"]);
+  });
+
   it("accepts a plural ending and keeps the matched text unchanged", () => {
     expect(termsIn("Count the tokens and the caches.", en)).toEqual([
       "token",

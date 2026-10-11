@@ -37,6 +37,7 @@ export interface GlossaryMatcher {
 export type Segment = string | { entry: GlossaryEntry; text: string };
 
 const LATIN_EDGE = /[A-Za-z0-9]/;
+const CJK = /[\u3400-\u9fff]/;
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const normalise = (value: string, english = false) =>
   (english ? value.replace(/-/g, " ") : value)
@@ -57,7 +58,9 @@ export const isEnglishProse = (language?: string) =>
  * name and aliases (`term`, `local_aliases`) match case-insensitively as whole
  * words, a hyphen equals a space ("tool-calling" / "tool calling") and a
  * Latin name may take a plural ending ("tokens", "caches"). The Chinese forms
- * stay in the matcher for paragraphs that fall back to Chinese.
+ * stay in the matcher for paragraphs that fall back to Chinese, but Latin-only
+ * Chinese aliases ("Schema", "span") are dropped: in English prose they are
+ * ordinary words, and the English aliases already decide what matches.
  */
 export function buildMatcher(
   entries: readonly GlossaryEntry[],
@@ -66,12 +69,15 @@ export function buildMatcher(
   const english = isEnglishProse(language);
   const forms = new Map<string, GlossaryEntry | null>();
   for (const entry of entries) {
-    const names = [entry.zh, entry.en, ...(entry.aliases ?? [])];
-    if (english)
-      names.unshift(
-        ...(entry.term ? [entry.term] : []),
-        ...(entry.local_aliases ?? []),
-      );
+    const chinese = [entry.zh, ...(entry.aliases ?? [])];
+    const names = english
+      ? [
+          ...(entry.term ? [entry.term] : []),
+          ...(entry.local_aliases ?? []),
+          entry.en,
+          ...chinese.filter((form) => CJK.test(form)),
+        ]
+      : [entry.zh, entry.en, ...(entry.aliases ?? [])];
     for (const form of names) {
       const key = normalise(form.trim(), english);
       if (key && !forms.has(key)) forms.set(key, entry);
