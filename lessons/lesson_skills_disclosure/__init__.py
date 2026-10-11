@@ -1,1 +1,1 @@
-"""课程实现；以 curriculum/catalog.json 中的状态为准。"""
+"""Skills and progressive disclosure: every skill body in the system prompt, or a catalog and load on demand."""

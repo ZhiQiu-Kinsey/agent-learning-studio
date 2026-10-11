@@ -1,12 +1,17 @@
-"""“依赖式多轮调用”的离线测试模型：依赖调用的参数取自本次真实时钟结果；工具仍真实执行。"""
-from server.offline import CompletionScript, result_answer, tool_call
+"""Offline test model for dependent-calls: the dependent call's arguments come from this run's real clock; the tools still really run."""
+from server.offline import CompletionScript, offline_marker, result_answer, tool_call
+
+CHAIN_ANSWERS = {
+    "zh-CN": "真实本地时间为 {time}。小时 {hour} + 分钟 {minute} = {total}。",
+    "en": "The real local time is {time}. Hour {hour} + minute {minute} = {total}.",
+}
 
 
-def create_completion(exercise_id, inputs=None):
+def create_completion(exercise_id, inputs=None, locale="zh-CN"):
     if exercise_id == "both":
-        return CompletionScript(_independent)
+        return CompletionScript(lambda results: _independent(results, locale))
     if exercise_id != "chain":
-        raise ValueError("“依赖式多轮调用”没有此测试样本。")
+        raise ValueError(f"dependent-calls has no offline exercise {exercise_id!r}")
 
     def decide(results):
         if not results:
@@ -16,14 +21,16 @@ def create_completion(exercise_id, inputs=None):
             return {"tool_calls": [tool_call("add_numbers", {"a": clock["hour"], "b": clock["minute"]}, 2)]}
         if all(result["ok"] for result in results):
             clock = results[0]["result"]
-            return {"content": f"【离线脚本回答】真实本地时间为 {clock['local_datetime']}。小时 {clock['hour']} + 分钟 {clock['minute']} = {results[-1]['result']}。"}
-        return result_answer(results)
+            answer = CHAIN_ANSWERS[locale].format(time=clock["local_datetime"], hour=clock["hour"],
+                                                  minute=clock["minute"], total=results[-1]["result"])
+            return {"content": offline_marker(locale) + answer}
+        return result_answer(results, locale)
 
     return CompletionScript(decide)
 
 
-def _independent(results):
-    """两个任务互不依赖：第一轮同时提出加法和查时间，看到两个结果后作答。"""
+def _independent(results, locale):
+    """The two tasks don't depend on each other: round 1 proposes the sum and the time together, then answers from both results."""
     if results:
-        return result_answer(results)
+        return result_answer(results, locale)
     return {"tool_calls": [tool_call("add_numbers", {"a": 19, "b": 23}, 1), tool_call("get_current_time", {}, 2)]}

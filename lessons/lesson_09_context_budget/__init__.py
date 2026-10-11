@@ -1,1 +1,1 @@
-"""上下文预算与截取窗口。"""
+"""Context budget and the truncation window (context-budget)."""

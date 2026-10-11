@@ -74,7 +74,7 @@
             "模型在同一个响应里写下的所有参数，都是在看到任何工具结果之前定下的。一次响应是模型一口气生成的一段输出：它在这段输出里提出 get_current_time，可这个工具要等响应返回、Python 执行之后才有结果。生成这段输出时结果还不存在，模型没办法把它写进同一个响应里的加法参数。",
             "结果要进入下一次请求，模型才看得到。第一轮模型提出 get_current_time；run_agent 先把带 tool_calls 的 assistant 消息追加进 messages，再执行工具，把结果包成一条 role 为 tool 的消息，用同一个调用 id 配对。于是第二轮请求的 messages 有四条：messages[0] 是系统提示词，messages[1] 是用户问题，messages[2] 是上一轮的调用提议，messages[3] 是时间结果。模型读到 messages[3] 里的 hour、minute，才能把它们填进 add_numbers 的 a、b。",
             "运行器不会替模型补参数。它按模型写下的 arguments 原样解析、原样执行。如果模型在同一个响应里先提出查时间、再提出加法，并在加法参数里写了猜的数字，Python 会先查时间、再用猜的数字做加法：顺序完全正确，数据却没有传过去。",
-            "这也是 SYSTEM_PROMPT 要写明“必须先单独调用 get_current_time”“不要并行调用这两个有依赖关系的工具”的原因。工具定义只能描述每个参数的类型和含义，写不出“b 要等另一个工具的结果”，依赖顺序只能靠系统提示词交代。提示词是要求，不是保证；模型照没照做，要看这次运行实际记下的调用。"
+            "这也是 system_prompt 要写明“必须先单独调用 get_current_time”“不要并行调用这两个有依赖关系的工具”的原因。工具定义只能描述每个参数的类型和含义，写不出“b 要等另一个工具的结果”，依赖顺序只能靠系统提示词交代。提示词是要求，不是保证；模型照没照做，要看这次运行实际记下的调用。"
           ]
         },
         {
@@ -258,7 +258,7 @@
               "actor": "运行器 → 下一轮",
               "title": "把返回值加入消息历史",
               "body": "假设工具返回 11 点 33 分。运行器把结果加入 role=tool 消息，第二轮请求重新携带这段历史。这里只展示与计算相关的字段。",
-              "code": "// 假设返回值，仅展示相关字段\n{\n  \"ok\": true,\n  \"result\": {\n    \"hour\": 11,\n    \"minute\": 33\n  }\n}",
+              "code": "// Assumed return value; only the relevant fields\n{\n  \"ok\": true,\n  \"result\": {\n    \"hour\": 11,\n    \"minute\": 33\n  }\n}",
               "evidence": "展开第二轮 request，确认上一轮真实时间结果已经出现在 messages。"
             },
             {
@@ -277,7 +277,7 @@
               "actor": "工具 → 模型",
               "title": "答案背后，要有完整的数据传递",
               "body": "示例输入得到 44。最后还要核对加法工具返回与模型回答。真实轨迹可能不同，轮数本身不能证明数据依赖成立。",
-              "code": "// 假设 11:33 对应的计算结果\n{ \"ok\": true, \"result\": 44 }\n\n// 应逐步核对的链路\ntime.hour   → a\ntime.minute → b\ntool_result → 最终回答",
+              "code": "// Assumed result for 11:33\n{ \"ok\": true, \"result\": 44 }\n\n// The chain to check step by step\ntime.hour   → a\ntime.minute → b\ntool_result → final answer",
               "evidence": "确认最终答案依据实际加法结果，再与两个独立任务的调用安排作对比。"
             }
           ]
@@ -322,11 +322,11 @@
           "type": "whats-new"
         },
         {
-          "id": "code-dependency-prompt",
+          "id": "code-setup",
           "type": "annotated-source",
           "path": "lessons/lesson_02_dependent_calls/main.py",
-          "start": 3,
-          "end": 18,
+          "start": 5,
+          "end": 15,
           "notes": [
             {
               "id": "n4",
@@ -335,32 +335,47 @@
               "text": "直接复用{{lesson:tool-selection}}的 tool_definitions 和 available_tools。本课只改系统提示词，“本课新增”里工具定义显示为沿用，方便对照。"
             },
             {
+              "id": "n12",
+              "line": 12,
+              "anchor": "system_prompt=texts_for(locale).system_prompt,",
+              "text": "系统提示词按运行语言从本课的 locales 读取。与{{lesson:tool-selection}}相比，本课只改了这一段文字，下面逐句看。"
+            }
+          ]
+        },
+        {
+          "id": "code-dependency-prompt",
+          "type": "annotated-source",
+          "path": "lessons/lesson_02_dependent_calls/locales/zh_CN.py",
+          "start": 5,
+          "end": 15,
+          "notes": [
+            {
               "id": "n10",
-              "line": 11,
+              "line": 8,
               "anchor": "\"如果用户同时要求独立的计算和查时间，可以调用两个合适的工具。\"",
               "text": "独立任务允许同一轮提出两个调用，这是“两个独立任务”那组要观察的情况。"
             },
             {
               "id": "n11",
-              "line": 12,
+              "line": 9,
               "anchor": "\"时间工具返回的是运行本 Python 程序的机器本地时间和时区；\"",
               "text": "说清时间来自哪台机器，免得模型把它说成用户所在地的时间。"
             },
             {
               "id": "n13",
-              "line": 14,
+              "line": 11,
               "anchor": "\"如果用户要求把当前小时和分钟相加，必须先单独调用 get_current_time；\"",
               "text": "工具定义无法表达“b 依赖 a 的结果”，所以依赖顺序写在系统提示词里：先单独取时间。"
             },
             {
               "id": "n15",
-              "line": 16,
+              "line": 13,
               "anchor": "\"不要并行调用这两个有依赖关系的工具，也不要猜测或编造参数。\"",
               "text": "同一轮的参数在提出时就已写定，看不到彼此的结果；有依赖时同轮提出只能靠猜，所以明确禁止。"
             },
             {
               "id": "n16",
-              "line": 17,
+              "line": 14,
               "anchor": "\"拿到工具结果后再回答。\"",
               "text": "最后一句约束回答时机：没看到工具结果之前，不写最终回答。"
             }
@@ -403,7 +418,7 @@
           "id": "code-decision",
           "type": "decision",
           "title": "依赖顺序交给多轮循环与提示词，不在 Python 里写死",
-          "chosen": "运行器保持通用：每轮把真实工具结果追加进 messages，由模型在下一轮根据 hour、minute 提出加法；SYSTEM_PROMPT 只声明依赖规则和禁止猜参数。",
+          "chosen": "运行器保持通用：每轮把真实工具结果追加进 messages，由模型在下一轮根据 hour、minute 提出加法；system_prompt 只声明依赖规则和禁止猜参数。",
           "alternatives": [
             {
               "id": "hardcode-order",
@@ -999,8 +1014,8 @@
   },
   "code_notes": [
     {
-      "name": "SYSTEM_PROMPT",
-      "note": "main.py 里的系统提示词，作为第一条 system 消息发送；本课在这里写明先查时间、不许猜参数。"
+      "name": "system_prompt",
+      "note": "本课 locales 里的系统提示词，作为第一条 system 消息发送；本课在这里写明先查时间、不许猜参数。"
     },
     {
       "name": "tool_definitions",

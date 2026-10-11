@@ -1,22 +1,21 @@
-"""连问几轮：程序把每轮的问题和回答记在 history 里，下一次请求再把它们发出去。"""
+"""Ask several turns in a row: the program keeps each question and answer in history and sends them with the next request."""
 from typing import Literal
 
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
+from lessons.lesson_multi_turn_history.locales import texts_for
 
-SYSTEM = "你是简洁的助手，每次只用一句话回答。"
-# 第一轮说出一个事实，后面的问题都要靠这个事实才能回答。
-TURNS = [
-    "我养了一只猫，名字叫团子，今年三岁。请只回答“记住了”。",
-    "我的猫叫什么名字？",
-    "它今年几岁？",
-]
-FACT = "团子"
+
+def reply_text(response: dict, missing_choices: str) -> str:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise ValueError(missing_choices)
+    return (choices[0].get("message") or {}).get("content") or ""
 
 
 class Inputs(LessonInputs):
-    # full：每轮带上之前的全部消息；latest_only：只发 system 和这一轮的问题。
+    # full: every turn carries all earlier messages; latest_only: only system and this turn's question.
     history: Literal["full", "latest_only"] = "full"
     turns: int = Field(default=2, ge=2, le=3)
 
@@ -24,63 +23,63 @@ class Inputs(LessonInputs):
 INPUT_MODEL = Inputs
 
 
-def reply_text(response: dict) -> str:
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        raise ValueError("模型响应缺少 choices[0]，无法读取回答。")
-    return (choices[0].get("message") or {}).get("content") or ""
-
-
 def run(context: RunContext) -> str:
+    t = texts_for(context.locale)
     values = Inputs.model_validate(context.inputs)
-    # 1. 消息历史只存在这个 Python 列表里，模型那边什么都不留。
-    history = [{"role": "system", "content": SYSTEM}]
+    # 1. The message history lives only in this Python list; the model keeps nothing.
+    history = [{"role": "system", "content": t.system_prompt}]
     turns = []
-    for number, question in enumerate(TURNS[:values.turns], start=1):
-        # 2. 这一轮的问题先进历史。
+    for number, question in enumerate(t.turns[:values.turns], start=1):
+        # 2. This turn's question goes into the history first.
         history.append({"role": "user", "content": question})
-        # 3. 决定这次发什么：整段历史，或者只有 system 和这一轮的问题。
+        # 3. Decide what to send: the whole history, or only system and this turn's question.
         messages = history if values.history == "full" else [history[0], history[-1]]
         response = context.complete({"messages": messages}, round_number=number)
-        answer = reply_text(response)
+        answer = reply_text(response, t.missing_choices)
         turns.append({"messages": list(messages), "response": response, "answer": answer})
-        # 4. 回答作为 assistant 消息放回历史；不放回去，下一轮就发不出它。
+        # 4. The answer goes back into the history as an assistant message; otherwise the next turn can't send it.
         history.append({"role": "assistant", "content": answer})
     _report(context, values, turns)
     return answer
 
 
 def _report(context: RunContext, values: Inputs, turns: list[dict]) -> None:
-    """平台：把每轮发出的消息数和用量整理成实验报告。"""
+    """Platform: turn each turn's message count and usage into the lab report."""
+    t = texts_for(context.locale)
+
     def prompt_tokens(turn):
         return (turn["response"].get("usage") or {}).get("prompt_tokens")
 
     def completion_tokens(turn):
         return (turn["response"].get("usage") or {}).get("completion_tokens")
 
-    rows = [[number, len(turn["messages"]), "是" if any(FACT in m["content"] for m in turn["messages"]) else "否",
-             "未报告" if prompt_tokens(turn) is None else prompt_tokens(turn),
-             "未报告" if completion_tokens(turn) is None else completion_tokens(turn), turn["answer"]]
+    def shown(value):
+        return t.value_not_reported if value is None else value
+
+    def has_fact(messages):
+        return any(t.fact in message["content"] for message in messages)
+
+    rows = [[number, len(turn["messages"]), t.value_yes if has_fact(turn["messages"]) else t.value_no,
+             shown(prompt_tokens(turn)), shown(completion_tokens(turn)), turn["answer"]]
             for number, turn in enumerate(turns, start=1)]
     first, last = prompt_tokens(turns[0]), prompt_tokens(turns[-1])
     second = turns[1]
     context.emit("lesson.report", {
-        "title": "每轮发出的消息与用量",
-        "summary": ("每轮都把整段历史重发一遍。" if values.history == "full" else "每轮只发 system 和这一轮的问题。")
-                   + "数字来自各轮 response 的 usage；没有报告的写“未报告”。",
+        "title": t.report_title,
+        "summary": t.summary_full if values.history == "full" else t.summary_latest_only,
         "checks": [
-            {"label": "第二轮请求里有第一轮说的事实", "passed": any(FACT in m["content"] for m in second["messages"]),
-             "detail": f"逐条检查第二轮实际发出的 messages 里有没有“{FACT}”。"},
-            {"label": "第二轮回答提到了这个事实", "passed": FACT in second["answer"],
-             "detail": "检查第二轮 response 的 content，只说明这一次的回答。"},
+            {"label": t.check_fact_sent, "passed": has_fact(second["messages"]),
+             "detail": t.check_fact_sent_detail.format(fact=t.fact)},
+            {"label": t.check_fact_answered, "passed": t.fact in second["answer"],
+             "detail": t.check_fact_answered_detail},
         ],
         "metrics": [
-            {"label": "模式", "value": "整段历史" if values.history == "full" else "只发本轮问题"},
-            {"label": "模型调用数", "value": len(turns)},
-            {"label": "最后一轮发出的消息数", "value": len(turns[-1]["messages"])},
-            {"label": "提示 Token 从第一轮到最后一轮",
-             "value": "未报告" if first is None or last is None else f"{first} → {last}"},
-            {"label": "学习者备注", "value": context.question.strip() or "（空）"},
+            {"label": t.label_mode, "value": t.mode_values[values.history]},
+            {"label": t.label_model_calls, "value": len(turns)},
+            {"label": t.label_last_message_count, "value": len(turns[-1]["messages"])},
+            {"label": t.label_prompt_growth,
+             "value": t.value_not_reported if first is None or last is None else t.prompt_growth.format(first=first, last=last)},
+            {"label": t.label_note, "value": context.question.strip() or t.value_empty},
         ],
-        "table": {"columns": ["轮", "发出的消息数", "包含事实", "提示 Token", "完成 Token", "回答"], "rows": rows},
+        "table": {"columns": list(t.columns), "rows": rows},
     })

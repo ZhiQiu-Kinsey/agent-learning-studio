@@ -1,18 +1,22 @@
-# 记忆的更新、过期与召回范围（`memory-lifecycle`）
+# Memory updates, expiry, and recall scope (`memory-lifecycle`)
 
-本课不调用模型。三个练习都在一次性临时库里运行，真实运行和离线测试模式走同一段代码，不碰“持久记忆”一课的固定教学库。存储类沿用 `lessons/lesson_10_persistent_memory/store.py`。
+English · [简体中文](README.zh-CN.md)
 
-| 练习 | 做什么 | 看哪里 |
+This lesson calls no model. All three exercises run in a throwaway temporary store; real runs and offline test mode take the same code path and never touch the fixed teaching store of "Persistent memory". The store class is `lessons/lesson_10_persistent_memory/store.py`.
+
+| Exercise | What it does | Where to look |
 | --- | --- | --- |
-| 两个写入方与过时写入 | A、B 两条连接读到同一个版本；A 先写成功，B 带旧版本写入被 `VersionConflict` 拒绝，重新读取后带新版本写入 | `conflict_and_update` 事件的 `stale_rejected`、`error`、`value_after_reject` |
-| 过期、删除与重开核对 | 写一条已到期的提醒：`get` 读不到但 `stored` 找得到；`delete` 后换新连接核对 | `expired`、`deleted` 事件；把 `expires_in_seconds` 改成正数可以对照“还没到期” |
-| 按范围召回，召回内容只当数据 | 预置 persistent 与两个任务的 current_task 记录，为 task-now 召回、包装成数据、结束任务、再为 task-next 召回 | `recalled`、`packaged`（`sent_to_model` 为 false）、`task_ended` 事件 |
+| Two writers and a stale write | Connections A and B read the same version; A writes first and succeeds, B writes with the old version and `VersionConflict` rejects it, then B rereads and writes with the new version | `stale_rejected`, `error`, `value_after_reject` of the `conflict_and_update` event |
+| Expiry, deletion, and reopen check | Writes a reminder that has already expired: `get` cannot read it but `stored` finds it; after `delete`, a new connection checks again | The `expired` and `deleted` events; set `expires_in_seconds` to a positive number for the "not expired yet" comparison |
+| Recall by scope; recalled content is only data | Seeds persistent records and current_task records of two tasks, recalls for task-now, packages as data, ends the task, recalls for task-next | The `recalled`, `packaged` (`sent_to_model` is false) and `task_ended` events |
 
-- 乐观并发控制只防同一个库里的过时写入；本课两个写入方在同一进程里先后执行，不能证明跨机器或数据库副本的一致性。
-- 过期是读取规则，删除是存储操作：到期的行仍在表里，直到显式删除。删除不清零版本：`versions` 表记着每个键写到了第几版，同一个键删除后重建，版本接着往上加，删除前读到旧版本的写入方仍会被拒绝。
-- `instruction_like` 是正则粗筛，会漏报也会误报，不是安全边界。包装好的消息只展示、不发送；模型读到这类数据会不会照做，留到提示注入课用真实模型检验。
+- Optimistic concurrency control only stops stale writes within one store. The two writers here run one after the other in one process; this does not prove consistency across machines or database replicas.
+- Expiry is a read rule, deletion is a storage operation: an expired row stays in the table until it is deleted explicitly. Deletion does not reset the version: the `versions` table records how far each key has counted, so a key recreated after deletion continues counting up, and a writer holding a version read before the deletion is still rejected.
+- `instruction_like` is a rough regex screen that misses some cases and flags harmless ones; it is not a security boundary. It knows a few Chinese and English phrasings, whatever the run language. The packaged messages are only shown, not sent; whether a model acts on such data is tested with a real model in the prompt-injection lesson.
 
-参考与取舍见 `docs/architecture/budget-memory-sources.md`。
+**Run language:** this lesson runs in Chinese and in English. The values and sources written to the store, the report labels and the answers built by code are in `locales/zh_CN.py` and `locales/en.py`; the version-conflict error, the reasons recall skips a record and the rules in system come from persistent-memory's `locales/shared/`. The web page picks the language from the UI language, and every run record states the language it ran in.
+
+References and trade-offs: `docs/architecture/budget-memory-sources.md`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_memory_lifecycle.test_lesson -v

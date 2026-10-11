@@ -1,13 +1,23 @@
-# 结构化输出与业务校验（`structured-output`）
+# Structured output and business validation (`structured-output`)
 
-## 运行
+English · [简体中文](README.zh-CN.md)
 
-在网页打开本课，选择预设，必要时修改结构化输入，点击运行。在右侧实验报告查看检查结果并展开事件；回放只读已有记录。需要已配置的真实模型。normal、missing-field、wrong-fact 三个预设生成任务卡；repair 可关闭。失败时最多再请求一次，最多两个模型调用。每次响应后都有独立报告，可在实验报告里回看初稿与修复稿。问题框里写的是学习者备注，会记在报告中；实际任务由结构化预设决定。
+## Running it
 
-## 读源码与实验
+Open the lesson on the web page, pick a preset, change the structured inputs if you like, and click Run. The lab report on the right shows the checks, and you can expand the events; replay only reads what was recorded. This lesson needs a configured real model. The presets normal, missing-field and wrong-fact each generate a task card; repair can be switched off. On a failure the lesson sends at most one more request, so a run makes at most two model calls. Every response gets its own report, so you can compare the first draft and the repaired draft in the lab report. The question box holds a learner note that goes into the report; the structured preset decides the actual task.
 
-runtime.py 中 TaskCard 用 Pydantic 校验字段；inspect_output 依次检查标准 JSON、Schema 和 FACTS 业务事实。fixtures.py 仅供自动化测试。故意要求模型第一轮犯错是教学注入，服务商可能不遵循；不能假定每次都触发修复，应以实际响应及每份校验报告为准。按“预测结果→运行→对照请求和报告→修改输入再试”的顺序练习。
+**Run language:** this lesson runs in Chinese and in English. The system prompt, the user task, the repair request and the report text are in `locales/zh_CN.py` and `locales/en.py`, and the lesson title among the trusted facts follows the run language too; the exercise questions are written per language in `lesson.json`. The web page picks the language from the UI language, and every run record states the language it ran in.
 
-## 限制与参考
+## Reading the source and the lab
 
-本课没有读取外部任意路径，也没有长期状态。“任务目标与验收”一课仅证明固定本地案例的验收逻辑；本课和“提示词与工具描述”一课的实际模型表现依赖当前服务商，报告只依据本次响应。来源范围与固定 commit 见 [来源记录](../../docs/architecture/chapter2-sources.md)。
+In runtime.py, TaskCard validates the fields with Pydantic; inspect_output checks standard JSON, then the schema, then the business facts in trusted_facts. fixtures.py serves automated tests only. Asking the model to make a mistake in round 1 is a teaching injection that a provider may not follow; do not assume a repair happens every time, and go by the actual responses and each check report. Practice in this order: predict the result, run, compare the requests and reports, change the inputs and run again.
+
+Offline tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest lessons.lesson_05_structured_output.test_lesson -v
+```
+
+## Limits and references
+
+This lesson reads no arbitrary external paths and keeps no long-term state. The lesson "Task goals and acceptance" only proves the acceptance logic for a fixed local case; how a real model behaves in this lesson and in "Prompts and tool descriptions" depends on the current provider, and the reports rely only on this run's responses. Source scope and pinned commits: [source record](../../docs/architecture/chapter2-sources.md).

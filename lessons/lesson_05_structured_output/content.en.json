@@ -67,7 +67,7 @@
       "source": "b0bab0b3a971"
     },
     "section-1.paragraphs.2": {
-      "text": "The prompt says \"只输出一个 JSON 对象\" (\"output only one JSON object\"), but the model still returns just a string in message.content. It may be clean JSON. It may start with \"Sure, here is the lesson card\" and wrap the JSON in code fence markers. It may miss a field or add one nobody agreed on. Or the format may be perfect while the prerequisite is written as dependent-calls. The program has to tell these cases apart and say exactly what is wrong.",
+      "text": "The prompt says \"Output only one JSON object\", but the model still returns just a string in message.content. It may be clean JSON. It may start with \"Sure, here is the lesson card\" and wrap the JSON in code fence markers. It may miss a field or add one nobody agreed on. Or the format may be perfect while the prerequisite is written as dependent-calls. The program has to tell these cases apart and say exactly what is wrong.",
       "source": "351d4537563f"
     },
     "section-1.paragraphs.3": {
@@ -179,28 +179,28 @@
       "source": "08941d6ece96"
     },
     "section-4.paragraphs.0": {
-      "text": "Layer 3 compares the lesson card, item by item, against trusted facts given in advance. FACTS holds the three facts this lesson accepts: the lesson ID is task-contract, the title is \"任务目标与验收\" (the Chinese title of that lesson, \"task goals and acceptance\"), and the prerequisite is fail-safely. inspect_output compares lesson_id, lesson_title, and prerequisite one by one. If any item differs, it judges the card a failure and lists the differing items in the report.",
-      "source": "82d859e00fb3"
+      "text": "Layer 3 compares the lesson card, item by item, against trusted facts given in advance. trusted_facts holds the three facts this lesson accepts: the lesson ID is task-contract, the title is \"Task goals and acceptance\", and the prerequisite is fail-safely. The title follows the run language; a Chinese run compares against that lesson's Chinese title. inspect_output compares lesson_id, lesson_title, and prerequisite one by one. If any item differs, it judges the card a failure and lists the differing items in the report.",
+      "source": "102745869278"
     },
     "section-4.paragraphs.1": {
-      "text": "Take the first draft from the \"Wrong fact on purpose\" arm. It parses fine, all four fields are present and within length, so it passes the first two layers. At layer 3, prerequisite is dependent-calls, which differs from fail-safely in FACTS. The report says \"与给定资料不符\" (\"does not match the given material\") and lists prerequisite.",
-      "source": "19bcf6cfc0df"
+      "text": "Take the first draft from the \"Wrong fact on purpose\" arm. It parses fine, all four fields are present and within length, so it passes the first two layers. At layer 3, prerequisite is dependent-calls, which differs from fail-safely in trusted_facts. The report says \"does not match the given facts\" and lists prerequisite.",
+      "source": "042a6b6617a9"
     },
     "section-4.paragraphs.2": {
-      "text": "The system prompt already says \"不得编造给定事实\" (\"do not make up the given facts\"). Why check again in code? In its discussion of coding agents, *Understanding AI Agents in Depth* (深入理解 AI Agent) calls this principle \"constraints before guidance\": a rule that code can enforce should not be written only as advice. A code check makes the mistake impossible; a \"please follow\" in a prompt only advises against it. A rule in the prompt gives the model something to understand and explain, but at the critical points a piece of deterministic code has to guard the door, so the same input gets the same verdict every time. If the model says \"verified\" in its answer, layer 3 does not let it through for that reason.",
+      "text": "The system prompt already says \"Do not make up the given facts\". Why check again in code? In its discussion of coding agents, *Understanding AI Agents in Depth* (深入理解 AI Agent) calls this principle \"constraints before guidance\": a rule that code can enforce should not be written only as advice. A code check makes the mistake impossible; a \"please follow\" in a prompt only advises against it. A rule in the prompt gives the model something to understand and explain, but at the critical points a piece of deterministic code has to guard the door, so the same input gets the same verdict every time. If the model says \"verified\" in its answer, layer 3 does not let it through for that reason.",
       "source": "942010120d60"
     },
     "section-4.paragraphs.3": {
-      "text": "This layer checks only what a program can check. exercise is a piece of exercise text. Whether it is well written, and whether it fits the task goal, cannot be judged by comparing three strings, and the report will not say it \"passed\". Where the facts come from matters just as much: FACTS is trusted material written into this lesson's code. If the same model first generated the facts and then checked them itself, the check would not be independent.",
-      "source": "bd02c375500f"
+      "text": "This layer checks only what a program can check. exercise is a piece of exercise text. Whether it is well written, and whether it fits the task goal, cannot be judged by comparing three strings, and the report will not say it \"passed\". Where the facts come from matters just as much: trusted_facts is trusted material written into this lesson's code. If the same model first generated the facts and then checked them itself, the check would not be independent.",
+      "source": "0e188f8509bc"
     },
     "mq-wrong-fact.wrong-fact-layer.prompt": {
       "text": "The JSON the model produced has all fields and correct types, but prerequisite is written as dependent-calls. Where does it get stopped?",
       "source": "b1b9f0d1977d"
     },
     "mq-wrong-fact.wrong-fact-layer.a.text": {
-      "text": "The business fact layer: it is compared with the trusted FACTS and judged a failure",
-      "source": "95f4f62bd2cb"
+      "text": "The business fact layer: it is compared with the trusted facts in trusted_facts and judged a failure",
+      "source": "4781c9a62347"
     },
     "mq-wrong-fact.wrong-fact-layer.a.feedback": {
       "text": "Correct. The structure is valid, but the facts do not match.",
@@ -235,11 +235,11 @@
       "source": "0f0c1200fe7f"
     },
     "section-5.paragraphs.1": {
-      "text": "The repair request appends two messages after the original messages. One is an assistant message that puts the model's previous output back unchanged. The other is a user message that starts with \"上一版未通过\" (\"the previous version failed\"), followed by the specific reason from the layer that failed, and ends by asking for a complete JSON object based only on the original trusted facts. The model can fix the draft only if it sees what it wrote and what was wrong.",
+      "text": "The repair request appends two messages after the original messages. One is an assistant message that puts the model's previous output back unchanged. The other is a user message that starts with \"The previous version failed\", followed by the specific reason from the layer that failed, and ends by asking for a complete JSON object based only on the original trusted facts. The model can fix the draft only if it sees what it wrote and what was wrong.",
       "source": "bfe52ee336a7"
     },
     "section-5.paragraphs.2": {
-      "text": "The repaired draft must be checked again from layer 1, not just at the layer that failed last time: filling in the missing field may have introduced a wrong fact. A report is published right after each draft is checked, so the lab report lets you compare the first draft and the repaired draft. If the repaired draft still fails, the run explicitly returns \"未通过校验\" (\"failed validation\"). It adds no default values and does not turn into a success. The platform checks the call budget before every model request, so even if the runner's code is wrong and tries to make one more request, it is blocked.",
+      "text": "The repaired draft must be checked again from layer 1, not just at the layer that failed last time: filling in the missing field may have introduced a wrong fact. A report is published right after each draft is checked, so the lab report lets you compare the first draft and the repaired draft. If the repaired draft still fails, the run explicitly returns \"The model output failed the checks\". It adds no default values and does not turn into a success. The platform checks the call budget before every model request, so even if the runner's code is wrong and tries to make one more request, it is blocked.",
       "source": "6cd9da5bd3ac"
     },
     "section-5.paragraphs.3": {
@@ -259,8 +259,8 @@
       "source": "86ff0a081ede"
     },
     "deep-dive-repair.paragraphs.1": {
-      "text": "This lesson's repair message is built that way: take the detail from the layer that failed, put it after \"上一版未通过：\" (\"the previous version failed:\"), and add one sentence of instruction. For a missing field, that user message looks roughly like `上一版未通过：prerequisite: missing。只按原始可信事实输出完整 JSON 对象。`. It does not repeat all the facts. They are still in the earlier user message, and the repair request is sent with the whole history.",
-      "source": "fe64f0056aa7"
+      "text": "This lesson's repair message is built that way: take the detail from the layer that failed, put it after \"The previous version failed:\", and add one sentence of instruction. For a missing field, that user message looks roughly like \"The previous version failed: `prerequisite: missing`. Output a complete JSON object based only on the original trusted facts.\" It does not repeat all the facts. They are still in the earlier user message, and the repair request is sent with the whole history.",
+      "source": "a829426ef881"
     },
     "deep-dive-repair.paragraphs.2": {
       "text": "The original draft goes back in too. If you sent only the failure reason, the model would have to rewrite from scratch, and might fix this spot while breaking another. With the draft put back as an assistant message, the model can edit it in place. The cost is a longer request: both the draft and the failure reason go into the messages of request 2, so usage grows.",
@@ -275,8 +275,8 @@
       "source": "cc7026208758"
     },
     "misconception-schema-trust.correction": {
-      "text": "JSON mode and a schema secure the format and shape: the output parses, the fields are complete, and types and lengths are valid. They do not know whether the facts in the fields are right. In this lesson's \"Wrong fact on purpose\" arm, the first draft passes the first two layers and is stopped only when layer 3 compares it with FACTS.",
-      "source": "6615b6b684c0"
+      "text": "JSON mode and a schema secure the format and shape: the output parses, the fields are complete, and types and lengths are valid. They do not know whether the facts in the fields are right. In this lesson's \"Wrong fact on purpose\" arm, the first draft passes the first two layers and is stopped only when layer 3 compares it with trusted_facts.",
+      "source": "dd01d05edabb"
     },
     "mq-repair-final.repair-final.prompt": {
       "text": "The first draft is missing prerequisite. The repaired draft has all fields but writes prerequisite as dependent-calls. What is the conclusion for this run?",
@@ -403,8 +403,8 @@
       "source": "9218bd1688fc"
     },
     "walkthrough.step-4.body": {
-      "text": "Lesson ID, title, and prerequisite are compared one by one with FACTS.",
-      "source": "0f75c9b87621"
+      "text": "Lesson ID, title, and prerequisite are compared one by one with trusted_facts.",
+      "source": "390cb2fdfe4b"
     },
     "walkthrough.step-4.evidence": {
       "text": "The third check in the report",
@@ -458,6 +458,10 @@
       "text": "extra=\"forbid\": one extra field counts as a schema failure, so the model cannot sneak in undeclared content.",
       "source": "7a65fec3d19f"
     },
+    "code-three-layers.n35.text": {
+      "text": "inspect_output checks the three layers in order. t holds the text of this run's language; it only decides the language of the report and the errors, not the verdict.",
+      "source": "a25d20c1d697"
+    },
     "code-three-layers.n36.text": {
       "text": "json.loads accepts non-standard constants such as NaN and Infinity by default; parse_constant rejects them.",
       "source": "a99e49f31ea7"
@@ -471,8 +475,12 @@
       "source": "c1fd4c13b9a1"
     },
     "code-three-layers.n47.text": {
-      "text": "Layer 3 compares FACTS item by item. A fully valid output can still get a fact wrong; the wrong_fact scenario stops at this layer.",
-      "source": "af3c18e7f654"
+      "text": "Layer 3 compares trusted_facts item by item. A fully valid output can still get a fact wrong; the wrong_fact scenario stops at this layer.",
+      "source": "bc7bc35cace4"
+    },
+    "code-repair.n85.text": {
+      "text": "The system prompt, the user task and the repair request are all in the message catalog, one per run language; texts_for picks the one for this run.",
+      "source": "64f3711207fa"
     },
     "code-repair.n88.text": {
       "text": "temperature=0 lowers randomness but does not guarantee identical output every time; the result is still whatever this run's response says.",
@@ -481,6 +489,10 @@
     "code-repair.n92.text": {
       "text": "Repair happens only when the draft failed, repair is on, and the model call budget is at least 2, and it happens only once.",
       "source": "892452734cfb"
+    },
+    "code-repair.n101.text": {
+      "text": "The failure reasons are only the detail of the layers that failed, written into the repair request unchanged.",
+      "source": "c28a204c02f0"
     },
     "code-repair.n95.text": {
       "text": "The repair request puts the original output back as an assistant message and attaches only the specific reason for the failed item.",
@@ -511,8 +523,8 @@
       "source": "d4abe6c5fe92"
     },
     "code-decision.chosen": {
-      "text": "Parse with json.loads first, then validate the structure with the Pydantic TaskCard, and finally compare with the given FACTS. If any layer fails, the model may rewrite once with the specific error, and the result still goes through all three layers again.",
-      "source": "e16f710a9e51"
+      "text": "Parse with json.loads first, then validate the structure with the Pydantic TaskCard, and finally compare with the given trusted_facts. If any layer fails, the model may rewrite once with the specific error, and the result still goes through all three layers again.",
+      "source": "6d4f74fc5bc7"
     },
     "code-decision.regex-extract.title": {
       "text": "Extract fields from the answer with a regular expression",
@@ -563,15 +575,15 @@
       "source": "36a06bb537e2"
     },
     "three-layers.json-layer.text": {
-      "text": "Layer 1 of the first draft's report, \"JSON 格式\" (\"JSON format\"): it only answers whether the text can be parsed.",
+      "text": "Layer 1 of the first draft's report, \"JSON format\": it only answers whether the text can be parsed.",
       "source": "190e743f175c"
     },
     "three-layers.schema-layer.text": {
-      "text": "Layer 2 of the first draft's report, \"字段 Schema\" (\"field schema\"): a missing field fails here, and detail says which field is missing.",
+      "text": "Layer 2 of the first draft's report, \"Field schema\": a missing field fails here, and detail says which field is missing.",
       "source": "1e6249ae5bcd"
     },
     "three-layers.fact-layer.text": {
-      "text": "Layer 3 of the first draft's report, \"业务事实\" (\"business facts\"): compared with the given trusted facts. A report whose upstream layer failed has no such item.",
+      "text": "Layer 3 of the first draft's report, \"Business facts\": compared with the given trusted facts. A report whose upstream layer failed has no such item.",
       "source": "2b8d691bd6d4"
     },
     "three-layers.repair-request.text": {
@@ -791,7 +803,7 @@
       "source": "e3c3390ac778"
     },
     "check-hunt.explanation": {
-      "text": "This is the round 2 request: at the end of messages come the model's previous raw output and a user message giving the reason after \"上一版未通过\" (\"the previous version failed\"). The repair has only this one chance, and the repaired draft must go through all three layers again.",
+      "text": "This is the round 2 request: at the end of messages come the model's previous raw output and a user message giving the reason after \"The previous version failed\". The repair has only this one chance, and the repaired draft must go through all three layers again.",
       "source": "ca0364e522d1"
     },
     "check-points.title": {
@@ -818,9 +830,9 @@
       "text": "Pydantic model of the lesson card: four required fields, length limits, and extra=\"forbid\" rejects extra fields.",
       "source": "213b3d1abf0d"
     },
-    "code_notes.FACTS.note": {
-      "text": "Trusted course facts hard-coded in this lesson: the lesson ID, title, and prerequisite from {{lesson:task-contract}}, which layer 3 compares item by item.",
-      "source": "0a81212a6dd5"
+    "code_notes.trusted_facts.note": {
+      "text": "The trusted lesson facts this lesson accepts: the lesson ID, title, and prerequisite of {{lesson:task-contract}}, which layer 3 compares item by item. The title follows the run language.",
+      "source": "c8c294267f72"
     },
     "code_notes.prerequisite.note": {
       "text": "Lesson card field: the prerequisite lesson. The trusted fact is fail-safely; when set to be wrong on purpose it becomes dependent-calls.",

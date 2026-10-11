@@ -1,1 +1,1 @@
-"""课程实现；以 curriculum/catalog.json 中的状态为准。"""
+"""Multi-turn conversation: the program keeps the message history and resends it with every request."""

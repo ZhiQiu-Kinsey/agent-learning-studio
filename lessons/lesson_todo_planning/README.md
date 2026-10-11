@@ -1,20 +1,24 @@
-# 规划：TODO 清单与状态提示（`todo-planning`）
+# Planning: a TODO list and status reminders (`todo-planning`)
 
-任务固定为“查 messages-context、application-state、context-budget 三课的要点，连同要点编号存进复习卡”。三课在工具参数里用课程 slug 指代，不用课号：显示课号会随课程表变化。本课需要真实模型连接，三组条件用同一个模型、同一个任务和同一个验收器：
+English · [简体中文](README.zh-CN.md)
 
-| 预设 | 工具 | 运行层提醒 |
+The task is fixed: "look up the review points of the three lessons messages-context, application-state and context-budget, and save them with their point IDs on a review card". The tool arguments name the three lessons by slug, not by number, because display numbers change with the curriculum. This lesson needs a real model connection. The three conditions use the same model, the same task and the same acceptance check:
+
+| Preset | Tools | Harness reminder |
 | --- | --- | --- |
-| 无 TODO | `lookup_note`、`save_card` | 无 |
-| 有 TODO，无提醒 | 再加 `todo_write` | 无 |
-| 有 TODO，有提醒 | 再加 `todo_write` | 连续 `reminder_after` 轮没有 `todo_write` 成功更新清单，就在本轮 tool 消息之后追加一条 user 提醒 |
+| No TODO | `lookup_note`, `save_card` | none |
+| TODO, no reminder | plus `todo_write` | none |
+| TODO, with reminder | plus `todo_write` | after `reminder_after` rounds in a row without a successful `todo_write` update, a user reminder is appended after this round's tool messages |
 
-- `todo_write` 整体替换清单，校验通过后版本号加一，并发布 `lesson.todo`（完整清单与差异）。
-- 运行层提醒同时发布 `lesson.harness_injected`，`source` 为 `harness`，用来和模型、用户的话区分开。
-- `verify_card` 只看复习卡和本次 `lookup_note` 的真实返回；模型最后的说法和清单上的 done 都写进报告，但不参与判定。
+- `todo_write` replaces the whole list; when the checks pass, the version goes up by one and `lesson.todo` is published (the complete list and the diff).
+- The harness reminder also publishes `lesson.harness_injected` with `source` set to `harness`, to tell it apart from what the model or the user said.
+- `verify_card` looks only at the review card and the real `lookup_note` results of this run; the model's last claim and the done items on the list go into the report but do not count toward the verdict.
 
-每组只跑一次，不足以比较完成率。`fixtures.py` 只服务自动化测试，里面“无 TODO 组漏掉 context-budget 一课”是脚本写的，不代表任何真实模型。
+Each condition runs once, which is not enough to compare completion rates. `fixtures.py` serves automated tests only; "the no-TODO group skips the context-budget lesson" is written by its script and stands for no real model.
 
-`todo_write` 的约束和“连续几轮没更新就提醒”的做法参考 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)（MIT）s03（TodoWrite），工具、提醒文本、验收器与实验由本项目编写。
+**Run language:** this lesson runs in Chinese and in English. The task, the system prompt and the list rules, the text of the three review points, the tool descriptions and errors, the reminder and the lab report are in `locales/zh_CN.py` and `locales/en.py`. Tool names, parameter names, statuses (pending, in_progress, done) and point IDs are code and the same in both languages. The web page picks the run language from the UI language, and every run record states the language it ran in.
+
+The `todo_write` rules and the "remind after a few rounds without an update" approach follow s03 (TodoWrite) of [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) (MIT); the tools, reminder text, acceptance check and experiments are written for this project.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_todo_planning.test_lesson -v

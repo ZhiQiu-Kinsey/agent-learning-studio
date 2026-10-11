@@ -1,4 +1,4 @@
-"""提示缓存课的行为测试：缓存字段归一化、前缀哈希，以及用确定性夹具跑完三组请求。"""
+"""Behavior tests for prompt-caching: cache-field normalization, prefix hashes, and the three arms on the deterministic fixture."""
 import json
 import unittest
 from pathlib import Path
@@ -10,18 +10,26 @@ from course.runner import RunCancelled
 from lessons.lesson_prompt_caching import runtime
 from lessons.lesson_prompt_caching.cache_usage import hit_ratio, normalize_cache_usage
 from lessons.lesson_prompt_caching.fixtures import create_completion
+from lessons.lesson_prompt_caching.locales import texts_for
 
 MANIFEST = json.loads(Path(runtime.__file__).with_name("lesson.json").read_text(encoding="utf-8"))
+ZH = texts_for("zh-CN")
+HANDBOOK = runtime.load_handbook("zh-CN")
 
 
-def run_case(exercise_id, inputs, completion=None, budget=6, cancelled=lambda: False, mode="offline"):
+def build(layout, session, question, dynamic, locale="zh-CN"):
+    return runtime.build_messages(texts_for(locale), runtime.load_handbook(locale), layout, session, question, dynamic)
+
+
+def run_case(exercise_id, inputs, completion=None, budget=6, cancelled=lambda: False, mode="offline", locale="zh-CN"):
     events = []
     values = validate_inputs(runtime, inputs)
     context = RunContext(
         lesson_id="prompt-caching", exercise_id=exercise_id, question="", mode=mode,
         model="fixture-model", representation="sdk_standardized", inputs=values, api_key="",
-        completion=completion or create_completion(exercise_id, values), max_model_calls=budget,
+        completion=completion or create_completion(exercise_id, values, locale), max_model_calls=budget,
         cancelled=cancelled, emit_event=lambda kind, data, number: events.append((kind, data, number)),
+        locale=locale,
     )
     answer = execute_lesson({"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}, runtime, context)
     return answer, events
@@ -56,7 +64,7 @@ class NormalizeTests(unittest.TestCase):
                                        "prompt_cache_miss_tokens": 232})
         self.assertEqual((cache["input_tokens"], cache["cached_tokens"], cache["field"]),
                          (1000, 768, "prompt_cache_hit_tokens"))
-        # 没有 prompt_tokens 时，命中与未命中合起来就是全部输入。
+        # Without prompt_tokens, hits plus misses are the whole input.
         self.assertEqual(normalize_cache_usage({"prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 900})
                          ["input_tokens"], 900)
 
@@ -106,35 +114,35 @@ class NormalizeTests(unittest.TestCase):
 
 class PrefixTests(unittest.TestCase):
     def test_dynamic_line_position_decides_whether_the_prefix_repeats(self):
-        first = runtime.build_messages("dynamic_first", "s1", "问题一", "请求序号：1")
-        second = runtime.build_messages("dynamic_first", "s1", "问题二", "请求序号：2")
+        first = build("dynamic_first", "s1", "问题一", "请求序号：1")
+        second = build("dynamic_first", "s1", "问题二", "请求序号：2")
         self.assertNotEqual(runtime.prefix_hash(first), runtime.prefix_hash(second))
         self.assertLess(runtime.shared_prefix_chars(first, second), 40)
-        stable_one = runtime.build_messages("stable_prefix", "s1", "问题一", "请求序号：1")
-        stable_two = runtime.build_messages("stable_prefix", "s1", "问题二", "请求序号：2")
+        stable_one = build("stable_prefix", "s1", "问题一", "请求序号：1")
+        stable_two = build("stable_prefix", "s1", "问题二", "请求序号：2")
         self.assertEqual(runtime.prefix_hash(stable_one), runtime.prefix_hash(stable_two))
-        self.assertGreater(runtime.shared_prefix_chars(stable_one, stable_two), len(runtime.HANDBOOK))
+        self.assertGreater(runtime.shared_prefix_chars(stable_one, stable_two), len(HANDBOOK))
         self.assertIsNone(runtime.shared_prefix_chars(None, stable_one))
 
     def test_three_layouts_send_the_same_rules_handbook_and_question(self):
         for layout in ("dynamic_first", "stable_prefix", "warmup"):
             with self.subTest(layout=layout):
-                messages = runtime.build_messages(layout, "s1", "问题一", "请求序号：1")
+                messages = build(layout, "s1", "问题一", "请求序号：1")
                 self.assertEqual([message["role"] for message in messages], ["system", "user"])
-                self.assertIn(runtime.HANDBOOK, messages[0]["content"])
+                self.assertIn(HANDBOOK, messages[0]["content"])
                 self.assertIn("问题一", messages[1]["content"])
-        self.assertTrue(runtime.build_messages("dynamic_first", "s1", "问", "请求序号：1")[0]["content"]
+        self.assertTrue(build("dynamic_first", "s1", "问", "请求序号：1")[0]["content"]
                         .startswith("请求序号：1"))
-        self.assertTrue(runtime.build_messages("stable_prefix", "s1", "问", "请求序号：1")[1]["content"]
+        self.assertTrue(build("stable_prefix", "s1", "问", "请求序号：1")[1]["content"]
                         .endswith("（请求序号：1）"))
 
     def test_session_marker_changes_the_prefix(self):
-        one = runtime.build_messages("stable_prefix", "aaaa", "问", "请求序号：1")
-        two = runtime.build_messages("stable_prefix", "bbbb", "问", "请求序号：1")
+        one = build("stable_prefix", "aaaa", "问", "请求序号：1")
+        two = build("stable_prefix", "bbbb", "问", "请求序号：1")
         self.assertNotEqual(runtime.prefix_hash(one), runtime.prefix_hash(two))
 
     def test_handbook_is_long_enough_to_matter(self):
-        self.assertGreater(len(runtime.HANDBOOK), 1500)
+        self.assertGreater(len(HANDBOOK), 1500)
 
 
 class RunTests(unittest.TestCase):
@@ -162,7 +170,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(found[0]["cached_tokens"], 0)
         self.assertTrue(all(item["cached_tokens"] > 0 for item in found[1:]))
         self.assertEqual(len(of(events, "lesson.cache_hit")), 3)
-        # 只有第一次命中带 first_hit：找错题“第一次报告命中”只认它。
+        # Only the first hit carries first_hit: the find-the-error check "first reported hit" counts only that one.
         self.assertEqual([data.get("first_hit") for data in of(events, "lesson.cache_hit")], [True, None, None])
         self.assertEqual(len({item["prefix_hash"] for item in found}), 1)
         self.assertTrue(all(0 < item["ratio"] < 1 for item in found[1:]))
@@ -173,17 +181,17 @@ class RunTests(unittest.TestCase):
         self.assertEqual(metrics["缓存字段"], "prompt_tokens_details.cached_tokens")
         self.assertEqual(metrics["运行模式"], "离线测试（数字来自夹具）")
         self.assertIn("夹具", data["summary"])
-        # 动态行在最后一条 user 消息里，问题依次换成手册里的不同问题。
+        # The dynamic line is in the last user message; the question changes to a different handbook question each time.
         bodies = [data["body"] for data in of(events, "request")]
         self.assertEqual([body["messages"][1]["content"].split("\n")[0] for body in bodies],
-                         list(runtime.QUESTIONS[:4]))
+                         list(ZH.questions[:4]))
 
     def test_warmup_sends_one_extra_request_and_unreported_is_never_zero(self):
         _, events = run_case("warmup", {"layout": "warmup", "repeats": 5})
         found = records(events)
         self.assertEqual([item["purpose"] for item in found], ["预热"] + ["测量"] * 5)
-        self.assertIn(runtime.WARMUP_QUESTION, of(events, "request")[0]["body"]["messages"][1]["content"])
-        # 这一组的夹具故意不返回缓存字段：每条都是“未报告”，不是 0。
+        self.assertIn(ZH.warmup_question, of(events, "request")[0]["body"]["messages"][1]["content"])
+        # This arm's fixture deliberately returns no cache field: every record is "not reported", never 0.
         self.assertEqual(len(of(events, "lesson.cache_unreported")), 6)
         self.assertTrue(all(item["cached_tokens"] is None and item["ratio"] is None for item in found))
         data = report(events)
@@ -214,7 +222,7 @@ class RunTests(unittest.TestCase):
                 self.assertEqual({item["field"] for item in found}, {field})
                 self.assertEqual(found[0]["cached_tokens"], 0)
                 self.assertTrue(all(item["cached_tokens"] > 0 for item in found[1:]))
-                # 三家的“全部输入”口径不同，归一化后应一致。
+                # The three providers count "all input" differently; after normalization they agree.
                 usage = of(events, "response")[1]["body"]["usage"]
                 total = usage.get("prompt_tokens") or (usage["input_tokens"] + usage["cache_read_input_tokens"])
                 self.assertEqual(found[1]["input_tokens"], total)
@@ -225,7 +233,8 @@ class RunTests(unittest.TestCase):
         _, second = run_case("stable-prefix", {"layout": "stable_prefix"}, shared)
         self.assertNotEqual(records(first)[0]["prefix_hash"], records(second)[0]["prefix_hash"])
         self.assertEqual(records(second)[0]["cached_tokens"], 0)
-        # 关掉隔离：第二次运行的第一次请求就能复用上一次运行留下的前缀，报告会指出它来自本次运行之前。
+        # Isolation off: the second run's first request reuses the prefix left by the first run, and the report
+        # points out that the hit comes from before this run.
         shared = create_completion("stable-prefix")
         _, first = run_case("stable-prefix", {"layout": "stable_prefix", "isolate_run": False}, shared)
         _, second = run_case("stable-prefix", {"layout": "stable_prefix", "isolate_run": False}, shared)
@@ -253,6 +262,53 @@ class RunTests(unittest.TestCase):
                 validate_inputs(runtime, bad)
         with self.assertRaises(ValueError):
             create_completion("unknown")
+
+
+class EnglishRunTests(unittest.TestCase):
+    """The same arms in English: the English handbook, rules and questions are sent, the report is English."""
+
+    def metrics(self, events, locale="en"):
+        """Report metrics keyed by catalog field name, so one assertion covers both languages."""
+        t = texts_for(locale)
+        names = {getattr(t, field): field for field in vars(t) if field.startswith("label_")}
+        return {names[item["label"]]: item["value"] for item in report(events)["metrics"]}
+
+    def test_english_handbook_and_rules_are_sent(self):
+        t = texts_for("en")
+        handbook = runtime.load_handbook("en")
+        self.assertNotEqual(handbook, HANDBOOK)
+        self.assertGreater(len(handbook), 1500)
+        answer, events = run_case("stable-prefix", {"layout": "stable_prefix"}, locale="en")
+        bodies = [data["body"] for data in of(events, "request")]
+        system = bodies[0]["messages"][0]["content"]
+        self.assertTrue(system.startswith("Session tag: "))
+        self.assertIn(t.rules + "\n\n" + handbook, system)
+        self.assertEqual([body["messages"][1]["content"].split("\n")[0] for body in bodies], list(t.questions[:4]))
+        self.assertTrue(bodies[0]["messages"][1]["content"].endswith(")"))
+        self.assertEqual([item["purpose"] for item in records(events)], [t.purpose_measure] * 4)
+        self.assertEqual(answer, t.answer.format(count=4, layout="Stable prefix"))
+        values = self.metrics(events)
+        self.assertEqual(values["label_mode"], t.value_mode_offline)
+        self.assertEqual(values["label_hits"], 3)
+
+    def test_english_warmup_and_unreported(self):
+        t = texts_for("en")
+        _, events = run_case("warmup", {"layout": "warmup"}, locale="en")
+        self.assertEqual(of(events, "request")[0]["body"]["messages"][1]["content"].split("\n")[0], t.warmup_question)
+        self.assertEqual([item["purpose"] for item in records(events)], [t.purpose_warmup] + [t.purpose_measure] * 4)
+        rows = report(events)["table"]["rows"]
+        self.assertTrue(all(row[5] == "not reported" and row[6] == "not reported" for row in rows))
+        self.assertEqual(self.metrics(events)["label_ratio"], "not reported")
+        checks = {check["label"]: check for check in report(events)["checks"]}
+        self.assertIn("instead of recording 0", checks[t.check_reported]["detail"])
+
+    def test_english_dynamic_line_comes_first_and_session_tag_when_not_isolated(self):
+        t = texts_for("en")
+        _, events = run_case("dynamic-first", {"layout": "dynamic_first", "isolate_run": False}, locale="en")
+        system = of(events, "request")[0]["body"]["messages"][0]["content"]
+        self.assertTrue(system.startswith("Request number: 1; sent at: "))
+        self.assertIn(t.session_tag.format(session=t.not_isolated), system)
+        self.assertEqual(self.metrics(events)["label_session"], t.not_isolated)
 
 
 if __name__ == "__main__":

@@ -217,7 +217,7 @@
               "actor": "模型",
               "title": "写出一版正则",
               "body": "输出 JSON，运行器取出 regex 字段。",
-              "code": "pattern = extract_json(reply)[\"regex\"]",
+              "code": "pattern = extract_json(t, reply)[\"regex\"]",
               "language": "python",
               "evidence": "lesson.draft"
             },
@@ -227,7 +227,7 @@
               "actor": "程序",
               "title": "执行固定用例",
               "body": "编译正则，对每个用例做 re.fullmatch。",
-              "code": "tests = run_tests(pattern)",
+              "code": "tests = run_tests(t, pattern)",
               "language": "python",
               "evidence": "lesson.tests"
             },
@@ -237,7 +237,7 @@
               "actor": "程序",
               "title": "失败用例就是意见",
               "body": "没有失败就是 pass。",
-              "code": "issues = failures_of(tests)",
+              "code": "issues = failures_of(t, tests)",
               "language": "python",
               "evidence": "lesson.review（source=tests）"
             },
@@ -246,8 +246,8 @@
               "label": "修订",
               "actor": "模型",
               "title": "带着失败用例改一版",
-              "body": "提示里写上一版正则和评审意见。",
-              "code": "draft(f\"上一版正则：{previous}\\n评审意见：{issues}\")",
+              "body": "修订请求 t.revision_request 写上需求、上一版正则和评审意见。",
+              "code": "draft(t.revision_request.format(spec=t.spec, previous=previous, issues=issues))",
               "language": "python",
               "evidence": "下一条 lesson.draft 的 previous"
             },
@@ -257,7 +257,7 @@
               "actor": "程序",
               "title": "停下并做最终检查",
               "body": "写明停止原因，用同一组用例检查最终版本。",
-              "code": "final = run_tests(pattern)",
+              "code": "final = run_tests(t, pattern)",
               "language": "python",
               "evidence": "lesson.tests（version=final）"
             }
@@ -269,7 +269,7 @@
           "title": "评审的依据有强有弱",
           "paragraphs": [
             "评审的依据越接近真实执行，越靠得住；本课的两组只是这条光谱的两端。最强的依据是执行结果：跑测试、编译、真的调用一次接口看返回。其次是外部事实，比如用工具查到的数据。再往下是另一个模型按事先写好的条目评判。最弱的是同一个模型、同样的输入，再读一遍。",
-            "选哪一种，先看任务能不能写成程序检查。正则、代码、数据格式，大多能写测试，应当优先用测试。出题、写摘要、起标题这类任务，很难写出判定对错的程序，只能退一步，请模型按条目评审。{{lesson:orchestrator-evaluator}}会把写和评拆给两个角色，评审一方按三条事先写好的条目判定，同样设迭代上限。",
+            "选哪一种，先看任务能不能写成程序检查。正则、代码、数据格式，大多能写测试，应当优先用测试。出题、写摘要、起标题这类任务，很难写出判定对错的程序，只能退一步，请模型按条目评审。{{lesson:orchestrator-evaluator}}会把写和评拆给两个角色，评审一方按三条事先写好的条目判定，同样设迭代上限，修订后没有变化也会停下。",
             "不管用哪种评审，都别让被评审的一方改考卷。如果修订的一方能修改用例、放宽条目，或者直接改写结论，“通过”就成了自我批准。本课的用例写死在源码里，最终检查也不看评审怎么说，只看用例。{{lesson:workflow-patterns}}接着看另一类做法：步骤事先写死，由程序在每一步之间检查。",
             "{{lesson:task-contract}}讲过 Claude Code 怎样把检查变成关口：给它一个能自己运行的检查，或者配 Stop 钩子，在它准备结束时跑检查脚本，不通过就拦下。放进本课的修订循环里看，两者的差别在于谁控制循环。只在提示词里写“改完跑测试，失败就接着改”，依据来自真实执行，转几圈、何时停却由模型自己定；Stop 钩子把停不停交给脚本，模型说做完了也得先过检查。钩子也要兜底：文档写明，连续拦下多次仍没有进展就放行，作用和本课的迭代上限、“修订后没有变化”一样，免得循环空转。具体次数和机制以官方文档为准。"
           ]
@@ -329,6 +329,16 @@
               "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/09-metacognition/README.md"
             },
             {
+              "id": "self-refine",
+              "title": "Self-Refine：同一个模型写稿、提意见、修订（Madaan 等，NeurIPS 2023）",
+              "url": "https://arxiv.org/abs/2303.17651v2"
+            },
+            {
+              "id": "reflexion",
+              "title": "Reflexion：把成败信号写成文字总结，下次尝试时带上（Shinn 等，NeurIPS 2023）",
+              "url": "https://arxiv.org/abs/2303.11366v4"
+            },
+            {
               "id": "book-proposer-reviewer",
               "title": "提议者与审核者：审查为什么要读独立证据（深入理解 AI Agent）",
               "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter10.md"
@@ -380,37 +390,31 @@
             {
               "id": "n27",
               "line": 27,
-              "anchor": "WRITER_SYSTEM = (",
-              "text": "写手只输出一个带 regex 字段的 JSON；程序用 fullmatch 匹配，所以不用写 ^ 和 $。"
-            },
-            {
-              "id": "n29",
-              "line": 29,
-              "anchor": "SELF_REVIEW_SYSTEM = (",
-              "text": "自评的评审只拿到需求和正则，结论限定为 pass 或 revise。"
+              "anchor": "# The task (t.spec) and the two system prompts",
+              "text": "任务说明和两段系统提示词不写在这里，按运行语言放在消息目录里（locales/zh_CN.py、en.py），运行时用 t.spec 等字段取出。"
             },
             {
               "id": "n36",
-              "line": 36,
+              "line": 33,
               "anchor": "if not isinstance(pattern, str) or not pattern or len(pattern) > MAX_PATTERN:",
               "text": "先限长度：空串或过长的输出直接判全部失败，不去编译。"
             },
             {
               "id": "n40",
-              "line": 40,
+              "line": 37,
               "anchor": "compiled = re.compile(pattern)",
               "text": "只把模型写的字符串当正则编译，不执行任何模型写的代码。"
             },
             {
               "id": "n44",
-              "line": 44,
+              "line": 42,
               "anchor": "cases = [{\"text\": text, \"expected\": expected",
               "text": "每个用例都真实执行 re.fullmatch，实际结果和期望结果并列记录。"
             },
             {
               "id": "n49",
-              "line": 49,
-              "anchor": "def failures_of(tests: dict) -> list[str]:",
+              "line": 47,
+              "anchor": "def failures_of(t: Texts, tests: dict) -> list[str]:",
               "text": "测试组的评审意见就是失败用例清单，例如“s-0420 应该不匹配，实际匹配”。"
             }
           ]
@@ -419,60 +423,66 @@
           "id": "code-review",
           "type": "annotated-source",
           "path": "lessons/lesson_reflection_revision/runtime.py",
-          "start": 91,
-          "end": 129,
+          "start": 92,
+          "end": 131,
           "notes": [
             {
               "id": "n91",
-              "line": 91,
+              "line": 92,
               "anchor": "    def draft(self, user: str",
               "text": "写稿和修订共用 draft：每一版都发布 lesson.draft，并带上上一版以便比较。"
             },
             {
+              "id": "n94",
+              "line": 94,
+              "anchor": "content = self.ask(self.t.writer_system, user)",
+              "text": "写手的系统提示词 t.writer_system 要求只输出带 regex 字段的 JSON；程序用 fullmatch 匹配，所以不用写 ^ 和 $。"
+            },
+            {
               "id": "n95",
-              "line": 95,
-              "anchor": "pattern = extract_json(content).get(\"regex\")",
+              "line": 96,
+              "anchor": "pattern = extract_json(self.t, content).get(\"regex\")",
               "text": "读不出 regex 就记为空串和解析错误，不替模型修；空串在测试里全部失败。"
             },
             {
               "id": "n101",
-              "line": 101,
+              "line": 102,
               "anchor": "\"unchanged\": previous is not None and pattern == previous",
               "text": "unchanged 在事件里标出这一版和上一版一字不差，循环用同样的比较决定是否停止。"
             },
             {
               "id": "n106",
-              "line": 106,
+              "line": 107,
               "anchor": "def review_by_tests(context: RunContext",
               "text": "测试评审不调用模型：跑一遍固定用例，失败用例就是意见。"
             },
             {
               "id": "n111",
-              "line": 111,
+              "line": 112,
               "anchor": "verdict = \"pass\" if not issues else \"revise\"",
               "text": "测试组的结论由用例决定，全部通过才是 pass。"
             },
             {
               "id": "n117",
-              "line": 117,
+              "line": 118,
               "anchor": "def review_by_model(context: RunContext",
               "text": "自评组多一次模型请求，评审看不到任何运行结果。"
             },
             {
               "id": "n119",
-              "line": 119,
-              "anchor": "content = writer.ask(SELF_REVIEW_SYSTEM",
-              "text": "评审只看需求和正则，掌握的信息和写手一样多。"
+              "line": 121,
+              "anchor": "content = writer.ask(t.self_review_system",
+              "text": "自评的系统提示词 t.self_review_system 把结论限定为 pass 或 revise；评审只看需求和正则，掌握的信息和写手一样多。"
             },
             {
               "id": "n123",
-              "line": 123,
+              "line": 125,
               "anchor": "verdict = review.get(\"verdict\") if review.get(\"verdict\") in",
               "text": "评审结论只接受 pass 或 revise，其他输出记为不合格式。"
             },
             {
               "id": "n128",
-              "line": 128,
+              "line": 130,
               "anchor": "\"issues\": issues, \"raw\": content}, writer.rounds)",
               "text": "两种评审都发布 lesson.review，source 写明意见来自测试还是模型。"
             }
@@ -482,61 +492,61 @@
           "id": "code-loop",
           "type": "annotated-source",
           "path": "lessons/lesson_reflection_revision/runtime.py",
-          "start": 132,
-          "end": 166,
+          "start": 134,
+          "end": 170,
           "notes": [
             {
               "id": "n137",
-              "line": 137,
-              "anchor": "pattern = writer.draft(\"需求：\" + SPEC, 0, None)",
+              "line": 140,
+              "anchor": "pattern = writer.draft(t.draft_request.format(spec=t.spec), 0, None)",
               "text": "初稿只给需求，版本号为 0。"
             },
             {
               "id": "n139",
-              "line": 139,
+              "line": 142,
               "anchor": "for iteration in range(1, values.max_iters + 1):",
               "text": "循环次数由 max_iters 决定，修订不会无限进行。"
             },
             {
               "id": "n141",
-              "line": 141,
+              "line": 144,
               "anchor": "if values.reviewer == \"tests\":",
               "text": "两组只在这里分叉：评审来源不同，其余步骤完全一样。"
             },
             {
               "id": "n148",
-              "line": 148,
+              "line": 151,
               "anchor": "if verdict == \"pass\":",
               "text": "第一种停止：评审通过。"
             },
             {
               "id": "n151",
-              "line": 151,
+              "line": 154,
               "anchor": "if verdict == \"invalid\":",
               "text": "第二种停止：评审输出不合格式，没有可用的意见。"
             },
             {
               "id": "n154",
-              "line": 154,
+              "line": 157,
               "anchor": "if iteration == values.max_iters:",
               "text": "第三种停止：达到迭代上限，不再请求修订。"
             },
             {
               "id": "n158",
-              "line": 158,
-              "anchor": "pattern = writer.draft(f\"需求：{SPEC}\\n上一版正则",
-              "text": "修订请求带上需求、上一版和评审意见。"
+              "line": 161,
+              "anchor": "pattern = writer.draft(t.revision_request.format(",
+              "text": "修订请求 t.revision_request 带上需求、上一版和评审意见。"
             },
             {
               "id": "n160",
-              "line": 160,
+              "line": 164,
               "anchor": "if pattern == previous:",
               "text": "第四种停止：修订后没有变化，再评一次也不会有新结论。"
             },
             {
               "id": "n164",
-              "line": 164,
-              "anchor": "final = run_tests(pattern)",
+              "line": 168,
+              "anchor": "final = run_tests(t, pattern)",
               "text": "不论评审来源，最终版本都用同一组用例检查。"
             }
           ]

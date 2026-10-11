@@ -1,76 +1,76 @@
-"""同一个请求原样发几次：数一数回答有几种，看清输出来自采样。"""
+"""Send the same request several times unchanged: count the distinct answers and see that output comes from sampling."""
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
-
-DEFAULT_QUESTION = "给一家卖猫咪用品的小店起一个中文店名。"
-SYSTEM = "你是起名助手。只输出一个店名，不加解释和标点。"
+from lessons.lesson_sampling_variance.locales import texts_for
 
 
 class Inputs(LessonInputs):
-    # 实验条件：两组只改这一个数。
+    # The experimental condition: the two arms change only this number.
     temperature: float = Field(default=0, ge=0, le=2)
-    # 同一个请求连发几次；lesson.json 的 max_rounds 是 5，平台最多放行 5 次请求。
+    # How often the same request is sent; max_rounds in lesson.json is 5, so the platform allows at most 5 requests.
     repeats: int = Field(default=5, ge=2, le=5)
 
 
 INPUT_MODEL = Inputs
 
 
-def reply_text(response: dict) -> str:
+def reply_text(response: dict, missing_choices: str) -> str:
     choices = response.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        raise ValueError("模型响应缺少 choices[0]，无法读取回答。")
+        raise ValueError(missing_choices)
     return (choices[0].get("message") or {}).get("content") or ""
 
 
 def count_distinct(answers: list[str]) -> int:
-    """去掉首尾空白后逐字比较：只差一个标点也算两种，意思相近也不合并。"""
+    """Compare character by character after trimming: one extra punctuation mark makes another answer; similar meanings are not merged."""
     return len({answer.strip() for answer in answers})
 
 
 def run(context: RunContext) -> str:
+    t = texts_for(context.locale)
     values = Inputs.model_validate(context.inputs)
-    question = context.question.strip() or DEFAULT_QUESTION
-    # 1. 请求体只拼一次，每次发出的 messages 一字不差。
-    body = {"messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}],
+    question = context.question.strip() or t.default_question
+    # 1. Build the body once, so every request sends exactly the same messages.
+    body = {"messages": [{"role": "system", "content": t.system_prompt}, {"role": "user", "content": question}],
             "temperature": values.temperature}
     responses = []
     for number in range(1, values.repeats + 1):
-        # 2. 原样再发一次。每次请求都是独立的，前几次的回答不会带进来。
+        # 2. Send it again unchanged. Each request stands alone; earlier answers are not carried over.
         responses.append(context.complete(body, round_number=number))
-    answers = [reply_text(response) for response in responses]
-    # 3. 不同回答数由程序统计，不靠人眼判断。
+    answers = [reply_text(response, t.missing_choices) for response in responses]
+    # 3. The program counts the distinct answers; nobody judges them by eye.
     distinct = count_distinct(answers)
     _report(context, values, answers, responses, distinct)
-    return f"同一个请求发了 {values.repeats} 次，得到 {distinct} 种不同的回答（去掉首尾空白后逐字比较）。"
+    return t.answer.format(repeats=values.repeats, distinct=distinct)
 
 
 def _report(context: RunContext, values: Inputs, answers: list[str], responses: list[dict], distinct: int) -> None:
-    """平台：把每次回答和用量整理成实验报告；有一次没报告用量，合计就写“未报告”。"""
+    """Platform: put each answer and the usage into the lab report; if one response lacks usage, the total is "not reported"."""
+    t = texts_for(context.locale)
     usages = [response.get("usage") or {} for response in responses]
 
     def total(key):
         numbers = [usage.get(key) for usage in usages]
-        return "未报告" if any(number is None for number in numbers) else sum(numbers)
+        return t.value_not_reported if any(number is None for number in numbers) else sum(numbers)
 
     counts = {}
     for answer in answers:
         counts[answer.strip()] = counts.get(answer.strip(), 0) + 1
     context.emit("lesson.report", {
-        "title": f"temperature={values.temperature:g}：{values.repeats} 次回答",
-        "summary": "同一个请求体原样发出；回答都来自各次 response。不同回答数按去掉首尾空白后逐字比较统计。",
+        "title": t.report_title.format(temperature=f"{values.temperature:g}", repeats=values.repeats),
+        "summary": t.report_summary,
         "metrics": [
-            {"label": "temperature", "value": values.temperature},
-            {"label": "重复次数", "value": values.repeats},
-            {"label": "不同回答数", "value": distinct},
-            {"label": "出现最多的回答", "value": f"{max(counts.values())} 次"},
-            {"label": "提示 Token 合计", "value": total("prompt_tokens")},
-            {"label": "完成 Token 合计", "value": total("completion_tokens")},
-            {"label": "总 Token 合计", "value": total("total_tokens")},
+            {"label": t.label_temperature, "value": values.temperature},
+            {"label": t.label_repeats, "value": values.repeats},
+            {"label": t.label_distinct, "value": distinct},
+            {"label": t.label_most_common, "value": t.value_times.format(count=max(counts.values()))},
+            {"label": t.label_prompt_total, "value": total("prompt_tokens")},
+            {"label": t.label_completion_total, "value": total("completion_tokens")},
+            {"label": t.label_total_total, "value": total("total_tokens")},
         ],
-        "table": {"columns": ["次", "回答", "完成 Token"],
-                  "rows": [[number, answer, "未报告" if usage.get("completion_tokens") is None
+        "table": {"columns": [t.column_number, t.column_answer, t.column_completion_tokens],
+                  "rows": [[number, answer, t.value_not_reported if usage.get("completion_tokens") is None
                             else usage["completion_tokens"]]
                            for number, (answer, usage) in enumerate(zip(answers, usages), start=1)]},
     })

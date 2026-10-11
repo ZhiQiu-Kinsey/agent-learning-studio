@@ -287,7 +287,7 @@
               "actor": "运行器",
               "title": "带上本组的工具发请求",
               "body": "无 TODO 组不提供 todo_write。",
-              "code": "tools = tool_specs(condition)",
+              "code": "tools = tool_definitions(locale, condition)",
               "language": "python",
               "evidence": "request.body.tools"
             },
@@ -326,7 +326,7 @@
               "actor": "运行器",
               "title": "到阈值就插入提醒",
               "body": "放在本轮 tool 消息之后，并记成一条运行层插入事件。",
-              "code": "messages.append({\"role\": \"user\", \"content\": reminder_text(n)})",
+              "code": "messages.append({\"role\": \"user\", \"content\": reminder_text(n, t)})",
               "language": "python",
               "evidence": "lesson.harness_injected"
             }
@@ -376,42 +376,42 @@
           "id": "code-workspace",
           "type": "annotated-source",
           "path": "lessons/lesson_todo_planning/runtime.py",
-          "start": 39,
-          "end": 68,
+          "start": 30,
+          "end": 62,
           "notes": [
             {
               "id": "n42",
-              "line": 42,
-              "anchor": "def __init__(self):",
+              "line": 33,
+              "anchor": "def __init__(self, t: Texts):",
               "text": "每次运行新建一个 Workspace，清单和复习卡都不跨运行保留。"
             },
             {
               "id": "n47",
-              "line": 47,
+              "line": 40,
               "anchor": "def todo_write(self, todos: list) -> dict:",
               "text": "todo_write 接收完整清单并整体替换，没有“增加一项”这种操作，模型每次都写出全貌。"
             },
             {
               "id": "n53",
-              "line": 53,
+              "line": 47,
               "anchor": "if not isinstance(item, dict) or set(item) - {",
               "text": "每项只能有 id、content、status 三个字段，多写字段就拒绝。"
             },
             {
               "id": "n60",
-              "line": 60,
+              "line": 54,
               "anchor": "if status not in STATUSES:",
               "text": "状态只有三种：pending 未开始、in_progress 进行中、done 已完成。"
             },
             {
               "id": "n65",
-              "line": 65,
+              "line": 59,
               "anchor": "if sum(item[\"status\"] == \"in_progress\" for item in cleaned) > 1:",
               "text": "同一时间最多一项进行中，避免清单变成一堆半成品。"
             },
             {
               "id": "n67",
-              "line": 67,
+              "line": 61,
               "anchor": "self.todos, self.version = cleaned, self.version",
               "text": "全部校验通过后才替换，失败的更新不改动清单。"
             }
@@ -421,54 +421,54 @@
           "id": "code-loop",
           "type": "annotated-source",
           "path": "lessons/lesson_todo_planning/runtime.py",
-          "start": 119,
-          "end": 154,
+          "start": 113,
+          "end": 149,
           "notes": [
             {
               "id": "n125",
-              "line": 125,
+              "line": 120,
               "anchor": "if condition != \"no_todo\":",
               "text": "无 TODO 组既看不到也执行不了 todo_write，工具定义和白名单里都没有它。"
             },
             {
               "id": "n127",
-              "line": 127,
-              "anchor": "system = BASE_SYSTEM if condition == \"no_todo\"",
+              "line": 122,
+              "anchor": "system = t.base_system if condition == \"no_todo\"",
               "text": "有 TODO 的两组在系统提示词里加上清单规则；三组的任务完全相同。"
             },
             {
               "id": "n131",
-              "line": 131,
+              "line": 126,
               "anchor": "for round_number in range(1, context.max_model_calls + 1):",
               "text": "轮数上限就是本课的模型调用预算，任何一组都不会无限循环。"
             },
             {
               "id": "n133",
-              "line": 133,
+              "line": 128,
               "anchor": "response = context.complete({\"messages\": messages",
               "text": "每轮都带完整消息历史和本组的工具定义。"
             },
             {
               "id": "n139",
-              "line": 139,
+              "line": 134,
               "anchor": "if not calls:",
               "text": "没有调用提议就结束。模型说“完成了”只是声明，后面还要验收。"
             },
             {
               "id": "n148",
-              "line": 148,
+              "line": 143,
               "anchor": "result = context.execute_proposal(call, tools)",
               "text": "execute_proposal 执行调用提议，成对记录 tool_call 与 tool_result。"
             },
             {
               "id": "n150",
-              "line": 150,
+              "line": 145,
               "anchor": "if name == \"lookup_note\" and result.get(\"ok\"):",
               "text": "只有成功的查询才记进 looked_up，验收器拿它核对卡片上的编号。"
             },
             {
               "id": "n154",
-              "line": 154,
+              "line": 149,
               "anchor": "_publish_todo(context, workspace, before, round_number, timeline)",
               "text": "清单每变一次就发布一版快照和差异（lesson.todo），回放时能看到计划怎么推进。"
             }
@@ -478,55 +478,55 @@
           "id": "code-reminder",
           "type": "annotated-source",
           "path": "lessons/lesson_todo_planning/runtime.py",
-          "start": 155,
-          "end": 185,
+          "start": 150,
+          "end": 181,
           "notes": [
             {
               "id": "n156",
-              "line": 156,
+              "line": 151,
               "anchor": "since_update = 0 if updated else since_update + 1",
               "text": "这一轮有 todo_write 成功更新了清单就清零，否则加一；调用失败不算更新。"
             },
             {
               "id": "n157",
-              "line": 157,
+              "line": 152,
               "anchor": "if condition == \"todo_reminder\" and since_update",
               "text": "只有“有提醒”组会插入提醒，阈值来自输入 reminder_after。"
             },
             {
               "id": "n160",
-              "line": 160,
+              "line": 156,
               "anchor": "messages.append({\"role\": \"user\", \"content\": text})",
               "text": "提醒是一条单独的 user 消息，排在本轮所有 tool 消息之后。"
             },
             {
               "id": "n161",
-              "line": 162,
+              "line": 158,
               "anchor": "context.emit(\"lesson.harness_injected\", {\"kind\":",
               "text": "同时发布 lesson.harness_injected，标明 source 为 harness，回放时分得清是谁在说话。"
             },
             {
               "id": "n166",
-              "line": 168,
-              "anchor": "checks = verify_card(workspace.card, looked_up)",
+              "line": 164,
+              "anchor": "checks = verify_card(workspace.card, looked_up, t)",
               "text": "无论哪一组，最后都由同一个验收器判定。"
             },
             {
               "id": "n170",
-              "line": 172,
+              "line": 168,
               "anchor": "def verify_card(card: list[dict] | None, looked_",
               "text": "验收器的输入只有复习卡和真实查询结果，没有模型的说法，也没有清单。"
             },
             {
               "id": "n174",
-              "line": 176,
+              "line": 172,
               "anchor": "wrong = [item[\"lesson\"] for item in card or [] i",
               "text": "编号必须和本次 lookup_note 的返回一致；没查过的课，填什么编号都不算。"
             },
             {
               "id": "n178",
-              "line": 180,
-              "anchor": "{\"label\": \"卡片覆盖全部三课\"",
+              "line": 176,
+              "anchor": "{\"label\": t.check_all_lessons",
               "text": "三课一课都不能少，漏查一课就停在这一项。"
             }
           ]

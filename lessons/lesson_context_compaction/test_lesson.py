@@ -1,4 +1,6 @@
-"""上下文压缩一课的行为测试：确定性模型数据，lookup_lesson 在 Python 中真实执行。"""
+"""Behavior tests for context-compaction: deterministic model data; lookup_lesson really runs in Python."""
+import json
+import re
 import unittest
 
 from pydantic import ValidationError
@@ -6,19 +8,26 @@ from pydantic import ValidationError
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.runner import RunCancelled
 from lessons.lesson_07_messages_context.runtime import validate_tool_history
-from lessons.lesson_09_context_budget.runtime import FACTS, has_text, lookup_lesson
+from lessons.lesson_09_context_budget.locales.helpers import texts_for as helper_texts
+from lessons.lesson_09_context_budget.runtime import has_text, lookup_lesson
 from lessons.lesson_context_compaction import runtime
 from lessons.lesson_context_compaction.fixtures import create_completion
+from lessons.lesson_context_compaction.locales import texts_for
+
+FACTS = helper_texts("zh-CN").facts
+ZH = texts_for("zh-CN")
+CJK = re.compile(r"[　-〿㐀-䶿一-鿿＀-￯]")
 
 
-def run_case(exercise_id, inputs, completion=None, budget=5, cancelled=lambda: False, mode="offline"):
+def run_case(exercise_id, inputs, completion=None, budget=5, cancelled=lambda: False, mode="offline", locale="zh-CN"):
     events = []
     values = validate_inputs(runtime, inputs)
     context = RunContext(
         lesson_id="context-compaction", exercise_id=exercise_id, question="", mode=mode,
         model="fixture-model", representation="sdk_standardized", inputs=values, api_key="",
-        completion=completion or create_completion(exercise_id, values), max_model_calls=budget,
+        completion=completion or create_completion(exercise_id, values, locale), max_model_calls=budget,
         cancelled=cancelled, emit_event=lambda kind, data, number: events.append((kind, data, number)),
+        locale=locale,
     )
     answer = execute_lesson({"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}, runtime, context)
     return answer, events
@@ -43,10 +52,10 @@ class CompactionRunTests(unittest.TestCase):
         self.assertEqual(rounds(events, "request"), [1, 2, 3, 4, 5])
         full, rule, cleared, summary_request, summarized = [data["body"]["messages"] for data in of(events, "request")]
         for messages in (full, rule, cleared, summary_request, summarized):
-            validate_tool_history(messages)
-        self.assertEqual(summary_request[-1]["content"], runtime.SUMMARY_INSTRUCTIONS["keep_sources"])
+            validate_tool_history(messages, "zh-CN")
+        self.assertEqual(summary_request[-1]["content"], ZH.summary_instructions["keep_sources"])
         for messages in (full, rule, cleared, summarized):
-            self.assertEqual(messages[-1]["content"], runtime.PROBE)
+            self.assertEqual(messages[-1]["content"], ZH.probe)
             self.assertEqual(messages[-5:], full[-5:], "最近部分在每一组里都原样保留")
         self.assertEqual(len(cleared), len(full), "清理只换内容，不删消息")
         self.assertLess(len(rule), len(full))
@@ -81,7 +90,7 @@ class CompactionRunTests(unittest.TestCase):
     def test_brief_instruction_reaches_the_summary_request(self):
         _, events = run_case("brief-summary", {"summary_style": "brief"})
         summary_request = of(events, "request")[3]["body"]["messages"]
-        self.assertEqual(summary_request[-1]["content"], runtime.SUMMARY_INSTRUCTIONS["brief"])
+        self.assertEqual(summary_request[-1]["content"], ZH.summary_instructions["brief"])
         summarized = next(data for data in of(events, "lesson.compaction") if data.get("name") == "摘要压缩")
         self.assertFalse(summarized["phrase_in_context"], "离线夹具的简短摘要不含原话")
 
@@ -100,7 +109,7 @@ class CompactionRunTests(unittest.TestCase):
                 self.assertEqual(len(summary_request), 2 * repeats + 5)
                 self.assertEqual((data["instruction"], data["style"], data["messages"]),
                                  (summary_request[-1]["content"], style, len(summary_request)))
-                self.assertEqual(data["instruction"], runtime.SUMMARY_INSTRUCTIONS[style])
+                self.assertEqual(data["instruction"], ZH.summary_instructions[style])
 
     def test_missing_usage_is_reported_not_zero(self):
         def provider(body, key):
@@ -121,23 +130,23 @@ class CompactionRunTests(unittest.TestCase):
 
 class CompactionFunctionTests(unittest.TestCase):
     def setUp(self):
-        self.results = {key: {"ok": True, "result": lookup_lesson(key)} for key in runtime.SOURCES}
+        self.results = {key: {"ok": True, "result": lookup_lesson(helper_texts("zh-CN"), key)} for key in runtime.SOURCES}
 
     def test_rule_record_keeps_every_field_and_the_order_or_raises(self):
         reads = [("messages-context", self.results["messages-context"])]
-        record = runtime.rule_record(reads, 300)
+        record = runtime.rule_record(reads, 300, ZH, "zh-CN")
         for field in ("目标：", "约束：", "来源：第 1 次读取 messages-context", "事实：" + FACTS["messages-context"], "待办："):
             self.assertIn(field, record["content"])
-        both = runtime.rule_record([(key, self.results[key]) for key in runtime.SOURCES], 2000)["content"]
+        both = runtime.rule_record([(key, self.results[key]) for key in runtime.SOURCES], 2000, ZH, "zh-CN")["content"]
         self.assertIn("第 1 次读取 messages-context；第 2 次读取 application-state", both)
         with self.assertRaises(ValueError):
-            runtime.rule_record(reads, 100)
+            runtime.rule_record(reads, 100, ZH, "zh-CN")
         with self.assertRaises(ValueError):
-            runtime.rule_record([("messages-context", {"ok": False, "error": "读取失败"})], 300)
+            runtime.rule_record([("messages-context", {"ok": False, "error": "读取失败"})], 300, ZH, "zh-CN")
 
     def test_a_proposed_tool_call_is_reported_not_executed(self):
         def provider(body, key):
-            if body["messages"][-1]["content"] == runtime.PROBE and "cleared" in str(body["messages"]):
+            if body["messages"][-1]["content"] == ZH.probe and "cleared" in str(body["messages"]):
                 return {"choices": [{"message": {"content": "", "tool_calls": [
                     {"id": "again", "type": "function", "function": {"name": "lookup_lesson", "arguments": "{}"}}]},
                     "finish_reason": "tool_calls"}]}
@@ -149,30 +158,72 @@ class CompactionFunctionTests(unittest.TestCase):
         self.assertEqual(row[5], "未命中")
 
     def test_clearing_keeps_pairs_and_only_the_latest_result(self):
-        older, recent = runtime.build_history(2, self.results)
-        messages = runtime.clear_old_tool_results(older + recent)
-        validate_tool_history(messages)
+        older, recent = runtime.build_history(2, self.results, ZH, "zh-CN")
+        messages = runtime.clear_old_tool_results(older + recent, ZH)
+        validate_tool_history(messages, "zh-CN")
         tools = [message for message in messages if message["role"] == "tool"]
         self.assertIn("cleared", tools[0]["content"])
         self.assertIn(FACTS["application-state"], tools[1]["content"])
-        none_kept = runtime.clear_old_tool_results(older + recent, keep_latest=0)
+        none_kept = runtime.clear_old_tool_results(older + recent, ZH, keep_latest=0)
         self.assertFalse(any(has_text(none_kept, fact) for fact in FACTS.values()))
 
     def test_failed_lookup_is_not_compacted(self):
         broken = {**self.results, "messages-context": {"ok": False, "error_type": "ValueError", "error": "x"}}
         with self.assertRaises(ValueError):
-            runtime.build_history(2, broken)
+            runtime.build_history(2, broken, ZH, "zh-CN")
 
     def test_probe_hit_needs_both_source_and_phrase(self):
-        self.assertTrue(runtime.probe_hit("来自 messages-context，原话：模型只看到本次请求里的消息；历史由应用程序重发。"))
-        self.assertFalse(runtime.probe_hit("历史由应用程序重发"))
-        self.assertFalse(runtime.probe_hit("来自 messages-context"))
-        self.assertTrue(runtime.probe_hit("来自“上下文组成与消息协议”，原话：模型只看到本次请求里的消息，历史由应用程序重发"))
+        self.assertTrue(runtime.probe_hit("来自 messages-context，原话：模型只看到本次请求里的消息；历史由应用程序重发。", ZH))
+        self.assertFalse(runtime.probe_hit("历史由应用程序重发", ZH))
+        self.assertFalse(runtime.probe_hit("来自 messages-context", ZH))
+        self.assertTrue(runtime.probe_hit("来自“上下文组成与消息协议”，原话：模型只看到本次请求里的消息，历史由应用程序重发", ZH))
 
     def test_inputs_are_bounded(self):
         for bad in ({"char_budget": 50}, {"noise_repeats": 30}, {"summary_style": "long"}, {"extra": 1}):
             with self.subTest(bad=bad), self.assertRaises(ValidationError):
                 validate_inputs(runtime, bad)
+
+
+class EnglishRunTests(unittest.TestCase):
+    """The same experiments in an English run: English text everywhere, the same outcomes as the Chinese run."""
+
+    def test_english_runs_have_no_chinese_and_keep_the_outcomes(self):
+        for exercise, inputs, calls in (("compare", {}, [1, 2, 3, 4, 5]),
+                                        ("tight-budget", {"char_budget": 100}, [1, 3, 4, 5]),
+                                        ("brief-summary", {"summary_style": "brief"}, [1, 2, 3, 4, 5])):
+            with self.subTest(exercise=exercise):
+                answer, events = run_case(exercise, inputs, locale="en")
+                self.assertIsNone(CJK.search(json.dumps([answer, events], ensure_ascii=False)))
+                self.assertEqual(rounds(events, "request"), calls)
+        t = texts_for("en")
+        _, events = run_case("compare", {}, locale="en")
+        layouts = [data for data in of(events, "lesson.compaction") if data["kind"] == "layout"]
+        self.assertEqual([data["name"] for data in layouts], [t.layout_names[code] for code in ("none", "rule", "clear", "summary")])
+        self.assertEqual([data["phrase_in_context"] for data in layouts], [True, True, False, True])
+        report = of(events, "lesson.report")[0]
+        self.assertEqual([check["passed"] for check in report["checks"]], [True, True, True, True, False, True])
+        self.assertEqual([row[5] for row in report["table"]["rows"]], [t.hit, t.hit, t.miss, t.hit])
+        requests = [data["body"]["messages"] for data in of(events, "request")]
+        self.assertEqual(requests[0][-1]["content"], t.probe)
+        self.assertIn("cleared", requests[2][3]["content"])
+
+    def test_english_rule_record_fits_the_default_budget(self):
+        # The default budget of 300 must hold the English record as it holds the Chinese one; 100 must not.
+        t = texts_for("en")
+        reads = [("messages-context", {"ok": True, "result": lookup_lesson(helper_texts("en"), "messages-context")})]
+        record = runtime.rule_record(reads, 300, t, "en")["content"]
+        self.assertIn("read 1 messages-context", record)
+        self.assertIn(t.probe_phrase, record)
+        with self.assertRaisesRegex(ValueError, "character budget of 100"):
+            runtime.rule_record(reads, 100, t, "en")
+
+    def test_english_probe_screen(self):
+        t = texts_for("en")
+        fact = helper_texts("en").facts["messages-context"]
+        self.assertIn(t.probe_phrase, fact)
+        self.assertTrue(runtime.probe_hit(f"From messages-context: {fact}", t))
+        self.assertTrue(runtime.probe_hit(f"From \"{t.probe_source_title}\": {fact}", t))
+        self.assertFalse(runtime.probe_hit(fact, t))
 
 
 if __name__ == "__main__":

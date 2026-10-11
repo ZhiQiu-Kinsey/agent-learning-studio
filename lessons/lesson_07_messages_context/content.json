@@ -262,7 +262,7 @@
               "actor": "运行器",
               "title": "拼出五条消息",
               "body": "系统提示词、之前的对话、调用、结果、本轮问题各一条。",
-              "code": "parts = build_parts(values, result)",
+              "code": "parts = build_parts(t, values, result)",
               "language": "python",
               "evidence": "lesson.context"
             },
@@ -282,7 +282,7 @@
               "actor": "运行器",
               "title": "发送前检查",
               "body": "只去掉工具结果的那组在这里被拦下，不发请求。",
-              "code": "validate_tool_history(messages)  # 不合法就抛 ValueError",
+              "code": "validate_tool_history(messages, locale)  # raises ValueError when invalid",
               "language": "python",
               "evidence": "lesson.context"
             },
@@ -351,54 +351,54 @@
           "id": "code-context-parts",
           "type": "annotated-source",
           "path": "lessons/lesson_07_messages_context/runtime.py",
-          "start": 36,
-          "end": 67,
+          "start": 37,
+          "end": 68,
           "notes": [
             {
               "id": "n38",
-              "line": 38,
+              "line": 39,
               "anchor": "VARIANTS = {",
-              "text": "五组对照，每组只写拿掉了哪几部分；空元组就是完整上下文。"
+              "text": "五组对照：键是组的代码，值是这一组拿掉了哪几部分；空元组就是完整上下文。组名按运行语言写在 variant_names 里。"
             },
             {
               "id": "n42",
-              "line": 42,
-              "anchor": "\"去掉工具调用和结果\": (\"tool_call\", \"tool_result\")",
+              "line": 43,
+              "anchor": "\"no_tool_pair\": (\"tool_call\", \"tool_result\")",
               "text": "调用和结果是一对，要拿就一起拿，剩下的历史仍然合法。"
             },
             {
               "id": "n43",
-              "line": 43,
-              "anchor": "\"只去掉工具结果\": (\"tool_result\",)",
+              "line": 44,
+              "anchor": "\"no_tool_result\": (\"tool_result\",)",
               "text": "故意只拿掉结果、留下调用：这一组违反消息协议，用来演示发送前的检查。"
             },
             {
               "id": "n47",
-              "line": 47,
-              "anchor": "def build_parts(values: Inputs, tool_result: dict)",
-              "text": "五条消息各占一个键，键名就是部分名；消融时按键跳过，不改动任何一条的内容。"
+              "line": 48,
+              "anchor": "def build_parts(t, values: Inputs, tool_result: dict)",
+              "text": "五条消息各占一个键，键名就是部分名；消融时按键跳过，不改动任何一条的内容。消息的文字来自运行语言的消息目录 t。"
             },
             {
               "id": "n54",
-              "line": 54,
+              "line": 55,
               "anchor": "\"conversation\": {\"role\": \"user\"",
               "text": "之前的对话：复习日只出现在这里。回答提到它，说明用上了这一部分。"
             },
             {
               "id": "n57",
-              "line": 57,
+              "line": 58,
               "anchor": "\"tool_call\": {\"role\": \"assistant\", \"content\": None",
               "text": "这条 assistant 消息是运行器写的，不是模型提出的；调用 id 与真实执行时相同，事件和消息对得上。"
             },
             {
               "id": "n59",
-              "line": 59,
+              "line": 60,
               "anchor": "\"tool_result\": {\"role\": \"tool\", \"tool_call_id\": CALL_ID",
               "text": "内容是本次 call_tool 的真实返回值；分数只在这条消息里。"
             },
             {
               "id": "n67",
-              "line": 67,
+              "line": 68,
               "anchor": "return [parts[key] for key in ORDER if key not in removed]",
               "text": "按固定顺序拼：每组只比完整上下文少几条消息，其余消息的位置和文字都不变。"
             }
@@ -408,42 +408,42 @@
           "id": "code-history-protocol",
           "type": "annotated-source",
           "path": "lessons/lesson_07_messages_context/runtime.py",
-          "start": 70,
-          "end": 97,
+          "start": 71,
+          "end": 99,
           "notes": [
             {
               "id": "n70",
-              "line": 70,
-              "anchor": "def validate_tool_history(messages: list[dict]) -> None:",
-              "text": "发送前的协议检查：只读消息列表，不合法就抛 ValueError，运行器据此决定不发请求。"
+              "line": 71,
+              "anchor": "def validate_tool_history(messages: list[dict], locale: str) -> None:",
+              "text": "发送前的协议检查：只读消息列表，不合法就抛 ValueError，运行器据此决定不发请求。locale 只决定错误文字的语言。"
             },
             {
               "id": "n72",
-              "line": 72,
+              "line": 74,
               "anchor": "outstanding: set[str] = set()",
               "text": "outstanding 记着已经提出、还没等到结果的调用 id；不为空就说明有调用在等结果。"
             },
             {
               "id": "n77",
-              "line": 77,
+              "line": 79,
               "anchor": "if outstanding and role != \"tool\":",
               "text": "有调用在等结果时，下一条只能是 tool 消息。第五组就在这里被拦下：调用后面直接是本轮问题。"
             },
             {
               "id": "n83",
-              "line": 83,
+              "line": 85,
               "anchor": "if not isinstance(call_id, str) or not call_id or call_id in seen:",
               "text": "调用 id 是配对的唯一依据，空的或重复的 id 没法和结果一一对上。"
             },
             {
               "id": "n90",
-              "line": 90,
+              "line": 92,
               "anchor": "if call_id not in outstanding:",
               "text": "工具结果必须回应一个还在等结果的调用；孤立或重复的 tool 消息直接拒绝。"
             },
             {
               "id": "n96",
-              "line": 96,
+              "line": 98,
               "anchor": "if outstanding:",
               "text": "消息走完了还有调用没等到结果，同样不合法。"
             }
@@ -453,55 +453,61 @@
           "id": "code-ablation-run",
           "type": "annotated-source",
           "path": "lessons/lesson_07_messages_context/runtime.py",
-          "start": 100,
-          "end": 127,
+          "start": 102,
+          "end": 130,
           "notes": [
             {
-              "id": "n103",
+              "id": "n-texts",
               "line": 103,
+              "anchor": "t = texts_for(context.locale)",
+              "text": "t 是这次运行语言的消息目录：系统提示词、组名和报告文字都从这里取，中文、英文各一份。"
+            },
+            {
+              "id": "n103",
+              "line": 106,
               "anchor": "result = context.call_tool(\"lookup_score\"",
               "text": "call_tool 由运行器发起调用，记下 tool_call 与 tool_result 事件，origin 标为 course_program。"
             },
             {
               "id": "n107",
-              "line": 107,
-              "anchor": "parts = build_parts(values, result)",
+              "line": 110,
+              "anchor": "parts = build_parts(t, values, result)",
               "text": "五条消息只拼一次，五组都从这同一份里挑，各组之间只差拿掉的部分。"
             },
             {
               "id": "n110",
-              "line": 110,
-              "anchor": "for name, removed in VARIANTS.items():",
-              "text": "按 VARIANTS 的顺序逐组处理，会被拦下的那组排在最后。"
+              "line": 113,
+              "anchor": "for code, removed in VARIANTS.items():",
+              "text": "按 VARIANTS 的顺序逐组处理，会被拦下的那组排在最后；组名按运行语言从 variant_names 取。"
             },
             {
               "id": "n115",
-              "line": 115,
-              "anchor": "validate_tool_history(messages)",
+              "line": 119,
+              "anchor": "validate_tool_history(messages, context.locale)",
               "text": "每组发送前都检查一次；检查不过的那组只记下原因，直接跳到下一组。"
             },
             {
               "id": "n117",
-              "line": 117,
-              "anchor": "_record(context, name, removed, messages, rejected=str(error))",
+              "line": 121,
+              "anchor": "_record(context, t, name, removed, messages, rejected=str(error))",
               "text": "被拦下的组记为一条带 rejected 的 lesson.context，没有 request 事件。"
             },
             {
               "id": "n121",
-              "line": 121,
-              "anchor": "_record(context, name, removed, messages, round_number=sent)",
+              "line": 125,
+              "anchor": "_record(context, t, name, removed, messages, round_number=sent)",
               "text": "通过检查的组按发送顺序编号，lesson.context 与随后的 request 用同一个轮次。"
             },
             {
               "id": "n123",
-              "line": 123,
-              "anchor": "answer = _send(context, messages, sent)",
+              "line": 127,
+              "anchor": "answer = _send(context, t, messages, sent)",
               "text": "_send 用 context.complete 发请求；服务商若拒绝，记成 lesson.provider_error，不重试。"
             },
             {
               "id": "n125",
-              "line": 125,
-              "anchor": "_report(context, values, rows, sent)",
+              "line": 129,
+              "anchor": "_report(context, t, values, rows, sent)",
               "text": "报告的拼装和本课无关，放在 _report 里，读码不展开。"
             }
           ]
@@ -682,31 +688,31 @@
           "label": "能复习的日子（写进之前的对话）",
           "options": [
             {
-              "value": "周一",
+              "value": "mon",
               "label": "周一"
             },
             {
-              "value": "周二",
+              "value": "tue",
               "label": "周二"
             },
             {
-              "value": "周三",
+              "value": "wed",
               "label": "周三"
             },
             {
-              "value": "周四",
+              "value": "thu",
               "label": "周四"
             },
             {
-              "value": "周五",
+              "value": "fri",
               "label": "周五"
             },
             {
-              "value": "周六",
+              "value": "sat",
               "label": "周六"
             },
             {
-              "value": "周日",
+              "value": "sun",
               "label": "周日"
             }
           ]
@@ -893,7 +899,7 @@
             },
             {
               "id": "item-5",
-              "text": "小扩展：在 VARIANTS 里把“去掉系统提示词”改成同时拿掉 system 和 conversation，重启本地服务后在网页上真实运行一次，说明为什么一次拿掉两部分时，回答的变化难以归因。"
+              "text": "小扩展：在 VARIANTS 里把 no_system（“去掉系统提示词”）改成同时拿掉 system 和 conversation，重启本地服务后在网页上真实运行一次，说明为什么一次拿掉两部分时，回答的变化难以归因。"
             }
           ]
         }
@@ -915,7 +921,7 @@
     },
     {
       "name": "VARIANTS",
-      "note": "五组对照的清单：组名对应这一组拿掉的部分。"
+      "note": "五组对照的清单：键是组的代码，值是这一组拿掉的部分。"
     },
     {
       "name": "lookup_score",

@@ -1,30 +1,35 @@
-# 依赖式多轮调用（`dependent-calls`）
+# Dependent calls across rounds (`dependent-calls`)
 
-**目标：**练习工具之间存在依赖时，模型如何先拿到事实，再决定下一步；并对照两个互不依赖的任务为什么可以在同一轮提出。
+English · [简体中文](README.zh-CN.md)
 
-命令行运行（在项目根目录）：
+**Goal:** see how the model first gets a fact and then decides the next step when one tool depends on another, and compare why two independent tasks can be proposed in the same round.
+
+Command-line run (from the project root):
 
 ```powershell
-.\.venv\Scripts\python.exe -m lessons.lesson_02_dependent_calls.main
+.\.venv\Scripts\python.exe -m lessons.lesson_02_dependent_calls.main             # Chinese
+.\.venv\Scripts\python.exe -m lessons.lesson_02_dependent_calls.main --locale en # English
 ```
 
-练习一（`chain`）：
+Exercise one (`chain`):
 
-> 把现在的小时和分钟相加。
+> Add the current hour and minute.
 
-预期流程：
+Expected flow:
 
-1. 第一次模型请求只调用 `get_current_time()`。
-2. Python 返回带 `hour`、`minute` 的结构化数据。
-3. 模型读取真实返回值，再请求 `add_numbers(hour, minute)`。
-4. Python 将结果回传，模型组织最终回答。
+1. The first model request calls only `get_current_time()`.
+2. Python returns structured data with `hour` and `minute`.
+3. The model reads the real values, then requests `add_numbers(hour, minute)`.
+4. Python returns the result and the model writes the final answer.
 
-练习二（`both`）：
+Exercise two (`both`):
 
-> 计算 19 加 23，并告诉我现在几点。
+> Add 19 and 23, and tell me what time it is.
 
-两个任务互不依赖，模型可以在同一个响应里提出两个调用；`run_agent` 仍按列表逐个执行，两个工具结果各带自己的 `tool_call_id` 进入下一次请求。
+The two tasks don't depend on each other, so the model may propose both calls in the same response; `run_agent` still executes them one by one in list order, and each tool result goes into the next request with its own `tool_call_id`.
 
-这条路径最多用三轮模型请求。`main.py` 只保存本课的任务规则；工具定义与白名单沿用“执行工具与回传结果”一课的 `tools.py`，执行循环是 `course/runner.py` 的 `run_agent`。每轮的完整请求 JSON 会显示在终端中，认证头不会打印。实际百炼调用会产生用量。
+This path uses at most three model requests. `setup(locale)` in `main.py` is written exactly like the one in the lesson "Executing tools and returning results"; only the system prompt changes. The tool definitions and the allowlist come from that lesson's `tools.py`, and the loop is `run_agent` in `course/runner.py`. The terminal shows the full request JSON of every round without the authentication header. Real Bailian calls incur usage.
 
-本课也可在网页课程导航中进入，查看源码、真实运行事件和回放。
+**Run language:** the system prompt is in `locales/zh_CN.py` and `locales/en.py`; the tool descriptions and tool errors are in `locales/tools/`, shared with `tool-selection`. Tool and parameter names are code and the same in both languages. The web page picks the run language from the UI language.
+
+You can also open this lesson from the course navigation on the web page to see the source, real run events and replay.

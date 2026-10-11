@@ -291,7 +291,7 @@
               "actor": "SQLite",
               "title": "第二条连接读回",
               "body": "新连接按同一个命名空间和键查询。",
-              "code": "restored = MemoryStore(path).get(namespace, key)",
+              "code": "restored = MemoryStore(path, locale=locale).get(namespace, key)",
               "language": "python",
               "evidence": "lesson.report 表格第二行"
             },
@@ -301,7 +301,7 @@
               "actor": "程序",
               "title": "召回并放进数据块",
               "body": "只读召回，记录写进 user 消息的数据块。",
-              "code": "records, _ = store.recall(namespace)\nmessages = build_messages(items, QUESTION)",
+              "code": "records, _ = store.recall(namespace)\nmessages = build_messages(items, t.question, locale)",
               "language": "python",
               "evidence": "lesson.memory（recalled）与 request"
             },
@@ -360,78 +360,78 @@
           "id": "code-store",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/store.py",
-          "start": 26,
-          "end": 72,
+          "start": 22,
+          "end": 75,
           "notes": [
             {
               "id": "n27",
-              "line": 27,
-              "anchor": "def __init__(self, path: Path, *, read_only: bool = False):",
+              "line": 23,
+              "anchor": "def __init__(self, path: Path, *, locale: str, read_only: bool = False):",
               "text": "一个 MemoryStore 就是一条数据库连接；read_only 决定这条连接能不能写。"
             },
             {
               "id": "n30",
-              "line": 31,
+              "line": 29,
               "anchor": "?mode=ro\", uri=True)",
               "text": "mode=ro 只读打开：读取阶段在数据库层面就写不进去。"
             },
             {
               "id": "n36",
-              "line": 37,
+              "line": 35,
               "anchor": "CREATE TABLE IF NOT EXISTS memories",
               "text": "建表只在第一次打开时生效；之后再打开，用的是文件里已有的表和数据。值和来源一起存下。"
             },
             {
               "id": "n40",
-              "line": 41,
+              "line": 39,
               "anchor": "expires_at REAL, scope TEXT NOT NULL DEFAULT 'persistent', task_id TEXT,",
               "text": "到期时间和范围这三列本课不用，{{lesson:memory-lifecycle}}再讲。"
             },
             {
               "id": "n41",
-              "line": 42,
+              "line": 40,
               "anchor": "PRIMARY KEY (namespace, key))",
               "text": "主键是 (namespace, key)：同一命名空间里一个 key 只有一行，不同命名空间互不相干。"
             },
             {
               "id": "n43",
-              "line": 44,
+              "line": 42,
               "anchor": "CREATE TABLE IF NOT EXISTS versions",
               "text": "第二张表只记每个键写到了第几版，删除记忆时不删它。它防的是什么，{{lesson:memory-lifecycle}}再讲。"
             },
             {
               "id": "n44",
-              "line": 51,
+              "line": 49,
               "anchor": "def close(self):",
               "text": "关闭连接。重开验证靠的就是先关再开。"
             },
             {
               "id": "n49",
-              "line": 56,
+              "line": 59,
               "anchor": "row = self.connection.execute(\"SELECT * FROM memories WHERE namespace=? AND key=?\",",
               "text": "参数化查询：namespace 和 key 先经 check_id 检查，再用 ? 占位传入，不拼进 SQL 字符串。"
             },
             {
               "id": "n51",
-              "line": 58,
+              "line": 61,
               "anchor": "return None if row is None or self.expired(dict(row), now) else dict(row)",
               "text": "没有这一行就返回 None。过期检查本课用不到，{{lesson:memory-lifecycle}}再讲。"
             },
             {
               "id": "n53",
-              "line": 60,
+              "line": 63,
               "anchor": "def recall(self, namespace: str, task_id: str | None = None,",
               "text": "召回：取出一个命名空间里这次该带上的记录，返回召回的和过滤掉的两组。"
             },
             {
               "id": "n57",
-              "line": 64,
+              "line": 67,
               "anchor": "rows = self.connection.execute(\"SELECT * FROM memories WHERE namespace=? ORDER BY key\",",
               "text": "只查这个命名空间；按 key 排序，每次召回的顺序都一样。"
             },
             {
               "id": "n60",
-              "line": 67,
+              "line": 70,
               "anchor": "reason = self.skip_reason(item, task_id, now)",
               "text": "过期和范围的过滤规则在{{lesson:memory-lifecycle}}读。本课的记录都是 persistent、不设到期时间，全部召回。"
             }
@@ -441,78 +441,78 @@
           "id": "code-save-reopen",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/runtime.py",
-          "start": 37,
-          "end": 75,
+          "start": 36,
+          "end": 74,
           "notes": [
             {
               "id": "n37",
-              "line": 37,
+              "line": 36,
               "anchor": "def save_and_reopen(context: RunContext, path: Path, values: Inputs) -> str:",
               "text": "这个练习只用本地 Python 和 SQLite，不调用模型；path 由运行器决定，网页传不进来。"
             },
             {
               "id": "n38",
-              "line": 38,
+              "line": 37,
               "anchor": "other = \"other_learner\" if values.namespace != \"other_learner\" else \"learner_demo\"",
               "text": "另选一个命名空间，用来核对这次写入没有碰到别的分区。"
             },
             {
               "id": "n42",
-              "line": 42,
+              "line": 41,
               "anchor": "before = first.get(values.namespace, values.key)",
               "text": "先读一次：有旧记录就拿到它的版本，没有就是 None。"
             },
             {
               "id": "n45",
-              "line": 45,
+              "line": 44,
               "anchor": "saved = first.put(values.namespace, values.key, values.value, values.source,",
               "text": "显式写入：value 和 source 都来自输入，不从模型回答里抽取。"
             },
             {
               "id": "n48",
-              "line": 48,
+              "line": 47,
               "anchor": "first.close()",
               "text": "关闭第一条连接，它在内存里的东西从此用不上了。"
             },
             {
               "id": "n52",
-              "line": 52,
-              "anchor": "second = MemoryStore(path)",
+              "line": 51,
+              "anchor": "second = MemoryStore(path, locale=context.locale)",
               "text": "第二条连接是全新的，读到什么只取决于 SQLite 文件。"
             },
             {
               "id": "n54",
-              "line": 54,
+              "line": 53,
               "anchor": "restored = second.get(values.namespace, values.key)",
               "text": "按同一个 namespace 和 key 读回；报告比较它和写入时的值、版本。"
             },
             {
               "id": "n56",
-              "line": 56,
+              "line": 55,
               "anchor": "other_after = second.get(other, values.key)",
               "text": "另一个命名空间写入前后读到的结果应该完全一样。"
             },
             {
               "id": "n64",
-              "line": 64,
-              "anchor": "return MemoryStore(path, read_only=True) if path.exists() else MemoryStore(Path(\":memory:\"))",
+              "line": 63,
+              "anchor": "return MemoryStore(path, locale=locale, read_only=True) if path.exists()",
               "text": "有文件就只读打开；还没有文件就用空的内存库，读取阶段不会创建文件。"
             },
             {
               "id": "n67",
-              "line": 67,
+              "line": 66,
               "anchor": "def recall_only(context: RunContext, path: Path, values: Inputs) -> str:",
               "text": "只读恢复：不写入，只读上次留下的记录。"
             },
             {
               "id": "n70",
-              "line": 70,
+              "line": 69,
               "anchor": "record = store.get(values.namespace, values.key)",
               "text": "只查询；查不到就如实返回 None。"
             },
             {
               "id": "n71",
-              "line": 71,
+              "line": 70,
               "anchor": "writes = store.connection.total_changes",
               "text": "这条连接改动过的行数。报告用它核对读取阶段没有写入。"
             }
@@ -520,20 +520,20 @@
           "folds": [
             {
               "id": "emit-saved",
-              "start": 49,
-              "end": 50,
+              "start": 48,
+              "end": 49,
               "label": "平台：发布 lesson.memory 事件，检查是否已停止"
             },
             {
               "id": "report-reopen",
-              "start": 59,
-              "end": 59,
+              "start": 58,
+              "end": 58,
               "label": "平台：整理报告事件"
             },
             {
               "id": "emit-recall-only",
-              "start": 74,
-              "end": 75,
+              "start": 73,
+              "end": 74,
               "label": "平台：发布 lesson.memory 与报告事件"
             }
           ]
@@ -542,60 +542,60 @@
           "id": "code-recall-request",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/runtime.py",
-          "start": 78,
-          "end": 103,
+          "start": 77,
+          "end": 102,
           "notes": [
             {
               "id": "n78",
-              "line": 78,
-              "anchor": "def build_messages(items: list[dict], question: str) -> list[dict]:",
+              "line": 77,
+              "anchor": "def build_messages(items: list[dict], question: str, locale: str) -> list[dict]:",
               "text": "召回的记录在这里变成请求：一条 system，一条 user。"
             },
             {
               "id": "n81",
-              "line": 81,
+              "line": 80,
               "anchor": "payload = json.dumps(items, ensure_ascii=False, indent=2)",
               "text": "记忆写成 JSON；尖括号换成转义写法，值里写了 </memory> 也提前结束不了数据块。"
             },
             {
               "id": "n82",
-              "line": 82,
-              "anchor": "return [{\"role\": \"system\", \"content\": SYSTEM},",
+              "line": 81,
+              "anchor": "return [{\"role\": \"system\", \"content\": shared_texts_for(locale).memory_rules},",
               "text": "system 只放固定的规则，任何记忆内容都不拼进来。"
             },
             {
               "id": "n83",
-              "line": 83,
+              "line": 82,
               "anchor": "{\"role\": \"user\", \"content\": f\"<memory>",
               "text": "记忆在 user 消息开头的数据块里，问题跟在后面。"
             },
             {
               "id": "n88",
-              "line": 88,
-              "anchor": "store = open_for_reading(path)",
+              "line": 87,
+              "anchor": "store = open_for_reading(path, context.locale)",
               "text": "召回同样用只读连接，读取阶段不会改动记忆库。"
             },
             {
               "id": "n90",
-              "line": 90,
+              "line": 89,
               "anchor": "records, _ = store.recall(values.namespace)",
               "text": "召回这个命名空间里的记录；new_learner 里没有记录，结果就是空列表。"
             },
             {
               "id": "n97",
-              "line": 97,
+              "line": 96,
               "anchor": "items = [{\"key\": item[\"key\"], \"value\": item[\"value\"], \"source\": item[\"source\"]}",
               "text": "只带 key、value、source：版本、时间这些存储细节，回答问题用不上。"
             },
             {
               "id": "n99",
-              "line": 99,
-              "anchor": "answer = _content(context.complete({\"messages\": messages, \"temperature\": 0}))",
+              "line": 98,
+              "anchor": "answer = _content(context.complete({\"messages\": messages, \"temperature\": 0}), context.locale)",
               "text": "本练习唯一的一次模型请求，请求和响应都原样记成事件。"
             },
             {
               "id": "n101",
-              "line": 101,
+              "line": 100,
               "anchor": "cited = CITED.findall(answer)",
               "text": "取出回答方括号里的 key，报告核对它们是否都在这次请求的数据块里。"
             }
@@ -603,14 +603,14 @@
           "folds": [
             {
               "id": "emit-recalled",
-              "start": 94,
-              "end": 95,
+              "start": 93,
+              "end": 94,
               "label": "平台：发布 lesson.memory 事件，记下召回了哪些 key"
             },
             {
               "id": "report-recall",
-              "start": 102,
-              "end": 102,
+              "start": 101,
+              "end": 101,
               "label": "平台：整理报告事件"
             }
           ]

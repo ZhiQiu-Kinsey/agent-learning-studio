@@ -47,7 +47,7 @@
               "label": "04 / PROBE",
               "title": "探针问题",
               "description": "只有最早那次工具结果才能回答的问题。压缩之后再问一次，就知道这条信息还在不在。",
-              "token": "PROBE"
+              "token": "t.probe"
             }
           ]
         },
@@ -139,7 +139,7 @@
           "title": "清理旧工具结果：位置还在，内容没了",
           "paragraphs": [
             "清理旧工具结果只把较早那条 tool 消息的内容换成一句说明，消息本身留在原位。真实的长任务里，占地方的大头往往是工具结果：读一个文件是几千字，跑一次测试的日志可能上万字。这些结果模型读过、据此做完决定之后，多半不必再逐字看，却每轮都跟着历史重发。",
-            "clear_old_tool_results 先找出所有 tool 消息的位置，保留最近 keep_latest 条（默认 1），更早的内容换成 CLEARED：cleared 为 true，再附一句“原内容不在上下文里”。assistant 那条调用和 tool_call_id 都不动，消息条数不变，调用和工具结果仍然成对，{{lesson:messages-context}}的协议检查照样通过。它不调用模型，也不用设计字段，是三种做法里最省事的。",
+            "clear_old_tool_results 先找出所有 tool 消息的位置，保留最近 keep_latest 条（默认 1），更早的内容换成一段 JSON：cleared 为 true，note 是消息目录里的 cleared_note，说明原内容不在上下文里。assistant 那条调用和 tool_call_id 都不动，消息条数不变，调用和工具结果仍然成对，{{lesson:messages-context}}的协议检查照样通过。它不调用模型，也不用设计字段，是三种做法里最省事的。",
             "留下位置是有用的：模型仍能看到自己曾经用 messages-context 调过 lookup_lesson，只是不知道结果。真实系统通常允许它再调一次工具去查，所以清理适合能重新取到的结果，比如文件内容、查询结果。本课的请求有意不提供工具，模型没法重查：探针问的来源还能从调用参数里认出来，原话却答不出。",
             "还有两点要注意。会改动外部的调用，比如写文件、发消息，清理之后模型仍能从调用记录知道它做过，不会以为没做而重做一遍；但如果后面还要用它的结果，就不该清理。另外，本课的工具结果很短，清理省下的字符不多；工具结果越长，省下的越多。"
           ]
@@ -177,7 +177,7 @@
           "title": "摘要压缩：模型决定留什么",
           "paragraphs": [
             "摘要压缩多发一次请求，让模型把较早部分写成一段摘要，之后的请求用这段摘要代替较早部分。它和前两种最大的不同，是留什么由模型决定：规则压缩只认字段，清理只认位置，摘要却能读懂内容，把旁支讨论里一句有用的话也写进去。这是它的长处。",
-            "summary_body 拼出这次额外请求：第一条是 SUMMARY_SYSTEM，说明只写摘要、不继续执行任务；中间是较早部分的原文；最后一条 user 消息是压缩指令。运行器给模型的回答加上“此前对话的摘要：”，放进第 5 轮请求。这次额外请求也计入模型调用数，它要带上整段较早部分，用量单独列在实验报告里。",
+            "summary_body 拼出这次额外请求：第一条是 system 消息 summary_system，说明只写摘要、不继续执行任务；中间是较早部分的原文；最后一条 user 消息是压缩指令。运行器给模型的回答加上“此前对话的摘要：”，放进第 5 轮请求。这次额外请求也计入模型调用数，它要带上整段较早部分，用量单独列在实验报告里。",
             "摘要里留下什么，指令能影响。默认指令要求保留目标、约束、每次工具调用的来源和结果原文、尚未完成的事项；“用一两句话概括”那组只要求一两句话。摘要原文就在第 4 轮的 response 里，读它就知道这一组的探针为什么答得出或答不出。",
             "摘要天生有损：它通常保住大意，丢掉原话、具体数字和先后顺序。写摘要的模型也可能写错，比如把两份资料的来源记反；原文已经不在了，后面的请求只能相信它。所以摘要压缩之后，先读摘要原文，再看探针：只看探针回答，分不清是摘要丢了信息，还是模型没用上。"
           ]
@@ -191,7 +191,7 @@
             "同一段历史，指令不同，摘要差别很大。“请概括以上对话”只告诉模型要短，没告诉它后面要做什么，模型自然挑它觉得重要的写。本课的默认指令把要保留的东西点了名：目标、约束、来源和结果原文、待办，还给了字数上限。",
             "再进一步，可以把接下来的任务写进指令，比如“后面要回答某个问题，请保留与之相关的信息”。同一批资料，在“列出人名清单”和“了解某人经历”两个任务下，该留的东西不一样。代价是摘要绑定了任务，任务一变，旧摘要可能就不够用了。",
             "细节最容易丢。举个编的例子：原文是“3 号订单 9 月 12 日退款 86 元”，压成“有一笔退款”，日期、金额和订单号就都没了，后面要核对只能重查。指令里可以要求数字、日期、文件路径和原话照抄，并给每条事实注明来源，需要时能按来源回去查。",
-            "还有一条容易忽略：较早部分的工具结果里可能夹带着看起来像指令的文字，写摘要的模型不该去执行它。本课的 SUMMARY_SYSTEM 写明不继续执行任务，就是要让这次请求只写摘要。有的系统还会把用户当前的请求单独存一份，压缩后原样放回，不交给摘要去转述。"
+            "还有一条容易忽略：较早部分的工具结果里可能夹带着看起来像指令的文字，写摘要的模型不该去执行它。本课的 summary_system 写明不继续执行任务，就是要让这次请求只写摘要。有的系统还会把用户当前的请求单独存一份，压缩后原样放回，不交给摘要去转述。"
           ]
         },
         {
@@ -363,24 +363,24 @@
           "id": "code-history",
           "type": "annotated-source",
           "path": "lessons/lesson_context_compaction/runtime.py",
-          "start": 39,
-          "end": 47,
+          "start": 31,
+          "end": 39,
           "notes": [
             {
               "id": "n43",
-              "line": 43,
-              "anchor": "checked_fact(results[key], key)",
+              "line": 35,
+              "anchor": "checked_fact(results[key], key, locale)",
               "text": "工具结果不对就停下：压缩的输入必须是真实读取到的资料。"
             },
             {
               "id": "n44",
-              "line": 44,
-              "anchor": "older = [{\"role\": \"user\", \"content\": GOAL}, *tool",
+              "line": 36,
+              "anchor": "older = [{\"role\": \"user\", \"content\": t.goal}, *tool",
               "text": "较早部分：目标、第一次读取、旁支讨论。三种压缩改写的都是这一段。"
             },
             {
               "id": "n46",
-              "line": 46,
+              "line": 38,
               "anchor": "recent = [*tool_pair(\"compaction_lookup_2\", seco",
               "text": "最近部分：第二次读取和最后一轮旁支讨论，每一组都原样保留。"
             }
@@ -390,55 +390,55 @@
           "id": "code-strategies",
           "type": "annotated-source",
           "path": "lessons/lesson_context_compaction/runtime.py",
-          "start": 50,
-          "end": 82,
+          "start": 42,
+          "end": 73,
           "notes": [
             {
               "id": "n52",
-              "line": 52,
-              "anchor": "sources = \"；\".join(f\"第 {number} 次读取 {key}\"",
+              "line": 44,
+              "anchor": "sources = t.list_separator.join(t.source_entry.format(",
               "text": "来源一栏写明第几次读取：探针问“最早”，记录里就得留下先后顺序。"
             },
             {
               "id": "n53",
-              "line": 53,
-              "anchor": "facts = \"；\".join(checked_fact(result, key) for",
+              "line": 45,
+              "anchor": "facts = t.list_separator.join(checked_fact(result, key, locale)",
               "text": "事实只取自真实的工具结果，不让模型改写。"
             },
             {
               "id": "n56",
-              "line": 56,
-              "anchor": "f\"约束：不能把无来源的猜测当事实\\n来源：{sources}",
-              "text": "目标、约束、来源、事实、待办，五个字段写死在程序里。"
+              "line": 46,
+              "anchor": "record = {\"role\": \"user\", \"content\": t.rule_record.format(",
+              "text": "目标、约束、来源、事实、待办，五个字段写死在消息目录的 rule_record 模板里，程序只填来源和事实。"
             },
             {
               "id": "n58",
-              "line": 58,
+              "line": 48,
               "anchor": "if message_chars([record]) > char_budget:",
               "text": "超过字符预算就报错，不会为了装下而删掉来源或事实。"
             },
             {
               "id": "n66",
-              "line": 66,
+              "line": 56,
               "anchor": "cleared = set(tool_indexes[:-keep_latest] if kee",
               "text": "最近 keep_latest 次工具结果保留，更早的都要清理。"
             },
             {
               "id": "n68",
-              "line": 68,
-              "anchor": "return [{**message, \"content\": json.dumps(CLEARED",
+              "line": 59,
+              "anchor": "return [{**message, \"content\": note} if index in cleared else message",
               "text": "只换 content，消息本身和 tool_call_id 都不动，配对仍然完整。"
             },
             {
               "id": "n74",
-              "line": 74,
-              "anchor": "messages = [{\"role\": \"system\", \"content\": SUMMARY_",
+              "line": 65,
+              "anchor": "messages = [{\"role\": \"system\", \"content\": t.summary_system}, *older,",
               "text": "摘要请求带着较早部分的原文，最后一条是压缩指令。"
             },
             {
               "id": "n82",
-              "line": 82,
-              "anchor": "return any(name in answer for name in PROBE_SOURC",
+              "line": 73,
+              "anchor": "return any(name in answer for name in (SOURCES[0], t.probe_source_title))",
               "text": "初筛要求来源（键或名称都行）和原话同时出现，只答出其中一个不算。"
             }
           ]
@@ -447,84 +447,90 @@
           "id": "code-compare",
           "type": "annotated-source",
           "path": "lessons/lesson_context_compaction/runtime.py",
-          "start": 85,
-          "end": 127,
+          "start": 76,
+          "end": 120,
           "notes": [
             {
               "id": "n88",
-              "line": 88,
-              "anchor": "validate_tool_history(messages)",
+              "line": 79,
+              "anchor": "validate_tool_history(messages, context.locale)",
               "text": "每组发出前都跑协议检查：压缩不能留下孤立的工具结果。"
             },
             {
               "id": "n91",
-              "line": 91,
-              "anchor": "\"phrase_in_context\": has_text(messages, PROBE_PHRASE)",
+              "line": 82,
+              "anchor": "\"phrase_in_context\": has_text(messages, t.probe_phrase)",
               "text": "本地字符串检查：发出之前，先记下原话在不在这组上下文里。"
             },
             {
               "id": "n92",
-              "line": 92,
+              "line": 83,
               "anchor": "response = context.complete({\"messages\": messages",
               "text": "每组问一次探针问题，请求和响应由平台原样记录。"
             },
             {
               "id": "n93",
-              "line": 93,
-              "anchor": "answer = answer_text(response)",
+              "line": 84,
+              "anchor": "answer = answer_text(response, context.locale)",
               "text": "模型没写文本、改为提出工具调用时，回答一栏如实写明，运行器不执行这些调用。"
             },
             {
+              "id": "n-names",
+              "line": 91,
+              "anchor": "names = t.layout_names",
+              "text": "四组的名字按运行语言从 layout_names 取，lesson.compaction 和报告表格都写这个名字。"
+            },
+            {
               "id": "n100",
-              "line": 100,
+              "line": 93,
               "anchor": "results = {key: context.call_tool(\"lookup_lesson\"",
               "text": "两次读取都由运行器发起，事件里标为运行器调用。"
             },
             {
               "id": "n106",
-              "line": 106,
-              "anchor": "rows = [ask_probe(context, \"不压缩\"",
+              "line": 99,
+              "anchor": "rows = [ask_probe(context, t, names[\"none\"]",
               "text": "对照组带着全部历史，用来确认探针问题本身答得出。"
             },
             {
               "id": "n109",
-              "line": 109,
-              "anchor": "record, refused = rule_record([(SOURCES[0], resul",
+              "line": 102,
+              "anchor": "record, refused = rule_record([(SOURCES[0], results[SOURCES[0]])]",
               "text": "规则压缩只用第一次读取的结果拼记录，因为只有它在较早部分里。"
             },
             {
               "id": "n115",
-              "line": 115,
+              "line": 108,
               "anchor": "context.emit(\"lesson.compaction\", {\"kind\": \"refused\"",
               "text": "装不下就记下拒绝原因，这一组不发请求，第 2 轮留空。"
             },
             {
               "id": "n117",
-              "line": 117,
-              "anchor": "rows.append(ask_probe(context, \"清理旧工具结果\"",
+              "line": 110,
+              "anchor": "rows.append(ask_probe(context, t, names[\"clear\"]",
               "text": "清理组的消息条数和不压缩组一样，只有较早那条工具结果的内容变了。"
             },
             {
               "id": "n120",
-              "line": 120,
+              "line": 113,
               "anchor": "context.emit(\"lesson.compaction\", {\"kind\": \"summary_request\"",
               "text": "发出前把这次的摘要指令单独记进 lesson.compaction，不用去数它在 messages 里排第几。"
             },
             {
               "id": "n119",
-              "line": 123,
+              "line": 116,
               "anchor": "summary_response = context.complete(body, round_number=4)",
               "text": "摘要压缩的额外请求在第 4 轮，它的用量单独记进实验报告。"
             },
             {
               "id": "n121",
-              "line": 125,
-              "anchor": "rows.append(ask_probe(context, \"摘要压缩\"",
+              "line": 118,
+              "anchor": "rows.append(ask_probe(context, t, names[\"summary\"]",
               "text": "摘要替换较早部分，最近部分原样跟在后面。"
             },
             {
               "id": "n122",
-              "line": 126,
+              "line": 119,
               "anchor": "context.emit(\"lesson.report\", _report(",
               "text": "实验报告的拼装放在 _report 里，不在这里展开。"
             }

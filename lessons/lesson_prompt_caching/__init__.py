@@ -1,1 +1,1 @@
-"""课程实现；以 curriculum/catalog.json 中的状态为准。"""
+"""Prompt caching and the stable prefix: compare the cache hits providers report for three request layouts."""

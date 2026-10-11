@@ -27,8 +27,8 @@
       "source": "6f1e3d01fe54"
     },
     "concepts.01-boundary.description": {
-      "text": "The schema describes the argument format, and Python validates the real input. Only names in AVAILABLE_TOOLS are allowed to run.",
-      "source": "baf466eff1b0"
+      "text": "The schema describes the argument format, and Python validates the real input. Only names in the allowlist available_tools are allowed to run.",
+      "source": "8f7013604faf"
     },
     "concepts.02-feedback.label": {
       "text": "02 / FEEDBACK",
@@ -79,8 +79,8 @@
       "source": "6804e116f299"
     },
     "section-1.paragraphs.1": {
-      "text": "So there are two layers of checks, both in the program. The first is in the runner: execute_tool first parses arguments with json.loads and confirms it is an arguments object, then looks up the function by name in AVAILABLE_TOOLS and refuses if it is not found. AVAILABLE_TOOLS is this lesson's allowlist and registers only divide_numbers; no other name the model writes will be executed. The second is in the tool function: divide_numbers checks that both arguments are numbers, that they are finite (excluding NaN and infinity), and that the divisor is not 0, and after computing it checks whether the result overflowed.",
-      "source": "59861e61579f"
+      "text": "So there are two layers of checks, both in the program. The first is in the runner: execute_tool first parses arguments with json.loads and confirms it is an arguments object, then looks up the function by name in the allowlist and refuses if it is not found. available_tools returns the allowlist, and this lesson registers only divide_numbers; no other name the model writes will be executed. The second is in the tool function: divide_numbers checks that both arguments are numbers, that they are finite (excluding NaN and infinity), and that the divisor is not 0, and after computing it checks whether the result overflowed.",
+      "source": "b4c7f5dff8ae"
     },
     "section-1.paragraphs.2": {
       "text": "Both layers refuse when they find a problem and do not correct things for the model. The runner does not change b=0 into b=1, and does not complete a broken JSON. Quietly correcting may look considerate, but in effect the program does something the model did not ask for: the user asks for 12 divided by 0, the program computes 12 divided by 1 for them, and the answer is no longer to the question they asked.",
@@ -91,11 +91,11 @@
       "source": "750f9c954419"
     },
     "section-2.paragraphs.0": {
-      "text": "When a tool fails, the runner returns three fields, ok=false, error_type, and error; this is called a structured error. On success it returns ok=true and result. The tool result for 12 divided by 0 is {\"ok\": false, \"error_type\": \"ValueError\", \"error\": \"除数不能为 0；请提供非零除数。\"} (the error reads \"the divisor cannot be 0; please provide a non-zero divisor\"). Like a successful result, it is wrapped in a message with role tool, paired by the same call id, and appended to messages, so the model can read it in the next round.",
+      "text": "When a tool fails, the runner returns three fields, ok=false, error_type, and error; this is called a structured error. On success it returns ok=true and result. The tool result for 12 divided by 0 is {\"ok\": false, \"error_type\": \"ValueError\", \"error\": \"The divisor cannot be 0; please provide a non-zero divisor.\"}. Like a successful result, it is wrapped in a message with role tool, paired by the same call id, and appended to messages, so the model can read it in the next round.",
       "source": "7053b3253524"
     },
     "section-2.paragraphs.1": {
-      "text": "Each of the three fields has a job. ok tells the model and the program whether it succeeded without reading any text. error_type says what kind of problem it is: JSONDecodeError means the argument text is broken, ValueError means a value breaks the rules or the tool name is not registered, and TypeError usually means arguments are missing or extra. error is the wording written for the model; ideally it says both what is wrong and how to fix it. \"请提供非零除数\" (\"please provide a non-zero divisor\") gives the model what it needs to explain the problem to the user.",
+      "text": "Each of the three fields has a job. ok tells the model and the program whether it succeeded without reading any text. error_type says what kind of problem it is: JSONDecodeError means the argument text is broken, ValueError means a value breaks the rules or the tool name is not registered, and TypeError usually means arguments are missing or extra. error is the wording written for the model; ideally it says both what is wrong and how to fix it. \"please provide a non-zero divisor\" gives the model what it needs to explain the problem to the user.",
       "source": "02a4774bcc0b"
     },
     "section-2.paragraphs.2": {
@@ -115,7 +115,7 @@
       "source": "12858f5859d0"
     },
     "deep-dive-error-message.paragraphs.0": {
-      "text": "The error in a structured error is not a log for programmers; it is input to the model's next round. When the model reads \"除数不能为 0；请提供非零除数\" (\"the divisor cannot be 0; please provide a non-zero divisor\"), it learns two things: there is no result this time, and the next step is to ask the user for a different divisor. If error only says \"something went wrong\", or is a long stack trace, the model can only guess: it may retry with other arguments, or simply make up an answer. error is also sent to the provider with the next request, so it should not contain local paths, keys, or similar information. That is another benefit of execute_tool wrapping only three expected kinds of exceptions instead of passing arbitrary exception text back to the model.",
+      "text": "The error in a structured error is not a log for programmers; it is input to the model's next round. When the model reads \"The divisor cannot be 0; please provide a non-zero divisor\", it learns two things: there is no result this time, and the next step is to ask the user for a different divisor. If error only says \"something went wrong\", or is a long stack trace, the model can only guess: it may retry with other arguments, or simply make up an answer. error is also sent to the provider with the next request, so it should not contain local paths, keys, or similar information. That is another benefit of execute_tool wrapping only three expected kinds of exceptions instead of passing arbitrary exception text back to the model.",
       "source": "d7e5fb46c829"
     },
     "deep-dive-error-message.paragraphs.1": {
@@ -203,7 +203,7 @@
       "source": "715b34bac3d6"
     },
     "deep-dive-retry.paragraphs.1": {
-      "text": "This lesson retries neither kind automatically, for different reasons. Tool-layer failures go back to the model, which decides the next step, and the system prompt explicitly says \"不要重复同一个无效请求\" (\"do not repeat the same invalid request\"). Provider API failures stop the run: the course's model connection sets the number of automatic retries to 0. When a request times out, you do not know whether the provider never received it, or processed it and only the reply was lost. Blindly resending may bill you twice, and an operation that changes the outside world may run twice.",
+      "text": "This lesson retries neither kind automatically, for different reasons. Tool-layer failures go back to the model, which decides the next step, and the system prompt explicitly says \"do not repeat the same invalid request\". Provider API failures stop the run: the course's model connection sets the number of automatic retries to 0. When a request times out, you do not know whether the provider never received it, or processed it and only the reply was lost. Blindly resending may bill you twice, and an operation that changes the outside world may run twice.",
       "source": "019d2839e77a"
     },
     "deep-dive-retry.paragraphs.2": {
@@ -263,8 +263,8 @@
       "source": "08603b0d6088"
     },
     "misconception-prompt-guard.correction": {
-      "text": "A prompt is only a request to the model; the model may not follow it, or may be led astray by the user's words. What blocks unregistered tools is the runner: it looks up functions by name only in AVAILABLE_TOOLS, and if none is found it returns ok=false and no function is executed.",
-      "source": "06ef022a7d34"
+      "text": "A prompt is only a request to the model; the model may not follow it, or may be led astray by the user's words. What blocks unregistered tools is the runner: it looks up functions by name only in the allowlist available_tools, and if none is found it returns ok=false and no function is executed.",
+      "source": "cbb614659cd6"
     },
     "mq-injected-origin.injected-origin.prompt": {
       "text": "The tool_call in the \"Unregistered tool\" arm carries origin=course_program. What can this run prove?",
@@ -371,8 +371,8 @@
       "source": "4fd4f8e9bd05"
     },
     "walkthrough.step-3.body": {
-      "text": "The runner catches ValueError and wraps the failure, still sending it back through role=tool. A tool_result event only shows that a result came back; keep going and check ok.",
-      "source": "c5e834619390"
+      "text": "The runner catches the ValueError and wraps it as a failure, still returned via role=tool. A tool_result event only means a result came back; expand it and check ok. error holds the text the tool raised, \"The divisor cannot be 0; please provide a non-zero divisor.\"",
+      "source": "dcf2a4626872"
     },
     "walkthrough.step-3.evidence": {
       "text": "Find ok=false, match it to the original call by tool_call_id, then check whether the error entered the next round's request.",
@@ -422,13 +422,17 @@
       "text": "Tools reference: which exit codes of a command count as failure (Claude Code documentation)",
       "source": "2b02cd907810"
     },
+    "code-divide-guard.n-signature.text": {
+      "text": "t holds the error messages of the run's language and can only be passed by position; the model's arguments always arrive by name, so they can never replace it.",
+      "source": "b91af6941322"
+    },
     "code-divide-guard.n32.text": {
       "text": "Check each argument's type in turn and exclude bool; the error message names which argument is wrong.",
       "source": "f0bd59d4722b"
     },
     "code-divide-guard.n37.text": {
-      "text": "Converting a huge integer to a float makes math.isfinite raise OverflowError; here it becomes a clear out-of-range error, so no unexpected exception escapes the tool.",
-      "source": "a386ed176552"
+      "text": "Converting a huge integer to a float makes math.isfinite raise OverflowError. Here that counts as a non-finite input and reports \"Both arguments must be finite numbers within the supported range.\", so no unexpected exception escapes the tool.",
+      "source": "8141ba8bbc8f"
     },
     "code-divide-guard.n43.text": {
       "text": "A divisor of 0 raises ValueError, and the message states the fix directly. This text goes back to the model unchanged, for it to explain to the user.",
@@ -455,8 +459,8 @@
       "source": "83a31c39e9a6"
     },
     "code-fault-injection.n-unknown-name.text": {
-      "text": "An unregistered tool name: it is not in AVAILABLE_TOOLS and the model may not propose it, so the program builds it directly.",
-      "source": "a268e665192c"
+      "text": "An unregistered tool name: it is not in the allowlist available_tools returns, and the model may not propose it, so the program builds it directly.",
+      "source": "6d203586e5aa"
     },
     "code-fault-injection.n-broken-json.text": {
       "text": "The name is the registered divide_numbers, but the argument text is not valid JSON, and the refusal happens at the parsing step.",
@@ -479,15 +483,15 @@
       "source": "fd7cf4dca0e9"
     },
     "code-decision.chosen": {
-      "text": "execute_tool wraps argument errors and business-rule errors as {ok: false, error_type, error} and still returns them as a role=tool message; SYSTEM_PROMPT requires that a result be reported only when ok=true, and that when ok=false the model state the error honestly and ask the user to fix the input.",
-      "source": "e8d8124a25e2"
+      "text": "execute_tool wraps argument errors and business-rule errors as {ok: false, error_type, error} and still returns them as a role=tool message; the system prompt requires that a result be reported only when ok=true, and that when ok=false the model state the error honestly and ask the user to fix the input.",
+      "source": "900df7c08b9f"
     },
     "code-decision.abort-on-error.title": {
       "text": "End the whole run as soon as a tool raises an exception",
       "source": "c63dbebb0419"
     },
     "code-decision.abort-on-error.why_not": {
-      "text": "The model gets no reason for the failure, and the user sees only a failed run, with no fix suggestion like \"请提供非零除数\" (\"please provide a non-zero divisor\").",
+      "text": "The model gets no reason for the failure, and the user sees only a failed run, with no fix suggestion like \"please provide a non-zero divisor\".",
       "source": "ce91948d7188"
     },
     "code-decision.default-value.title": {
@@ -607,8 +611,8 @@
       "source": "4fc9be2a8207"
     },
     "injected-faults.unknown-name.text": {
-      "text": "The unregistered tool name unregistered_tool: it is not in AVAILABLE_TOOLS.",
-      "source": "9d0200671d20"
+      "text": "The unregistered tool name unregistered_tool: it is not in the allowlist available_tools.",
+      "source": "d983229fe3d7"
     },
     "injected-faults.broken-arguments.text": {
       "text": "The arguments of divide_numbers: a piece of JSON text that cannot be parsed.",
@@ -735,8 +739,8 @@
       "source": "502b2f79285e"
     },
     "quiz.allowlist-boundary.a.feedback": {
-      "text": "The runner looks only in the AVAILABLE_TOOLS allowlist and never searches for an arbitrary Python function by name; otherwise the model could extend its own execution permissions.",
-      "source": "fda99d355376"
+      "text": "The runner looks only in the available_tools allowlist and never searches for an arbitrary Python function by name; otherwise the model could extend its own execution permissions.",
+      "source": "1df0973988b2"
     },
     "quiz.allowlist-boundary.b.text": {
       "text": "Refuse to execute, return a structured error, and let the model continue within the allowed capabilities.",
@@ -755,8 +759,8 @@
       "source": "4dddf735ff99"
     },
     "quiz.allowlist-boundary.explanation": {
-      "text": "Valid JSON only means the arguments are parseable, not that the tool is authorized. AVAILABLE_TOOLS is the explicit execution allowlist; an unknown name must be refused, and the model's proposal cannot extend what the program executes.",
-      "source": "31d075ba2a4c"
+      "text": "Valid JSON only means the arguments are parseable, not that the tool is authorized. available_tools returns the explicit execution allowlist; an unknown name must be refused, and the model's proposal cannot extend what the program executes.",
+      "source": "f314ebaed56f"
     },
     "quiz.round-limit-error.prompt": {
       "text": "This lesson allows at most 2 rounds. In the divide-by-zero arm, the model proposes 12 divided by 0 again in round 2. How does the run end?",
@@ -859,16 +863,16 @@
       "source": "27a5b91d1e81"
     },
     "code_notes.error.note": {
-      "text": "The exception message as is, e.g. \"除数不能为 0；请提供非零除数。\" (\"the divisor cannot be 0; please provide a non-zero divisor\"), returned to the model unchanged.",
+      "text": "The exception message as is, e.g. \"The divisor cannot be 0; please provide a non-zero divisor.\", returned to the model unchanged.",
       "source": "d3b72b27ed28"
     },
     "code_notes.quotient.note": {
       "text": "The quotient divide_numbers returns on success; it appears only in a result with ok=true.",
       "source": "3e5fe6eebffb"
     },
-    "code_notes.AVAILABLE_TOOLS.note": {
-      "text": "A dict from tool names to functions, which is this lesson's allowlist; only divide_numbers is registered here.",
-      "source": "dacf15396f3c"
+    "code_notes.available_tools.note": {
+      "text": "Returns a dict from tool names to functions, which is this lesson's allowlist; only divide_numbers is registered here.",
+      "source": "074d47f5984a"
     },
     "code_notes.execute_tool.note": {
       "text": "The runner's function that executes tools: it wraps only argument and validation exceptions as ok=false, and lets other exceptions keep propagating.",

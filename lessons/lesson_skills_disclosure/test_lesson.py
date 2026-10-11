@@ -1,5 +1,6 @@
-"""Skills 与渐进式披露的行为测试：确定性模型数据，技能文件与 load_skill 在 Python 中真实读取和执行。"""
+"""Behavior tests for skills-disclosure: deterministic model data; skill files and load_skill really run in Python."""
 import json
+import re
 import unittest
 
 from pydantic import ValidationError
@@ -8,16 +9,21 @@ from course.execution import RunContext, execute_lesson, validate_inputs
 from course.runner import RunCancelled
 from lessons.lesson_skills_disclosure import runtime
 from lessons.lesson_skills_disclosure.fixtures import create_completion
+from lessons.lesson_skills_disclosure.locales import texts_for
+
+ZH = texts_for("zh-CN")
+CJK = re.compile(r"[　-〿一-鿿＀-￯]")
 
 
-def run_case(exercise_id, inputs, completion=None, budget=4, cancelled=lambda: False):
+def run_case(exercise_id, inputs, completion=None, budget=4, cancelled=lambda: False, locale="zh-CN"):
     events = []
     values = validate_inputs(runtime, inputs)
     context = RunContext(
         lesson_id="skills-disclosure", exercise_id=exercise_id, question="", mode="offline",
         model="fixture-model", representation="sdk_standardized", inputs=values, api_key="",
-        completion=completion or create_completion(exercise_id, values), max_model_calls=budget,
+        completion=completion or create_completion(exercise_id, values, locale), max_model_calls=budget,
         cancelled=cancelled, emit_event=lambda kind, data, number: events.append((kind, data, number)),
+        locale=locale,
     )
     answer = execute_lesson({"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}, runtime, context)
     return answer, events
@@ -28,7 +34,7 @@ def of(events, kind):
 
 
 def with_usage(completion, per_char=4):
-    """在确定性响应上补一个按请求长度计算的 prompt_tokens，只为测试报告的取值与合计。"""
+    """Add prompt_tokens computed from the request length to a deterministic response, only to test the report."""
     def complete(body, key):
         response = completion(body, key)
         size = len(json.dumps(body["messages"], ensure_ascii=False))
@@ -52,15 +58,15 @@ class SkillFileTests(unittest.TestCase):
     def test_every_registered_skill_has_frontmatter_and_body(self):
         for name in runtime.SKILL_NAMES:
             with self.subTest(name=name):
-                skill = runtime.read_skill(name)
+                skill = runtime.read_skill(name, "zh-CN")
                 self.assertEqual(skill["name"], name)
                 self.assertGreater(len(skill["description"]), 20)
                 self.assertNotIn("---", skill["body"][:5])
                 self.assertIn("## 做法", skill["body"])
 
     def test_catalog_lists_only_name_and_description(self):
-        skills = runtime.skill_list("precise")
-        catalog, full = runtime.catalog_prompt(skills), runtime.full_prompt(skills)
+        skills = runtime.skill_list("precise", "zh-CN")
+        catalog, full = runtime.catalog_prompt(ZH, skills), runtime.full_prompt(ZH, skills)
         for skill in skills:
             self.assertIn(f"- {skill['name']}：{skill['description']}", catalog)
             self.assertNotIn(skill["body"], catalog)
@@ -68,16 +74,17 @@ class SkillFileTests(unittest.TestCase):
         self.assertLess(len(catalog) * 3, len(full))
 
     def test_vague_variant_changes_only_one_description(self):
-        precise, vague = runtime.skill_list("precise"), runtime.skill_list("vague")
-        self.assertEqual(vague[0]["description"], runtime.VAGUE_DESCRIPTION)
+        precise, vague = runtime.skill_list("precise", "zh-CN"), runtime.skill_list("vague", "zh-CN")
+        self.assertEqual(vague[0]["description"], ZH.vague_description)
         self.assertEqual(vague[0]["body"], precise[0]["body"])
         self.assertEqual(vague[1:], precise[1:])
 
     def test_load_skill_reads_only_registered_names(self):
-        self.assertEqual(runtime.load_skill("review-cards")["instructions"], runtime.read_skill("review-cards")["body"])
+        self.assertEqual(runtime.load_skill("zh-CN", "review-cards")["instructions"],
+                         runtime.read_skill("review-cards", "zh-CN")["body"])
         for name in ("../../local_config", "review-cards/../error-question", "Review-Cards", ""):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, "没有名为"):
-                runtime.load_skill(name)
+                runtime.load_skill("zh-CN", name)
 
 
 class CompareTests(unittest.TestCase):
@@ -96,7 +103,7 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(records[2]["skills_in_context"], ["review-cards"])
         self.assertLess(records[1]["prompt_tokens"], records[0]["prompt_tokens"])
         result = of(events, "tool_result")[0]
-        self.assertEqual(result["result"]["result"]["instructions"], runtime.read_skill("review-cards")["body"])
+        self.assertEqual(result["result"]["result"]["instructions"], runtime.read_skill("review-cards", "zh-CN")["body"])
         report = of(events, "lesson.report")[-1]
         full_row, demand_row = report["table"]["rows"]
         self.assertEqual(full_row[:2], ["全量注入", 1])
@@ -136,7 +143,7 @@ class TriggerTests(unittest.TestCase):
         self.assertIn("review-cards：帮助学习。", of(events, "request")[0]["body"]["messages"][0]["content"])
         report = of(events, "lesson.report")[-1]
         self.assertEqual(report["table"]["rows"][0][5], "漏触发：该加载却没加载")
-        # 回答格式照样通过：只看回答，看不出技能没被加载。
+        # The format screen still passes: the answer alone cannot show that the skill was not loaded.
         self.assertTrue(next(c for c in report["checks"] if c["label"].endswith("回答格式初筛"))["passed"])
         _, events = run_case("question-vague", {"mode": "on_demand", "task": "review_question", "description": "vague"})
         report = of(events, "lesson.report")[-1]
@@ -192,9 +199,57 @@ class LimitTests(unittest.TestCase):
 
     def test_format_screen_counts_cards_with_markdown(self):
         text = "**问：** 列表能改吗？\n**答：** 能。\n\n1. 问：元组呢？\n答：不能。\n\n- 问：集合？\n- 答：去重。"
-        self.assertEqual(runtime.count_cards(text), (3, 3))
-        self.assertEqual(runtime.format_screen("review-cards", text)[0], True)
-        self.assertEqual(runtime.format_screen(None, text), (False, "写成了 3 张复习卡"))
+        self.assertEqual(runtime.count_cards(ZH, text), (3, 3))
+        self.assertEqual(runtime.format_screen(ZH, "review-cards", text)[0], True)
+        self.assertEqual(runtime.format_screen(ZH, None, text), (False, "写成了 3 张复习卡"))
+
+
+class EnglishRunTests(unittest.TestCase):
+    """English runs read the English skill files and send English prompts; the verdicts stay the same."""
+
+    def test_english_skill_files_parse_and_match_the_chinese_ones(self):
+        for name in runtime.SKILL_NAMES:
+            with self.subTest(name=name):
+                english, chinese = runtime.read_skill(name, "en"), runtime.read_skill(name, "zh-CN")
+                self.assertEqual(english["name"], name)
+                self.assertIn("## Procedure", english["body"])
+                self.assertNotEqual(english["body"], chinese["body"])
+                self.assertFalse(CJK.search(english["description"] + english["body"]))
+
+    def test_compare_cards_in_english(self):
+        t = texts_for("en")
+        answer, events = run_case("compare-cards", {"mode": "both"}, locale="en")
+        requests = [data["body"] for data in of(events, "request")]
+        self.assertTrue(requests[0]["messages"][0]["content"].startswith(t.full_prompt))
+        self.assertEqual(requests[0]["messages"][1]["content"], t.task_messages["make_cards"])
+        self.assertIn("- review-cards: Use when", requests[1]["messages"][0]["content"])
+        self.assertEqual(requests[1]["tools"][0]["function"]["description"], t.load_skill_description)
+        records = of(events, "lesson.skill_request")
+        self.assertEqual(records[0]["skills_in_context"], list(runtime.SKILL_NAMES))
+        self.assertEqual(records[2]["skills_in_context"], ["review-cards"])
+        report = of(events, "lesson.report")[-1]
+        self.assertTrue(all(check["passed"] for check in report["checks"]), report["checks"])
+        self.assertEqual(report["table"]["rows"][1][5], t.loading_correct.format(names="review-cards"))
+        self.assertTrue(answer.startswith("[Full injection]\n"))
+        self.assertFalse(CJK.search(json.dumps([answer, events], ensure_ascii=False)))
+
+    def test_vague_triggers_and_unknown_names_in_english(self):
+        t = texts_for("en")
+        _, events = run_case("cards-vague", {"mode": "on_demand", "description": "vague"}, locale="en")
+        self.assertIn("review-cards: Helps with studying.", of(events, "request")[0]["body"]["messages"][0]["content"])
+        self.assertEqual(of(events, "lesson.report")[-1]["table"]["rows"][0][5], t.loading_missed)
+        _, events = run_case("question-vague", {"mode": "on_demand", "task": "review_question", "description": "vague"},
+                             locale="en")
+        self.assertEqual(of(events, "lesson.report")[-1]["table"]["rows"][0][5],
+                         t.loading_false.format(names="review-cards"))
+        with self.assertRaisesRegex(ValueError, "the skill catalog has only: review-cards, error-question"):
+            runtime.available_tools("en")["load_skill"](name="../../local_config")
+
+    def test_english_format_screen_counts_q_and_a_lines(self):
+        t = texts_for("en")
+        text = "**Q:** Can a list change?\n**A:** Yes.\n\n1. Q: And a tuple?\nA: No.\n\n- Question: A set?\n- Answer: No duplicates."
+        self.assertEqual(runtime.count_cards(t, text), (3, 3))
+        self.assertEqual(runtime.format_screen(t, None, text), (False, "written as 3 review cards"))
 
 
 if __name__ == "__main__":

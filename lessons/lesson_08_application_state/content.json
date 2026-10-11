@@ -286,7 +286,7 @@
               "actor": "程序",
               "title": "新建状态",
               "body": "每次运行创建独立状态。",
-              "code": "state = TaskState(run_id=uuid4().hex, goal=goal)",
+              "code": "state = TaskState(run_id=uuid4().hex, goal=goal, locale=locale)",
               "language": "python",
               "evidence": "lesson.state"
             },
@@ -306,7 +306,7 @@
               "actor": "资料源",
               "title": "读取证据",
               "body": "只有真实读到的资料进入 evidence。",
-              "code": "source = SOURCES.get(source_key)\nstate.evidence.append({'source': source_key, 'excerpt': source})",
+              "code": "source = t.source_excerpts.get(source_key)\nstate.evidence.append({'source': source_key, 'excerpt': source})",
               "language": "python",
               "evidence": "lesson.state"
             },
@@ -316,7 +316,7 @@
               "actor": "状态机",
               "title": "判定终态",
               "body": "第三步执行前先扣预算，再生成课内要点并判定终态。",
-              "code": "if state.consume_step('生成课内资料要点', budget):\n    state.result = make_summary(source)\n    state.transition('completed', reason)",
+              "code": "if state.consume_step(t.step_summarize, budget):\n    state.result = make_summary(source)\n    state.transition('completed', t.reason_completed)",
               "language": "python",
               "evidence": "lesson.state"
             },
@@ -326,7 +326,7 @@
               "actor": "运行器",
               "title": "发布报告",
               "body": "比较终态、证据与消息。",
-              "code": "_report(context, state, messages, values)",
+              "code": "_report(context, t, state, messages, values)",
               "language": "python",
               "evidence": "lesson.report"
             }
@@ -375,26 +375,32 @@
           "id": "code-state-machine",
           "type": "annotated-source",
           "path": "lessons/lesson_08_application_state/runtime.py",
-          "start": 25,
-          "end": 68,
+          "start": 23,
+          "end": 71,
           "notes": [
             {
               "id": "n27",
-              "line": 26,
+              "line": 24,
               "anchor": "TRANSITIONS = {",
               "text": "转换表显式列出所有合法路径，不在表里的转换一律拒绝。"
             },
             {
               "id": "n31",
-              "line": 30,
+              "line": 28,
               "anchor": "\"completed\": set(), \"failed\": set(), \"cancelled\"",
               "text": "三个终态的出口都是空集合，进入后不能再转出。"
             },
             {
               "id": "n37",
-              "line": 36,
+              "line": 34,
               "anchor": "class TaskState:",
               "text": "应用状态是一个普通数据类，和 messages 是两个容器，状态更新不会自动变成消息。"
+            },
+            {
+              "id": "n-locale",
+              "line": 39,
+              "anchor": "locale: InitVar[str]",
+              "text": "运行语言只决定报错文字用哪种语言。它是 InitVar，不是字段，不会出现在 lesson.state 的快照里。"
             },
             {
               "id": "n42",
@@ -410,25 +416,25 @@
             },
             {
               "id": "n52",
-              "line": 51,
+              "line": 54,
               "anchor": "if self.used_steps >= budget:",
               "text": "步骤预算在执行前扣减：用完时返回 False，由调用方把状态转为 failed 并写明原因。"
             },
             {
               "id": "n60",
-              "line": 59,
+              "line": 62,
               "anchor": "if target not in TRANSITIONS[self.status]:",
               "text": "每次转换先查转换表；ready 直接转 completed 会在这里抛错。"
             },
             {
               "id": "n62",
-              "line": 61,
+              "line": 64,
               "anchor": "if target in TERMINAL and not reason:",
               "text": "进入终态必须说明原因。"
             },
             {
               "id": "n65",
-              "line": 64,
+              "line": 67,
               "anchor": "if target == \"completed\" and (not self.evidence ",
               "text": "没有证据或产物就不能标为 completed，规则写在状态机里，而不是靠调用方自觉。"
             }
@@ -438,61 +444,67 @@
           "id": "code-state-run",
           "type": "annotated-source",
           "path": "lessons/lesson_08_application_state/runtime.py",
-          "start": 71,
-          "end": 106,
+          "start": 74,
+          "end": 110,
           "notes": [
             {
+              "id": "n-texts",
+              "line": 75,
+              "anchor": "t = texts_for(context.locale)",
+              "text": "t 是运行语言的消息目录：步骤名、快照动作、终态原因和报告文字都从这里取，中文、英文各一份。"
+            },
+            {
               "id": "n75",
-              "line": 74,
-              "anchor": "state = TaskState(run_id=uuid4().hex, goal=values.goal)",
+              "line": 78,
+              "anchor": "state = TaskState(run_id=uuid4().hex, goal=values.goal",
               "text": "每次运行新建状态和 run_id，不共享全局任务状态。"
             },
             {
               "id": "n76",
-              "line": 75,
+              "line": 79,
               "anchor": "messages = [{\"role\": \"user\", \"content\": values.g",
               "text": "messages 从头到尾只有这一条 user 消息，状态更新从不伪装成 assistant 或 tool 消息。"
             },
             {
               "id": "n77",
-              "line": 76,
-              "anchor": "_publish(context, state, \"创建独立运行\")",
+              "line": 80,
+              "anchor": "_publish(context, state, t.action_created)",
               "text": "_publish 发布一份完整状态快照（lesson.state）；回放时能看到每一步的状态。"
             },
             {
               "id": "n83",
-              "line": 82,
-              "anchor": "source = SOURCES.get(values.source_key)",
-              "text": "选了不存在的资料，SOURCES 里查不到，走 waiting → failed。"
+              "line": 86,
+              "anchor": "source = t.source_excerpts.get(values.source_key)",
+              "text": "选了不存在的资料，source_excerpts 里查不到，走 waiting → failed。"
             },
             {
               "id": "n89",
-              "line": 88,
-              "anchor": "elif not state.consume_step(\"核对资料来源\", values.step_budget):",
+              "line": 92,
+              "anchor": "elif not state.consume_step(t.step_check_source, values.step_budget):",
               "text": "预算为 1 时，第二步前就用完，状态转为 failed，evidence 为空。"
             },
             {
               "id": "n93",
-              "line": 92,
+              "line": 96,
               "anchor": "state.evidence.append({\"source\": values.source_key",
               "text": "证据写进应用状态，messages 不因此增加。"
             },
             {
               "id": "n97",
-              "line": 96,
-              "anchor": "if not state.consume_step(\"生成课内资料要点\", values.step_budget):",
+              "line": 100,
+              "anchor": "if not state.consume_step(t.step_summarize, values.step_budget):",
               "text": "预算预设把预算设为 2：第三步在执行前就被拒绝，状态转为 failed，已有证据保留。"
             },
             {
               "id": "n101",
-              "line": 100,
-              "anchor": "state.transition(\"completed\", \"课内资料归纳流程完成",
+              "line": 104,
+              "anchor": "state.transition(\"completed\", t.reason_completed)",
               "text": "只有证据和 result 都在，transition 才允许进入 completed。"
             },
             {
               "id": "n104",
-              "line": 103,
-              "anchor": "_report(context, state, messages, values)",
+              "line": 107,
+              "anchor": "_report(context, t, state, messages, values)",
               "text": "报告的拼装放在 _report 里，检查项按状态逐项计算，读码不展开。"
             }
           ]
@@ -552,7 +564,7 @@
             },
             {
               "id": "evidence-recorded",
-              "text": "证据写进状态的那一刻：source 与 excerpt 来自本地 SOURCES。资料缺失组没有这一条。",
+              "text": "证据写进状态的那一刻：source 与 excerpt 来自本地资料 source_excerpts。资料缺失组没有这一条。",
               "selector": {
                 "event": "lesson.state",
                 "path": "data.state.evidence[0]"
@@ -868,8 +880,8 @@
       "note": "TaskState 方法：执行一步前先扣预算，预算用完返回 False，由调用方写入失败终态。"
     },
     {
-      "name": "SOURCES",
-      "note": "本课内置的两份本地资料（messages-context、application-state）；证据只能从这里读。"
+      "name": "source_excerpts",
+      "note": "本课的两份本地资料，按运行语言各写一份；证据只能从这里读，键名是课程 slug。"
     },
     {
       "name": "lesson.state",

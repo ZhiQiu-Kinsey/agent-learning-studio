@@ -1,25 +1,29 @@
-# 工具定义与调用提议（`tool-proposals`）
+# Tool definitions and call proposals (`tool-proposals`)
 
-**目标：**把工具定义随请求发给模型，只看模型提出的调用：选了哪个工具、参数是什么。本课不执行任何工具。
+English · [简体中文](README.zh-CN.md)
 
-本课是独立运行器（`runtime.py`），只发一次请求：
+**Goal:** send the tool definitions with the request and look only at the calls the model proposes: which tool it picked and what the arguments are. This lesson executes no tool.
 
-1. 请求体在 `messages` 之外多了 `tools`（工具定义，直接复用“执行工具与回传结果”一课 `tools.py` 的 `TOOLS`）和 `tool_choice: "auto"`。
-2. `context.complete` 发出请求，平台记录 `request`、`response` 事件。
-3. `read_proposals` 原样列出响应里的 `tool_calls`：调用 id、工具名、JSON 字符串形式的 `arguments`，并标出它能不能解析成 JSON 对象。本课没有登记任何可执行的函数，所以事件里没有 `tool_call` 和 `tool_result`。
+This lesson is a custom runner (`runtime.py`) that sends one request:
 
-| 练习 | 问题 | 看什么 |
+1. Besides `messages`, the body has `tools` (the tool definitions, built by `tool_definitions` in `tools.py` of the lesson "Executing tools and returning results") and `tool_choice: "auto"`.
+2. `context.complete` sends the request; the platform records the `request` and `response` events.
+3. `read_proposals` lists the `tool_calls` of the response unchanged: call id, tool name, `arguments` as a JSON string, and whether it parses as a JSON object. No function is registered for execution, so the events have no `tool_call` and no `tool_result`.
+
+| Exercise | Question | What to look at |
 | --- | --- | --- |
-| `sum` 问加法 | 帮我计算 19 加 23。 | 是否提出 `add_numbers`，参数怎么写 |
-| `time` 问时间 | 现在本地时间是几点？ | 是否提出 `get_current_time`，参数为空对象 |
-| `chat` 闲聊 | 你好，用一句话介绍一下你自己。 | 不提出调用、直接回答，`finish_reason` 为 `stop` |
+| `sum` Ask for a sum | Add 19 and 23 for me. | Whether it proposes `add_numbers`, and how it writes the arguments |
+| `time` Ask for the time | What is the local time now? | Whether it proposes `get_current_time` with an empty object |
+| `chat` Small talk | Hello, introduce yourself in one sentence. | No call proposal, a direct answer, `finish_reason` is `stop` |
 
-执行调用提议、把结果交回模型，是下一课“执行工具与回传结果”的内容。
+Executing call proposals and handing the results back to the model is the next lesson, "Executing tools and returning results".
 
-在网页课程导航中进入本课，可以查看源码、真实运行事件和回放。离线测试：
+**Run language:** this lesson runs in Chinese and in English. The system prompt, the answer the runner writes and the lab report texts are in `locales/zh_CN.py` and `locales/en.py`; the tool descriptions are in `locales/tools/`, shared with `tool-selection`; the exercise questions are written per language in `lesson.json`. The web page picks the run language from the UI language, and every run record states the language it ran in. Tool and parameter names are code and the same in both languages.
+
+Open this lesson from the course navigation on the web page to see the source, real run events and replay. Offline tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_tool_proposals.test_lesson -v
 ```
 
-`fixtures.py` 只服务自动化测试，提议是固定脚本，不代表真实模型的选择。
+`fixtures.py` serves automated tests only; its proposals are a fixed script, not a real model's choice.

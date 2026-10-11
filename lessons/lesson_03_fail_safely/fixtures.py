@@ -1,17 +1,18 @@
-"""错误处理与安全边界一课的除法练习样本：正常除法与除零，验证运行器回传失败结果。
+"""Division samples for fail-safely: a normal division and a zero divisor, to check that the runner returns the failure.
 
-两组故障注入（未登记的工具、损坏的参数）不调用模型，由 runtime.py 的运行器构造，不需要样本。
+The two fault injections (unregistered tool, broken arguments) call no model; runtime.py's runner
+builds them, so they need no sample.
 """
 from server.offline import CompletionScript, result_answer, tool_call
 
 
-def create_completion(exercise_id, inputs=None):
+def create_completion(exercise_id, inputs=None, locale="zh-CN"):
     if exercise_id not in ("divide", "zero"):
-        raise ValueError("错误处理与安全边界一课没有此测试样本。")
+        raise ValueError(f"fail-safely has no offline exercise {exercise_id!r}")
 
     def decide(results):
         if results:
-            return result_answer(results)
+            return result_answer(results, locale)
         return {"tool_calls": [tool_call("divide_numbers", {"a": 12, "b": 0 if exercise_id == "zero" else 3}, 1)]}
 
     return CompletionScript(decide)

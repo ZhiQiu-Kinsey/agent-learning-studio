@@ -1,23 +1,33 @@
-# 任务目标与验收（`task-contract`）
+# Task goals and acceptance (`task-contract`)
 
-## 运行
+English · [简体中文](README.zh-CN.md)
 
-本课不调用模型，完全在本地运行，不需要模型密钥。在网页打开本课，选一个预设后运行，右侧实验报告会显示检查结果，展开事件可以看到原始记录；回放只读已有记录。
+## Running it
 
-| 预设 | 发生了什么 | 验收结论 |
+This lesson does not call a model. It runs entirely on your machine and needs no model key. Open the lesson on the web page, pick a preset and run it: the lab report on the right shows the checks, and you can expand the events to see the raw records. Replay only reads what was recorded.
+
+| Preset | What happens | Verdict |
 | --- | --- | --- |
-| 正常 | 计算 19 + 23，声明引用这次结果 | 通过 |
-| 只有声明，没有证据 | 不调用工具，直接声明 42 | 未通过 |
-| 证据存在，结果错误 | 计算 19 + 22，如实报告 41 | 未通过 |
-| 声明与证据不一致 | 计算 19 + 22，却声明 42 | 未通过 |
-| 有上限的目标循环 | 第 1 次注入错误，验收器写下原因；第 2 次重做 | 上限 3 次时通过，上限 1 次时未通过 |
+| Normal | Computes 19 + 23; the claim references this result | passed |
+| Claim only, no evidence | Calls no tool and claims 42 directly | failed |
+| Evidence present, wrong result | Computes 19 + 22 and honestly reports 41 | failed |
+| Claim and evidence disagree | Computes 19 + 22 but claims 42 | failed |
+| Goal loop with a limit | Attempt 1 has an injected fault and the validator writes down why; attempt 2 redoes the task | passed with a limit of 3, failed with a limit of 1 |
 
-除“正常”外都是运行器注入的故障，不是模型的失误。问题框里写的是学习者备注，会写进报告，但不改变任务。
+Everything except "Normal" is a fault injected by the runner, not a model mistake. The question box holds a learner note: it goes into the report and does not change the task.
 
-## 读源码
+**Run language:** this lesson runs in Chinese and in English. The task card, the checks and the report text are in `locales/zh_CN.py` and `locales/en.py`; the exercise questions and the executor's completion claim are written per language in `lesson.json`. The web page picks the language from the UI language, and every run record states the language it ran in.
 
-`runtime.py` 中 `TASK_CARD` 定义范围、证据和停止条件；`add_numbers` 在 Python 中真实执行；`verify` 只用声明里的 `evidence_ref` 去找本次记录的 `tool_result`，再拿证据和任务卡比。目标循环每次尝试发布 `lesson.goal_check`，通过或到达上限就停。
+## Reading the source
 
-## 限制与参考
+The task card is `task_card` in `locales/zh_CN.py` and `locales/en.py`; it defines the scope, the evidence and the stop condition. `add_numbers` really runs in Python. `verify` in `runtime.py` uses only the claim's `evidence_ref` to find the call and the `tool_result` recorded in this run, then checks their arguments and value against the task card and the value against the claim. The goal loop publishes `lesson.goal_check` for each attempt and stops on a pass or at the limit.
 
-本课不读取外部路径，没有长期状态。它只证明固定本地案例的验收逻辑；目标循环的第 2 次修正是固定脚本，真实模型会不会据原因改对，要到“目标循环与放弃条件”一课用真实运行检验。来源范围与固定 commit 见 [来源记录](../../docs/architecture/chapter2-sources.md)。
+Offline tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest lessons.lesson_04_task_contract.test_lesson -v
+```
+
+## Limits and references
+
+This lesson reads no external paths and keeps no long-term state. It only proves the acceptance logic for one fixed local case. The fix in attempt 2 of the goal loop is a fixed script; whether a real model corrects itself from the reasons has to be tested with real runs in the lesson "Goal loops and give-up conditions". Source scope and pinned commits: [source record](../../docs/architecture/chapter2-sources.md).

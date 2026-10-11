@@ -1,1 +1,1 @@
-"""依赖式多轮调用：模型根据上一次工具结果继续调用。"""
+"""Dependent calls across rounds: the model makes its next call from the previous tool result."""

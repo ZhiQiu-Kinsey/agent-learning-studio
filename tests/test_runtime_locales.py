@@ -11,6 +11,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -32,6 +33,12 @@ def cjk_paths(value, path="$"):
     if isinstance(value, list):
         return [hit for index, item in enumerate(value) for hit in cjk_paths(item, f"{path}[{index}]")]
     return []
+
+
+def chinese_only(lesson_id):
+    """测试期间让一门课只声明源语言：所有课都有英文运行时以后，回落路径仍要有课可测。"""
+    spec = next(spec for spec in LESSONS if spec["id"] == lesson_id)
+    return patch.dict(spec["runtime"], {"locales": [SOURCE_LOCALE]})
 
 
 def catalog_packages():
@@ -193,16 +200,18 @@ class LocaleApiTests(unittest.TestCase):
         self.assertEqual(code["runtime_locale"], "en")
         self.assertIn("lessons/lesson_01_tool_selection/locales/tools/en.py", [f["path"] for f in code["files"]])
         # 本课还没有英文运行时：英文界面拿到的问题、源码和运行都是中文，并写明运行语言。
-        pending = self.client.get("/api/lessons/dependent-calls?lang=en").json()
+        with chinese_only("dependent-calls"):
+            pending = self.client.get("/api/lessons/dependent-calls?lang=en").json()
         self.assertEqual(pending["runtime_locale"], "zh-CN")
         self.assertTrue(CJK.search(pending["exercises"][0]["question"]))
 
     def test_unsupported_locale_falls_back_and_records_the_request(self):
-        detail = self.client.get("/api/lessons/dependent-calls?lang=en").json()
-        exercise = detail["exercises"][0]
-        result = run_and_read(self.client, {"lesson_id": "dependent-calls", "mode": "offline",
-                                            "question": exercise["question"], "exercise_id": exercise["id"],
-                                            "locale": "en"})
+        with chinese_only("dependent-calls"):
+            detail = self.client.get("/api/lessons/dependent-calls?lang=en").json()
+            exercise = detail["exercises"][0]
+            result = run_and_read(self.client, {"lesson_id": "dependent-calls", "mode": "offline",
+                                                "question": exercise["question"], "exercise_id": exercise["id"],
+                                                "locale": "en"})
         start = result.events[0]["data"]
         self.assertEqual((start["locale"], start["requested_locale"]), ("zh-CN", "en"))
         listed = self.client.get("/api/runs").json()["runs"][0]

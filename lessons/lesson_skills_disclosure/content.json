@@ -27,7 +27,7 @@
               "id": "01-skill",
               "label": "01 / SKILL",
               "title": "一份写给模型的做法",
-              "description": "技能（Skill）是一份写给模型的做法说明。本课每个技能是一个 SKILL.md：开头两行 --- 之间写 name 和 description，后面的正文写步骤、输出格式和自查项。",
+              "description": "技能（Skill）是一份写给模型的做法说明。本课每个技能是一个 SKILL.md 格式的文件：开头两行 --- 之间写 name 和 description，后面的正文写步骤、输出格式和自查项。",
               "token": "SKILL.md"
             },
             {
@@ -68,7 +68,7 @@
           "type": "prose",
           "title": "一个技能长什么样",
           "paragraphs": [
-            "一个技能就是一份写给模型的做法说明，分成头部和正文两部分。打开 skills/review-cards/SKILL.md：开头两行 --- 之间是头部，只有两个字段。name 是技能的名字，也是 load_skill 要填的参数；description 用一句话写清什么时候用、输入是什么、输出是什么，还写了什么时候不要用。",
+            "一个技能就是一份写给模型的做法说明，分成头部和正文两部分。打开 locales/skills/review-cards/zh_CN.md：开头两行 --- 之间是头部，只有两个字段。name 是技能的名字，也是 load_skill 要填的参数；description 用一句话写清什么时候用、输入是什么、输出是什么，还写了什么时候不要用。",
             "--- 之后是正文：什么时候用、四步做法、输出格式（每张卡一行“问：”、一行“答：”）和交付前自查。它像交给新同事的一页操作说明，照着做就能交出格式一致的复习卡。正文只有整理复习卡时才用得上，回一句问候时一个字都用不到。读码场景里能看到这份文件的全文。",
             "技能和工具不是一回事。工具是一段由程序执行的代码，执行后返回结果；技能只是一段文字，模型读了以后自己照着做，没有任何代码因为它而运行。本课的 load_skill 是一个工具，但它做的事很简单：把某个技能的正文读出来交给模型。复习卡最后是模型写的，不是 load_skill 写的。"
           ]
@@ -150,7 +150,7 @@
           "title": "load_skill 只认登记过的名字",
           "paragraphs": [
             "load_skill 的参数是模型写的，运行器只拿它查白名单，不把它当路径。最省事的写法是把参数直接拼进路径去读文件，可模型写出什么字符串都有可能。例如它写了 ../../../local_config.py，读取函数又直接把参数当文件路径，拼出来的路径就跳出了技能目录，指到项目根目录下放密钥的本地配置文件。",
-            "所以运行器先查白名单 SKILL_NAMES：名字在里面，才去读 skills 目录下对应的 SKILL.md；不在，就抛出错误，由 execute_tool 整理成 ok 为 false 的结构化错误交还给模型。上面那次调用得到的工具结果是“没有名为 ../../../local_config.py 的技能”，后面列出目录里的四个名字，模型可以据此改正。",
+            "所以运行器先查白名单 SKILL_NAMES：名字在里面，才去读 locales/skills 下对应的技能文件；不在，就抛出错误，由 execute_tool 整理成 ok 为 false 的结构化错误交还给模型。上面那次调用得到的工具结果是“没有名为 ../../../local_config.py 的技能”，后面列出目录里的四个名字，模型可以据此改正。",
             "白名单还管另一头：skills 目录里多放一个文件，不会自动出现在目录里，登记进 SKILL_NAMES 才算数。自动扫描目录写起来更省事，本课仍选择显式登记，因为技能正文会原样交给模型，模型会照着做。一份没审过的技能文件，和一段没审过的代码一样，不该悄悄生效。"
           ]
         },
@@ -328,7 +328,7 @@
               "actor": "工具",
               "title": "查白名单，再读文件",
               "body": "名字在 SKILL_NAMES 里才读对应的 SKILL.md；不在就返回结构化错误。",
-              "code": "if name not in SKILL_NAMES:\n    raise ValueError(\"没有名为 … 的技能\")",
+              "code": "if name not in SKILL_NAMES:\n    raise ValueError(t.unknown_skill.format(name=name, names=…))",
               "language": "python",
               "evidence": "tool_result 的 result.instructions"
             },
@@ -397,49 +397,49 @@
           "id": "code-skill-files",
           "type": "annotated-source",
           "path": "lessons/lesson_skills_disclosure/runtime.py",
-          "start": 20,
-          "end": 52,
+          "start": 24,
+          "end": 58,
           "notes": [
             {
               "id": "n22",
-              "line": 22,
+              "line": 26,
               "anchor": "SKILL_NAMES = (\"review-cards\"",
               "text": "白名单：目录里列谁、load_skill 能读谁，都只看这里。"
             },
             {
               "id": "n30",
-              "line": 30,
+              "line": 32,
               "anchor": "_, header, body = text.split(\"---\\n\", 2)",
               "text": "按前两条 --- 切成三段：空串、头部两行、正文。"
             },
             {
               "id": "n32",
-              "line": 32,
+              "line": 34,
               "anchor": "if fields.get(\"name\", \"\").strip() != name:",
               "text": "文件里写的 name 必须和登记的名字一致，避免目录和文件对不上。"
             },
             {
               "id": "n40",
-              "line": 40,
-              "anchor": "skills[0][\"description\"] = VAGUE_DESCRIPTION",
+              "line": 43,
+              "anchor": "skills[0][\"description\"] = texts_for(locale).vague_description",
               "text": "模糊描述只换 review-cards 这一行描述，正文不动，实验只差这一处。"
             },
             {
               "id": "n46",
-              "line": 46,
+              "line": 49,
               "anchor": "if name not in SKILL_NAMES:",
               "text": "先查白名单再碰文件：模型写的字符串不会被当成路径。"
             },
             {
               "id": "n49",
-              "line": 49,
-              "anchor": "return {\"name\": name, \"instructions\": read_skill(name)[\"body\"]}",
+              "line": 53,
+              "anchor": "return {\"name\": name, \"instructions\": read_skill(name, locale)[\"body\"]}",
               "text": "工具结果是名字加正文；描述已经在目录里，不再重复。"
             },
             {
               "id": "n52",
-              "line": 52,
-              "anchor": "AVAILABLE_TOOLS = {\"load_skill\": load_skill}",
+              "line": 58,
+              "anchor": "return {\"load_skill\": partial(load_skill, locale)}",
               "text": "执行调用提议时按名字查这张表，模型编出来的工具名不会被执行。"
             }
           ]
@@ -448,37 +448,37 @@
           "id": "code-prompts",
           "type": "annotated-source",
           "path": "lessons/lesson_skills_disclosure/runtime.py",
-          "start": 80,
+          "start": 81,
           "end": 109,
           "notes": [
             {
               "id": "n80",
-              "line": 80,
-              "anchor": "TOOLS = [{\"type\": \"function\", \"function\": {",
+              "line": 81,
+              "anchor": "def tool_definitions(locale: str) -> list[dict]:",
               "text": "按需加载只有这一个工具，参数只有 name。"
             },
             {
               "id": "n83",
-              "line": 83,
+              "line": 86,
               "anchor": "\"parameters\": {\"type\": \"object\", \"properties\": {\"name\"",
               "text": "参数不写成枚举：模型写错名字时，由 load_skill 返回结构化错误。"
             },
             {
               "id": "n88",
-              "line": 88,
-              "anchor": "先调用 load_skill 读取它的完整做法",
+              "line": 100,
+              "anchor": "return t.catalog_prompt + \"\\n\\n\" + t.catalog_heading",
               "text": "目录版的系统提示词明确说：符合描述才加载，都不符合就直接回答。"
             },
             {
               "id": "n94",
-              "line": 94,
-              "anchor": "sections = [f\"## 技能 {skill['name']}",
+              "line": 92,
+              "anchor": "sections = [t.full_section.format(",
               "text": "全量注入：每个技能的描述和正文都拼进来，约 2000 个字符。"
             },
             {
               "id": "n100",
-              "line": 100,
-              "anchor": "lines = [f\"- {skill['name']}：{skill['description']}\"",
+              "line": 99,
+              "anchor": "lines = [t.catalog_line.format(",
               "text": "目录：每个技能一行，约 480 个字符；只要不增删技能、不改描述，这一段就不会变。"
             },
             {
@@ -500,84 +500,84 @@
           "type": "annotated-source",
           "path": "lessons/lesson_skills_disclosure/runtime.py",
           "start": 112,
-          "end": 149,
+          "end": 151,
           "notes": [
             {
               "id": "n114",
-              "line": 114,
-              "anchor": "messages = [{\"role\": \"system\", \"content\": catalog_prompt(skills)}",
+              "line": 115,
+              "anchor": "messages = [{\"role\": \"system\", \"content\": catalog_prompt(t, skills)}",
               "text": "第 1 次请求的系统提示词只有目录。"
             },
             {
               "id": "n116",
-              "line": 116,
+              "line": 117,
               "anchor": "for round_number in range(first_round, first_round + ON_DEMAND_LIMIT):",
               "text": "循环有轮数上限：最多请求 ON_DEMAND_LIMIT 次。"
             },
             {
               "id": "n119",
-              "line": 119,
-              "anchor": "response = context.complete({\"messages\": messages, \"tools\": TOOLS",
+              "line": 120,
+              "anchor": "response = context.complete({\"messages\": messages, \"tools\": tool_definitions(context.locale),",
               "text": "每次请求都带着 load_skill，模型自己决定加载不加载。"
             },
             {
               "id": "n121",
-              "line": 121,
+              "line": 122,
               "anchor": "requests.append(_record(context, \"on_demand\"",
               "text": "每次请求后记一条 lesson.skill_request，加载记录就是靠它对应到具体请求。"
             },
             {
               "id": "n125",
-              "line": 125,
+              "line": 126,
               "anchor": "if not calls:",
               "text": "没有调用提议就结束；不加载也是模型的一种选择，要从事件里看出来。"
             },
             {
               "id": "n129",
-              "line": 129,
+              "line": 130,
               "anchor": "messages.append({\"role\": \"assistant\", \"content\": message.get(\"content\"), \"tool_calls\": calls})",
               "text": "先把带调用提议的 assistant 消息放回历史，工具结果才能按调用 id 配上。"
             },
             {
               "id": "n131",
-              "line": 131,
-              "anchor": "result = context.execute_proposal(call, AVAILABLE_TOOLS)",
+              "line": 132,
+              "anchor": "result = context.execute_proposal(call, available_tools(context.locale))",
               "text": "执行模型提出的调用，记成 tool_call 与 tool_result 一对事件。"
             },
             {
               "id": "n134",
-              "line": 134,
+              "line": 135,
               "anchor": "messages.append({\"role\": \"tool\", \"tool_call_id\": call[\"id\"],",
               "text": "正文以工具结果进入消息历史，排在目录之后，不改动前面的内容。"
             },
             {
               "id": "n137",
-              "line": 137,
+              "line": 138,
               "anchor": "return {\"mode\": \"on_demand\", \"answer\": None",
               "text": "用完轮数上限还在加载：如实记为没有回答。"
             },
             {
               "id": "n142",
-              "line": 142,
+              "line": 143,
               "anchor": "if loaded is None:",
               "text": "加载判定：全量注入没有加载这一步，不适用。"
             },
             {
               "id": "n145",
-              "line": 145,
-              "anchor": "漏触发：该加载却没加载",
+              "line": 146,
+              "anchor": "else (False, t.loading_missed)",
               "text": "该用技能却没加载成功，记为漏触发。"
             },
             {
               "id": "n148",
-              "line": 148,
-              "anchor": "误触发：加载了",
+              "line": 149,
+              "anchor": "return False, t.loading_false.format(names=names)",
               "text": "不该用技能却加载了，记为误触发。"
             },
             {
               "id": "n149",
-              "line": 149,
-              "anchor": "加载错技能：",
+              "line": 151,
+              "anchor": "False, t.loading_wrong.format(names=names))",
               "text": "该用技能但加载的不是它，记为加载错技能。"
             }
           ]

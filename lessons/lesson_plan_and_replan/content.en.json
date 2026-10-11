@@ -91,8 +91,8 @@
       "source": "61b0b0e23ae2"
     },
     "section-plan-data.paragraphs.1": {
-      "text": "Before execution, parse_plan checks the plan item by item: a JSON object can be read, steps is not an empty list, no two steps share an id, each tool is in the allowlist AVAILABLE_TOOLS, and arguments is a JSON object. If any check fails, it records a lesson.plan_error with the planner's original text and the error, then stops without running a single tool. Like the parser in {{lesson:text-actions}}, it is only tolerant in a limited way: it starts reading a JSON object at the first left brace, ignores any explanatory text and code fences around the JSON, and repairs nothing else.",
-      "source": "e24cdefa20ad"
+      "text": "Before execution, parse_plan checks the plan item by item: a JSON object can be read, steps is not an empty list, no two steps share an id, a revision does not reuse an id from any earlier plan version, each tool is in the allowlist TOOL_NAMES, and arguments is a JSON object. If any check fails, it records a lesson.plan_error with the planner's original text and the error, then stops without running a single tool. Like the parser in {{lesson:text-actions}}, it is only tolerant in a limited way: it starts reading a JSON object at the first left brace, ignores any explanatory text and code fences around the JSON, and repairs nothing else.",
+      "source": "10f43f30abeb"
     },
     "section-plan-data.paragraphs.2": {
       "text": "This is where it differs from the checklist in {{lesson:todo-planning}}. Each checklist item is a sentence written for humans, so the program cannot execute it. Each plan step is a tool and arguments that the program can call directly, so it has to be validated first. A plan that passes validation only shows that it can be executed, not that it can finish the task: a step with valid arguments can still fail.",
@@ -103,11 +103,11 @@
       "source": "59384c1a079e"
     },
     "section-2.paragraphs.0": {
-      "text": "In this lesson the primary score source is set to always fail, so all three strategies face the same fault. Scores come from two data sources: primary is the main one and backup is the spare, with identical data. Every time fetch_quiz_scores uses primary, it raises the error \"成绩主数据源暂时不可用（受控故障：本课固定失败）。可以改用 source=backup。\" (\"The primary score source is temporarily unavailable (controlled fault: fails by design in this lesson). You can switch to source=backup.\"). This is hard-coded in the lesson's source. It is not a network problem and it is not the model's fault.",
+      "text": "In this lesson the primary score source is set to always fail, so all three strategies face the same fault. Scores come from two data sources: primary is the main one and backup is the spare, with identical data. Every time fetch_quiz_scores uses primary, it raises the error \"The primary score source is unavailable for now (controlled fault: it always fails in this lesson). You can use source=backup instead.\" This is hard-coded in the lesson's source. It is not a network problem and it is not the model's fault.",
       "source": "5a86eb689a0b"
     },
     "section-2.paragraphs.1": {
-      "text": "Why hard-code it? If the fault were random, some arms would hit it and others would not, and you could not tell whether a difference in results came from the strategy or from luck. A fixed fault makes strategy the only difference. The error message also deliberately says \"可以改用 source=backup\" (switch to backup), and that is the sentence the planner reads when it revises the plan. Error messages in real systems are rarely this helpful; we come back to this when we discuss the limits.",
+      "text": "Why hard-code it? If the fault were random, some arms would hit it and others would not, and you could not tell whether a difference in results came from the strategy or from luck. A fixed fault makes strategy the only difference. The error message also deliberately says \"You can use source=backup instead\", and that is the sentence the planner reads when it revises the plan. Error messages in real systems are rarely this helpful; we come back to this when we discuss the limits.",
       "source": "0b9d94934872"
     },
     "section-2.paragraphs.2": {
@@ -179,7 +179,7 @@
       "source": "e43ec8742a2a"
     },
     "section-4.paragraphs.2": {
-      "text": "Let's work through the made-up example above. Step 1 fetches the progress and succeeds, so it is marked done. Step 2 fetches scores with primary and fails, so it is marked failed. There are no unexecuted steps after it, so removed is empty. The planner reads \"可以改用 source=backup\" (\"you can switch to source=backup\") in the error and writes version 2: it adds step 3, which fetches scores from backup. The diff records that step 3 was added and that the revision was caused by step 2 failing. Step 3 succeeds, then the report is written, and the number of model calls is 3: one each for planning, revision, and the report.",
+      "text": "Let's work through the made-up example above. Step 1 fetches the progress and succeeds, so it is marked done. Step 2 fetches scores with primary and fails, so it is marked failed. There are no unexecuted steps after it, so removed is empty. The planner reads \"You can use source=backup instead\" in the error and writes version 2: it adds step 3, which fetches scores from backup. The diff records that step 3 was added and that the revision was caused by step 2 failing. Step 3 succeeds, then the report is written, and the number of model calls is 3: one each for planning, revision, and the report.",
       "source": "9b755f5b7180"
     },
     "section-4.paragraphs.3": {
@@ -215,7 +215,7 @@
       "source": "c6e9d465d7bd"
     },
     "deep-dive-planner-history.paragraphs.0": {
-      "text": "The planner does not share a message history with the executor. At the first revision, its request has four messages. The system prompt states the available tools and the plan format. The first user message is the task. The assistant message is the version 1 plan it wrote. The last user message, appended at the end, is the execution status (it starts with \"执行情况\", \"execution status\"): it lists the id, tool, and status of every step, followed by the original error text of the failed step, and then asks the planner to list only the steps that still need to run and to give the revision reason in reason.",
+      "text": "The planner does not share a message history with the executor. At the first revision, its request has four messages. The system prompt states the available tools and the plan format. The first user message is the task. The assistant message is the version 1 plan it wrote. The last user message, appended at the end, is the \"Execution status\": it lists the id, tool, and status of every step, followed by the original error text of the failed step, and then asks the planner to list only the steps that still need to run and to give the revision reason in reason.",
       "source": "42408686f445"
     },
     "deep-dive-planner-history.paragraphs.1": {
@@ -558,13 +558,9 @@
       "text": "The error says you can switch to backup. This is the sentence the planner reads when it revises the plan.",
       "source": "66044d6ec366"
     },
-    "code-tools-plan.n47.text": {
-      "text": "The planner only writes the plan and does not execute tools. Its output is fixed to JSON with reason and steps.",
-      "source": "1e0a3f04710c"
-    },
-    "code-tools-plan.n53.text": {
-      "text": "A revision lists only the steps that still have to run. Steps that already ran are not redone.",
-      "source": "305c8df01504"
+    "code-tools-plan.n-parse-plan.text": {
+      "text": "The planner's plan goes through parse_plan before anything runs; the planner's prompt is planner_system in the runtime text.",
+      "source": "eb6eef53e158"
     },
     "code-tools-plan.n58.text": {
       "text": "Explanatory text or code fences around the JSON are allowed. This is the parser's only tolerance.",
@@ -573,6 +569,10 @@
     "code-tools-plan.n67.text": {
       "text": "Step ids must be unique: the revision diff and the \"Plan and checklist\" view both use the id to find a step.",
       "source": "215bfab838c5"
+    },
+    "code-tools-plan.n-reused-id.text": {
+      "text": "Revised steps may not reuse an id from an earlier plan version; otherwise the diff would list the same id as both removed and added.",
+      "source": "8bb7a79f6f2c"
     },
     "code-tools-plan.n69.text": {
       "text": "A tool in the plan must be on the allowlist, so a nonexistent tool is caught before execution.",
@@ -594,6 +594,10 @@
       "text": "If the plan has the wrong format, record the original text and the error, then stop. Do not fill in the plan for the planner.",
       "source": "2f69ea560a12"
     },
+    "code-planner.n-used-ids.text": {
+      "text": "Once a plan passes the checks, its step ids are recorded; later versions cannot use them again.",
+      "source": "884a0b8b2403"
+    },
     "code-planner.n137.text": {
       "text": "A revision is a new user message: the current step statuses plus the failed step's error.",
       "source": "46de2da204f0"
@@ -607,8 +611,8 @@
       "source": "fad7bcf73513"
     },
     "code-planner.n155.text": {
-      "text": "The runner makes the call, and the event is marked course_program. The call id carries the step id.",
-      "source": "98e94d20887f"
+      "text": "The runner makes the call through call_tool, so tool_call and tool_result both carry origin: course_program; the call id contains the step id.",
+      "source": "03e73c25d53a"
     },
     "code-planner.n158.text": {
       "text": "Only successful results are saved, so the report can only use data that was really obtained.",

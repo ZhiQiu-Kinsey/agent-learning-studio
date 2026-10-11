@@ -1,32 +1,38 @@
-# 错误处理与安全边界（`fail-safely`）
+# Error handling and safety boundaries (`fail-safely`)
 
-**目标：**让工具遇到坏参数或业务错误时明确失败；让模型如实说明；遇到 API/网络错误时停止并交给人判断。
+English · [简体中文](README.zh-CN.md)
 
-## 先跑离线演示
+**Goal:** make a tool fail explicitly on bad arguments or business errors; have the model state the failure truthfully; on API or network errors, stop and leave the decision to a person.
 
-从项目根目录执行：
+## Run the offline demo first
+
+From the project root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m lessons.lesson_03_fail_safely.offline_demo
+.\.venv\Scripts\python.exe -m lessons.lesson_03_fail_safely.offline_demo             # Chinese
+.\.venv\Scripts\python.exe -m lessons.lesson_03_fail_safely.offline_demo --locale en # English
 ```
 
-这段演示不读 API Key、不请求百炼，也不会产生用量。观察四种情况：计算成功、除数为零、未知工具、JSON 参数无效。工具错误会转成 `ok=false` 的结构化结果；未知名称无法通过 allowlist 找到可执行函数。
+The demo reads no API key, sends no request to Bailian and incurs no usage. It shows four cases: a successful division, a zero divisor, an unknown tool and invalid JSON arguments. A tool error becomes a structured result with `ok=false`; an unknown name finds no function in the allowlist.
 
-网页实验里“未登记的工具”“损坏的参数”两组也是这样做的：`runtime.py` 由运行器构造调用，交给同一个 `execute_tool` 检查，不调用模型；事件标为程序发起，不冒充模型提出的调用。
+The web lab's "Unregistered tool (program-built)" and "Malformed arguments (program-built)" exercises work the same way: in `runtime.py` the runner builds the call and hands it to the same `execute_tool` for checking, without calling a model; the events mark the call as program-initiated instead of passing it off as a model proposal.
 
-## 再看真实模型循环
+## Then the real model loop
 
 ```powershell
 .\.venv\Scripts\python.exe main.py --lesson fail-safely
+.\.venv\Scripts\python.exe main.py --lesson fail-safely --locale en
 ```
 
-分别问 `12 除以 3 等于多少？` 和 `12 除以 0 等于多少？`。第二种情况下，Python 把错误作为 `role: tool` 消息回传；system prompt 要求模型承认失败、请你修正输入，并且不要编造商。
+Ask `What is 12 divided by 3?` and then `What is 12 divided by 0?`. In the second case Python returns the error as a `role: tool` message; the system prompt asks the model to admit the failure, ask you to fix the input, and never make up a quotient.
 
-## 失败处理边界
+## Failure boundaries
 
-- **工具参数或计算失败：**转成 `ok=false` 的工具结果，让模型根据真实错误作答。
-- **未知工具：**只查显式登记的 `AVAILABLE_TOOLS`，绝不动态执行模型返回的名称。
-- **API 或网络错误：**显示状态并结束这次运行，不自动重发。超时后服务器是否已处理原请求无法确定；盲目重试可能重复消耗百炼用量。
-- **循环控制：**本课最多发出两轮模型请求，防止模型反复请求工具。
+- **Tool argument or computation failure:** becomes a tool result with `ok=false`, so the model answers from the real error.
+- **Unknown tool:** only the allowlist returned by `available_tools` is consulted; a name the model returns is never executed dynamically.
+- **API or network error:** show the status and end the run without resending. After a timeout you can't know whether the server processed the original request; a blind retry may consume Bailian usage twice.
+- **Loop control:** this lesson sends at most two model requests, so the model can't keep requesting tools.
 
-观察 `course/runner.py` 的错误封装与 allowlist，以及 `course/api_client.py` 的网络错误处理。该流程让人决定何时修正并重新提交。
+Look at the error wrapping and the allowlist in `course/runner.py`, and the network error handling in `course/api_client.py`. This flow leaves it to a person to decide when to fix and resubmit.
+
+**Run language:** the system prompt, the tool description, tool errors, the answers of the fault-injection arms and the demo texts are in `locales/zh_CN.py` and `locales/en.py`. Tool and parameter names are code and the same in both languages. The web page picks the run language from the UI language.

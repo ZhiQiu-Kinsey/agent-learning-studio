@@ -13,6 +13,8 @@ from lessons.lesson_07_messages_context import runtime as context_runtime
 from lessons.lesson_08_application_state import runtime as state_runtime
 
 CUSTOM = {"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}
+# 应用状态一课的目标没有默认值，预设按运行语言写在 lesson.json 里。
+GOAL = {"goal": "说明消息与应用状态的区别"}
 
 
 def make_context(lesson_id, exercise_id, inputs, completion=None, cancelled=lambda: False, budget=4):
@@ -60,7 +62,7 @@ class MessagesContextTests(unittest.TestCase):
             with self.subTest(variant=name):
                 expected = [message for key, message in zip(context_runtime.ORDER, full) if key not in removed]
                 self.assertEqual(messages, expected)
-                context_runtime.validate_tool_history(messages)
+                context_runtime.validate_tool_history(messages, "zh-CN")
 
     def test_tool_result_is_really_executed_and_paired_by_the_same_call_id(self):
         values, _, events = run_ablation({"student_id": "s-2077"})
@@ -75,7 +77,7 @@ class MessagesContextTests(unittest.TestCase):
         self.assertNotIn("58", full[1]["content"] + full[4]["content"])
 
     def test_report_table_lists_screens_only_for_sent_variants(self):
-        _, _, events = run_ablation({"free_day": "周六"})
+        _, _, events = run_ablation({"free_day": "sat"})
         report = of(events, "lesson.report")[0]
         rows = {row[0]: row for row in report["table"]["rows"]}
         self.assertEqual(rows["完整上下文"][4:], [True, True, True])
@@ -150,26 +152,26 @@ class MessagesContextTests(unittest.TestCase):
 
     def test_protocol_rejects_orphan_tool_result_and_unfinished_call(self):
         with self.assertRaises(ValueError):
-            context_runtime.validate_tool_history([{"role": "tool", "tool_call_id": "x", "content": "3"}])
+            context_runtime.validate_tool_history([{"role": "tool", "tool_call_id": "x", "content": "3"}], "zh-CN")
         with self.assertRaises(ValueError):
-            context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]}])
+            context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]}], "zh-CN")
         with self.assertRaises(ValueError):
             context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]},
-                                                   {"role": "user", "content": "下一问"}])
+                                                   {"role": "user", "content": "下一问"}], "zh-CN")
         context_runtime.validate_tool_history([{"role": "assistant", "tool_calls": [{"id": "x"}]},
-                                               {"role": "tool", "tool_call_id": "x", "content": "3"}])
+                                               {"role": "tool", "tool_call_id": "x", "content": "3"}], "zh-CN")
 
     def test_input_contract(self):
         for invalid in ({"student_id": "s-9999"}, {"free_day": "明天"}, {"unexpected": "value"}):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 validate_inputs(context_runtime, invalid)
         with self.assertRaises(ValueError):
-            context_runtime.lookup_score("s-9999")
+            context_runtime.lookup_score(context_runtime.texts_for("zh-CN"), "s-9999")
 
 
 class ApplicationStateTests(unittest.TestCase):
     def test_success_has_evidence_and_distinct_messages(self):
-        values = validate_inputs(state_runtime, {})
+        values = validate_inputs(state_runtime, GOAL)
         context, events = make_context("application-state", "success", values)
         answer = state_runtime.run(context)
         states = [data["state"] for data in of(events, "lesson.state")]
@@ -186,7 +188,7 @@ class ApplicationStateTests(unittest.TestCase):
         presets = {"missing": {"source_key": "missing"},
                    "budget": {"source_key": "application-state", "step_budget": 2}}
         for scenario, inputs in presets.items():
-            values = validate_inputs(state_runtime, inputs)
+            values = validate_inputs(state_runtime, {**GOAL, **inputs})
             context, events = make_context("application-state", scenario, values)
             state_runtime.run(context)
             states = [data["state"] for data in of(events, "lesson.state")]
@@ -200,14 +202,14 @@ class ApplicationStateTests(unittest.TestCase):
             self.assertNotIn("passed", success)
 
     def test_budget_of_one_fails_before_checking_the_source(self):
-        values = validate_inputs(state_runtime, {"source_key": "application-state", "step_budget": 1})
+        values = validate_inputs(state_runtime, {**GOAL, "source_key": "application-state", "step_budget": 1})
         context, events = make_context("application-state", "budget", values)
         self.assertIn("核对资料来源前耗尽", state_runtime.run(context))
         final = of(events, "lesson.state")[-1]["state"]
         self.assertEqual((final["status"], final["used_steps"], final["evidence"]), ("failed", 1, []))
 
     def test_invalid_transition_and_cancel(self):
-        state = state_runtime.TaskState(run_id="one", goal="可检查的目标")
+        state = state_runtime.TaskState(run_id="one", goal="可检查的目标", locale="zh-CN")
         with self.assertRaisesRegex(ValueError, "非法状态转换：ready → completed"):
             state.transition("completed", "未经执行")
         state.transition("running")
@@ -221,7 +223,7 @@ class ApplicationStateTests(unittest.TestCase):
         state.transition("cancelled", "用户停止")
         with self.assertRaises(ValueError):
             state.transition("running")
-        values = validate_inputs(state_runtime, {})
+        values = validate_inputs(state_runtime, GOAL)
         context, _ = make_context("application-state", "success", values, cancelled=lambda: True)
         with self.assertRaises(RunCancelled):
             state_runtime.run(context)
@@ -231,7 +233,7 @@ class ApplicationStateTests(unittest.TestCase):
         for invalid in ({"step_budget": 0}, {"source_key": "../../private"}, {"source_key": "lesson-07"},
                         {"scenario": "budget"}):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
-                validate_inputs(state_runtime, invalid)
+                validate_inputs(state_runtime, {**GOAL, **invalid})
 
 
 if __name__ == "__main__":

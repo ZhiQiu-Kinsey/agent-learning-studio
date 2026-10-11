@@ -1,1 +1,1 @@
-"""课程：应用状态与运行生命周期（application-state）。"""
+"""Application state and the run lifecycle (application-state)."""

@@ -85,7 +85,7 @@ class RunnerTests(unittest.TestCase):
                     lesson_id="fail-safely", exercise_id=case, question="q", mode="live", model="local-python",
                     representation="local", inputs={}, api_key="", completion=None,
                     emit_event=lambda kind, data, number: events.append({"type": kind, "data": data}))
-                with patch.dict(tools.AVAILABLE_TOOLS, {"divide_numbers": lambda **_: self.fail("函数被执行了")}):
+                with patch.object(tools, "divide_numbers", lambda *_, **__: self.fail("函数被执行了")):
                     execute_lesson(spec, module, context)
                 self.assertEqual([e["type"] for e in events], ["tool_call", "tool_result", "answer"])
                 call, outcome, answer = (e["data"] for e in events)

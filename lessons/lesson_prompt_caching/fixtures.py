@@ -1,14 +1,16 @@
-"""提示缓存课的离线测试模型：只服务自动化测试，不代表任何服务商的行为。
+"""Offline test model for prompt-caching: serves automated tests only and stands for no provider.
 
-夹具记住本次运行里发过的请求，按“和之前某次请求从头相同的字符数”编造命中数：每 2 个字符算 1 个 Token，
-按 64 个 Token 一档向下取整。前缀不同就报告 0；“稳定前缀 + 预热”组故意不返回任何缓存字段，用来测试“未报告”。
+The fixture remembers the requests of this run and makes up the hit count from "characters identical from the start
+with an earlier request": 2 characters count as 1 token, rounded down to blocks of 64 tokens. A different prefix
+reports 0; the "stable prefix + warmup" arm deliberately returns no cache field, to test "not reported".
 """
 import json
 import os
 
-# 每组练习用哪种用量格式；测试可以用 style 参数换成其他服务商的写法。
+# The usage format each exercise uses; tests can switch to another provider's shape with the style parameter.
 STYLES = {"dynamic-first": "openai", "stable-prefix": "openai", "warmup": "none"}
 BLOCK = 64
+ANSWERS = {"zh-CN": "（离线夹具）收到问题：{question}", "en": "(offline fixture) Question received: {question}"}
 
 
 def _tokens(text: str) -> int:
@@ -16,12 +18,12 @@ def _tokens(text: str) -> int:
 
 
 def _shared(text: str, earlier: list[str]) -> int:
-    """和之前任何一次请求从头相同的最长字符数。"""
+    """The longest run of identical characters from the start with any earlier request."""
     return max((len(os.path.commonprefix([text, other])) for other in earlier), default=0)
 
 
 def usage_in_style(style: str, total: int, cached: int, output: int) -> dict:
-    """同一组数字，按不同服务商的字段写法返回。"""
+    """The same numbers, in the field names of different providers."""
     if style == "openai":
         return {"prompt_tokens": total, "completion_tokens": output, "total_tokens": total + output,
                 "prompt_tokens_details": {"cached_tokens": cached}}
@@ -33,13 +35,13 @@ def usage_in_style(style: str, total: int, cached: int, output: int) -> dict:
                 "cache_read_input_tokens": cached, "cache_creation_input_tokens": 0}
     if style == "none":
         return {"prompt_tokens": total, "completion_tokens": output, "total_tokens": total + output}
-    raise ValueError(f"未知用量格式：{style}")
+    raise ValueError(f"unknown usage style: {style}")
 
 
-def create_completion(exercise_id, inputs=None, style=None):
+def create_completion(exercise_id, inputs=None, locale="zh-CN", style=None):
     if style is None:
         if exercise_id not in STYLES:
-            raise ValueError("未知的提示缓存练习。")
+            raise ValueError(f"prompt-caching has no offline exercise {exercise_id!r}")
         style = STYLES[exercise_id]
     earlier: list[str] = []
 
@@ -48,7 +50,7 @@ def create_completion(exercise_id, inputs=None, style=None):
         cached = _shared(text, earlier) // 2 // BLOCK * BLOCK
         earlier.append(text)
         question = body["messages"][-1]["content"].split("\n")[0]
-        answer = f"（离线夹具）收到问题：{question}"
+        answer = ANSWERS[locale].format(question=question)
         return {"choices": [{"message": {"role": "assistant", "content": answer}, "finish_reason": "stop"}],
                 "usage": usage_in_style(style, _tokens(text), cached, _tokens(answer))}
 

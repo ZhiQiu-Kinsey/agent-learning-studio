@@ -1,7 +1,15 @@
-# 应用状态与运行生命周期（`application-state`）
+# Application state and the run lifecycle (`application-state`)
 
-本课不调用模型，只执行本地 Python，不要求模型连接。三组预设分别演示有证据完成、资料缺失、预算结束。状态机真实检查合法转换、完成前的证据与产物和终态原因；`lesson.state` 是本次运行的实际状态快照。每次运行有独立 run_id，结束后仅事件回放保留证据；本课不提供跨运行持久化。
+English · [简体中文](README.zh-CN.md)
 
-资料来源键与课程 slug 一致：`messages-context`、`application-state`，另有不存在的 `missing`。报告拼装放在 `_report` 中，读码页只展示状态机与运行流程。
+This lesson calls no model; it runs only local Python and needs no model connection. Three presets show completion with evidence, missing material and a used-up budget. The state machine really checks legal transitions, evidence and a result before completion, and a reason for every terminal state; `lesson.state` is the actual state snapshot of this run. Every run has its own run_id, and after it ends only the event replay keeps the evidence; this lesson has no persistence across runs.
 
-流程讲解是教学示意，实际结论请以 `lesson.state` 与 `lesson.report` 为准。参考范围见 `docs/architecture/context-state-sources.md`。
+Material keys match lesson slugs: `messages-context`, `application-state`, plus the nonexistent `missing`. The report is assembled in `_report`, and the Code scene shows only the state machine and the run flow.
+
+**Run language:** this lesson runs in Chinese and in English. The material, step names, snapshot actions, terminal reasons, the state machine's errors and the report text are in `locales/zh_CN.py` and `locales/en.py`; the task goal `goal` has no default in code, and its preset is written per language in `lesson.json`. State names (`ready`, `running`, ...) and material keys are code and stay the same in both languages.
+
+The walkthroughs are illustrations; go by `lesson.state` and `lesson.report` for the actual results. For the scope of the references, see `docs/architecture/context-state-sources.md`.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest lessons.lesson_08_application_state.test_lesson tests.test_lessons_context_state -v
+```

@@ -1,21 +1,25 @@
-# 工作流模式：链式、路由与并行（`workflow-patterns`）
+# Workflow patterns: chaining, routing, and parallelization (`workflow-patterns`)
 
-三种由程序决定流程、由模型完成每一步的工作流。本课需要真实模型连接，不使用工具。
+English · [简体中文](README.zh-CN.md)
 
-| 预设 | 模型请求 | 证据 |
+Three workflows where the program decides the flow and the model does each step. This lesson needs a real model connection and uses no tools.
+
+| Preset | Model requests | Evidence |
 | --- | --- | --- |
-| 提示链：三步加检查门 | 最多 3 次 | `lesson.chain_step`：每步输出与检查门结果；不通过就停 |
-| 路由：20 张标注工单 | 20 次 | `lesson.route`：标注、预测、原文、是否兜底，兜底时另有 `fallback_reason`；报告给出准确率、混淆矩阵和分错的工单 |
-| 三个子任务，串行 | 3 次 | `lesson.parallel`：墙钟时间、各分支开始与结束时间 |
-| 三个子任务，并行 | 3 次，同时发出 | 同上；请求和响应带 `branch`，时间线按它配对 |
+| Prompt chain: three steps with gates | Up to 3 | `lesson.chain_step`: each step's output and gate result; the chain stops on a failed gate |
+| Routing: 20 human-labeled tickets | 20 | `lesson.route`: label, prediction, raw reply, whether it took the fallback, plus `fallback_reason` when it did; the report gives accuracy, a confusion matrix and the misrouted tickets |
+| Three subtasks, serial | 3 | `lesson.parallel`: wall-clock time, start and end of each branch |
+| Three subtasks, parallel | 3, sent at the same time | Same as above; requests and responses carry `branch`, and the timeline pairs them by it |
 
-- 路由只接受 `course`、`account`、`error`、`other` 四个标签，其他输出一律走兜底 `other` 并记下原文。
-- 工单标注由课程作者完成，有几张故意模棱两可；20 张不足以代表真实流量。
-- 时间由后端 `perf_counter` 测量，受网络和服务商排队影响，一次测量只说明这一次。
+- Routing accepts only the four labels `course`, `account`, `error` and `other`; any other output takes the fallback `other` and the raw reply is recorded.
+- The tickets were labeled by the course author, and a few are deliberately ambiguous; 20 tickets do not represent real traffic.
+- Time is measured on the backend with `perf_counter` and depends on the network and provider queues; one measurement speaks only for that run.
 
-`fixtures.py` 只服务自动化测试：路由脚本故意分错两张、对一张输出列表外的标签；复述任务固定停顿 50 毫秒。
+**Run language:** this lesson runs in Chinese and in English. The note, the three step instructions, the 20 ticket texts, the router prompt, the recap tasks and the report text are in `locales/zh_CN.py` and `locales/en.py`; the labels, the human labels (`GOLD`) and the lesson identifiers are code and the same in every language. The title length limit of step 3 is also per language: 8 characters in Chinese, 30 in English. The web page picks the language from the UI language, and every run record states the language it ran in.
 
-三种模式的划分参考 [claude-cookbooks](https://github.com/anthropics/claude-cookbooks)（MIT）`patterns/agents/basic_workflows.ipynb`；那份示例遇到未知标签会出错，本课改为兜底并记录。工单、检查门、计时与实验由本项目编写。
+`fixtures.py` serves automated tests only: the routing script deliberately misroutes two tickets and answers one with a label that is not in the list; each recap task pauses for a fixed 50 ms.
+
+The split into three patterns follows `patterns/agents/basic_workflows.ipynb` in [claude-cookbooks](https://github.com/anthropics/claude-cookbooks) (MIT); that example raises on an unknown label, while this lesson takes the fallback and records it. The tickets, gates, timing and experiments are written by this project.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_workflow_patterns.test_lesson -v

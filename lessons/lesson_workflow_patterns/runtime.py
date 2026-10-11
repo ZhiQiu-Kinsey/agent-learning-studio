@@ -1,8 +1,10 @@
-"""工作流模式：提示链（带检查门）、路由（带兜底）、并行与串行。
+"""Workflow patterns: prompt chaining (with gates), routing (with a fallback), parallel versus serial.
 
-三种模式的划分参考 claude-cookbooks patterns/agents/basic_workflows（MIT）。那份示例的路由遇到
-未知标签会出错，本课改为记录原文并走兜底路径；工单、检查门、计时与实验由本项目编写。
-文件按模式分三段，每段依次是数据、检查或解析、运行函数；报告组装统一放在文件末尾。
+The split into three patterns follows claude-cookbooks patterns/agents/basic_workflows (MIT). That example's router
+raises on an unknown label; this lesson records the raw reply and takes a fallback path instead. Tickets, gates,
+timing and experiments are written by this project.
+The file has one section per pattern (data, checks or parsing, the run function); report building is at the end.
+Every text that reaches the model or an event is in locales/, one catalog per run language.
 """
 import json
 import time
@@ -10,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 from course.execution import LessonInputs, RunContext
+from lessons.lesson_workflow_patterns.locales import Texts, texts_for
 
 
 class Inputs(LessonInputs):
@@ -24,229 +27,206 @@ def _text(response: dict) -> str:
     return content if isinstance(content, str) else ""
 
 
-# ---------- 提示链 ----------
-NOTE = ("“上下文组成与消息协议”一课讲：模型只看到本次请求里的消息，历史要由应用程序重发；"
-        "assistant 的工具调用和 tool 消息必须成对出现；上下文越长，越要注意哪些信息真的需要。")
-CHAIN = [
-    ("提取要点", "从下面的笔记里提取恰好 3 个要点。每行一个，以“- ”开头，不要写别的。"),
-    ("改写问答", "把下面每个要点改写成一组问答。每组两行：第一行以“Q: ”开头，第二行以“A: ”开头。只输出这 6 行。"),
-    ("起标题", "给下面三组问答各起一个不超过 8 个字的标题。只输出一个 JSON 字符串数组，例如 [\"标题一\", \"标题二\", \"标题三\"]。"),
-]
-
-
+# ---------- Prompt chaining ----------
 def _lines(text: str) -> list[str]:
     return [line.strip() for line in text.strip().splitlines() if line.strip()]
 
 
-def gate(step: int, output: str) -> tuple[bool, str]:
-    """每一步之后的程序检查；不通过就停在这一步，不把不合格的结果传下去。"""
+def gate(t: Texts, step: int, output: str) -> tuple[bool, str]:
+    """The program check after each step; on failure the chain stops here and passes nothing bad on."""
     lines = _lines(output)
     if step == 0:
         ok = len(lines) == 3 and all(line.startswith("- ") for line in lines)
-        return ok, f"{len(lines)} 行，" + ("都以“- ”开头" if ok else "需要恰好 3 行且都以“- ”开头")
+        return ok, (t.gate_lines_ok if ok else t.gate_lines_bad).format(count=len(lines))
     if step == 1:
         questions = [line for line in lines if line.startswith("Q: ")]
         answers = [line for line in lines if line.startswith("A: ")]
         ok = len(lines) == 6 and len(questions) == 3 and len(answers) == 3
-        return ok, f"Q {len(questions)} 行、A {len(answers)} 行，共 {len(lines)} 行"
+        return ok, t.gate_qa.format(questions=len(questions), answers=len(answers), count=len(lines))
     try:
         titles = json.loads(output.strip())
     except json.JSONDecodeError:
-        return False, "不是合法的 JSON"
-    ok = isinstance(titles, list) and len(titles) == 3 and all(isinstance(t, str) and 0 < len(t) <= 8 for t in titles)
-    return ok, "3 个不超过 8 字的标题" if ok else "需要 3 个不超过 8 字的字符串"
+        return False, t.gate_not_json
+    limit = t.title_max_chars
+    ok = isinstance(titles, list) and len(titles) == 3 and all(isinstance(x, str) and 0 < len(x) <= limit for x in titles)
+    return ok, (t.gate_titles_ok if ok else t.gate_titles_bad).format(limit=limit)
 
 
-def run_chain(context: RunContext) -> str:
-    """提示链：固定的三步，每一步的输出经过检查门，才成为下一步的输入。"""
-    current, rows, stopped = NOTE, [], None
-    for index, (name, instruction) in enumerate(CHAIN):
-        # 1. 发请求：输入是上一步通过检查的输出，第一步是原始笔记。
+def run_chain(context: RunContext, t: Texts) -> str:
+    """Prompt chaining: three fixed steps; each output must pass its gate before it becomes the next input."""
+    current, rows, stopped = t.chain_note, [], None
+    for index, (name, instruction) in enumerate(t.chain):
+        # 1. Send the request: its input is the previous step's checked output; the first step gets the raw note.
         response = context.complete({"messages": [{"role": "user", "content": f"{instruction}\n\n{current}"}],
                                      "temperature": 0}, index + 1)
         output = _text(response)
-        # 2. 检查门：由程序检查格式，结果和输出一起记成 lesson.chain_step。
-        passed, detail = gate(index, output)
+        # 2. Gate: the program checks the format; the result and the output are recorded as lesson.chain_step.
+        passed, detail = gate(t, index, output)
         context.emit("lesson.chain_step", {"step": index + 1, "name": name, "gate_passed": passed,
                                            "gate_detail": detail, "output": output}, index + 1)
-        rows.append([index + 1, name, "通过" if passed else "未通过", detail])
-        # 3. 不通过就停在这一步；通过了，这一步的输出成为下一步的输入。
+        rows.append([index + 1, name, t.value_passed if passed else t.value_failed, detail])
+        # 3. Stop on failure; on success this step's output becomes the next step's input.
         if not passed:
             stopped = name
             break
         current = output
-    _report_chain(context, rows, stopped)
-    return f"提示链停在“{stopped}”：检查门未通过。" if stopped else "提示链三步都通过了检查门。最终输出：" + current
+    _report_chain(context, t, rows, stopped)
+    return t.chain_stopped.format(name=stopped) if stopped else t.chain_done.format(output=current)
 
 
-# ---------- 路由 ----------
-LABELS = {"course": "课程内容", "account": "账号与登录", "error": "运行报错", "other": "其他"}
+# ---------- Routing ----------
+LABELS = ("course", "account", "error", "other")
 FALLBACK = "other"
-# 20 张人工标注的工单；标签是本课作者标的，有几张故意写得模棱两可。工单提到其他课时只写课名，不写课号。
-TICKETS = [
-    ("t01", "上下文预算那课说字符数不等于 token，那 token 到底怎么算？", "course"),
-    ("t02", "登录后一直跳回首页，清了缓存也不行。", "account"),
-    ("t03", "运行错误处理那课时报 ZeroDivisionError，是我哪里写错了？", "error"),
-    ("t04", "能不能开个夜间模式？", "other"),
-    ("t05", "任务卡和结构化输出这两课讲的东西有什么区别？", "course"),
-    ("t06", "改了邮箱以后收不到验证码。", "account"),
-    ("t07", "点运行之后一直转圈，控制台显示 HTTP 400。", "error"),
-    ("t08", "课程有没有配套的纸质书？", "other"),
-    ("t09", "ReAct 和原生工具调用到底差在哪？", "course"),
-    ("t10", "账号被锁了，提示尝试次数过多。", "account"),
-    ("t11", "导出录制时报错：源码哈希不一致。", "error"),
-    ("t12", "想推荐给同事，有没有团队版？", "other"),
-    ("t13", "为什么提醒要放在 tool 消息之后？TODO 清单那课没看懂。", "course"),
-    ("t14", "忘记密码了，重置链接过期了。", "account"),
-    ("t15", "文本动作那课跑完提示 JSONDecodeError。", "error"),
-    ("t16", "页面字体能调大一点吗？", "other"),
-    ("t17", "持久记忆那课的记忆和应用状态那课的状态是一回事吗？", "course"),
-    ("t18", "换了电脑以后学习进度没了，是账号没同步吗？", "account"),
-    ("t19", "运行到一半我点了停止，然后再也运行不了，提示上一次运行尚未结束。", "error"),
-    ("t20", "重新规划那课的备份数据源是不是也会坏？", "course"),
-]
-ROUTER_SYSTEM = ("你负责给学习平台的工单分类。只输出一个标签，不要解释。可选标签："
-                 + "；".join(f"{key}（{name}）" for key, name in LABELS.items()) + "。")
+# The author's label for each of the 20 tickets; the ticket texts are in t.tickets, one catalog per language.
+GOLD = {"t01": "course", "t02": "account", "t03": "error", "t04": "other", "t05": "course",
+        "t06": "account", "t07": "error", "t08": "other", "t09": "course", "t10": "account",
+        "t11": "error", "t12": "other", "t13": "course", "t14": "account", "t15": "error",
+        "t16": "other", "t17": "course", "t18": "account", "t19": "error", "t20": "course"}
+
+
+def router_system(t: Texts) -> str:
+    """The router prompt lists every label with its meaning; the labels themselves are the same in every language."""
+    return t.router_system.format(labels=t.router_label_separator.join(
+        t.router_label.format(key=key, name=t.label_names[key]) for key in LABELS))
 
 
 def parse_label(content: str) -> tuple[str, bool]:
-    """取回复第一行的标签；不在列表里就走兜底，并如实标记 fallback。"""
+    """Take the label from the reply's first line; anything not in the list takes the fallback, flagged as such."""
     lines = (content or "").strip().splitlines()
     first = lines[0].strip().strip("`'\"。.").lower() if lines else ""
     return (first, False) if first in LABELS else (FALLBACK, True)
 
 
-def run_routing(context: RunContext) -> str:
-    """路由：每张工单请模型只输出一个标签，程序按标签分派；准确率按人工标注计算。"""
+def run_routing(context: RunContext, t: Texts) -> str:
+    """Routing: the model outputs only a label per ticket and the program dispatches on it; accuracy is against the author's labels."""
     pairs, rows, fallbacks = [], [], 0
-    for index, (ticket_id, text, gold) in enumerate(TICKETS, 1):
-        # 1. 每张工单一次请求，system 固定，模型只输出一个标签。
-        response = context.complete({"messages": [{"role": "system", "content": ROUTER_SYSTEM},
+    system = router_system(t)
+    for index, (ticket_id, gold) in enumerate(GOLD.items(), 1):
+        text = t.tickets[ticket_id]
+        # 1. One request per ticket with a fixed system message; the model outputs only a label.
+        response = context.complete({"messages": [{"role": "system", "content": system},
                                                   {"role": "user", "content": text}], "temperature": 0}, index)
         raw = _text(response)
-        # 2. 解析标签：不在列表里就走兜底，原文照记；只有兜底的记录带 fallback_reason，只有分错的带 misrouted。
+        # 2. Parse the label: anything not in the list takes the fallback and the raw reply is kept; only
+        #    fallback records carry fallback_reason, only misrouted ones carry misrouted.
         predicted, fallback = parse_label(raw)
         fallbacks += fallback
         context.emit("lesson.route", {"ticket": ticket_id, "gold": gold, "predicted": predicted, "raw": raw,
                                       "fallback": fallback, "correct": predicted == gold,
-                                      **({"fallback_reason": "回复第一行不是可选标签"} if fallback else {}),
+                                      **({"fallback_reason": t.fallback_reason} if fallback else {}),
                                       **({"misrouted": True} if predicted != gold else {})}, index)
         pairs.append((gold, predicted))
-        # 3. 分错或走了兜底的工单列进报告，标注本身也可能有争议，留给人复核。
+        # 3. Misrouted or fallback tickets go into the report; a label can be debatable too, so a person reviews them.
         if predicted != gold or fallback:
-            rows.append([ticket_id, text, LABELS[gold], LABELS[predicted], raw if fallback else "—"])
+            rows.append([ticket_id, text, t.label_names[gold], t.label_names[predicted], raw if fallback else "—"])
     correct = sum(g == p for g, p in pairs)
-    _report_routing(context, pairs, rows, fallbacks, correct)
-    return f"路由完成：{correct}/{len(TICKETS)} 与标注一致，{fallbacks} 张走了兜底。"
+    _report_routing(context, t, pairs, rows, fallbacks, correct)
+    return t.routing_done.format(correct=correct, total=len(GOLD), fallbacks=fallbacks)
 
 
-# ---------- 并行与串行 ----------
-# 三个互不依赖的复述子任务，键是课程 slug；并行时 slug 也是请求的 branch 名。
-TOPICS = {
-    "messages-context": "模型只看到本次请求里的消息，历史要由应用程序重发。",
-    "application-state": "应用状态记录目标和证据，消息列表不会自动更新它。",
-    "context-budget": "压缩上下文时，工具调用和工具结果要成对保留或成对删除。",
-}
-SUMMARY_SYSTEM = "用一句不超过 30 字的话复述要点，不要加别的内容。"
+# ---------- Parallel and serial ----------
+# Three independent restating subtasks keyed by lesson slug (texts in t.topics); in parallel the slug is also the branch.
+TOPICS = ("messages-context", "application-state", "context-budget")
 
 
-def run_fanout(context: RunContext, parallel: bool) -> str:
-    """同样三个互不依赖的子任务，串行或并行发出；时间用后端的 perf_counter 测量。"""
+def run_fanout(context: RunContext, t: Texts, parallel: bool) -> str:
+    """The same three independent subtasks, sent one after another or all at once; time is measured with perf_counter on the backend."""
     origin = time.perf_counter()
     spans: dict[str, dict] = {}
 
     def one(index: int, lesson: str) -> str:
         started = time.perf_counter()
-        # 并行的三个请求都记在第 1 轮，靠 branch 配对请求和响应；串行时各占一轮，不带 branch。
-        response = context.complete({"messages": [{"role": "system", "content": SUMMARY_SYSTEM},
-                                                  {"role": "user", "content": TOPICS[lesson]}], "temperature": 0},
+        # In parallel all three requests are in round 1 and pair by branch; serial requests take one round each, no branch.
+        response = context.complete({"messages": [{"role": "system", "content": t.summary_system},
+                                                  {"role": "user", "content": t.topics[lesson]}], "temperature": 0},
                                     1 if parallel else index, branch=lesson if parallel else None)
         ended = time.perf_counter()
         spans[lesson] = {"branch": lesson, "started_ms": round((started - origin) * 1000),
                          "ended_ms": round((ended - origin) * 1000)}
         return _text(response)
 
-    # 1. 发出：并行时线程池同时发出三个请求，共用同一个调用预算；串行时一个接一个。
+    # 1. Send: in parallel a thread pool sends all three at once on one shared call budget; serial sends them in turn.
     if parallel:
         with ThreadPoolExecutor(max_workers=len(TOPICS)) as pool:
             futures = {lesson: pool.submit(one, index, lesson) for index, lesson in enumerate(TOPICS, 1)}
             outputs = {lesson: future.result() for lesson, future in futures.items()}
     else:
         outputs = {lesson: one(index, lesson) for index, lesson in enumerate(TOPICS, 1)}
-    # 2. 计时：墙钟时间与各分支耗时之和都由后端测量，两者之差就是重叠的部分。
+    # 2. Timing: both the wall-clock time and the sum of branch durations are backend measurements; their difference is the overlap.
     wall = round((time.perf_counter() - origin) * 1000)
     branches = [{**spans[lesson], "duration_ms": spans[lesson]["ended_ms"] - spans[lesson]["started_ms"]} for lesson in TOPICS]
     total = sum(item["duration_ms"] for item in branches)
     context.emit("lesson.parallel", {"mode": "parallel" if parallel else "serial", "wall_ms": wall,
                                      "sum_of_branches_ms": total, "branches": branches})
-    _report_fanout(context, parallel, outputs, branches, wall, total)
-    return f"{'并行' if parallel else '串行'}完成：墙钟 {wall} 毫秒，三个分支耗时之和 {total} 毫秒。"
+    _report_fanout(context, t, parallel, outputs, branches, wall, total)
+    return t.fanout_done.format(mode=t.fanout_names["parallel" if parallel else "serial"], wall=wall, total=total)
 
 
 def run(context: RunContext) -> str:
+    t = texts_for(context.locale)
     pattern = Inputs.model_validate(context.inputs).pattern
     context.check_cancelled()
     if pattern == "chain":
-        return run_chain(context)
+        return run_chain(context, t)
     if pattern == "routing":
-        return run_routing(context)
-    return run_fanout(context, parallel=pattern == "parallel")
+        return run_routing(context, t)
+    return run_fanout(context, t, parallel=pattern == "parallel")
 
 
-# ---------- 报告 ----------
-def _report_chain(context: RunContext, rows: list[list], stopped: str | None) -> None:
-    """发布提示链的报告（lesson.report）：每一步的检查门结果。"""
+# ---------- Reports ----------
+def _report_chain(context: RunContext, t: Texts, rows: list[list], stopped: str | None) -> None:
+    """Emit the prompt chain report (lesson.report): the gate result of each step."""
     context.emit("lesson.report", {
-        "title": "提示链", "summary": "每一步之后由程序检查格式，不通过就停在这一步，不把不合格的结果传给下一步。",
-        "checks": [{"label": f"第 {row[0]} 步检查门：{row[1]}", "passed": row[2] == "通过", "detail": row[3]} for row in rows],
-        "metrics": [{"label": "模型调用数", "value": len(rows)},
-                    {"label": "停在", "value": stopped or "全部完成"},
-                    {"label": "学习者备注", "value": context.question or "（空）"}],
-        "table": {"columns": ["步", "名称", "检查门", "说明"], "rows": rows},
+        "title": t.chain_title, "summary": t.chain_summary,
+        "checks": [{"label": t.chain_check.format(step=row[0], name=row[1]), "passed": row[2] == t.value_passed,
+                    "detail": row[3]} for row in rows],
+        "metrics": [{"label": t.label_model_calls, "value": len(rows)},
+                    {"label": t.label_stopped_at, "value": stopped or t.value_all_done},
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
+        "table": {"columns": list(t.chain_columns), "rows": rows},
     })
 
 
-def confusion(rows: list[tuple[str, str]]) -> list[list]:
-    """混淆矩阵：行是人工标注，列是路由结果，对角线以外就是分错的数量。"""
-    keys = list(LABELS)
+def confusion(t: Texts, rows: list[tuple[str, str]]) -> list[list]:
+    """Confusion matrix: rows are the author's labels, columns the routing results; everything off the diagonal is misrouted."""
     table = []
-    for gold in keys:
-        counts = [sum(1 for g, p in rows if g == gold and p == predicted) for predicted in keys]
-        table.append([LABELS[gold], *counts])
+    for gold in LABELS:
+        counts = [sum(1 for g, p in rows if g == gold and p == predicted) for predicted in LABELS]
+        table.append([t.label_names[gold], *counts])
     return table
 
 
-def _report_routing(context: RunContext, pairs: list[tuple[str, str]], rows: list[list], fallbacks: int,
+def _report_routing(context: RunContext, t: Texts, pairs: list[tuple[str, str]], rows: list[list], fallbacks: int,
                     correct: int) -> None:
-    """发布路由的两份报告（lesson.report）：准确率与分错的工单、混淆矩阵。"""
+    """Emit the two routing reports (lesson.report): accuracy with the misrouted tickets, and the confusion matrix."""
     context.emit("lesson.report", {
-        "title": "路由准确率", "summary": "准确率按作者的人工标注计算；标注本身也可能有争议，错分的工单列在下表供复核。",
-        "checks": [{"label": "每张工单都有路由结果", "passed": len(pairs) == len(TICKETS),
-                    "detail": f"{len(pairs)}/{len(TICKETS)}，其中 {fallbacks} 张走了兜底"}],
-        "metrics": [{"label": "准确率", "value": f"{correct}/{len(TICKETS)}"},
-                    {"label": "兜底次数", "value": fallbacks},
-                    {"label": "模型调用数", "value": len(pairs)},
-                    {"label": "学习者备注", "value": context.question or "（空）"}],
-        "table": {"columns": ["工单", "内容", "标注", "预测", "兜底前的原文"], "rows": rows},
+        "title": t.routing_title, "summary": t.routing_summary,
+        "checks": [{"label": t.routing_check, "passed": len(pairs) == len(GOLD),
+                    "detail": t.routing_check_detail.format(done=len(pairs), total=len(GOLD), fallbacks=fallbacks)}],
+        "metrics": [{"label": t.label_accuracy, "value": f"{correct}/{len(GOLD)}"},
+                    {"label": t.label_fallbacks, "value": fallbacks},
+                    {"label": t.label_model_calls, "value": len(pairs)},
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
+        "table": {"columns": list(t.routing_columns), "rows": rows},
     })
     context.emit("lesson.report", {
-        "title": "混淆矩阵", "summary": "行是人工标注，列是路由结果；对角线以外的格子就是分错的工单数。",
-        "table": {"columns": ["标注 → 预测", *LABELS.values()], "rows": confusion(pairs)},
+        "title": t.confusion_title, "summary": t.confusion_summary,
+        "table": {"columns": [t.confusion_corner, *(t.label_names[key] for key in LABELS)], "rows": confusion(t, pairs)},
     })
 
 
-def _report_fanout(context: RunContext, parallel: bool, outputs: dict[str, str], branches: list[dict], wall: int,
-                   total: int) -> None:
-    """发布并行或串行的报告（lesson.report）：墙钟时间、各分支耗时与回答。"""
+def _report_fanout(context: RunContext, t: Texts, parallel: bool, outputs: dict[str, str], branches: list[dict],
+                   wall: int, total: int) -> None:
+    """Emit the parallel or serial report (lesson.report): wall-clock time, branch durations and answers."""
     context.emit("lesson.report", {
-        "title": "并行" if parallel else "串行",
-        "summary": "墙钟时间与各分支耗时都由后端 perf_counter 测量；网络和服务商排队会让每次结果不同。",
-        "checks": [{"label": "三个子任务都有回答", "passed": all(outputs.values()),
-                    "detail": "、".join(lesson for lesson, text in outputs.items() if text) or "无"}],
-        "metrics": [{"label": "墙钟时间（毫秒）", "value": wall}, {"label": "各分支耗时之和（毫秒）", "value": total},
-                    {"label": "模型调用数", "value": len(outputs)},
-                    {"label": "学习者备注", "value": context.question or "（空）"}],
-        "table": {"columns": ["分支", "开始（毫秒）", "结束（毫秒）", "耗时（毫秒）", "回答"],
+        "title": t.fanout_names["parallel" if parallel else "serial"],
+        "summary": t.fanout_summary,
+        "checks": [{"label": t.fanout_check, "passed": all(outputs.values()),
+                    "detail": t.list_separator.join(lesson for lesson, text in outputs.items() if text) or t.value_none}],
+        "metrics": [{"label": t.label_wall_ms, "value": wall}, {"label": t.label_sum_ms, "value": total},
+                    {"label": t.label_model_calls, "value": len(outputs)},
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
+        "table": {"columns": list(t.fanout_columns),
                   "rows": [[b["branch"], b["started_ms"], b["ended_ms"], b["duration_ms"], outputs[lesson]]
                            for lesson, b in zip(TOPICS, branches)]},
     })

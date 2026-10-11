@@ -70,7 +70,7 @@
           "paragraphs": [
             "缓存按前缀匹配：拿这次请求和之前的请求从第一个字开始比，一直比到第一个不同的字为止，只有这之前的部分可能被复用。中间改了一个字，它后面再长的相同内容也用不上。",
             "为什么只认开头？服务商处理输入时，每个位置的中间结果都依赖它前面的全部内容。前面改了一个字，后面每个位置算出来的都不一样了，没法复用；改动之前的部分不受影响。好比按顺序记账，第 3 笔改了，第 3 笔之后的每个余额都得重算，前两笔的余额照旧。",
-            "本课每次请求都发同样三样东西：一段规则、一份 2700 多个字符的图书馆手册（handbook.md）、一个关于手册的问题。另外还有一行每次都不同的动态内容，例如“请求序号：2；发送时间：2026-10-03T10:15:02+08:00”。这一行写在系统提示词第一行，比到“请求序号：”后面的数字就不同了，后面的规则和手册全都用不上；挪到最后一条 user 消息末尾，规则和手册就成了稳定前缀。",
+            "本课每次请求都发同样三样东西：一段规则、一份 2700 多个字符的图书馆手册（locales/handbook/zh_CN.md）、一个关于手册的问题。另外还有一行每次都不同的动态内容，例如“请求序号：2；发送时间：2026-10-03T10:15:02+08:00”。这一行写在系统提示词第一行，比到“请求序号：”后面的数字就不同了，后面的规则和手册全都用不上；挪到最后一条 user 消息末尾，规则和手册就成了稳定前缀。",
             "比的是服务商实际收到的内容，不是意思。多一个空格、换一个标点、工具定义换了顺序，都算不同。“内容没变”要逐字核对。"
           ]
         },
@@ -387,48 +387,48 @@
           "id": "code-layout",
           "type": "annotated-source",
           "path": "lessons/lesson_prompt_caching/runtime.py",
-          "start": 41,
-          "end": 71,
+          "start": 39,
+          "end": 70,
           "notes": [
             {
               "id": "n43",
-              "line": 43,
-              "anchor": "return f\"请求序号：{number}；发送时间：",
+              "line": 41,
+              "anchor": "return t.dynamic_line.format(number=number",
               "text": "动态行：请求序号和发送时间，每次请求都不同。"
             },
             {
               "id": "n48",
-              "line": 48,
-              "anchor": "stable = f\"会话标记：{session}\\n{RULES}\\n\\n{HANDBOOK}\"",
+              "line": 46,
+              "anchor": "stable = f\"{t.session_tag.format(session=session)}\\n{t.rules}\\n\\n{handbook}\"",
               "text": "稳定部分：会话标记、规则和手册，三组完全相同。"
             },
             {
               "id": "n51",
-              "line": 51,
+              "line": 50,
               "anchor": "return [{\"role\": \"system\", \"content\": f\"{dynamic}\\n{stable}\"}",
               "text": "动态内容在前：动态行是系统提示词的第一行。"
             },
             {
               "id": "n54",
-              "line": 54,
+              "line": 53,
               "anchor": "return [{\"role\": \"system\", \"content\": stable}",
               "text": "稳定前缀：system 只放稳定部分，动态行跟在问题后面。"
             },
             {
               "id": "n59",
-              "line": 59,
+              "line": 58,
               "anchor": "sort_keys=True",
               "text": "固定键的顺序再序列化，同样的消息总是得到同样的字符串。"
             },
             {
               "id": "n64",
-              "line": 64,
+              "line": 63,
               "anchor": "hashlib.sha256(_serialize(messages[:-1])",
               "text": "前缀哈希只算最后一条消息之前的部分，相同就说明前缀逐字相同。"
             },
             {
               "id": "n71",
-              "line": 71,
+              "line": 70,
               "anchor": "os.path.commonprefix",
               "text": "从头逐字比较两次请求，数到第一个不同的字符为止。"
             }
@@ -438,12 +438,12 @@
           "id": "code-loop",
           "type": "annotated-source",
           "path": "lessons/lesson_prompt_caching/runtime.py",
-          "start": 74,
-          "end": 113,
+          "start": 73,
+          "end": 112,
           "notes": [
             {
               "id": "n76",
-              "line": 76,
+              "line": 75,
               "anchor": "if cache[\"cached_tokens\"] is None:",
               "text": "先判断有没有报告，再判断是不是 0，三种结果发三种事件。"
             },
@@ -456,13 +456,13 @@
             {
               "id": "n85",
               "line": 85,
-              "anchor": "plan = ([\"预热\"] if values.layout == \"warmup\"",
+              "anchor": "plan = ([t.purpose_warmup] if values.layout == \"warmup\"",
               "text": "预热组在测量请求前多发一次，测量次数三组相同。"
             },
             {
               "id": "n92",
               "line": 92,
-              "anchor": "messages = build_messages(values.layout",
+              "anchor": "messages = build_messages(t, handbook, values.layout",
               "text": "每次只换问题和动态行，其余内容不动。"
             },
             {
@@ -501,60 +501,60 @@
           "id": "code-normalize",
           "type": "annotated-source",
           "path": "lessons/lesson_prompt_caching/cache_usage.py",
-          "start": 9,
-          "end": 46,
+          "start": 10,
+          "end": 47,
           "notes": [
             {
               "id": "n11",
-              "line": 11,
+              "line": 12,
               "anchor": "return value if type(value) is int and value >= 0",
               "text": "只认非负整数：True、小数、字符串都不当成 Token 数。"
             },
             {
               "id": "n14",
-              "line": 14,
+              "line": 15,
               "anchor": "def normalize_cache_usage(usage) -> dict:",
               "text": "纯函数：输入响应的用量，输出统一的四项。"
             },
             {
               "id": "n18",
-              "line": 18,
+              "line": 19,
               "anchor": "if not isinstance(usage, dict):",
               "text": "响应根本没有用量时，四项都是 None。"
             },
             {
               "id": "n23",
-              "line": 23,
+              "line": 24,
               "anchor": "if isinstance(details, dict) and _count(details.get(\"cached_tokens\"))",
               "text": "百炼等 OpenAI 兼容接口：命中数在 prompt_tokens_details 里。"
             },
             {
               "id": "n27",
-              "line": 27,
+              "line": 28,
               "anchor": "hit = _count(usage.get(\"prompt_cache_hit_tokens\"))",
               "text": "DeepSeek 官方接口：命中与未命中各有一个字段。"
             },
             {
               "id": "n31",
-              "line": 31,
+              "line": 32,
               "anchor": "if total is None and miss is not None:",
               "text": "没有 prompt_tokens 时，用命中加未命中补出全部输入。"
             },
             {
               "id": "n37",
-              "line": 37,
+              "line": 38,
               "anchor": "read = _count(usage.get(\"cache_read_input_tokens\"))",
               "text": "Anthropic：命中写在 cache_read_input_tokens。"
             },
             {
               "id": "n39",
-              "line": 39,
+              "line": 40,
               "anchor": "total = None if base is None else base + read + (write or 0)",
               "text": "它的 input_tokens 不含缓存读写，三项相加才是全部输入。"
             },
             {
               "id": "n46",
-              "line": 46,
+              "line": 47,
               "anchor": "return {**EMPTY, \"input_tokens\": total, \"cache_write_tokens\": write}",
               "text": "哪个缓存字段都没有：命中数保持 None，报告写“未报告”。"
             }

@@ -1,11 +1,30 @@
-"""文本动作课的离线测试模型：只服务自动化测试，不代表任何真实模型的行为。
+"""Offline test model for text-actions: serves automated tests only and stands for no real model.
 
-不带 stop 的分支故意让“模型”接着写出一段 Observation 和 Final Answer，用来测试运行器会不会采信它。
+Without stop the "model" deliberately goes on to write an Observation and a Final Answer,
+to test whether the runner trusts them.
 """
 import json
 
-ACTION = 'Thought: 需要先查成绩。\nAction: lookup_quiz_score\nAction Input: {"student_id": "%s"}\n'
-INVENTED = 'Observation: {"score": 88, "attempts": 1}\nThought: 88 分，及格了。\nFinal Answer: 他得了 88 分，及格。'
+# Deterministic script text per run language. The protocol keywords stay English in both.
+SCRIPT = {
+    "zh-CN": {
+        "action": 'Thought: 需要先查成绩。\nAction: lookup_quiz_score\nAction Input: {"student_id": "%s"}\n',
+        "invented": 'Observation: {"score": 88, "attempts": 1}\nThought: 88 分，及格了。\nFinal Answer: 他得了 88 分，及格。',
+        "got_result": "Thought: 拿到了真实成绩。\nFinal Answer: ",
+        "final": "他最近一次得了 {score} 分，{verdict}。",
+        "passed": "及格",
+        "failed": "没有及格",
+    },
+    "en": {
+        "action": 'Thought: I need to look up the score first.\nAction: lookup_quiz_score\nAction Input: {"student_id": "%s"}\n',
+        "invented": ('Observation: {"score": 88, "attempts": 1}\nThought: 88 points, a pass.\n'
+                     'Final Answer: The student scored 88 and passed.'),
+        "got_result": "Thought: I have the real score.\nFinal Answer: ",
+        "final": "The latest score is {score}, so the student {verdict}.",
+        "passed": "passed",
+        "failed": "did not pass",
+    },
+}
 
 
 def _student(messages):
@@ -14,7 +33,7 @@ def _student(messages):
 
 
 def _observed(messages):
-    """取最后一条真实 Observation 里的分数；没有就返回 None。"""
+    """The score in the last real Observation, or None."""
     for message in reversed(messages):
         content = message.get("content")
         if message["role"] == "user" and isinstance(content, str) and content.startswith("Observation: "):
@@ -26,11 +45,12 @@ def _observed(messages):
     return None
 
 
-def _final(score):
-    return f"他最近一次得了 {score} 分，{'及格' if score >= 60 else '没有及格'}。"
+def _final(score, script):
+    return script["final"].format(score=score, verdict=script["passed"] if score >= 60 else script["failed"])
 
 
-def create_completion(exercise_id, inputs=None):
+def create_completion(exercise_id, inputs=None, locale="zh-CN"):
+    script = SCRIPT[locale]
     protocol = (inputs or {}).get("protocol") or {"text-no-stop": "text_no_stop", "native": "native"}.get(
         exercise_id, "text_stop")
 
@@ -43,13 +63,14 @@ def create_completion(exercise_id, inputs=None):
                     "name": "lookup_quiz_score", "arguments": json.dumps({"student_id": _student(messages)})}}
                 return {"choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [call]},
                                      "finish_reason": "tool_calls"}]}
-            return {"choices": [{"message": {"role": "assistant", "content": _final(score)}, "finish_reason": "stop"}]}
+            return {"choices": [{"message": {"role": "assistant", "content": _final(score, script)},
+                                 "finish_reason": "stop"}]}
         if score is None:
-            content = ACTION % _student(messages)
+            content = script["action"] % _student(messages)
             if "stop" not in body:
-                content += INVENTED
+                content += script["invented"]
             return {"choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]}
-        content = f"Thought: 拿到了真实成绩。\nFinal Answer: {_final(score)}"
+        content = script["got_result"] + _final(score, script)
         return {"choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]}
 
     return complete

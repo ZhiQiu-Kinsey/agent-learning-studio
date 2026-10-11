@@ -68,7 +68,7 @@
           "type": "prose",
           "title": "任务卡写的是验收规则",
           "paragraphs": [
-            "任务卡在执行之前把验收标准（Acceptance Criteria）写成六个字段，执行者照它做，验收方照它查。TASK_CARD 的六个字段是：goal 写目标，“依据本地计算结果回答 19 + 23”；input_scope 限定能用的数据，只有 19 和 23，不读外部文件或网页；output 写交付什么，数值 42，并说明来自本次计算；evidence 写看哪条证据、满足什么条件，计算工具成功返回且结果等于 42；failure 写不满足时怎么报，明确标为未通过；stop 写什么时候停，完成一次计算和验收后停止。",
+            "任务卡在执行之前把验收标准（Acceptance Criteria）写成六个字段，执行者照它做，验收方照它查。任务卡 task_card 的六个字段是：goal 写目标，“依据本地计算结果回答 19 + 23”；input_scope 限定能用的数据，只有 19 和 23，不读外部文件或网页；output 写交付什么，数值 42，并说明来自本次计算；evidence 写看哪条证据、满足什么条件，计算工具以 19 和 23 为参数成功返回，且结果等于 42；failure 写不满足时怎么报，工具失败、证据缺失、参数或数值不符都明确标为未通过；stop 写什么时候停，完成一次计算和验收后停止。",
             "六个字段各防一类问题。没有 input_scope，执行者可能去网上搜一个答案；没有 evidence，验收只能看回答的措辞；没有 failure，失败可能被写成“基本完成”；没有 stop，执行者可能一直追加调用。写下的条件要能用程序检查：“结果等于 42”可以，“回答清楚易懂”就不行，后者至少要换成能核对的说法。",
             "任务卡要在执行之前写好。先跑、再看着结果写标准，标准就会不自觉地向结果靠拢。运行一开始，runtime.py 就把任务卡作为 lesson.task_card 事件发布，之后执行者交来什么，验收都只对照这张卡。改任务卡会改变验收的对象；把回答写得更自信，检查结果不会变。"
           ]
@@ -101,7 +101,7 @@
           "type": "micro-quiz",
           "question": {
             "id": "evidence-field",
-            "prompt": "任务卡的 evidence 写着“计算工具成功返回且结果等于 42”。这个字段起什么作用？",
+            "prompt": "任务卡的 evidence 写着“计算工具以 19 和 23 为参数成功返回，且结果等于 42”。这个字段起什么作用？",
             "options": [
               {
                 "id": "a",
@@ -129,7 +129,7 @@
           "title": "运行结束与验收通过是两件事",
           "paragraphs": [
             "“做完了”至少有三种意思，要分开判断：流程结束、工具执行成功、任务验收通过。流程结束看终态，本课所有场景都会以 completed 结束；工具执行成功看 tool_result 的 ok；验收通过看任务卡上的条件是否全部满足。前一种成立，推不出后一种。",
-            "verify 的报告把这层关系写得很直接。第一项“执行过程已结束”在所有场景里都为真，它只说明 Python 走到了验收这一步。决定结论的是后面四项：声明有没有引用本次的工具证据，工具是否成功返回，证据里的值是不是 42，声明和证据是否一致。accepted 跳过第一项，只看后四项是否全部通过。",
+            "verify 的报告把这层关系写得很直接。第一项“执行过程已结束”在所有场景里都为真，它只说明 Python 走到了验收这一步。决定结论的是后面五项：声明有没有引用本次的工具证据，工具是否成功返回，调用参数是不是 19 和 23，证据里的值是不是 42，声明和证据是否一致。accepted 跳过第一项，只看后五项是否全部通过。",
             "举个例子：“只有声明，没有证据”这组，流程照常结束，第一项为真；执行者声称答案是 42，答案本身也对；可第二项“声明引用了本次的工具证据”为假，后面几项跟着为假，结论是未通过。答案碰巧对，不等于任务按要求完成了：任务卡要的是“依据本地计算”，没有计算记录，就证明不了这一点。"
           ]
         },
@@ -175,7 +175,7 @@
           "title": "声称完成与证明完成",
           "paragraphs": [
             "完成声明只是执行者交来的一句说法，它的作用是指出证据在哪里，而不是充当证据。可以要求 Agent 结束时交一份完成声明，比如 {status: done, answer: 42, evidence_ref: task_add_1}。本课的执行者是运行器里的一段固定脚本，代替 Agent 交声明。声明里的 evidence_ref 指向本次运行中某次工具调用的 id。",
-            "验收器拿到声明，不拿它的答案下结论，而是顺着 evidence_ref 去本次记录的证据里找对应的工具结果，再用证据里的值分别和任务卡、和声明比一次。“只有声明，没有证据”这组的声明没有 evidence_ref，验收器无处可查，只能判未通过。",
+            "验收器拿到声明，不拿它的答案下结论，而是顺着 evidence_ref 去本次记录的证据里找对应的工具结果，再拿证据里的参数和值去对照任务卡，拿证据里的值去对照声明。“只有声明，没有证据”这组的声明没有 evidence_ref，验收器无处可查，只能判未通过。",
             "“声明与证据不一致”这组更隐蔽：工具实际返回 41，执行者却在声明里写 42，还附上了这次调用的 evidence_ref。只读声明的验收会判通过；顺着引用去读 tool_result，才发现两者对不上。《深入理解 AI Agent》讲验证器时说得很直接：Agent 很容易写出一份报告，说任务已经全部完成，事实上却没有完成。",
             "所以验收器守两条规矩：只用声明定位证据，不用声明下结论；证据要来自执行时的记录，不能由执行者事后改写。本课的证据是 context.call_tool 的返回值，同一份结果也记成了 tool_result 事件，可以对照；本课没有演示证据被篡改的情况。"
           ]
@@ -187,8 +187,8 @@
           "summary": "让执行者自己判自己，等于把验收换成了又一份声明。",
           "paragraphs": [
             "最省事的验收是问执行者：“你做完了吗？”问题在于，执行者判断自己时，用的是和执行时同一套信息、同一套盲点。前面手机记账的例子里，那个 Agent 在中途的思考里就写过“看不到图片里的开销”，却继续往下做，最后照样宣布完成。让它自己验收，它只会再说一遍“完成了”。",
-            "独立有两层意思。一是信息独立：验收器只读任务卡和执行时记下的证据，不读执行者对过程的描述。二是规则独立：判定规则写成代码，执行之前就定好，执行者影响不了。本课的 verify 两条都满足：它的输入只有声明和证据，五项检查都是固定的比较。",
-            "反过来的情况也有：事情做对了，最后的说法却错了。那本书引用 τ²-bench 公开的基线结果：带信息告知要求的运行失败了 240 次，其中 80 次环境状态是对的，只是告诉用户的信息错了，占全部失败的三分之一。所以验收既要查证据，也要查声明和证据是否一致。本课的第五项“声明与证据一致”就是干这个的：工具算出 41、声明写 42 时，它判假。",
+            "独立有两层意思。一是信息独立：验收器只读任务卡和执行时记下的证据，不读执行者对过程的描述。二是规则独立：判定规则写成代码，执行之前就定好，执行者影响不了。本课的 verify 两条都满足：它的输入只有声明和证据，六项检查都是固定的比较。",
+            "反过来的情况也有：事情做对了，最后的说法却错了。那本书引用 τ²-bench 公开的基线结果：带信息告知要求的运行失败了 240 次，其中 80 次环境状态是对的，只是告诉用户的信息错了，占全部失败的三分之一。所以验收既要查证据，也要查声明和证据是否一致。本课的第六项“声明与证据一致”就是干这个的：工具算出 41、声明写 42 时，它判假。",
             "Claude Code 的官方最佳实践讲的是同一件事。文档说，Claude 在活儿看起来做完时就会停；没有它能自己运行的检查，“看起来做完了”就是唯一的信号。所以文档建议给它一个返回通过或失败的检查，比如测试或构建的退出码，并让它拿出证据：测试输出、运行的命令和返回结果，而不只是说成功了。要把检查变成硬性的关口，可以配 Stop 钩子：它每次要结束时运行你的检查脚本，不通过就拦下，把原因交给它接着改；文档还给连续拦截设了上限。也可以另起一个上下文干净的复核者，只给它看改动和标准，干活的就不给自己打分。前者对应规则独立，后者对应信息独立。",
             "规则写成代码还有一个好处：同样的输入，每次判定都一样，可以反复跑、可以复核。有些标准写不成代码，比如一段讲解是否清楚，常见的做法是另请一个模型来评审；但那是带不确定性的判断，本身也要检验，后面的课再讲。本课只做能写成代码的部分。"
           ]
@@ -232,7 +232,7 @@
           "title": "报告追溯到实际证据",
           "paragraphs": [
             "lesson.report 里每一项检查的 passed，都能追溯到本次的 tool_call 和 tool_result。报告的表格把每次尝试的“声明的答案”“证据中的值”“验收结论”和未通过的原因排在同一行；拿表格里的值去时间线上找对应的 tool_result，结论应该能原样推出来。",
-            "验收器只查任务卡写了的东西。本课 evidence 写的是“计算工具成功返回且结果等于 42”，verify 也就只看工具是否成功、结果是不是 42，不看工具算的是不是 19 和 23。假如执行者算的是 20 + 22，结果同样是 42，这套检查会判通过，尽管它违反了 input_scope。要堵住这个缺口，得在 evidence 里加一条“参数是 19 和 23”，再让验收器去查调用的参数。任务卡写漏的，验收器不会替你补上。",
+            "验收器只查任务卡写了的东西。本课的 evidence 写明“以 19 和 23 为参数”，verify 才会去查调用的参数：执行者算的要是 20 + 22，结果同样是 42，第四项“调用参数符合任务卡”也会判假，验收不通过。假如 evidence 只写“计算工具成功返回且结果等于 42”，验收器就只看工具是否成功、结果是不是 42，这次违反 input_scope 的计算会被判通过。任务卡写漏的，验收器不会替你补上；要查什么，就得先把它写成检查项。",
             "实验台的“执行者的完成声明”只写进声明的 summary，写成“全部完成”也不会改变任何一项检查。开放的任务需要更多案例和外部事实才能验收，本课只演示验收的骨架。"
           ]
         },
@@ -245,13 +245,13 @@
             "options": [
               {
                 "id": "a",
-                "text": "通过：evidence 只要求工具成功且结果等于 42",
-                "feedback": "对。验收器只查任务卡写成检查项的条件，没有检查调用参数。"
+                "text": "通过：工具成功，结果也等于 42",
+                "feedback": "不对。evidence 还写了参数必须是 19 和 23，verify 会查调用参数，这一项不通过。"
               },
               {
                 "id": "b",
-                "text": "未通过：违反了 input_scope",
-                "feedback": "任务卡确实写了 input_scope，但 verify 没有检查参数，这一条不会被拦下。"
+                "text": "未通过：调用参数不符合任务卡",
+                "feedback": "对。evidence 写明了参数，verify 拿证据里的参数去比，20 和 22 不符合。"
               },
               {
                 "id": "c",
@@ -259,8 +259,8 @@
                 "feedback": "不对。声明 42，证据也是 42，两者一致。"
               }
             ],
-            "correct": "a",
-            "explanation": "任务卡写漏的条件，验收器不会替你补上；要查参数，就得把它写进 evidence 并加一项检查。"
+            "correct": "b",
+            "explanation": "验收器只查任务卡写成检查项的条件。本课的 evidence 写了参数，verify 才去查参数；任务卡写漏的条件，验收器不会替你补上。"
           }
         },
         {
@@ -314,8 +314,8 @@
               "label": "核对",
               "actor": "验收器",
               "title": "顺着引用读证据",
-              "body": "verify 用 evidence_ref 找到 tool_result，拿证据里的值对照任务卡和声明。",
-              "code": "checks = verify(claim, evidence)",
+              "body": "verify 用 evidence_ref 找到本次记录的调用和 tool_result，拿证据里的参数和值对照任务卡，拿值对照声明。",
+              "code": "checks = verify(claim, evidence, t)",
               "language": "python",
               "evidence": "报告里每项 passed 与 detail"
             },
@@ -379,54 +379,66 @@
           "id": "code-acceptance",
           "type": "annotated-source",
           "path": "lessons/lesson_04_task_contract/runtime.py",
-          "start": 20,
-          "end": 58,
+          "start": 22,
+          "end": 62,
           "notes": [
             {
               "id": "n21",
-              "line": 21,
-              "anchor": "TASK_CARD = {",
-              "text": "任务卡把目标、输入范围、产物、证据、失败处理和停止条件写成六个字段，运行开始时作为 lesson.task_card 发布。"
+              "line": 23,
+              "anchor": "# The task card (t.task_card) is written before the run",
+              "text": "任务卡把目标、输入范围、产物、证据、失败处理和停止条件写成六个字段，放在消息目录的 task_card 里，每种运行语言一份；运行开始时作为 lesson.task_card 发布。"
             },
             {
               "id": "n25",
               "line": 25,
-              "anchor": "\"evidence\": \"计算工具成功返回",
-              "text": "evidence 写的是能核对的条件：哪个工具成功、结果等于几。后面的检查项逐条照它判。"
+              "anchor": "EXPECTED_ARGUMENTS = {\"a\": 19, \"b\": 23}",
+              "text": "evidence 写的是能核对的条件：以 19 和 23 为参数、结果等于 42。这两个常量就是检查项要比的值。"
             },
             {
               "id": "n36",
-              "line": 36,
-              "anchor": "def verify(claim: dict, evidence",
-              "text": "验收器的输入只有完成声明和本次记录的证据，执行者怎么描述过程它不看。"
+              "line": 33,
+              "anchor": "def verify(claim: dict, evidence: dict[str, dict], t)",
+              "text": "验收器的输入只有完成声明和本次记录的证据，执行者怎么描述过程它不看；t 只提供检查项的文字。"
             },
             {
               "id": "n39",
-              "line": 39,
+              "line": 36,
               "anchor": "record = evidence.get(claim.get(\"evidence_ref\")",
               "text": "只顺着声明里的 evidence_ref 找证据。引用了别处的调用 id，这里拿到的就是空。"
             },
             {
+              "id": "n42",
+              "line": 42,
+              "anchor": "arguments = record.get(\"arguments\") if record else None",
+              "text": "参数也从证据里取：本次记录的这次调用用了哪两个数。"
+            },
+            {
               "id": "n44",
-              "line": 44,
-              "anchor": "{\"label\": \"执行过程已结束\", \"passed\": True",
+              "line": 45,
+              "anchor": "{\"label\": t.check_ended, \"passed\": True",
               "text": "第一项永远为真：流程走到这里，只说明 Python 没出错。"
             },
             {
+              "id": "n49",
+              "line": 49,
+              "anchor": "{\"label\": t.check_arguments, \"passed\": arguments == EXPECTED_ARGUMENTS",
+              "text": "对照 input_scope 查参数：算的不是 19 和 23，结果碰巧是 42 也不能通过。"
+            },
+            {
               "id": "n48",
-              "line": 48,
-              "anchor": "{\"label\": \"证据中的值满足任务卡\"",
-              "text": "拿证据里的值对照任务卡；wrong_result 证据存在、工具也成功，但停在这一项。"
+              "line": 51,
+              "anchor": "{\"label\": t.check_value, \"passed\": value == EXPECTED",
+              "text": "拿证据里的值对照任务卡。wrong_result 证据存在、工具也成功，但这一项和上一项都不通过。"
             },
             {
               "id": "n51",
-              "line": 51,
-              "anchor": "{\"label\": \"声明与证据一致\", \"passed\": ok and claim.get(",
-              "text": "声明与证据单独比一次：claim_mismatch 就是在这里被拦下的。"
+              "line": 55,
+              "anchor": "{\"label\": t.check_consistent, \"passed\": ok and claim.get(",
+              "text": "声明与证据单独比一次：claim_mismatch 的声明写 42、证据是 41，这一项判假。"
             },
             {
               "id": "n58",
-              "line": 58,
+              "line": 62,
               "anchor": "return all(item[\"passed\"] for item in checks[1:])",
               "text": "accepted 跳过第一项。流程跑完和任务通过是两件事。"
             }
@@ -436,36 +448,36 @@
           "id": "code-attempt",
           "type": "annotated-source",
           "path": "lessons/lesson_04_task_contract/runtime.py",
-          "start": 61,
-          "end": 74,
+          "start": 65,
+          "end": 79,
           "notes": [
             {
               "id": "n61",
-              "line": 61,
+              "line": 65,
               "anchor": "def _attempt(context: RunContext",
               "text": "执行者是一段固定脚本，代替 Agent 交完成声明。故障由运行器注入，不是模型犯的错。"
             },
             {
               "id": "n65",
-              "line": 65,
+              "line": 69,
               "anchor": "return {\"status\": \"done\", \"answer\": EXPECTED, \"evidence_ref\": None",
               "text": "missing_evidence 不调用工具就交声明：答案恰好是对的，但没有可核对的证据。"
             },
             {
               "id": "n67",
-              "line": 67,
+              "line": 71,
               "anchor": "wrong = scenario in (\"wrong_result\", \"claim_mism",
               "text": "注入的故障只改变证据，不改变验收规则。goal_loop 只让第 1 次出错。"
             },
             {
               "id": "n71",
-              "line": 71,
-              "anchor": "evidence[call_id] = {\"result\": result}",
-              "text": "工具结果按调用 id 存进 evidence，验收器只认这里的记录。"
+              "line": 76,
+              "anchor": "evidence[call_id] = {\"arguments\": arguments, \"result\": result}",
+              "text": "调用参数和工具结果一起按调用 id 存进 evidence，验收器只认这里的记录。"
             },
             {
               "id": "n73",
-              "line": 73,
+              "line": 78,
               "anchor": "answer = EXPECTED if scenario == \"claim_mismatch",
               "text": "claim_mismatch 的执行者不管工具返回什么都报 42，模拟“只报好消息”的声明。"
             }
@@ -475,48 +487,48 @@
           "id": "code-goal-loop",
           "type": "annotated-source",
           "path": "lessons/lesson_04_task_contract/runtime.py",
-          "start": 77,
-          "end": 107,
+          "start": 82,
+          "end": 114,
           "notes": [
             {
               "id": "n81",
-              "line": 81,
+              "line": 87,
               "anchor": "limit = context.inputs[\"max_attempts\"] if scenario",
               "text": "尝试次数由 max_attempts 决定；其他场景固定为 1 次，每种故障单独可见。"
             },
             {
               "id": "n83",
-              "line": 83,
-              "anchor": "card = {**TASK_CARD, \"stop\": f\"验收通过或尝试 {limit} 次",
+              "line": 89,
+              "anchor": "card = {**t.task_card, \"stop\": t.stop_with_limit.format(limit=limit)}",
               "text": "目标循环把上限写进任务卡的 stop 字段，停止条件也是契约的一部分。"
             },
             {
               "id": "n87",
-              "line": 87,
+              "line": 93,
               "anchor": "for attempt in range(1, limit + 1):",
               "text": "有上限的目标循环：每次尝试都是“执行 → 独立验收”，最多 limit 次。"
             },
             {
               "id": "n93",
-              "line": 93,
-              "anchor": "checks = verify(claim, evidence)",
+              "line": 99,
+              "anchor": "checks = verify(claim, evidence, t)",
               "text": "每次尝试都交给同一个验收器，执行者的声明改变不了检查规则。"
             },
             {
               "id": "n98",
-              "line": 98,
+              "line": 104,
               "anchor": "context.emit(\"lesson.goal_check\", {",
               "text": "每次尝试都发布 lesson.goal_check：是否通过、未通过的原因、下一步是重试还是停止。"
             },
             {
               "id": "n104",
-              "line": 104,
+              "line": 111,
               "anchor": "if passed:",
               "text": "通过就停。没有这一行，循环会把剩下的尝试次数用完。"
             },
             {
               "id": "n107",
-              "line": 107,
+              "line": 114,
               "anchor": "_report(context, scenario, limit, checks",
               "text": "报告的组装放在 _report 里：检查项、指标和每次尝试的记录。"
             }
@@ -577,7 +589,7 @@
             },
             {
               "id": "card-failure",
-              "text": "任务卡的 failure：证据缺失或数值不符时必须标为未通过。",
+              "text": "任务卡的 failure：证据缺失、参数或数值不符时必须标为未通过。",
               "selector": {
                 "event": "lesson.task_card",
                 "path": "data.failure"
@@ -601,11 +613,19 @@
               }
             },
             {
-              "id": "value-check",
-              "text": "报告第四项“证据中的值满足任务卡”：期望值与证据中的值并列。",
+              "id": "arguments-check",
+              "text": "报告第四项“调用参数符合任务卡”：结果错误组算的是 19 + 22，这一项也不通过。",
               "selector": {
                 "event": "lesson.report",
                 "path": "data.checks[3]"
+              }
+            },
+            {
+              "id": "value-check",
+              "text": "报告第五项“证据中的值满足任务卡”：期望值与证据中的值并列。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[4]"
               }
             },
             {
@@ -627,7 +647,7 @@
               "stage": "runtime"
             },
             {
-              "text": "失败规则也写在前面：缺证据或数值不符，都要明确标为未通过。",
+              "text": "失败规则也写在前面：缺证据、参数或数值不符，都要明确标为未通过。",
               "observe": "card-failure"
             },
             {
@@ -639,6 +659,10 @@
               "text": "第一项检查在三组都为真：流程走到了验收阶段，但这不代表任务成功。",
               "observe": "ended-check",
               "stage": "runtime"
+            },
+            {
+              "text": "这一项查调用参数：任务卡只允许 19 和 23。参数不对，结果碰巧是 42 也不能通过。",
+              "observe": "arguments-check"
             },
             {
               "text": "这一项把期望和证据中的值并列，结论由它们推出。",
@@ -705,10 +729,10 @@
             },
             {
               "id": "consistency-check",
-              "text": "报告第五项“声明与证据一致”：只有这一项能把 claim_mismatch 拦下来。",
+              "text": "报告第六项“声明与证据一致”：声明写 42、证据是 41 时，这一项判假。",
               "selector": {
                 "event": "lesson.report",
-                "path": "data.checks[4]"
+                "path": "data.checks[5]"
               }
             }
           ],
@@ -774,7 +798,7 @@
             },
             {
               "id": "first-reasons",
-              "text": "第 1 次验收未通过的原因：证据中的值不是 42。",
+              "text": "第 1 次验收未通过的原因：调用参数不是 19 和 23，证据中的值也不是 42。",
               "selector": {
                 "event": "lesson.goal_check",
                 "round": 1,
@@ -1003,7 +1027,7 @@
             "event": "tool_result",
             "name": "add_numbers"
           },
-          "explanation": "这是 add_numbers 的 tool_result。报告里“工具成功返回”“证据中的值满足任务卡”“声明与证据一致”三项读的都是这里的 result。流程结束和执行者的声明都不能代替这一步；“只有声明，没有证据”的案例里没有这一步，验收就无法通过。"
+          "explanation": "这是 add_numbers 的 tool_result。报告里“工具成功返回”“证据中的值满足任务卡”“声明与证据一致”三项读的都是这里的 result；“调用参数符合任务卡”读的是同一次调用的参数。流程结束和执行者的声明都不能代替这一步；“只有声明，没有证据”的案例里没有这一步，验收就无法通过。"
         },
         {
           "id": "check-points",
@@ -1039,11 +1063,11 @@
     },
     {
       "name": "evidence",
-      "note": "任务卡字段：验收看哪条证据、满足什么条件，本课是计算工具成功返回且结果等于 42。"
+      "note": "任务卡字段：验收看哪条证据、满足什么条件，本课是计算工具以 19 和 23 为参数成功返回、结果等于 42。"
     },
     {
       "name": "failure",
-      "note": "任务卡字段：工具失败、证据缺失或数值不符时，必须明确标为未通过。"
+      "note": "任务卡字段：工具失败、证据缺失、参数或数值不符时，必须明确标为未通过。"
     },
     {
       "name": "stop",

@@ -1,19 +1,27 @@
-# 上下文组成与消息协议（`messages-context`）
+# Context components and the message protocol (`messages-context`)
 
-本课把一次请求的上下文拆成四部分：系统提示词、之前的对话、工具调用与工具结果、本轮问题。一次运行准备五组上下文，每组只比完整上下文少一部分，问同一个问题：
+English · [简体中文](README.zh-CN.md)
 
-| 组 | 拿掉的部分 | 是否发送 |
+This lesson splits the context of one request into four parts: the system prompt, the earlier conversation, the tool call with its tool result, and this turn's question. One run prepares five contexts, each with one part less than the full context, and asks the same question:
+
+| Variant | Removed part | Sent? |
 | --- | --- | --- |
-| 完整上下文 | 无 | 发送 |
-| 去掉系统提示词 | system 消息 | 发送 |
-| 去掉之前的对话 | 那条 user 消息 | 发送 |
-| 去掉工具调用和结果 | 带 tool_calls 的 assistant 消息与对应的 tool 消息 | 发送 |
-| 只去掉工具结果 | tool 消息（留下调用） | 被 `validate_tool_history` 在发送前拦下 |
+| Full context | nothing | sent |
+| Remove the system prompt | the system message | sent |
+| Remove the earlier conversation | that user message | sent |
+| Remove the tool call and result | the assistant message with tool_calls and its tool message | sent |
+| Remove only the tool result | the tool message (the call stays) | blocked by `validate_tool_history` before sending |
 
-本课使用当前配置的真实模型，每次运行发出 4 次请求（被拦下的那组不发送），运行前请注意模型开销。工具 `lookup_score` 由运行器真实执行一次；带 tool_calls 的 assistant 消息由运行器写入，不是模型提出的，事件里这次调用的 `origin` 是 `course_program`。报告里“提到分数”“提到复习日”“写了依据行”三列是关键词初筛，要对照回答原文复核。
+This lesson uses the real model you configured and sends 4 requests per run (the blocked variant is not sent), so mind the model cost. The runner really runs the tool `lookup_score` once; the runner writes the assistant message with tool_calls, the model did not propose it, and the event of this call has `origin` set to `course_program`. The report columns "Mentions score", "Mentions review day" and "Has basis line" are a keyword screen; check them against the answer text.
 
-`validate_tool_history(messages)` 的名字、签名和行为保持不变，“上下文预算与截取窗口”一课会导入它，也导入 `rejection_status`：只有请求级的 4xx 算服务商拒绝了这组消息，记成 `lesson.provider_error`；超时、限流、鉴权失败、连接失败和 5xx 照常报错。
+`validate_tool_history(messages, locale)` keeps its name and behavior. The lessons "Context budget and the truncation window" and "Context compression and probe questions" import it, and the first also imports `rejection_status`: only a request-level 4xx counts as the provider rejecting these messages and is recorded as `lesson.provider_error`; timeouts, rate limits, auth failures, connection failures and 5xx are raised as errors. `locale` only decides the language of the error text.
 
-`runtime.py` 实现消息组装、协议检查和报告；`fixtures.py` 仅供离线测试，按本次消息内容拼出确定性回答。课程不提供学生环境的模拟回退。
+**Run language:** this lesson runs in Chinese and in English. The system prompt, the conversation samples, the variant names and the report text are in `locales/zh_CN.py` and `locales/en.py`; the errors of `validate_tool_history` are in `locales/protocol/`, because other lessons import it. The exercise questions are written per language in `lesson.json`. The review day `free_day` is a code (`mon` … `sun`) that becomes "周四" or "Thursday" in the conversation, depending on the run language. The web page picks the run language from the UI language, and every run record states the language it ran in.
 
-参考范围见 `docs/architecture/context-state-sources.md`。页面上的流程讲解是教学示意，实际证据请看 request、response、lesson.context 与 lesson.report。
+`runtime.py` assembles the messages, runs the protocol check and builds the report; `fixtures.py` serves offline tests only and builds deterministic answers from the messages of each request. The lesson has no simulated fallback for learners.
+
+For the scope of the references, see `docs/architecture/context-state-sources.md`. The walkthroughs on the page are illustrations; the evidence is in request, response, lesson.context and lesson.report.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest lessons.lesson_07_messages_context.test_lesson tests.test_lessons_context_state -v
+```

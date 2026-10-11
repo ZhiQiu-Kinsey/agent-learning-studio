@@ -67,7 +67,7 @@
           "type": "prose",
           "title": "请求里多了 tools",
           "paragraphs": [
-            "{{lesson:chat-request}}的请求只有 messages。本课多了两个字段：tools 是工具定义的列表；tool_choice 设为 auto，表示让模型自己决定用不用工具。这里的 TOOLS 来自{{lesson:tool-selection}}的 tools.py，一共两个工具：add_numbers 计算两数之和，get_current_time 读运行 Python 的机器的本地时间。",
+            "{{lesson:chat-request}}的请求只有 messages。本课多了两个字段：tools 是工具定义的列表；tool_choice 设为 auto，表示让模型自己决定用不用工具。这里的工具定义由{{lesson:tool-selection}} tools.py 里的 tool_definitions 按运行语言生成，一共两个工具：add_numbers 计算两数之和，get_current_time 读运行 Python 的机器的本地时间。",
             "模型看到的只有这几段文字，看不到 Python 函数。每条定义有三样东西：name 是工具名，description 是工具描述，parameters 描述参数。add_numbers 的工具描述是“把两个数字相加。需要计算两个数的和时调用。”，既说了它做什么，也说了什么时候该用。模型就是读这些文字来挑工具的：描述写得含糊，它就可能选错，或者该用时不用。",
             "tool_choice 除了 auto，常见的还有 `none`（这次不许用工具）和 `required`（必须用一个工具），也可以指定某一个工具；各家支持哪些取值，以服务商文档为准。本课用 auto，才看得到模型自己的选择。",
             "工具定义也是请求的一部分，同样算进 prompt_tokens：工具越多、描述越长，每次请求越大。本课的 system 和问题都和{{lesson:chat-request}}不同，两课的提示 Token 不能直接相减，算不出这两条定义占了多少。"
@@ -363,75 +363,81 @@
           "id": "code-proposals",
           "type": "annotated-source",
           "path": "lessons/lesson_tool_proposals/runtime.py",
-          "start": 14,
-          "end": 47,
+          "start": 9,
+          "end": 43,
           "notes": [
             {
               "id": "n14",
-              "line": 14,
+              "line": 9,
               "anchor": "def read_proposals(message: dict) -> list[dict]:",
               "text": "只读不执行：这个函数里没有任何能调用工具的东西。"
             },
             {
               "id": "n17",
-              "line": 17,
+              "line": 12,
               "anchor": "for call in message.get(\"tool_calls\") or []:",
               "text": "没有 tool_calls 时得到空列表，闲聊组就是这样。"
             },
             {
               "id": "n19",
-              "line": 19,
+              "line": 14,
               "anchor": "arguments = function.get(\"arguments\")",
               "text": "arguments 原样保留成字符串，实验报告里显示的就是模型写的那段文字。"
             },
             {
               "id": "n22",
-              "line": 22,
+              "line": 17,
               "anchor": "valid = isinstance(json.loads(arguments or \"{}\"), dict)",
               "text": "只看能不能解析成 JSON 对象。写错了就标为 false，不替模型修。"
             },
             {
+              "id": "n26",
+              "line": 26,
+              "anchor": "t = texts_for(context.locale)",
+              "text": "先按这次运行的语言取运行时文本：系统提示词、回答模板和报告标签都从 t 读。"
+            },
+            {
               "id": "n33",
-              "line": 33,
-              "anchor": "body = {\"messages\": [{\"role\": \"system\", \"content\": SYSTEM_PROMPT}",
+              "line": 29,
+              "anchor": "body = {\"messages\": [{\"role\": \"system\", \"content\": t.system_prompt}",
               "text": "messages 的写法和不带工具时一样，系统提示词里写了什么问题用哪个工具。"
             },
             {
               "id": "n34",
-              "line": 34,
+              "line": 30,
               "anchor": "\"tools\": tool_definitions(context.locale), \"tool_choice\": \"auto\"}",
               "text": "新增的两个字段：工具定义，以及让模型自己决定用不用工具。"
             },
             {
               "id": "n36",
-              "line": 36,
+              "line": 32,
               "anchor": "response = context.complete(body)",
               "text": "整课只有这一次请求。lesson.json 的 max_rounds 是 1，不会有第二轮。"
             },
             {
               "id": "n42",
-              "line": 42,
+              "line": 38,
               "anchor": "proposals = read_proposals(message)",
               "text": "拿到的只是提议列表。后面没有执行，也没有把任何结果交回模型。"
             },
             {
               "id": "n44",
-              "line": 44,
+              "line": 40,
               "anchor": "if not proposals:",
               "text": "没有提议，就把模型的 content 当作回答。"
             },
             {
               "id": "n47",
-              "line": 47,
-              "anchor": "return f\"模型提出了 {len(proposals)} 个调用：\"",
+              "line": 43,
+              "anchor": "return t.proposals_answer.format(",
               "text": "有提议时，最终回答如实写出提了什么，并说明本课没有执行。"
             }
           ],
           "folds": [
             {
               "id": "fold-report",
-              "start": 43,
-              "end": 43,
+              "start": 39,
+              "end": 39,
               "label": "平台：发布实验报告（_report）"
             }
           ]

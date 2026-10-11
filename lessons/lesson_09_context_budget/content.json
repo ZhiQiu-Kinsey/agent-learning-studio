@@ -287,7 +287,7 @@
               "actor": "运行器",
               "title": "按预算截取",
               "body": "从最新的一组往回装，装不下就停；工具调用和工具结果整组进出。",
-              "code": "window = fit_window(full, char_budget)",
+              "code": "window = fit_window(full, char_budget, t)",
               "language": "python",
               "evidence": "lesson.context_variant"
             },
@@ -342,42 +342,48 @@
           "id": "code-cut",
           "type": "annotated-source",
           "path": "lessons/lesson_09_context_budget/runtime.py",
-          "start": 40,
-          "end": 77,
+          "start": 42,
+          "end": 79,
           "notes": [
             {
               "id": "n45",
-              "line": 44,
+              "line": 46,
               "anchor": "if message.get(\"role\") == \"tool\" and groups:",
               "text": "tool 消息并进前一组，也就是它的 assistant 调用所在的组。"
             },
             {
+              "id": "n-fit-t",
+              "line": 53,
+              "anchor": "def fit_window(messages: list[dict], char_budget: int, t)",
+              "text": "截取窗口的入口。t 是运行语言的消息目录，只在预算连 system 和当前问题都装不下时用来写报错。"
+            },
+            {
               "id": "n56",
-              "line": 55,
+              "line": 57,
               "anchor": "if message_chars([system, question]) > char_budget:",
               "text": "system 和当前问题是底线；连它们都装不下就报错，不发残缺的请求。"
             },
             {
               "id": "n60",
-              "line": 59,
+              "line": 61,
               "anchor": "for group in reversed(message_groups(history)):",
               "text": "从最新的一组往回装：越近的消息越先进窗口。"
             },
             {
               "id": "n62",
-              "line": 61,
+              "line": 63,
               "anchor": "break  # 3.",
               "text": "装不下就停，不跳过这一组去装更早的消息，窗口始终是连续的最近历史。"
             },
             {
               "id": "n69",
-              "line": 68,
+              "line": 70,
               "anchor": "return [messages[0], *messages[1:][-keep:]]",
               "text": "按条数截断只数条数，不看配对，切点可能正好落在调用和工具结果之间。"
             },
             {
               "id": "n75",
-              "line": 74,
+              "line": 76,
               "anchor": "while tail and tail[0].get(\"role\") == \"tool\" and",
               "text": "按配对截断：开头是 tool 就往前多留一条，直到把它的 assistant 调用也留下。"
             }
@@ -387,48 +393,48 @@
           "id": "code-layouts",
           "type": "annotated-source",
           "path": "lessons/lesson_09_context_budget/runtime.py",
-          "start": 90,
-          "end": 122,
+          "start": 92,
+          "end": 127,
           "notes": [
             {
               "id": "n94",
-              "line": 93,
-              "anchor": "full = [{\"role\": \"system\", \"content\": SYSTEM}, {\"r",
+              "line": 95,
+              "anchor": "full = [{\"role\": \"system\", \"content\": t.system_prompt}",
               "text": "完整历史：工具调用和工具结果在开头，旁支讨论在后，追问在最后。"
             },
             {
               "id": "n97",
-              "line": 96,
-              "anchor": "window = fit_window(full, char_budget)",
+              "line": 98,
+              "anchor": "window = fit_window(full, char_budget, t)",
               "text": "截取窗口从同一份完整历史里截出来，两种布局只差这一步。"
             },
             {
               "id": "n99",
-              "line": 98,
-              "anchor": "validate_tool_history(messages)",
+              "line": 100,
+              "anchor": "validate_tool_history(messages, locale)",
               "text": "两种布局发出前都跑协议检查，截取不能留下孤立的工具结果。"
             },
             {
               "id": "n105",
-              "line": 104,
+              "line": 106,
               "anchor": "result = lookup_once(context, values.source_key)",
               "text": "资料由运行器真实读取一次，两种布局用的是同一个工具结果。"
             },
             {
               "id": "n110",
-              "line": 109,
+              "line": 112,
               "anchor": "context.emit(\"lesson.context_variant\", {",
               "text": "把窗口保留和舍弃了几条消息、工具结果还在不在记成事件，先于两次请求出现在时间线上。"
             },
             {
               "id": "n119",
-              "line": 118,
+              "line": 121,
               "anchor": "response = context.complete({\"messages\": messages",
               "text": "同一个追问，两种布局各发一次请求；请求和响应由平台原样记录。"
             },
             {
               "id": "n122",
-              "line": 121,
+              "line": 126,
               "anchor": "context.emit(\"lesson.report\", _layout_report(",
               "text": "实验报告的拼装放在 _layout_report 里，不在这里展开。"
             }
@@ -436,8 +442,8 @@
           "folds": [
             {
               "id": "fold-variant-data",
-              "start": 110,
-              "end": 113,
+              "start": 113,
+              "end": 116,
               "label": "lesson.context_variant 的数据：预算、保留与舍弃的消息数、构造说明"
             }
           ]
@@ -446,48 +452,54 @@
           "id": "code-broken-pair",
           "type": "annotated-source",
           "path": "lessons/lesson_09_context_budget/runtime.py",
-          "start": 150,
-          "end": 183,
+          "start": 156,
+          "end": 190,
           "notes": [
             {
               "id": "n155",
-              "line": 154,
-              "anchor": "history = [{\"role\": \"system\", \"content\": SYSTEM}",
+              "line": 160,
+              "anchor": "history = [{\"role\": \"system\", \"content\": t.system_prompt}",
               "text": "这次工具交互放在最后，只留最后 2 条时切点正好落在配对中间。"
             },
             {
               "id": "n158",
-              "line": 157,
-              "anchor": "attempts = {\"按条数截断（保留最后 2 条）\": naive_tail(histor",
+              "line": 163,
+              "anchor": "attempts = {\"naive\": naive_tail(history, 2),",
               "text": "同一段历史，两种截断，各发一次。"
             },
             {
+              "id": "n-truncation-name",
+              "line": 167,
+              "anchor": "name = t.truncation_names[code]",
+              "text": "两种截断用代码区分，名字按运行语言从 truncation_names 取；报告和 lesson.provider_error 都写这个名字。"
+            },
+            {
               "id": "n165",
-              "line": 164,
-              "anchor": "validate_tool_history(messages)",
+              "line": 171,
+              "anchor": "validate_tool_history(messages, context.locale)",
               "text": "本地协议检查只记下结论，不拦截：本实验就是要看服务商怎么回应。"
             },
             {
               "id": "n171",
-              "line": 170,
+              "line": 177,
               "anchor": "response = context.complete({\"messages\": messages",
               "text": "请求原样发出，不改写。"
             },
             {
               "id": "n174",
-              "line": 171,
+              "line": 178,
               "anchor": "except Exception as error:  # 3.",
               "text": "只有请求级 4xx（鉴权、找不到模型、超时、限流除外）算服务商拒绝，记录不重试；其余错误照常抛出。"
             },
             {
               "id": "n177",
-              "line": 176,
+              "line": 183,
               "anchor": "context.emit(\"lesson.provider_error\", {",
               "text": "lesson.provider_error 记录状态码、错误类型、原文和 source；离线时 source 是 offline_fixture。"
             },
             {
               "id": "n183",
-              "line": 182,
+              "line": 189,
               "anchor": "context.emit(\"lesson.report\", _pair_report(",
               "text": "两次的本地协议检查结论和服务商结果并列进实验报告。"
             }

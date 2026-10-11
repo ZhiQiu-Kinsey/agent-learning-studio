@@ -1,0 +1,23 @@
+# 结构化输出与业务校验（`structured-output`）
+
+[English](README.md) · 简体中文
+
+## 运行
+
+在网页打开本课，选择预设，必要时修改结构化输入，点击运行。在右侧实验报告查看检查结果并展开事件；回放只读已有记录。需要已配置的真实模型。normal、missing-field、wrong-fact 三个预设生成任务卡；repair 可关闭。失败时最多再请求一次，最多两个模型调用。每次响应后都有独立报告，可在实验报告里回看初稿与修复稿。问题框里写的是学习者备注，会记在报告中；实际任务由结构化预设决定。
+
+**运行语言：**本课可以用中文或英文运行。系统提示词、用户任务、修复请求和报告文字在 `locales/zh_CN.py` 与 `locales/en.py`，可信事实里的课程标题也按运行语言取；练习问题按语言写在 `lesson.json` 里。网页按界面语言选择运行语言，每条运行记录都写明它用的语言。
+
+## 读源码与实验
+
+runtime.py 中 TaskCard 用 Pydantic 校验字段；inspect_output 依次检查标准 JSON、Schema 和 trusted_facts 业务事实。fixtures.py 仅供自动化测试。故意要求模型第一轮犯错是教学注入，服务商可能不遵循；不能假定每次都触发修复，应以实际响应及每份校验报告为准。按“预测结果→运行→对照请求和报告→修改输入再试”的顺序练习。
+
+离线测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest lessons.lesson_05_structured_output.test_lesson -v
+```
+
+## 限制与参考
+
+本课没有读取外部任意路径，也没有长期状态。“任务目标与验收”一课仅证明固定本地案例的验收逻辑；本课和“提示词与工具描述”一课的实际模型表现依赖当前服务商，报告只依据本次响应。来源范围与固定 commit 见 [来源记录](../../docs/architecture/chapter2-sources.md)。

@@ -1,41 +1,58 @@
-"""工作流模式课的离线测试模型：只服务自动化测试，不代表任何真实模型的行为。
+"""Offline test model for workflow-patterns: serves automated tests only and does not stand for any real model.
 
-路由脚本故意分错两张工单，并对一张输出不在列表里的标签，用来测试准确率、混淆矩阵和兜底。
-复述子任务每次停顿 50 毫秒，好让测试能比较串行和并行的墙钟时间。
+The routing script deliberately misroutes two tickets and answers one with a label that is not in the list,
+to test accuracy, the confusion matrix and the fallback. Each restating subtask pauses 50 ms so tests can
+compare serial and parallel wall-clock time.
 """
 import json
 import time
 
-from lessons.lesson_workflow_patterns.runtime import SUMMARY_SYSTEM, TICKETS
+from lessons.lesson_workflow_patterns.locales import texts_for
+from lessons.lesson_workflow_patterns.runtime import GOLD
 
-SCRIPTED = {text: gold for _, text, gold in TICKETS}
-SCRIPTED[TICKETS[17][1]] = "error"     # t18：进度丢失，标注为账号问题，脚本判成报错
-SCRIPTED[TICKETS[19][1]] = "error"     # t20：问备份数据源，标注为课程内容，脚本判成报错
-SCRIPTED[TICKETS[11][1]] = "billing"   # t12：不在标签列表里，应该走兜底
-CHAIN_OUTPUTS = [
-    "- 模型只看到本次请求里的消息\n- 工具调用和工具结果要成对\n- 上下文越长越要挑信息",
-    "Q: 模型能看到什么？\nA: 只有本次请求里的消息。\nQ: 工具消息有什么要求？\nA: 调用和工具结果要成对。\n"
-    "Q: 上下文长了怎么办？\nA: 只留真正需要的信息。",
-    json.dumps(["模型看到什么", "成对的消息", "挑选上下文"], ensure_ascii=False),
-]
+# Scripted router answers that differ from the author's label, by ticket id.
+OVERRIDES = {
+    "t18": "error",     # lost progress: labelled account, the script says error
+    "t20": "error",     # asks about the backup data source: labelled course, the script says error
+    "t12": "billing",   # not a label in the list, so it must take the fallback
+}
+CHAIN_OUTPUTS = {
+    "zh-CN": [
+        "- 模型只看到本次请求里的消息\n- 工具调用和工具结果要成对\n- 上下文越长越要挑信息",
+        "Q: 模型能看到什么？\nA: 只有本次请求里的消息。\nQ: 工具消息有什么要求？\nA: 调用和工具结果要成对。\n"
+        "Q: 上下文长了怎么办？\nA: 只留真正需要的信息。",
+        json.dumps(["模型看到什么", "成对的消息", "挑选上下文"], ensure_ascii=False),
+    ],
+    "en": [
+        "- The model sees only the messages in this request\n- Tool calls and tool results come in pairs\n"
+        "- The longer the context, the more you must choose",
+        "Q: What can the model see?\nA: Only the messages in this request.\nQ: What do tool messages require?\n"
+        "A: A call and its tool result come in pairs.\nQ: What if the context grows long?\nA: Keep only what is really needed.",
+        json.dumps(["What the model sees", "Messages in pairs", "Choosing context"]),
+    ],
+}
+SUMMARY_PREFIX = {"zh-CN": "要点：", "en": "Key point: "}
 
 
 def _reply(content):
     return {"choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]}
 
 
-def create_completion(exercise_id, inputs=None):
+def create_completion(exercise_id, inputs=None, locale="zh-CN"):
+    t = texts_for(locale)
+    scripted = {t.tickets[ticket]: OVERRIDES.get(ticket, gold) for ticket, gold in GOLD.items()}
     chain_step = 0
 
     def complete(body, api_key):
         nonlocal chain_step
         messages = body["messages"]
-        if messages[0]["role"] == "system" and messages[0]["content"] == SUMMARY_SYSTEM:
+        if messages[0]["role"] == "system" and messages[0]["content"] == t.summary_system:
             time.sleep(0.05)
-            return _reply("要点：" + messages[1]["content"][:20])
+            return _reply(SUMMARY_PREFIX[locale] + messages[1]["content"][:20])
         if messages[0]["role"] == "system":
-            return _reply(SCRIPTED.get(messages[1]["content"], "other"))
-        output = CHAIN_OUTPUTS[min(chain_step, len(CHAIN_OUTPUTS) - 1)]
+            return _reply(scripted.get(messages[1]["content"], "other"))
+        outputs = CHAIN_OUTPUTS[locale]
+        output = outputs[min(chain_step, len(outputs) - 1)]
         chain_step += 1
         return _reply(output)
 

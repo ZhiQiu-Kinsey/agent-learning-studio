@@ -1,28 +1,32 @@
-# 上下文压缩与探针问题（`context-compaction`）
+# Context compression and probe questions (`context-compaction`)
 
-同一段历史，比较三种压缩做法，用一个探针问题检查最早那次工具结果还在不在。本课需要真实模型连接。
+English · [简体中文](README.zh-CN.md)
 
-运行器先后真实读取两份资料（`messages-context`、`application-state`），中间夹着 `noise_repeats` 轮旁支讨论。目标、第一次读取和旁支讨论是“较早部分”，第二次读取和最后一轮旁支讨论是“最近部分”。每种压缩只改写较早部分，最近部分原样保留。
+One history, three ways to compress it, and one probe question to check whether the earliest tool result survived. This lesson needs a real model connection.
 
-| 轮次 | 请求 | 较早部分变成什么 |
+The runner really reads two materials in turn (`messages-context`, `application-state`), with `noise_repeats` rounds of side discussion between them. The goal, the first read and the side discussion are the "older part"; the second read and the last round of side discussion are the "recent part". Each compression rewrites only the older part and keeps the recent part as it is.
+
+| Round | Request | What the older part becomes |
 | --- | --- | --- |
-| 1 | 不压缩（对照） | 原样保留 |
-| 2 | 规则压缩 | `rule_record` 按目标、约束、来源、事实、待办拼的一条记录；超过 `char_budget` 就拒绝，这一轮不发请求 |
-| 3 | 清理旧工具结果 | 消息条数不变，较早那条工具结果的内容换成 `cleared` 说明 |
-| 4 | 摘要请求 | 较早部分原文加一条压缩指令（`summary_style` 决定用哪条） |
-| 5 | 摘要压缩 | 第 4 轮模型写的摘要 |
+| 1 | No compression (control) | kept as it is |
+| 2 | Rule-based compression | one record that `rule_record` builds from goal, constraints, sources, facts and to-do; if it exceeds `char_budget` it is refused and this round sends nothing |
+| 3 | Clearing old tool results | the same number of messages; the content of the earlier tool result becomes a `cleared` note |
+| 4 | Summary request | the older part's original text plus one compression instruction (`summary_style` picks which) |
+| 5 | Summary compression | the summary the model wrote in round 4 |
 
-第 1、2、3、5 轮都问同一个探针问题：“最早读取的那份资料来自哪一项？它的原话是什么？”实验报告分开写两件事：原话还在不在上下文里（本地字符串检查，记在 `lesson.compaction` 的 `phrase_in_context`），回答有没有同时答出来源名和原话（关键词初筛，命中也要读原文复核）。
+Rounds 1, 2, 3 and 5 ask the same probe question: "Which item did the earliest material you read come from? What is its original wording?" The lab report keeps two things apart: whether the original wording is still in the context (a local string check, recorded as `phrase_in_context` in `lesson.compaction`), and whether the answer gives both the source name and the original wording (a keyword screen; read the answer even on a hit).
 
-| 练习 | 输入 | 模型调用数 |
+| Exercise | Inputs | Model calls |
 | --- | --- | --- |
-| 三种压缩，同一个探针问题 | 预算 300，保留来源的摘要指令 | 5 |
-| 规则压缩的预算装不下证据 | 预算 100 | 4 |
-| 换一条简短的摘要指令 | `summary_style=brief` | 5 |
+| Three compression methods, one probe question | budget 300, instruction that keeps sources | 5 |
+| Rule-based compression's budget cannot hold the evidence | budget 100 | 4 |
+| Switch to a brief summary instruction | `summary_style=brief` | 5 |
 
-字符数是本地 JSON 长度，不是 Token；用量只展示服务商响应实际返回的 `usage`，没有就写“未报告”。字符数、本地字符串检查、组装工具配对与旁支讨论、资料读取这些小工具从“上下文预算与截取窗口”一课的 `runtime.py` 导入。`fixtures.py` 只服务自动化测试，其中的摘要和回答是脚本写的。
+Character counts are local JSON lengths, not tokens; usage shows only the `usage` that the provider's response actually returned, and says "not reported" when there is none. The character count, the local string check, the helpers that build tool pairs and side discussion, and the material lookup are imported from the `runtime.py` of the lesson "Context budget and the truncation window". `fixtures.py` serves automated tests only; its summaries and answers are written by the script.
 
-规则压缩与模型摘要的取舍参考《深入理解 AI Agent》第 2 章“上下文压缩策略”与 `chapter2/context-compression/compression_strategies.py` 的思路，代码与实验由本项目编写；阅读范围见 `docs/architecture/budget-memory-sources.md`。
+**Run language:** this lesson runs in Chinese and in English. The goal, the probe question, the system prompts, the summary instructions, the template of the rule-based record, the names of the four arms and the report text are in `locales/zh_CN.py` and `locales/en.py`; the material and the side discussion come from `locales/helpers/` of "Context budget and the truncation window". The English rule-based record also fits the default budget of 300 and does not fit 100, so both languages reach the same result.
+
+The trade-off between rule-based compression and model summaries follows the ideas of chapter 2, "Context compression strategies", of *Understanding AI Agents in Depth* and its `chapter2/context-compression/compression_strategies.py`; the code and experiments were written for this project. For the reading scope, see `docs/architecture/budget-memory-sources.md`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_context_compaction.test_lesson -v

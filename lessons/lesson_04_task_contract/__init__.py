@@ -1,1 +1,1 @@
-"""任务目标与验收：执行前写好任务卡，再拿本次的工具证据核对完成声明。"""
+"""Lesson implementations; whether a lesson is open is decided by curriculum/catalog.json."""

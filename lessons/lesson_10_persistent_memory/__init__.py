@@ -1,1 +1,1 @@
-"""持久记忆：保存、重开与召回（SQLite）。"""
+"""Persistent memory: save, reopen and recall (SQLite)."""

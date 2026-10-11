@@ -1,20 +1,25 @@
-# 编排者-工人与评估者-优化者（`orchestrator-evaluator`）
+# Orchestrator-workers and evaluator-optimizer (`orchestrator-evaluator`)
 
-任务固定为“为 messages-context、application-state、context-budget 三课各出一道四选一的选择题”；三课用课程 slug 指代，不用会随课程表变化的课号。本课需要真实模型连接。
+English · [简体中文](README.zh-CN.md)
 
-| 预设 | 模型请求 | 证据 |
+The task is fixed: write one four-option multiple-choice question for each of the lessons messages-context, application-state and context-budget. The lessons are named by slug, not by lesson number, which changes as the syllabus grows. This lesson needs a real model connection.
+
+| Preset | Model requests | Evidence |
 | --- | --- | --- |
-| 单次调用（基线） | 1 | 三道题的格式检查 |
-| 编排者-工人 | 1 + 子任务数 | `lesson.plan`（子任务即计划项）、工人请求带 `branch` 并行发出、`lesson.worker` |
-| 评估者-优化者，最多 3 轮 / 1 轮 | 每轮 1–2 | `lesson.draft`、`lesson.review`（`source` 为 `evaluator` 或 `format-check`）、停止原因 |
+| Single call (baseline) | 1 | The format check of the three questions |
+| Orchestrator-workers | 1 + number of subtasks | `lesson.plan` (each subtask is a plan item), worker requests sent in parallel with `branch`, `lesson.worker` |
+| Evaluator-optimizer, up to 3 rounds / 1 round | 1–2 per round | `lesson.draft`, `lesson.review` (`source` is `evaluator` or `format-check`), the stop reason |
 
-- 编排者的子任务列表先校验（最多 4 个、id 不重复、lesson 只能是这三课的 slug），不通过就记 `lesson.plan_error`，不派工人。
-- 题目格式由程序检查；格式不对时直接退回，不请求评估者。
-- 每次调用记入账本（`lesson.cost`）：角色、轮次、branch、服务商报告的 `total_tokens`；没有报告就记为未报告，不估算。
+- The orchestrator's subtask list is validated first (at most 4, unique ids, lesson must be one of the three slugs); if it fails, `lesson.plan_error` is recorded and no workers are dispatched.
+- A program checks the question format; a format problem goes straight back without asking the evaluator.
+- The revision loop has four stop reasons: the review passed, the review output had the wrong format, the revision made no change, the iteration limit was reached. When the generator hands back the previous question unchanged (`unchanged` is true in `lesson.draft`), the evaluator is not asked again and the loop stops.
+- Every call goes into the ledger (`lesson.cost`): role, round, branch and the `total_tokens` the provider reported; when it was not reported, the ledger says so and does not estimate.
 
-格式检查通过不代表题出得好，题目质量需要阅读判断。`fixtures.py` 只服务自动化测试，其中评估者第一次固定要求修订、用量数字都是脚本写的。
+**Run language:** this lesson runs in Chinese and in English. The key points of the three lessons, the task, the system prompts of the four roles, the format problems, the stop reasons and the report text are in `locales/zh_CN.py` and `locales/en.py`; lesson slugs, role codes and review verdicts are code and the same in every language. The web page picks the language from the UI language, and every run record states the language it ran in.
 
-两种模式参考 [claude-cookbooks](https://github.com/anthropics/claude-cookbooks)（MIT）`patterns/agents/orchestrator_workers.ipynb` 与 `evaluator_optimizer.ipynb`。原示例的工人串行执行、修订循环没有迭代上限；本课改为并行工人，修订循环设迭代上限。任务、格式检查与实验由本项目编写。
+Passing the format check does not mean a question is good; judge quality by reading it. `fixtures.py` serves automated tests only; in it the evaluator always asks for a revision the first time, and the usage numbers are scripted.
+
+The two patterns follow `patterns/agents/orchestrator_workers.ipynb` and `evaluator_optimizer.ipynb` in [claude-cookbooks](https://github.com/anthropics/claude-cookbooks) (MIT). The original runs the workers one after another and its revision loop has no iteration limit; this lesson runs the workers in parallel, limits the revision loop, and stops early when a revision makes no change. The task, format checks and experiments are written by this project.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_orchestrator_evaluator.test_lesson -v

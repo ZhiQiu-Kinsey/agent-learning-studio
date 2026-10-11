@@ -131,3 +131,12 @@
 | `permission-modes#analyze-before-you-edit-with-plan-mode` | `plan-and-replan` |
 
 课程 slug 与目录名的对应以 `curriculum/catalog.json` 为准；上表按 `lessons/lesson_*/content.json` 的目录名去掉前缀和序号写出。
+
+## 10. 论文：正文引用结论的研究（2026-10-12）
+
+正文里点名讨论过、但不属于上面任何教程的研究论文登记在这里。只引用论文的结论，用自己的话概括并给出链接；不复制正文、图表、提示词和代码，因此不进入 `THIRD_PARTY_NOTICES.md`。
+
+| 资料 | 固定版本 | 许可证 | 登记的阅读范围 | 借鉴方式与用途 |
+| --- | --- | --- | --- | --- |
+| [Self-Refine: Iterative Refinement with Self-Feedback](https://arxiv.org/abs/2303.17651v2)（Madaan 等，NeurIPS 2023） | arXiv `2303.17651v2`（2023-05-25） | 论文，CC BY 4.0；只引用结论，不复制 | 摘要与方法概述 | `reflection-revision` 的深入一点“研究怎么看模型的自我纠正”：同一个模型轮流写稿、提意见、修订，在对话回复、代码优化等任务上报告了提升。正文只转述这一结论 |
+| [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366v4)（Shinn 等，NeurIPS 2023） | arXiv `2303.11366v4`（2023-10-10） | 论文，CC BY 4.0；只引用结论，不复制 | 摘要与方法概述 | 同上一段：把环境给出的成败信号（这次尝试是否成功、测试是否通过）先写成文字总结，下次尝试时带上。正文只转述这一做法 |

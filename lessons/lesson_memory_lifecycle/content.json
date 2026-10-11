@@ -327,7 +327,7 @@
               "actor": "SQLite",
               "title": "显式删除并重开核对",
               "body": "删除这一行，新连接上再查一遍。",
-              "code": "store.delete(namespace, key)\nMemoryStore(path).stored(namespace, key)  # False",
+              "code": "store.delete(namespace, key)\nMemoryStore(path, locale=locale).stored(namespace, key)  # False",
               "language": "python",
               "evidence": "lesson.memory（deleted）"
             },
@@ -337,7 +337,7 @@
               "actor": "程序",
               "title": "按任务召回，包成数据",
               "body": "只带本任务的记录，疑似指令打上标记。",
-              "code": "included, excluded = store.recall(namespace, \"task-now\")\nmessages = package_memories(included, question)",
+              "code": "included, excluded = store.recall(namespace, \"task-now\")\nmessages = package_memories(included, question, locale)",
               "language": "python",
               "evidence": "lesson.memory（recalled、packaged）"
             },
@@ -392,78 +392,78 @@
           "id": "code-put-version",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/store.py",
-          "start": 74,
-          "end": 110,
+          "start": 77,
+          "end": 113,
           "notes": [
             {
               "id": "n67",
-              "line": 74,
+              "line": 77,
               "anchor": "def put(self, namespace: str, key: str, value: str, source: str, expected_version: int | None, *,",
               "text": "expected_version 是写入方上次读到的版本；写新键时传 None。"
             },
             {
               "id": "n71",
-              "line": 78,
+              "line": 81,
               "anchor": "if scope not in SCOPES or (scope == \"current_task\") != (task_id is not None):",
               "text": "范围和 task_id 必须配对：current_task 一定带 task_id，persistent 一定不带。"
             },
             {
               "id": "n76",
-              "line": 83,
+              "line": 86,
               "anchor": "self.connection.execute(\"BEGIN IMMEDIATE\")",
               "text": "先拿写锁再读版本：两条连接同时写，只有一条能进来。"
             },
             {
               "id": "n80",
-              "line": 87,
+              "line": 90,
               "anchor": "current = row[\"version\"] if row else None",
               "text": "库里现在的版本；还没有这一行就是 None。"
             },
             {
               "id": "n82",
-              "line": 89,
+              "line": 92,
               "anchor": "revive = row is not None and expected_version is None and self.expired(dict(row))",
               "text": "已经过期的行，允许当作新键重写。"
             },
             {
               "id": "n83",
-              "line": 90,
+              "line": 93,
               "anchor": "if current != expected_version and not revive:",
               "text": "乐观并发控制的核心：读到的版本和库里的对不上，就拒绝。"
             },
             {
               "id": "n84",
-              "line": 91,
+              "line": 94,
               "anchor": "raise VersionConflict(",
               "text": "抛出异常，事务回滚，现值不动；调用方从异常里知道自己读到的已经过时。"
             },
             {
               "id": "n91",
-              "line": 94,
+              "line": 97,
               "anchor": "last = self.connection.execute(\"SELECT version FROM versions WHERE namespace=? AND key=?\",",
               "text": "从版本表里读这个键写到过第几版；记忆那一行被删掉以后，这个数还在。"
             },
             {
               "id": "n87",
-              "line": 96,
+              "line": 99,
               "anchor": "version = max(current or 0, last[\"version\"] if last else 0) + 1",
               "text": "版本只增不减：重写过期行、删除后重建都接着往上加，不会回到 1。"
             },
             {
               "id": "n90",
-              "line": 101,
+              "line": 104,
               "anchor": "\"INSERT OR REPLACE INTO memories",
               "text": "整行写入：同一个 (namespace, key) 只保留最新的一行。"
             },
             {
               "id": "n101",
-              "line": 104,
+              "line": 107,
               "anchor": "self.connection.execute(\"INSERT OR REPLACE INTO versions (namespace, key, version)\"",
               "text": "同一个事务里更新版本计数：记忆和计数要么一起写进去，要么一起回滚。"
             },
             {
               "id": "n95",
-              "line": 108,
+              "line": 111,
               "anchor": "self.connection.rollback()",
               "text": "任何异常都回滚，写了一半的数据不会留在库里。"
             }
@@ -473,66 +473,66 @@
           "id": "code-read-rules",
           "type": "annotated-source",
           "path": "lessons/lesson_10_persistent_memory/store.py",
-          "start": 112,
-          "end": 144,
+          "start": 115,
+          "end": 147,
           "notes": [
             {
               "id": "n100",
-              "line": 113,
+              "line": 116,
               "anchor": "def expired(row: dict, now: float | None = None) -> bool:",
               "text": "到期判断：get、store.recall 和 put 都调用它。"
             },
             {
               "id": "n102",
-              "line": 115,
+              "line": 118,
               "anchor": "return row[\"expires_at\"] is not None and row[\"expires_at\"] <=",
               "text": "expires_at 不为空且已经过去，就算到期。它只决定读不读得到，不动表里的数据。"
             },
             {
               "id": "n104",
-              "line": 117,
+              "line": 120,
               "anchor": "def skip_reason(self, item: dict, task_id: str | None, now: float | None = None) -> str | None:",
               "text": "store.recall 对每条记录调用它，返回跳过的原因。"
             },
             {
               "id": "n109",
-              "line": 122,
+              "line": 125,
               "anchor": "if item[\"scope\"] == \"current_task\" and item[\"task_id\"] != task_id:",
               "text": "current_task 只在 task_id 相同时召回；别的任务的记录留在库里，但不带上。"
             },
             {
               "id": "n115",
-              "line": 128,
+              "line": 131,
               "anchor": "return self.connection.execute(\"SELECT 1 FROM memories WHERE namespace=? AND key=?\",",
               "text": "stored 不经过到期判断，只看这一行在不在。"
             },
             {
               "id": "n120",
-              "line": 133,
+              "line": 136,
               "anchor": "with self.connection:",
               "text": "with 块正常结束就提交，出错就回滚。"
             },
             {
               "id": "n121",
-              "line": 134,
+              "line": 137,
               "anchor": "cursor = self.connection.execute(\"DELETE FROM memories WHERE namespace=? AND key=?\",",
               "text": "删除是存储操作：记忆这一行从表里移除；版本表里的计数不动。"
             },
             {
               "id": "n123",
-              "line": 136,
+              "line": 139,
               "anchor": "return cursor.rowcount == 1",
               "text": "真的删掉了一行才返回 True；删一个不存在的键返回 False。"
             },
             {
               "id": "n125",
-              "line": 138,
+              "line": 141,
               "anchor": "def end_task(self, namespace: str, task_id: str) -> int:",
               "text": "任务结束时调用，返回清掉了几行。"
             },
             {
               "id": "n129",
-              "line": 142,
+              "line": 145,
               "anchor": "\"DELETE FROM memories WHERE namespace=? AND scope='current_task' AND task_id=?\",",
               "text": "只删这个任务的 current_task；persistent 和别的任务的记录都不动。"
             }
@@ -542,60 +542,60 @@
           "id": "code-scope-run",
           "type": "annotated-source",
           "path": "lessons/lesson_memory_lifecycle/runtime.py",
-          "start": 100,
-          "end": 139,
+          "start": 102,
+          "end": 142,
           "notes": [
             {
               "id": "n101",
-              "line": 101,
+              "line": 104,
               "anchor": "INSTRUCTION_LIKE = re.compile(",
               "text": "用正则粗筛疑似指令：命中就标记；换个说法就会漏掉，正常句子也可能被误标。"
             },
             {
               "id": "n106",
-              "line": 106,
-              "anchor": "def package_memories(records: list[dict], question: str) -> list[dict]:",
+              "line": 108,
+              "anchor": "def package_memories(records: list[dict], question: str, locale: str) -> list[dict]:",
               "text": "沿用持久记忆一课的 build_messages，只多 scope 和 instruction_like 两个字段。"
             },
             {
               "id": "n109",
-              "line": 109,
+              "line": 111,
               "anchor": "\"instruction_like\": bool(INSTRUCTION_LIKE.search(item[\"value\"]))",
               "text": "标记只是一个布尔字段，随数据一起进数据块，不触发任何操作。"
             },
             {
               "id": "n117",
-              "line": 117,
-              "anchor": "for key, value, source, scope, task_id in SEEDS:",
+              "line": 120,
+              "anchor": "for key, scope, task_id in SEEDS:",
               "text": "预置四条：两条 persistent，两条 current_task 分属上一个任务和本任务。"
             },
             {
               "id": "n122",
-              "line": 122,
+              "line": 125,
               "anchor": "included, excluded = store.recall(NAMESPACE, TASK_NOW)",
               "text": "为 task-now 召回；被过滤的记录连同原因一起返回。"
             },
             {
               "id": "n125",
-              "line": 125,
+              "line": 128,
               "anchor": "before = store.count(NAMESPACE)",
               "text": "包装前后各数一次行数：记忆里的“删除全部记忆”如果被执行，这两个数会不同。"
             },
             {
               "id": "n126",
-              "line": 126,
-              "anchor": "messages = package_memories(included, PREVIEW_QUESTION)",
+              "line": 129,
+              "anchor": "messages = package_memories(included, t.preview_question, context.locale)",
               "text": "包装好的消息只展示，不发送给模型。"
             },
             {
               "id": "n133",
-              "line": 133,
+              "line": 136,
               "anchor": "ended = store.end_task(NAMESPACE, TASK_NOW)",
               "text": "任务结束：只清掉 task-now 的 current_task。"
             },
             {
               "id": "n135",
-              "line": 135,
+              "line": 138,
               "anchor": "next_included, next_excluded = store.recall(NAMESPACE, TASK_NEXT)",
               "text": "新任务只召回 persistent；上一个任务的草稿仍被过滤。"
             }
@@ -603,38 +603,38 @@
           "folds": [
             {
               "id": "emit-seeded",
-              "start": 119,
-              "end": 120,
+              "start": 122,
+              "end": 123,
               "label": "平台：发布预置事件"
             },
             {
               "id": "emit-recalled",
-              "start": 123,
-              "end": 123,
+              "start": 126,
+              "end": 126,
               "label": "平台：发布召回事件"
             },
             {
               "id": "emit-packaged",
-              "start": 128,
-              "end": 129,
+              "start": 131,
+              "end": 132,
               "label": "平台：发布包装事件"
             },
             {
               "id": "emit-ended",
-              "start": 134,
-              "end": 134,
+              "start": 137,
+              "end": 137,
               "label": "平台：发布任务结束事件"
             },
             {
               "id": "emit-next",
-              "start": 136,
-              "end": 136,
+              "start": 139,
+              "end": 139,
               "label": "平台：发布召回事件"
             },
             {
               "id": "report",
-              "start": 139,
-              "end": 139,
+              "start": 142,
+              "end": 142,
               "label": "平台：整理报告事件"
             }
           ]

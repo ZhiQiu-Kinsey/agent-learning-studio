@@ -5,12 +5,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from course.execution import LessonInputs, RunContext
+from lessons.lesson_05_structured_output.locales import texts_for
 
-
-# 课程用 slug 作 ID：显示课号会随课程表插入新课而变化，不能当作可信事实。
-FACTS = {"lesson_id": "task-contract", "lesson_title": "任务目标与验收", "prerequisite": "fail-safely"}
-# “故意写错事实”练习要求模型写成的错误先修课程。
+# The wrong prerequisite the "wrong fact" exercise asks the model to write.
 WRONG_PREREQUISITE = "dependent-calls"
+
+
+def trusted_facts(t) -> dict:
+    """The facts this lesson trusts. Lessons are identified by slug: the displayed lesson number moves when lessons are inserted, so it is no fact."""
+    return {"lesson_id": "task-contract", "lesson_title": t.facts_lesson_title, "prerequisite": "fail-safely"}
 
 
 class Inputs(LessonInputs):
@@ -29,78 +32,78 @@ class TaskCard(BaseModel):
     exercise: str = Field(min_length=8, max_length=120)
 
 
-def reject_non_json_constant(value: str):
-    raise ValueError("非标准 JSON 常量：" + value)
+def inspect_output(raw: str, t) -> tuple[TaskCard | None, list[dict]]:
+    def reject_non_json_constant(value: str):
+        raise ValueError(t.non_json_constant.format(value=value))
 
-
-def inspect_output(raw: str) -> tuple[TaskCard | None, list[dict]]:
     checks = []
     try:
         parsed = json.loads(raw, parse_constant=reject_non_json_constant)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        return None, [{"label": "JSON 格式", "passed": False, "detail": str(exc)}]
-    checks.append({"label": "JSON 格式", "passed": True, "detail": "可解析为 JSON"})
+        return None, [{"label": t.layer_json, "passed": False, "detail": str(exc)}]
+    checks.append({"label": t.layer_json, "passed": True, "detail": t.detail_json_ok})
     try:
         card = TaskCard.model_validate(parsed)
     except ValidationError as exc:
-        checks.append({"label": "字段 Schema", "passed": False,
+        checks.append({"label": t.layer_schema, "passed": False,
                        "detail": "; ".join(".".join(map(str, e["loc"])) + ": " + e["type"] for e in exc.errors())[:300]})
         return None, checks
-    checks.append({"label": "字段 Schema", "passed": True, "detail": "必填、类型、长度及额外字段检查通过"})
-    mismatches = [key for key, expected in FACTS.items() if getattr(card, key) != expected]
-    checks.append({"label": "业务事实", "passed": not mismatches,
-                   "detail": "与给定课程事实一致" if not mismatches else "与给定资料不符：" + ", ".join(mismatches)})
+    checks.append({"label": t.layer_schema, "passed": True, "detail": t.detail_schema_ok})
+    mismatches = [key for key, expected in trusted_facts(t).items() if getattr(card, key) != expected]
+    checks.append({"label": t.layer_facts, "passed": not mismatches,
+                   "detail": t.detail_facts_ok if not mismatches else t.detail_facts_mismatch.format(fields=", ".join(mismatches))})
     return card, checks
 
 
-def _content(response: dict) -> str:
+def _content(response: dict, t) -> str:
     try:
         value = response["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise ValueError("模型响应没有可读取的 message.content") from exc
+        raise ValueError(t.missing_content) from exc
     if not isinstance(value, str):
-        raise ValueError("模型响应内容必须为文本")
+        raise ValueError(t.content_not_text)
     return value
 
 
 def _report(context: RunContext, checks: list[dict], attempt: int) -> None:
+    t = texts_for(context.locale)
     accepted = len(checks) == 3 and all(c["passed"] for c in checks)
-    stage = "初稿" if attempt == 1 else "修复稿"
+    stage = t.stage_first if attempt == 1 else t.stage_repair
     context.emit("lesson.report", {
-        "title": stage + "：结构化输出三层校验",
-        "summary": stage + ("通过已执行的全部检查" if accepted else "未通过；后续层级在上游失败时不作判断"),
+        "title": t.report_title.format(stage=stage),
+        "summary": (t.summary_passed if accepted else t.summary_failed).format(stage=stage),
         "checks": checks,
-        "metrics": [{"label": "模型调用数", "value": attempt},
-                    {"label": "本稿验收", "value": "通过" if accepted else "失败"},
-                    {"label": "学习者备注", "value": context.question or "（空）"}],
-        "table": {"columns": ["阶段", "结果"],
-                  "rows": [[c["label"], "通过" if c["passed"] else c["detail"]] for c in checks]},
+        "metrics": [{"label": t.label_model_calls, "value": attempt},
+                    {"label": t.label_draft_verdict, "value": t.value_passed if accepted else t.value_failed},
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
+        "table": {"columns": list(t.columns),
+                  "rows": [[c["label"], t.value_passed if c["passed"] else c["detail"]] for c in checks]},
     }, attempt)
 
 
 def run(context: RunContext) -> str:
+    t = texts_for(context.locale)
     scenario = context.inputs["scenario"]
-    facts_text = json.dumps(FACTS, ensure_ascii=False)
-    system = "只输出一个 JSON 对象，字段 lesson_id、lesson_title、prerequisite、exercise。不得编造给定事实；exercise 是 8 到 120 字的练习说明。"
-    user = f"把这些可信课程事实整理为学习任务卡：{facts_text}。练习要求：用固定输入 19+23 比较运行结束和验收通过。"
+    facts_text = json.dumps(trusted_facts(t), ensure_ascii=False)
+    user = t.user_prompt.format(facts=facts_text)
     if scenario == "missing_field":
-        user += " 本轮故意省略 prerequisite 字段，供验证器展示字段错误。"
+        user += t.inject_missing_field
     elif scenario == "wrong_fact":
-        user += f" 本轮故意把 prerequisite 写成 {WRONG_PREREQUISITE}，供验证器展示事实错误。"
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    raw = _content(context.complete({"messages": messages, "temperature": 0}, 1))
-    card, checks = inspect_output(raw)
+        user += t.inject_wrong_fact.format(wrong=WRONG_PREREQUISITE)
+    messages = [{"role": "system", "content": t.system_prompt}, {"role": "user", "content": user}]
+    raw = _content(context.complete({"messages": messages, "temperature": 0}, 1), t)
+    card, checks = inspect_output(raw, t)
     attempts = 1
     _report(context, checks, attempts)
     if (not all(item["passed"] for item in checks) and context.inputs["repair"]
             and context.max_model_calls >= 2):
         context.check_cancelled()
+        reasons = "; ".join(c["detail"] for c in checks if not c["passed"])
         messages.extend([{"role": "assistant", "content": raw},
-                         {"role": "user", "content": "上一版未通过：" + "; ".join(c["detail"] for c in checks if not c["passed"])
-                          + "。只按原始可信事实输出完整 JSON 对象。"}])
-        raw = _content(context.complete({"messages": messages, "temperature": 0}, 2))
-        card, checks = inspect_output(raw)
+                         {"role": "user", "content": t.repair_prompt.format(reasons=reasons)}])
+        raw = _content(context.complete({"messages": messages, "temperature": 0}, 2), t)
+        card, checks = inspect_output(raw, t)
         attempts = 2
         _report(context, checks, attempts)
     accepted = len(checks) == 3 and all(c["passed"] for c in checks)
-    return "验收通过：" + card.model_dump_json() if accepted else "模型输出未通过校验；请查看响应和三层检查。"
+    return t.answer_passed.format(card=card.model_dump_json()) if accepted else t.answer_failed

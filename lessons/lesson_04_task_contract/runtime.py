@@ -1,31 +1,28 @@
-"""任务卡与独立验收：执行者交来的完成声明，要拿本次记录的工具证据去核对。
+"""Task card and independent acceptance: check the executor's completion claim against the tool evidence recorded in this run.
 
-本课不调用模型。执行者是运行器里的一段固定脚本，各种故障也由运行器注入；
-验收规则对所有场景都一样，变的只有证据。
+This lesson does not call a model. The executor is a fixed script inside the runner, and
+the runner injects every fault; the acceptance rule is the same in every scenario, only
+the evidence changes.
 """
 from typing import Literal
 
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
+from lessons.lesson_04_task_contract.locales import texts_for
 
 
 class Inputs(LessonInputs):
     scenario: Literal["normal", "missing_evidence", "wrong_result", "claim_mismatch", "goal_loop"] = "normal"
-    claim: str = Field(default="已完成学习助教的加法任务", min_length=1, max_length=120)
+    # No default: the preset in lesson.json supplies the claim in the run's language.
+    claim: str = Field(min_length=1, max_length=120)
     max_attempts: int = Field(default=3, ge=1, le=3)
 
 
 INPUT_MODEL = Inputs
-# 任务卡在执行前写好；验收只认这张卡，执行者事后怎么描述都改变不了它。
-TASK_CARD = {
-    "goal": "依据本地计算结果回答 19 + 23",
-    "input_scope": "两个给定整数 19 和 23；不读取外部文件或网页",
-    "output": "给出数值 42 并说明来自本次计算",
-    "evidence": "计算工具成功返回且结果等于 42",
-    "failure": "工具失败、证据缺失或数值不符时明确标为未通过",
-    "stop": "完成一次计算和验收后停止，不再追加调用",
-}
+# The task card (t.task_card) is written before the run; acceptance trusts only the card,
+# and nothing the executor says afterwards can change it. These are its checkable values.
+EXPECTED_ARGUMENTS = {"a": 19, "b": 23}
 EXPECTED = 42
 
 
@@ -33,105 +30,116 @@ def add_numbers(a: int, b: int) -> int:
     return a + b
 
 
-def verify(claim: dict, evidence: dict[str, dict]) -> list[dict]:
-    """拿完成声明去核对本次记录的工具结果；声明里的答案只用来比对，不能单独作为依据。"""
-    # 只顺着 evidence_ref 找证据：引用不到本次记录的调用，就等于没有证据。
+def verify(claim: dict, evidence: dict[str, dict], t) -> list[dict]:
+    """Check the completion claim against the tool results recorded in this run; the claimed answer is only compared, never trusted."""
+    # Look for evidence only through evidence_ref: a call not recorded in this run is no evidence.
     record = evidence.get(claim.get("evidence_ref") or "")
     result = record["result"] if record else None
     ok = bool(result and result.get("ok"))
     value = result.get("result") if ok else None
+    # The task card's input_scope allows only 19 and 23: a call with other numbers that
+    # happens to return 42 must not pass.
+    arguments = record.get("arguments") if record else None
+    shown = t.arguments_format.format(**arguments) if arguments else t.value_none
     return [
-        {"label": "执行过程已结束", "passed": True, "detail": "本地流程运行到验收阶段；这不代表任务成功。"},
-        {"label": "声明引用了本次的工具证据", "passed": record is not None,
-         "detail": "evidence_ref 指向本次运行中的 tool_result" if record else "声明没有指向任何本次记录的工具结果"},
-        {"label": "工具成功返回", "passed": ok, "detail": "ok 为真" if ok else "未执行或失败"},
-        {"label": "证据中的值满足任务卡", "passed": value == EXPECTED,
-         "detail": f"期望 {EXPECTED}；证据中为 {value if ok else '无'}"},
-        # 声明与证据要单独比一次：引用对了、证据也对，声明里的数字仍可能是另写的。
-        {"label": "声明与证据一致", "passed": ok and claim.get("answer") == value,
-         "detail": f"声明写 {claim.get('answer')}；证据中为 {value if ok else '无'}"},
+        {"label": t.check_ended, "passed": True, "detail": t.detail_ended},
+        {"label": t.check_referenced, "passed": record is not None,
+         "detail": t.detail_referenced if record else t.detail_not_referenced},
+        {"label": t.check_tool_ok, "passed": ok, "detail": t.detail_tool_ok if ok else t.detail_tool_not_ok},
+        {"label": t.check_arguments, "passed": arguments == EXPECTED_ARGUMENTS,
+         "detail": t.detail_expected.format(expected=t.arguments_format.format(**EXPECTED_ARGUMENTS), actual=shown)},
+        {"label": t.check_value, "passed": value == EXPECTED,
+         "detail": t.detail_expected.format(expected=EXPECTED, actual=value if ok else t.value_none)},
+        # Compare claim and evidence on their own: the reference and the evidence can be right
+        # while the number in the claim was written separately.
+        {"label": t.check_consistent, "passed": ok and claim.get("answer") == value,
+         "detail": t.detail_consistent.format(claimed=claim.get("answer"), actual=value if ok else t.value_none)},
     ]
 
 
 def accepted(checks: list[dict]) -> bool:
-    # 跳过第一项“执行过程已结束”：流程跑完和任务通过是两件事。
+    # Skip the first check, "the run has finished": finishing and passing are two different things.
     return all(item["passed"] for item in checks[1:])
 
 
 def _attempt(context: RunContext, scenario: str, attempt: int, evidence: dict[str, dict]) -> dict:
-    """执行者的一次尝试：固定脚本代替 Agent 交声明，故障由运行器注入，不是模型犯的错。"""
+    """One attempt by the executor: a fixed script hands in the claim instead of an agent; faults come from the runner, not a model."""
     if scenario == "missing_evidence":
-        # 只交声明、不调用工具：答案恰好是对的，但没有任何可核对的东西。
+        # A claim without any tool call: the answer happens to be right, but there is nothing to check.
         return {"status": "done", "answer": EXPECTED, "evidence_ref": None, "summary": context.inputs["claim"]}
-    # goal_loop 只让第 1 次出错，重试时按任务卡重做；真实的目标循环要由模型读验收原因再改。
+    # goal_loop fails only on attempt 1 and redoes the task card on retry; a real goal loop needs a model that reads the reasons.
     wrong = scenario in ("wrong_result", "claim_mismatch") or (scenario == "goal_loop" and attempt == 1)
     call_id = f"task_add_{attempt}"
-    result = context.call_tool("add_numbers", {"a": 19, "b": 22 if wrong else 23},
-                               {"add_numbers": add_numbers}, round_number=attempt, call_id=call_id)
-    evidence[call_id] = {"result": result}
-    # claim_mismatch：执行者不管工具返回什么都报 42，模拟“只报好消息”的声明。
+    arguments = {"a": 19, "b": 22 if wrong else 23}
+    result = context.call_tool("add_numbers", arguments, {"add_numbers": add_numbers},
+                               round_number=attempt, call_id=call_id)
+    evidence[call_id] = {"arguments": arguments, "result": result}
+    # claim_mismatch: the executor reports 42 whatever the tool returned, a claim that only reports good news.
     answer = EXPECTED if scenario == "claim_mismatch" else result.get("result")
     return {"status": "done", "answer": answer, "evidence_ref": call_id, "summary": context.inputs["claim"]}
 
 
 def run(context: RunContext) -> str:
-    """按任务卡执行并验收；goal_loop 未通过就再试，通过或到达上限就停。本课的重试是固定脚本，原因只记录。"""
+    """Execute against the task card and accept; goal_loop retries on failure and stops on a pass or at the limit. The retry is a fixed script; reasons are only recorded."""
+    t = texts_for(context.locale)
     scenario = context.inputs["scenario"]
-    # 只有目标循环允许多次尝试；其他场景只做一次，每种故障单独可见。
+    # Only the goal loop may try several times; every other scenario runs once, so each fault shows on its own.
     limit = context.inputs["max_attempts"] if scenario == "goal_loop" else 1
-    # 停止条件也是契约的一部分：目标循环把尝试上限写进任务卡的 stop 字段。
-    card = {**TASK_CARD, "stop": f"验收通过或尝试 {limit} 次后停止"} if scenario == "goal_loop" else TASK_CARD
+    # The stop condition is part of the contract: the goal loop writes its attempt limit into the stop field.
+    card = {**t.task_card, "stop": t.stop_with_limit.format(limit=limit)} if scenario == "goal_loop" else t.task_card
     context.emit("lesson.task_card", card)
     evidence: dict[str, dict] = {}
     history, checks = [], []
     for attempt in range(1, limit + 1):
         context.check_cancelled()
-        # 1. 执行：执行者交来完成声明，调用过的工具结果记进 evidence。
+        # 1. Execute: the executor hands in a completion claim; the tool results it produced go into evidence.
         claim = _attempt(context, scenario, attempt, evidence)
         context.emit("lesson.completion_claim", {"attempt": attempt, **claim}, attempt)
-        # 2. 验收：验收器独立于执行者，只看声明引用的证据和任务卡。
-        checks = verify(claim, evidence)
+        # 2. Accept: the validator is independent of the executor and reads only the referenced evidence and the card.
+        checks = verify(claim, evidence, t)
         passed = accepted(checks)
-        reasons = [item["label"] + "：" + item["detail"] for item in checks[1:] if not item["passed"]]
-        # 3. 决定下一步并记录原因：本课的执行者是固定脚本，不读这些原因；真实的目标循环要把它们交回执行者。
+        reasons = [t.reason.format(label=item["label"], detail=item["detail"]) for item in checks[1:] if not item["passed"]]
+        # 3. Decide the next step and record why: this executor is a fixed script and ignores the reasons; a real goal loop hands them back.
         if scenario == "goal_loop":
             context.emit("lesson.goal_check", {
                 "attempt": attempt, "max_attempts": limit, "passed": passed, "reasons": reasons,
                 "next": "stop" if passed or attempt == limit else "retry"}, attempt)
-        history.append([attempt, claim["answer"], _evidence_value(evidence, claim), "通过" if passed else "未通过",
-                        "；".join(reasons) or "全部检查通过"])
-        # 4. 通过就停，不把剩下的尝试次数用完；没通过就进入下一次，直到上限。
+        history.append([attempt, claim["answer"], _evidence_value(evidence, claim, t),
+                        t.verdict_passed if passed else t.verdict_failed,
+                        t.reason_separator.join(reasons) or t.all_passed])
+        # 4. Stop on a pass instead of using up the remaining attempts; otherwise go on until the limit.
         if passed:
             break
     ok = accepted(checks)
     _report(context, scenario, limit, checks, history, len(evidence))
     if ok:
-        return f"验收通过：19 + 23 = 42，依据本次工具结果（第 {len(history)} 次尝试）。"
+        return t.answer_passed.format(attempts=len(history))
     if scenario == "goal_loop":
-        return f"验收未通过：尝试 {len(history)} 次后达到上限，已停止。"
-    return "验收未通过：流程已结束，但声明没有得到本次证据的支持。"
+        return t.answer_limit.format(attempts=len(history))
+    return t.answer_failed
 
 
-def _evidence_value(evidence: dict[str, dict], claim: dict):
+def _evidence_value(evidence: dict[str, dict], claim: dict, t):
     record = evidence.get(claim.get("evidence_ref") or "")
     if not record or not record["result"].get("ok"):
-        return "无"
+        return t.value_none
     return record["result"].get("result")
 
 
 def _report(context: RunContext, scenario: str, limit: int, checks: list[dict], history: list[list],
             tool_calls: int) -> None:
-    """发布实验报告（lesson.report）：检查项、指标和每次尝试的记录。"""
+    """Publish the lab report (lesson.report): the checks, the metrics and one row per attempt."""
+    t = texts_for(context.locale)
     ok = accepted(checks)
-    metrics = [{"label": "工具调用数", "value": tool_calls},
-               {"label": "场景", "value": scenario},
-               {"label": "学习者备注", "value": context.question or "（空）"}]
+    metrics = [{"label": t.label_tool_calls, "value": tool_calls},
+               {"label": t.label_scenario, "value": scenario},
+               {"label": t.label_note, "value": context.question or t.value_empty}]
     if scenario == "goal_loop":
-        metrics[1:1] = [{"label": "尝试次数", "value": len(history)}, {"label": "尝试上限", "value": limit},
-                        {"label": "停止原因", "value": "验收通过" if ok else "达到尝试上限"}]
+        metrics[1:1] = [{"label": t.label_attempts, "value": len(history)}, {"label": t.label_limit, "value": limit},
+                        {"label": t.label_stop_reason, "value": t.stop_passed if ok else t.stop_limit}]
     context.emit("lesson.report", {
-        "title": "任务卡独立验收", "summary": "验收通过" if ok else "运行结束，但验收未通过",
+        "title": t.report_title, "summary": t.summary_passed if ok else t.summary_failed,
         "checks": checks,
         "metrics": metrics,
-        "table": {"columns": ["尝试", "声明的答案", "证据中的值", "验收结论", "原因"], "rows": history},
+        "table": {"columns": list(t.columns), "rows": history},
     })

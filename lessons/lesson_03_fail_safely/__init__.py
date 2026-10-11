@@ -1,1 +1,1 @@
-"""错误处理与安全边界：处理工具失败、未知工具和模型请求错误。"""
+"""Error handling and safety boundaries: tool failures, unknown tools and failed model requests."""

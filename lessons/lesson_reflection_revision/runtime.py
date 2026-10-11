@@ -1,8 +1,8 @@
-"""反思与有上限的修订：同一个正则表达式任务，分别由模型自评和真实测试结果驱动修订。
+"""Reflection and bounded revision: one regex task, revised once from the model's self-review and once from real test results.
 
-任务产物是一条正则表达式，测试用 Python re.fullmatch 在固定用例上真实执行，不运行模型写的代码。
-“自我评估与纠正”的讲法参考 Microsoft AI Agents for Beginners 09（MIT），
-任务、测试、评审格式、停止条件与实验由本项目编写。
+The artifact is a regular expression; the tests run Python re.fullmatch on fixed cases and never run code the model wrote.
+The idea of "self-evaluation and correction" follows Microsoft AI Agents for Beginners 09 (MIT);
+the task, tests, review format, stop conditions and experiments are written by this project.
 """
 import json
 import re
@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
+from lessons.lesson_reflection_revision.locales import Texts, texts_for
 
 
 class Inputs(LessonInputs):
@@ -19,49 +20,48 @@ class Inputs(LessonInputs):
 
 
 INPUT_MODEL = Inputs
-SPEC = "学号形如 s-1042：小写字母 s、一个连字符、四位数字，且第一位数字不能是 0。必须整串匹配。"
-# 9 个固定用例：3 个该匹配、6 个不该匹配，含“第一位是 0”这类读需求时容易漏掉的情况。
+# 9 fixed cases: 3 should match, 6 should not, including "first digit is 0", which is easy to miss when reading the spec.
 CASES = [("s-1042", True), ("s-9999", True), ("s-1000", True),
          ("s-0420", False), ("S-1042", False), ("s-104", False), ("s-10422", False), ("s1042", False), ("s-12a4", False)]
 MAX_PATTERN = 200
-WRITER_SYSTEM = ('你写 Python 正则表达式。只输出一个 JSON 对象：{"regex": "你的正则"}。'
-                 "正则会用 re.fullmatch 匹配，不需要写 ^ 和 $。")
-SELF_REVIEW_SYSTEM = ('你是评审，检查一条正则是否满足需求。只输出 JSON：'
-                      '{"verdict": "pass" 或 "revise", "issues": ["问题，没有就留空"]}。')
+# The task (t.spec) and the two system prompts (t.writer_system, t.self_review_system) are in locales/.
 
 
-def run_tests(pattern: str) -> dict:
-    """在固定用例上真实执行 re.fullmatch。编译失败时所有用例都算失败。"""
-    # 先限长度再编译：模型写的字符串只当正则数据处理，不执行任何模型写的代码。
+def run_tests(t: Texts, pattern: str) -> dict:
+    """Run re.fullmatch on the fixed cases for real. If the pattern does not compile, every case fails."""
+    # Limit the length before compiling: the model's string is only regex data; no model-written code runs.
     if not isinstance(pattern, str) or not pattern or len(pattern) > MAX_PATTERN:
-        return {"compiled": False, "error": f"正则必须是 1–{MAX_PATTERN} 个字符的字符串。", "passed": 0,
+        return {"compiled": False, "error": t.pattern_invalid.format(limit=MAX_PATTERN), "passed": 0,
                 "failed": len(CASES), "cases": []}
     try:
         compiled = re.compile(pattern)
     except re.error as error:
-        return {"compiled": False, "error": f"正则无法编译：{error}", "passed": 0, "failed": len(CASES), "cases": []}
-    # 每个用例都真实匹配一次，实际结果和期望结果并列记录。
+        return {"compiled": False, "error": t.pattern_not_compiled.format(error=error), "passed": 0,
+                "failed": len(CASES), "cases": []}
+    # Every case is matched once for real; the actual and the expected result are recorded side by side.
     cases = [{"text": text, "expected": expected, "actual": compiled.fullmatch(text) is not None} for text, expected in CASES]
     passed = sum(case["expected"] == case["actual"] for case in cases)
     return {"compiled": True, "error": None, "passed": passed, "failed": len(CASES) - passed, "cases": cases}
 
 
-def failures_of(tests: dict) -> list[str]:
-    """把失败用例写成评审意见：测试组交回写手的意见完全来自这里。"""
+def failures_of(t: Texts, tests: dict) -> list[str]:
+    """Turn failed cases into review feedback: everything the tests arm hands back to the writer comes from here."""
     if not tests["compiled"]:
         return [tests["error"]]
-    return [f"{case['text']} 应该{'匹配' if case['expected'] else '不匹配'}，实际{'匹配' if case['actual'] else '不匹配'}"
+    word = {True: "match", False: "no_match"}
+    return [t.failure.format(text=case["text"], expected=t.expected_words[word[case["expected"]]],
+                             actual=t.actual_words[word[case["actual"]]])
             for case in tests["cases"] if case["expected"] != case["actual"]]
 
 
-def extract_json(content: str) -> dict:
-    """读取回复里的第一个 JSON 对象；允许前后有说明文字或代码围栏，其余不做修复。"""
+def extract_json(t: Texts, content: str) -> dict:
+    """Read the first JSON object in a reply; text or a code fence around it is allowed, nothing else is repaired."""
     start = content.find("{")
     if start < 0:
-        raise ValueError("回复里没有 JSON 对象。")
+        raise ValueError(t.no_json_object)
     value, _ = json.JSONDecoder().raw_decode(content[start:])
     if not isinstance(value, dict):
-        raise ValueError("回复里的 JSON 不是对象。")
+        raise ValueError(t.json_not_object)
     return value
 
 
@@ -72,10 +72,11 @@ def _tokens(response: dict) -> int | None:
 
 
 class Writer:
-    """本次运行的模型调用：写稿和自评都经过 ask，每次都记下服务商报告的用量。"""
+    """The model calls of one run: drafts and self-reviews both go through ask, which records the reported usage."""
 
-    def __init__(self, context: RunContext):
+    def __init__(self, context: RunContext, t: Texts):
         self.context = context
+        self.t = t
         self.rounds = 0
         self.usage: list[int | None] = []
 
@@ -89,12 +90,12 @@ class Writer:
         return content if isinstance(content, str) else ""
 
     def draft(self, user: str, version: int, previous: str | None) -> str:
-        """请求一版正则并发布 lesson.draft；读不出 regex 字段就记为空串和解析错误，不替模型修。"""
-        content = self.ask(WRITER_SYSTEM, user)
+        """Ask for one regex and emit lesson.draft; a missing regex field is recorded as "" plus a parse error, not repaired."""
+        content = self.ask(self.t.writer_system, user)
         try:
-            pattern = extract_json(content).get("regex")
+            pattern = extract_json(self.t, content).get("regex")
             pattern = pattern if isinstance(pattern, str) else ""
-            error = None if pattern else "JSON 里没有字符串字段 regex"
+            error = None if pattern else self.t.missing_regex
         except ValueError as exc:
             pattern, error = "", str(exc)
         self.context.emit("lesson.draft", {"version": version, "regex": pattern, "previous": previous,
@@ -103,11 +104,11 @@ class Writer:
         return pattern
 
 
-def review_by_tests(context: RunContext, pattern: str, iteration: int, round_number: int) -> tuple[str, list[str]]:
-    """测试评审：跑一遍固定用例，失败用例就是评审意见。"""
-    tests = run_tests(pattern)
+def review_by_tests(context: RunContext, t: Texts, pattern: str, iteration: int, round_number: int) -> tuple[str, list[str]]:
+    """Test review: run the fixed cases once; the failed cases are the feedback."""
+    tests = run_tests(t, pattern)
     context.emit("lesson.tests", {"version": iteration - 1, **tests}, round_number)
-    issues = failures_of(tests)
+    issues = failures_of(t, tests)
     verdict = "pass" if not issues else "revise"
     context.emit("lesson.review", {"iteration": iteration, "source": "tests", "verdict": verdict,
                                    "issues": issues}, round_number)
@@ -115,11 +116,12 @@ def review_by_tests(context: RunContext, pattern: str, iteration: int, round_num
 
 
 def review_by_model(context: RunContext, writer: Writer, pattern: str, iteration: int) -> tuple[str, list[str]]:
-    """模型自评：多一次请求，评审只看需求和正则，看不到任何运行结果。"""
-    content = writer.ask(SELF_REVIEW_SYSTEM, f"需求：{SPEC}\n正则：{pattern}")
+    """Model self-review: one more request; the reviewer sees only the spec and the regex, no run results."""
+    t = writer.t
+    content = writer.ask(t.self_review_system, t.self_review_request.format(spec=t.spec, pattern=pattern))
     try:
-        review = extract_json(content)
-        # 结论只接受 pass 或 revise；其他输出记为不合格式，循环会因此停下。
+        review = extract_json(t, content)
+        # Only pass or revise counts as a verdict; anything else is malformed and stops the loop.
         verdict = review.get("verdict") if review.get("verdict") in ("pass", "revise") else "invalid"
         issues = [str(item) for item in review.get("issues", [])] if isinstance(review.get("issues"), list) else []
     except ValueError:
@@ -130,59 +132,67 @@ def review_by_model(context: RunContext, writer: Writer, pattern: str, iteration
 
 
 def run(context: RunContext) -> str:
-    """修订循环：两组只换评审来源，写稿、停止条件和最终检查完全相同。"""
+    """The revision loop: the two arms differ only in the review source; drafting, stopping and the final check are identical."""
+    t = texts_for(context.locale)
     values = Inputs.model_validate(context.inputs)
-    writer = Writer(context)
-    # 1. 初稿：只给需求。
-    pattern = writer.draft("需求：" + SPEC, 0, None)
-    stop_reason, history = "达到迭代上限", []
+    writer = Writer(context, t)
+    # 1. First draft: the spec only.
+    pattern = writer.draft(t.draft_request.format(spec=t.spec), 0, None)
+    stop, history = "limit", []
     for iteration in range(1, values.max_iters + 1):
-        # 2. 评审：测试组跑真实用例，自评组再请求一次模型。
+        # 2. Review: the tests arm runs the real cases, the self arm asks the model once more.
         if values.reviewer == "tests":
-            verdict, issues = review_by_tests(context, pattern, iteration, writer.rounds)
+            verdict, issues = review_by_tests(context, t, pattern, iteration, writer.rounds)
         else:
             verdict, issues = review_by_model(context, writer, pattern, iteration)
-        history.append([iteration, pattern, "测试" if values.reviewer == "tests" else "模型自评", verdict,
-                        "；".join(issues) or "—"])
-        # 3. 停止条件：评审通过、评审输出不合格式、达到迭代上限，都不再请求修订。
+        history.append([iteration, pattern, t.reviewer_names[values.reviewer], verdict,
+                        t.issue_separator.join(issues) or "—"])
+        # 3. Stop conditions: review passed, malformed review output, or the limit reached; no revision after any of them.
         if verdict == "pass":
-            stop_reason = "评审通过"
+            stop = "passed"
             break
         if verdict == "invalid":
-            stop_reason = "评审输出不合格式"
+            stop = "invalid"
             break
         if iteration == values.max_iters:
             break
-        # 4. 修订：把上一版和评审意见交回写手；改不出新版本也是一种停止原因。
+        # 4. Revise: hand the previous version and the feedback back; no new version is a stop reason too.
         previous = pattern
-        pattern = writer.draft(f"需求：{SPEC}\n上一版正则：{previous}\n评审意见：" + json.dumps(issues, ensure_ascii=False)
-                               + "\n请修订。", iteration, previous)
+        pattern = writer.draft(t.revision_request.format(spec=t.spec, previous=previous,
+                                                         issues=json.dumps(issues, ensure_ascii=False)),
+                               iteration, previous)
         if pattern == previous:
-            stop_reason = "修订后没有变化"
+            stop = "unchanged"
             break
-    # 5. 最终检查：不论评审来自哪里，最终版本都用同一组真实用例检查。
-    final = run_tests(pattern)
+    # 5. Final check: whatever the review source, the final version is checked against the same real cases.
+    final = run_tests(t, pattern)
     context.emit("lesson.tests", {"version": "final", **final}, writer.rounds)
-    return _report(context, values, stop_reason, history, final, pattern, writer)
+    return _report(context, t, values, t.stop_reasons[stop], history, final, pattern, writer)
 
 
-def _report(context: RunContext, values: Inputs, stop_reason: str, history: list[list], final: dict, pattern: str,
-            writer: Writer) -> str:
-    """发布实验报告（lesson.report）并返回最终回答；累计用量只加服务商报告的 total_tokens。"""
+def _report(context: RunContext, t: Texts, values: Inputs, stop_reason: str, history: list[list], final: dict,
+            pattern: str, writer: Writer) -> str:
+    """Emit the lab report (lesson.report) and return the final answer; total_tokens adds only what the provider reported."""
     reported = [value for value in writer.usage if value is not None]
+    if len(reported) == len(writer.usage):
+        tokens = sum(reported)
+    else:
+        missing = len(writer.usage) - len(reported)
+        tokens = t.tokens_partly_reported.format(total=sum(reported), missing=missing) if reported else t.value_not_reported
+    detail = (t.final_detail_error.format(passed=final["passed"], total=len(CASES), error=final["error"])
+              if final["error"] else t.final_detail.format(passed=final["passed"], total=len(CASES)))
     context.emit("lesson.report", {
-        "title": "模型自评驱动修订" if values.reviewer == "self" else "测试结果驱动修订",
-        "summary": "最终版本一律用同一组真实用例检查；评审说通过，不等于测试通过。",
-        "checks": [{"label": "最终版本通过全部用例", "passed": final["failed"] == 0,
-                    "detail": f"{final['passed']}/{len(CASES)} 通过" + (f"；{final['error']}" if final["error"] else "")}],
-        "metrics": [{"label": "停止原因", "value": stop_reason},
-                    {"label": "迭代次数", "value": len(history)}, {"label": "迭代上限", "value": values.max_iters},
-                    {"label": "模型调用数", "value": writer.rounds},
-                    {"label": "累计 total_tokens", "value": sum(reported) if len(reported) == len(writer.usage) else
-                     (f"{sum(reported)}（{len(writer.usage) - len(reported)} 次未报告）" if reported else "未报告")},
-                    {"label": "最终正则", "value": pattern or "（空）"},
-                    {"label": "学习者备注", "value": context.question or "（空）"}],
-        "table": {"columns": ["迭代", "被评审的正则", "评审来源", "结论", "意见"], "rows": history},
+        "title": t.report_titles[values.reviewer],
+        "summary": t.report_summary,
+        "checks": [{"label": t.check_final, "passed": final["failed"] == 0, "detail": detail}],
+        "metrics": [{"label": t.label_stop_reason, "value": stop_reason},
+                    {"label": t.label_iterations, "value": len(history)},
+                    {"label": t.label_max_iters, "value": values.max_iters},
+                    {"label": t.label_model_calls, "value": writer.rounds},
+                    {"label": t.label_total_tokens, "value": tokens},
+                    {"label": t.label_final_regex, "value": pattern or t.value_empty},
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
+        "table": {"columns": list(t.table_columns), "rows": history},
     })
-    outcome = "通过" if final["failed"] == 0 else "未通过"
-    return f"停止原因：{stop_reason}。最终正则 {pattern or '（空）'} 在真实用例上{outcome}（{final['passed']}/{len(CASES)}）。"
+    answer = t.answer_passed if final["failed"] == 0 else t.answer_failed
+    return answer.format(reason=stop_reason, pattern=pattern or t.value_empty, passed=final["passed"], total=len(CASES))

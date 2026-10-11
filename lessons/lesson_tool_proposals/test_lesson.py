@@ -1,4 +1,4 @@
-"""“工具定义与调用提议”的行为测试：确定性模型数据；本课只记录提议，任何情况下都不执行工具。"""
+"""Behavior tests for tool-proposals: deterministic model data; the lesson only records proposals and never executes a tool."""
 import json
 import unittest
 from unittest.mock import patch
@@ -10,15 +10,17 @@ from course.runner import RunCancelled
 from lessons.lesson_01_tool_selection import tools
 from lessons.lesson_tool_proposals import runtime
 from lessons.lesson_tool_proposals.fixtures import create_completion
+from lessons.lesson_tool_proposals.locales import texts_for
 
 
-def run_case(exercise_id, completion=None, question="帮我计算 19 加 23。", cancelled=lambda: False):
+def run_case(exercise_id, completion=None, question="帮我计算 19 加 23。", cancelled=lambda: False, locale="zh-CN"):
     events = []
     context = RunContext(
         lesson_id="tool-proposals", exercise_id=exercise_id, question=question, mode="offline",
         model="fixture-model", representation="http_body", inputs=validate_inputs(runtime, {}), api_key="",
-        completion=completion or create_completion(exercise_id), max_model_calls=1,
+        completion=completion or create_completion(exercise_id, locale=locale), max_model_calls=1,
         cancelled=cancelled, emit_event=lambda kind, data, number: events.append((kind, data, number)),
+        locale=locale,
     )
     answer = execute_lesson({"runtime": {"kind": "custom", "entrypoint": "runtime:run"}}, runtime, context)
     return answer, events
@@ -41,8 +43,8 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual([m["role"] for m in body["messages"]], ["system", "user"])
 
     def test_sum_proposal_is_recorded_but_never_executed(self):
-        # 换掉白名单里的函数：真有地方按名字执行工具，测试就会失败。
-        never = lambda *_, **__: self.fail("不应执行工具")
+        # Replace the allowlisted functions: if anything executed a tool by name, the test would fail.
+        never = lambda *_, **__: self.fail("no tool may be executed")
         with patch.object(tools, "add_numbers", never), patch.object(tools, "get_current_time", never):
             answer, events = run_case("sum")
         self.assertEqual(of(events, "tool_call"), [])
@@ -87,6 +89,33 @@ class ProposalTests(unittest.TestCase):
         answer, events = run_case("sum", reply({"content": None, "tool_calls": calls}, "tool_calls"))
         self.assertEqual(len(of(events, "lesson.report")[-1]["table"]["rows"]), 2)
         self.assertIn("2 个调用", answer)
+
+
+class EnglishRunTests(unittest.TestCase):
+    def test_english_run_sends_and_reports_in_english(self):
+        t = texts_for("en")
+        answer, events = run_case("sum", question="Add 19 and 23 for me.", locale="en")
+        body = of(events, "request")[0]["body"]
+        self.assertEqual(body["messages"][0]["content"], t.system_prompt)
+        self.assertEqual(body["tools"], tools.tool_definitions("en"))
+        report = of(events, "lesson.report")[-1]
+        self.assertEqual(report["title"], t.report_title)
+        self.assertEqual(report["table"]["columns"], list(t.columns))
+        metrics = {item["label"]: item["value"] for item in report["metrics"]}
+        self.assertEqual(metrics[t.label_proposal_count], 1)
+        self.assertEqual(answer, t.proposals_answer.format(count=1, calls='add_numbers({"a": 19, "b": 23})'))
+
+    def test_english_defaults_and_errors(self):
+        t = texts_for("en")
+        _, events = run_case("sum", question="  ", locale="en")
+        self.assertEqual(of(events, "request")[0]["body"]["messages"][1]["content"], t.default_question)
+        answer, _ = run_case("sum", reply({"content": None}, "stop"), locale="en")
+        self.assertEqual(answer, t.empty_content)
+        with self.assertRaisesRegex(ValueError, "choices"):
+            run_case("sum", lambda body, key: {"choices": []}, locale="en")
+        _, events = run_case("chat", question="Hello", locale="en")
+        self.assertTrue(of(events, "response")[0]["body"]["choices"][0]["message"]["content"]
+                        .startswith("[Offline script answer]"))
 
 
 class BoundaryTests(unittest.TestCase):

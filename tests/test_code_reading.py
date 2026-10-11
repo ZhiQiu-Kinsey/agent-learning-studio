@@ -195,9 +195,9 @@ class RealLessonTests(unittest.TestCase):
         self.assertEqual(news["compare_with"]["id"], "tool-proposals")
         unchanged = {item["name"] for item in news["unchanged"]}
         self.assertTrue({"tool_definitions", "available_tools", "add_numbers", "get_current_time"} <= unchanged)
-        # 工具描述在共用的 locales/tools/ 里，提议课也登记了它：沿用；系统提示词是本课新写的。
+        # 工具描述在共用的 locales/tools/ 里，提议课也登记了它：沿用；系统提示词在提议课的基础上改写过。
         self.assertIn("t.add_numbers", unchanged)
-        self.assertIn("t.system_prompt", {item["name"] for item in news["added"]})
+        self.assertIn("t.system_prompt", {item["name"] for item in news["changed"]})
         # 运行时文本按源语言比较，英文界面得出同样的结论。
         english = lesson_code_view(next(spec for spec in LESSONS if spec["id"] == "tool-selection"), "en")
         self.assertEqual({item["name"] for item in english["whats_new"]["unchanged"]}, unchanged)
@@ -210,15 +210,15 @@ class RealLessonTests(unittest.TestCase):
         data = self.view("dependent-calls")
         news = data["whats_new"]
         self.assertEqual(news["compare_with"]["id"], "tool-selection")
-        # 本课还只有中文运行时：系统提示词仍是 main.py 里的常量，对照课的提示词在运行时文本里。
-        self.assertEqual({item["name"] for item in news["changed"]}, {"setup", "main"})
-        self.assertEqual({item["name"] for item in news["added"]}, {"SYSTEM_PROMPT"})
+        # 两课的 main.py 写法相同、只换了提示词：系统提示词显示为变化，setup 与 main 沿用。
+        self.assertIn("t.system_prompt", {item["name"] for item in news["changed"]})
+        self.assertEqual({item["name"] for item in news["added"]}, set())
         unchanged = {item["name"] for item in news["unchanged"]}
-        self.assertTrue({"tool_definitions", "add_numbers", "t.add_numbers"} <= unchanged)
+        self.assertTrue({"setup", "main", "tool_definitions", "add_numbers", "t.add_numbers"} <= unchanged)
         self.assertNotIn("run_agent", unchanged)
-        prompt = next(item for item in news["added"] if item["name"] == "SYSTEM_PROMPT")
+        prompt = next(item for item in news["changed"] if item["name"] == "t.system_prompt")
         source = (Path(web.ROOT) / prompt["path"]).read_text(encoding="utf-8").splitlines()
-        self.assertTrue(source[prompt["start"] - 1].startswith("SYSTEM_PROMPT"))
+        self.assertTrue(source[prompt["start"] - 1].strip().startswith("system_prompt="))
 
     def test_compared_lesson_title_follows_the_requested_language(self):
         # 对照课标题来自实现清单的源语言；英文界面要换成目录译文里的标题，没有译文时保持源文本。

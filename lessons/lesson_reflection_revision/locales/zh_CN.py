@@ -1,0 +1,43 @@
+"""reflection-revision runtime text: Chinese (source language)."""
+from lessons.lesson_reflection_revision.locales import Texts
+
+TEXTS = Texts(
+    spec="学号形如 s-1042：小写字母 s、一个连字符、四位数字，且第一位数字不能是 0。必须整串匹配。",
+    writer_system=('你写 Python 正则表达式。只输出一个 JSON 对象：{"regex": "你的正则"}。'
+                   "正则会用 re.fullmatch 匹配，不需要写 ^ 和 $。"),
+    self_review_system=('你是评审，检查一条正则是否满足需求。只输出 JSON：'
+                        '{"verdict": "pass" 或 "revise", "issues": ["问题，没有就留空"]}。'),
+    draft_request="需求：{spec}",
+    self_review_request="需求：{spec}\n正则：{pattern}",
+    revision_request="需求：{spec}\n上一版正则：{previous}\n评审意见：{issues}\n请修订。",
+    pattern_invalid="正则必须是 1–{limit} 个字符的字符串。",
+    pattern_not_compiled="正则无法编译：{error}",
+    failure="{text} 应该{expected}，实际{actual}",
+    expected_words={"match": "匹配", "no_match": "不匹配"},
+    actual_words={"match": "匹配", "no_match": "不匹配"},
+    no_json_object="回复里没有 JSON 对象。",
+    json_not_object="回复里的 JSON 不是对象。",
+    missing_regex="JSON 里没有字符串字段 regex",
+    stop_reasons={"limit": "达到迭代上限", "passed": "评审通过", "invalid": "评审输出不合格式",
+                  "unchanged": "修订后没有变化"},
+    reviewer_names={"tests": "测试", "self": "模型自评"},
+    issue_separator="；",
+    report_titles={"self": "模型自评驱动修订", "tests": "测试结果驱动修订"},
+    report_summary="最终版本一律用同一组真实用例检查；评审说通过，不等于测试通过。",
+    check_final="最终版本通过全部用例",
+    final_detail="{passed}/{total} 通过",
+    final_detail_error="{passed}/{total} 通过；{error}",
+    label_stop_reason="停止原因",
+    label_iterations="迭代次数",
+    label_max_iters="迭代上限",
+    label_model_calls="模型调用数",
+    label_total_tokens="累计 total_tokens",
+    label_final_regex="最终正则",
+    label_note="学习者备注",
+    tokens_partly_reported="{total}（{missing} 次未报告）",
+    value_not_reported="未报告",
+    value_empty="（空）",
+    table_columns=("迭代", "被评审的正则", "评审来源", "结论", "意见"),
+    answer_passed="停止原因：{reason}。最终正则 {pattern} 在真实用例上通过（{passed}/{total}）。",
+    answer_failed="停止原因：{reason}。最终正则 {pattern} 在真实用例上未通过（{passed}/{total}）。",
+)

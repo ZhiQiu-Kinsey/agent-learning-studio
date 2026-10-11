@@ -26,7 +26,7 @@
               "id": "01-boundary",
               "label": "01 / BOUNDARY",
               "title": "把权限留给程序",
-              "description": "Schema 说明参数格式，Python 校验真实输入。只有 AVAILABLE_TOOLS 中的名称才允许执行。",
+              "description": "Schema 说明参数格式，Python 校验真实输入。只有白名单 available_tools 中的名称才允许执行。",
               "token": "allowlist + validation"
             },
             {
@@ -61,7 +61,7 @@
           "title": "Schema 说明接口，Python 负责守住边界",
           "paragraphs": [
             "工具定义里的参数说明是写给模型看的，真正挡住非法输入的是 Python 里的检查。divide_numbers 的工具定义写明 a、b 是数字，b 不能为 0。这能帮模型写出合适的调用，但它不是执行权限，也不能保证模型每次都照做：模型照样可能提出 b=0，或者把数字写成字符串。",
-            "所以检查分两道，都在程序里。第一道在运行器：execute_tool 先用 json.loads 解析 arguments，确认它是一个参数对象；再到 AVAILABLE_TOOLS 里按名字找函数，找不到就拒绝。AVAILABLE_TOOLS 是本课的白名单，只登记了 divide_numbers，模型写出的其他名字一个都不会被执行。第二道在工具函数里：divide_numbers 检查两个参数是不是数字、是不是有限值（排除 NaN 和无穷大）、除数是不是 0，算完再看结果有没有溢出。",
+            "所以检查分两道，都在程序里。第一道在运行器：execute_tool 先用 json.loads 解析 arguments，确认它是一个参数对象；再到白名单里按名字找函数，找不到就拒绝。白名单由 available_tools 返回，本课只登记了 divide_numbers，模型写出的其他名字一个都不会被执行。第二道在工具函数里：divide_numbers 检查两个参数是不是数字、是不是有限值（排除 NaN 和无穷大）、除数是不是 0，算完再看结果有没有溢出。",
             "两道检查都是发现问题就拒绝，不替模型修正。运行器不会把 b=0 改成 b=1，也不会把残缺的 JSON 补全。悄悄修正看起来体贴，实际是让程序做了模型没要求的事：用户问 12 除以 0，程序替他算了 12 除以 1，答的就不是他问的问题了。"
           ]
         },
@@ -191,7 +191,7 @@
           "id": "misconception-prompt-guard",
           "type": "misconception",
           "claim": "系统提示词里已经写了只调用 divide_numbers，模型就不会提出别的工具，程序里不用再按名字检查。",
-          "correction": "提示词只是写给模型的要求，模型可能不照做，也可能被用户的话带偏。挡住未登记工具的是运行器：它只在 AVAILABLE_TOOLS 里按名字找函数，找不到就返回 ok=false，任何函数都不会被执行。"
+          "correction": "提示词只是写给模型的要求，模型可能不照做，也可能被用户的话带偏。挡住未登记工具的是运行器：它只在白名单 available_tools 里按名字找函数，找不到就返回 ok=false，任何函数都不会被执行。"
         },
         {
           "id": "mq-injected-origin",
@@ -251,7 +251,7 @@
               "actor": "Python 工具",
               "title": "Python 明确拒绝除零",
               "body": "工具检查数字类型、有限值和非零除数。模型提出调用不会绕过这些检查，执行名称也必须在白名单中。",
-              "code": "# divide_numbers 中的实际校验\nif b == 0:\n    raise ValueError(\n        \"除数不能为 0；请提供非零除数。\"\n    )",
+              "code": "# The actual check in divide_numbers\nif b == 0:\n    raise ValueError(t.zero_divisor)",
               "language": "python",
               "evidence": "对照工具源码和实际结果，确认错误来自执行路径中的校验。"
             },
@@ -260,8 +260,8 @@
               "label": "回传失败",
               "actor": "运行器 → 模型",
               "title": "错误也是一种有结构的结果",
-              "body": "运行器捕获 ValueError 并包装失败，仍通过 role=tool 回传。出现 tool_result 事件只说明有结果返回，应继续展开检查 ok。",
-              "code": "{\n  \"ok\": false,\n  \"error_type\": \"ValueError\",\n  \"error\": \"除数不能为 0；请提供非零除数。\"\n}",
+              "body": "运行器捕获 ValueError 并包装失败，仍通过 role=tool 回传。出现 tool_result 事件只说明有结果返回，应继续展开检查 ok。error 里是工具抛出的原文，即“除数不能为 0；请提供非零除数。”",
+              "code": "{\n  \"ok\": false,\n  \"error_type\": \"ValueError\",\n  \"error\": \"……\"\n}",
               "language": "json",
               "evidence": "找到 ok=false，并用 tool_call_id 对应原调用，再检查错误是否进入下一轮 request。"
             },
@@ -271,7 +271,7 @@
               "actor": "模型 → 用户",
               "title": "解释问题，请求有效输入",
               "body": "合适的后续是说明不能除零并请求非零除数。正常结束不会把失败变成成功；原样重试也不能改变数学规则。",
-              "code": "// 教学示意：两种状态需分开判断\n工具结果：ok = false\n循环结束：done = completed\n\n// 合理后续行为\n说明错误 → 请求非零除数",
+              "code": "// Illustration: judge the two states separately\ntool result: ok = false\nloop end:    done = completed\n\n// A reasonable next step\nexplain the error → ask for a non-zero divisor",
               "evidence": "检查最终回答是否如实处理错误，且没有编造商、擅自改数或重复同一失败请求。"
             }
           ]
@@ -324,30 +324,36 @@
           "id": "code-divide-guard",
           "type": "annotated-source",
           "path": "lessons/lesson_03_fail_safely/tools.py",
-          "start": 29,
-          "end": 54,
+          "start": 32,
+          "end": 58,
           "notes": [
             {
-              "id": "n32",
+              "id": "n-signature",
               "line": 32,
+              "anchor": "def divide_numbers(t, /, a, b):",
+              "text": "t 是运行语言的错误消息，只能按位置传入；模型的参数总是按名字传，换不掉它。"
+            },
+            {
+              "id": "n32",
+              "line": 39,
               "anchor": "if isinstance(value, bool) or not isinstance(val",
               "text": "逐个检查参数类型并排除 bool，错误消息点名是哪个参数。"
             },
             {
               "id": "n37",
-              "line": 37,
+              "line": 44,
               "anchor": "except OverflowError:",
-              "text": "超大整数转成浮点数时 math.isfinite 会抛 OverflowError，这里把它转换为明确的“超出支持范围”，不让意外异常逃出工具。"
+              "text": "超大整数转成浮点数时 math.isfinite 会抛 OverflowError。这里把它算作输入不是有限数字，报出“参数必须是有限数字且处于支持范围内。”，不让意外异常逃出工具。"
             },
             {
               "id": "n43",
-              "line": 43,
-              "anchor": "raise ValueError(\"除数不能为 0；请提供非零除数。\")",
+              "line": 50,
+              "anchor": "raise ValueError(t.zero_divisor)",
               "text": "除数为 0 时抛 ValueError，消息里直接写修正方法。这段文字会原样回传给模型，供它向用户解释。"
             },
             {
               "id": "n49",
-              "line": 49,
+              "line": 56,
               "anchor": "if not math.isfinite(quotient):",
               "text": "浮点运算溢出可能得到无穷大而不抛错，所以对结果也再检查一次。"
             }
@@ -390,37 +396,37 @@
           "id": "code-fault-injection",
           "type": "annotated-source",
           "path": "lessons/lesson_03_fail_safely/runtime.py",
-          "start": 13,
-          "end": 28,
+          "start": 15,
+          "end": 31,
           "notes": [
             {
               "id": "n-unknown-name",
-              "line": 14,
+              "line": 17,
               "anchor": "\"unknown\": (\"unregistered_tool\", \"{}\")",
-              "text": "未登记的工具名：AVAILABLE_TOOLS 里没有它，模型也不一定会提出它，所以由程序直接构造。"
+              "text": "未登记的工具名：available_tools 返回的白名单里没有它，模型也不一定会提出它，所以由程序直接构造。"
             },
             {
               "id": "n-broken-json",
-              "line": 15,
+              "line": 18,
               "anchor": "\"{bad json\"",
               "text": "名字是登记过的 divide_numbers，但参数文本不是合法 JSON，拒绝发生在解析这一步。"
             },
             {
               "id": "n-native-loop",
-              "line": 23,
+              "line": 26,
               "anchor": "context.run_native(main",
               "text": "两道除法练习照旧走原生工具循环，最多两轮模型请求。"
             },
             {
               "id": "n-submit",
-              "line": 25,
-              "anchor": "AVAILABLE_TOOLS)",
+              "line": 28,
+              "anchor": "available_tools(context.locale))",
               "text": "原样交给运行器：与模型提出的调用走同一个 execute_tool，事件标为运行器发起。"
             },
             {
               "id": "n-program-answer",
-              "line": 27,
-              "anchor": "本组没有调用模型",
+              "line": 30,
+              "anchor": "texts_for(context.locale).fault_answer.format(",
               "text": "没有模型，回答由程序按真实的检查结果写出，不冒充模型的回答。"
             }
           ]
@@ -429,7 +435,7 @@
           "id": "code-decision",
           "type": "decision",
           "title": "可预期的工具失败作为结构化结果回传，而不是中断运行",
-          "chosen": "execute_tool 把参数错误和业务规则错误包装为 {ok: false, error_type, error}，仍以 role=tool 消息回传；SYSTEM_PROMPT 要求只有 ok=true 才能报告结果，ok=false 时如实说明并请用户修正。",
+          "chosen": "execute_tool 把参数错误和业务规则错误包装为 {ok: false, error_type, error}，仍以 role=tool 消息回传；系统提示词要求只有 ok=true 才能报告结果，ok=false 时如实说明并请用户修正。",
           "alternatives": [
             {
               "id": "abort-on-error",
@@ -588,7 +594,7 @@
             },
             {
               "id": "unknown-name",
-              "text": "未登记的工具名 unregistered_tool：它不在 AVAILABLE_TOOLS 里。",
+              "text": "未登记的工具名 unregistered_tool：它不在白名单 available_tools 里。",
               "selector": {
                 "event": "tool_call",
                 "path": "data.function.name",
@@ -722,7 +728,7 @@
                 {
                   "id": "a",
                   "text": "自动寻找并执行同名 Python 函数，以免中断任务。",
-                  "feedback": "运行器只查 AVAILABLE_TOOLS 白名单，不会按名字去找任意 Python 函数；否则模型就能自行扩展执行权限。"
+                  "feedback": "运行器只查 available_tools 白名单，不会按名字去找任意 Python 函数；否则模型就能自行扩展执行权限。"
                 },
                 {
                   "id": "b",
@@ -736,7 +742,7 @@
                 }
               ],
               "correct": "b",
-              "explanation": "合法 JSON 只表示参数可解析，不表示工具被授权。AVAILABLE_TOOLS 是明确的执行白名单；未知名称必须被拒绝，不能由模型的提议扩展程序执行权限。"
+              "explanation": "合法 JSON 只表示参数可解析，不表示工具被授权。available_tools 返回的是明确的执行白名单；未知名称必须被拒绝，不能由模型的提议扩展程序执行权限。"
             },
             {
               "id": "round-limit-error",
@@ -838,8 +844,8 @@
       "note": "divide_numbers 成功时返回的商，只在 ok=true 的结果里出现。"
     },
     {
-      "name": "AVAILABLE_TOOLS",
-      "note": "工具名到函数的字典，也就是本课的白名单；这里只登记了 divide_numbers。"
+      "name": "available_tools",
+      "note": "返回工具名到函数的字典，也就是本课的白名单；这里只登记了 divide_numbers。"
     },
     {
       "name": "execute_tool",

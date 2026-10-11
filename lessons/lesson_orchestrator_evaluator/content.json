@@ -145,7 +145,7 @@
           "paragraphs": [
             "评估者-优化者（Evaluator-Optimizer）让一个角色写、另一个角色按量规评，要改就带着意见再写一版，直到通过或达到迭代上限。{{lesson:reflection-revision}}的正则有用例可以跑，出题没有：一道选择题好不好，写不成一个能判对错的程序。退一步的办法，是事先把“好题”写成几条具体的评判条目，请模型逐条判定，这份条目就是量规。",
             "本课的量规有三条，写在评估者的系统提示词里：题干考的是给定要点；四个选项都合理，但只有一个正确；解释说明了为什么正确。评估者只输出 JSON：verdict 是 pass 或 revise，feedback 列出具体问题。生成者，也就是模式名里的“优化者”，第一轮只拿到要点；之后每轮拿到要点、上一版题目和评审意见。参考示例会把之前每一版都交回去，本课只交上一版。为了数清每轮多几次调用，这个模式只为 context-budget 一课出题。",
-            "参考示例的循环没有上限，评估者一直不满意，它就一直跑；它的评审提示词还要求“没有任何改进建议才算通过”，这个门槛很难达到。本课必须设迭代上限 max_iters（1 到 3），停下时写明原因：评审通过、评审输出不合格式，或达到迭代上限。和{{lesson:reflection-revision}}不同，本课没有“修订后没有变化”这一条，生成者原样交回同一道题，也要等上限兜底。"
+            "参考示例的循环没有上限，评估者一直不满意，它就一直跑；它的评审提示词还要求“没有任何改进建议才算通过”，这个门槛很难达到。本课必须设迭代上限 max_iters（1 到 3），停下时写明原因：评审通过、评审输出不合格式、修订后没有变化，或达到迭代上限。“修订后没有变化”和{{lesson:reflection-revision}}的规则一样：生成者原样交回上一版的题目（按解析出的 JSON 比较），就不再请评估者，直接停下，因为同一道题再评一次，也只会得到同样的意见。"
           ]
         },
         {
@@ -251,7 +251,7 @@
             [
               "评估者-优化者",
               "每轮 1 到 2 次",
-              "评估者的结论与 max_iters",
+              "评估者的结论、修订有无变化与 max_iters",
               "评估者永远不满意；没有上限就停不下"
             ]
           ]
@@ -268,7 +268,7 @@
               "actor": "编排者",
               "title": "输出子任务列表",
               "body": "程序校验后记成一版计划。",
-              "code": "plan = extract_json(ledger.call(\"编排者\", ORCHESTRATOR_SYSTEM, TASK, 1))",
+              "code": "plan = extract_json(t, ledger.call(\"orchestrator\", t.orchestrator_system, t.task, 1))",
               "language": "python",
               "evidence": "lesson.plan（event=created）"
             },
@@ -288,7 +288,7 @@
               "actor": "程序",
               "title": "检查每道题的格式",
               "body": "四个不重复的选项、合法的 answer、题干和解释。",
-              "code": "problems = check_question(question)",
+              "code": "problems = check_question(t, question)",
               "language": "python",
               "evidence": "lesson.worker"
             },
@@ -358,42 +358,48 @@
           "id": "code-ledger",
           "type": "annotated-source",
           "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
-          "start": 83,
-          "end": 108,
+          "start": 69,
+          "end": 95,
           "notes": [
             {
               "id": "n83",
-              "line": 83,
+              "line": 69,
               "anchor": "class Ledger:",
               "text": "账本是本课的成本证据：每次模型调用记一行，含角色、轮次、branch 和用量。"
             },
             {
               "id": "n90",
-              "line": 90,
+              "line": 77,
               "anchor": "def call(self, role: str, system: str",
               "text": "所有角色都经过同一个 call，单次、编排者、工人、生成者和评估者记在同一本账上。"
             },
             {
               "id": "n92",
-              "line": 92,
+              "line": 79,
               "anchor": "response = self.context.complete({\"messages\": [{\"role\": \"system\", \"content\": system}",
               "text": "请求和响应仍由平台原样记成事件，账本只多记一行汇总。"
             },
             {
               "id": "n96",
-              "line": 96,
+              "line": 83,
               "anchor": "tokens = usage.get(\"total_tokens\") if isinstance",
               "text": "只记服务商报告的 total_tokens，没有就记 None。"
             },
             {
+              "id": "n84",
+              "line": 84,
+              "anchor": "self.rows.append({\"role\": self.t.roles[role]",
+              "text": "角色在代码里是 worker 这样的代号，记账时换成运行语言的名字，报告里按它统计各角色调用。"
+            },
+            {
               "id": "n103",
-              "line": 103,
+              "line": 90,
               "anchor": "def total(self) -> str | int:",
               "text": "累计时把未报告的次数写出来，不拿估算补。"
             },
             {
               "id": "n106",
-              "line": 106,
+              "line": 93,
               "anchor": "if not reported:",
               "text": "一次都没报告就写“未报告”，而不是 0。"
             }
@@ -403,67 +409,67 @@
           "id": "code-orchestrator",
           "type": "annotated-source",
           "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
-          "start": 126,
-          "end": 162,
+          "start": 115,
+          "end": 152,
           "notes": [
             {
               "id": "n126",
-              "line": 126,
+              "line": 115,
               "anchor": "def valid_subtasks(plan)",
               "text": "编排者的输出是计划数据，派工前先由程序校验。"
             },
             {
               "id": "n129",
-              "line": 129,
+              "line": 118,
               "anchor": "valid = (isinstance(subtasks, list) and 0 < len(subtasks) <= MAX_WORKERS",
               "text": "子任务最多 4 个：编排者拆得再多，工人数也有上限。"
             },
             {
               "id": "n130",
-              "line": 130,
-              "anchor": "and all(isinstance(s, dict) and s.get(\"lesson\") in NOTES",
+              "line": 119,
+              "anchor": "and all(isinstance(s, dict) and s.get(\"lesson\") in LESSONS",
               "text": "lesson 必须是三课之一，工人才能拿到对应的要点。"
             },
             {
               "id": "n132",
-              "line": 132,
+              "line": 121,
               "anchor": "and len({s[\"id\"] for s in subtasks}) == len(subtasks))",
               "text": "id 不能重复：它同时是计划项的 id 和工人请求的 branch。"
             },
             {
               "id": "n139",
-              "line": 139,
-              "anchor": "content = ledger.call(\"编排者\", ORCHESTRATOR_SYSTEM",
+              "line": 128,
+              "anchor": "content = ledger.call(\"orchestrator\", t.orchestrator_system",
               "text": "第 1 次调用：编排者只拆任务，不写题目。"
             },
             {
               "id": "n146",
-              "line": 146,
-              "anchor": "context.emit(\"lesson.plan_error\", {\"error\": \"编排者",
+              "line": 135,
+              "anchor": "context.emit(\"lesson.plan_error\", {\"error\": t.plan_error",
               "text": "校验不通过就不派工人，原文记下来。"
             },
             {
               "id": "n149",
-              "line": 149,
+              "line": 139,
               "anchor": "context.emit(\"lesson.plan\", {\"version\": 1, \"event\": \"created\"",
               "text": "子任务就是计划项，以 lesson.plan 发布，计划透镜能显示它们的状态。"
             },
             {
               "id": "n153",
-              "line": 153,
-              "anchor": "user = f\"{subtask['instruction']}\\n要点：",
+              "line": 143,
+              "anchor": "user = t.worker_request.format(instruction=subtask[\"instruction\"]",
               "text": "工人只拿到自己的指令和那一课的要点，请求带 branch。"
             },
             {
               "id": "n157",
-              "line": 157,
+              "line": 147,
               "anchor": "with ThreadPoolExecutor(max_workers=len(subtasks",
               "text": "工人并行执行，共用同一个调用预算；总调用数是 1 + 子任务数。"
             },
             {
               "id": "n160",
-              "line": 160,
-              "anchor": "results, rows = _collect(context, outputs, steps)",
+              "line": 150,
+              "anchor": "results, rows = _collect(context, t, outputs, steps)",
               "text": "_collect 逐题做格式检查，把计划项标成 done 或 failed。"
             }
           ]
@@ -472,38 +478,50 @@
           "id": "code-evaluator",
           "type": "annotated-source",
           "path": "lessons/lesson_orchestrator_evaluator/runtime.py",
-          "start": 195,
+          "start": 187,
           "end": 228,
           "notes": [
             {
               "id": "n197",
-              "line": 197,
-              "anchor": "lesson, rows, feedback, previous = EVALUATED",
+              "line": 189,
+              "anchor": "lesson, rows, feedback, previous, previous_question = EVALUATED",
               "text": "评估者-优化者只为一课出题，便于数清每轮多了几次调用。"
             },
             {
               "id": "n199",
-              "line": 199,
+              "line": 191,
               "anchor": "for iteration in range(1, max_iters + 1):",
               "text": "循环次数由 max_iters 决定，没有无限循环。"
             },
             {
               "id": "n203",
-              "line": 203,
-              "anchor": "user += f\"\\n上一版：{previous}",
+              "line": 196,
+              "anchor": "user = t.revision_request.format(",
               "text": "修订请求带上上一版和评审意见，生成者据此改写。"
             },
             {
               "id": "n204",
-              "line": 204,
-              "anchor": "output = ledger.call(\"生成者\", WORKER_SYSTEM",
-              "text": "生成者和工人用同一个出题提示词，每轮至少一次调用。"
+              "line": 198,
+              "anchor": "output = ledger.call(\"generator\", t.worker_system",
+              "text": "生成者和工人用同一个出题提示词 t.worker_system，每轮至少一次调用。"
             },
             {
               "id": "n205",
-              "line": 205,
-              "anchor": "question, problems = _parse_question(output)",
+              "line": 199,
+              "anchor": "question, problems = _parse_question(t, output)",
               "text": "先做程序能确定的格式检查：四个不重复的选项、answer 是 0 到 3 的整数、有题干和解释。"
+            },
+            {
+              "id": "n201",
+              "line": 201,
+              "anchor": "unchanged = previous is not None and (question == previous_question",
+              "text": "修订稿和上一版是同一道题，就记为 unchanged：按解析出的 JSON 比较，解析不了就比原文。"
+            },
+            {
+              "id": "n207",
+              "line": 207,
+              "anchor": "if unchanged:",
+              "text": "第四种停止：修订后没有变化。不再请评估者，同一道题再评一次也只会得到同样的意见。"
             },
             {
               "id": "n209",
@@ -541,7 +559,7 @@
           "id": "code-decision",
           "type": "decision",
           "title": "并行工人，修订有上限，账本单列",
-          "chosen": "编排者的子任务先校验再派工，工人并行且只拿最小输入；修订循环先做格式检查并设 max_iters；每次调用记账，只用服务商报告的用量。",
+          "chosen": "编排者的子任务先校验再派工，工人并行且只拿最小输入；修订循环先做格式检查并设 max_iters，修订后没有变化就提前停；每次调用记账，只用服务商报告的用量。",
           "alternatives": [
             {
               "id": "serial-workers",
@@ -665,7 +683,7 @@
         {
           "id": "evaluator-loop",
           "title": "修订循环与迭代上限",
-          "hypothesis": "评估者要求修订时，生成者带着意见改一版；循环在评估者判定通过、评估者输出不合格式或达到 max_iters 时停止，停止原因写进报告。",
+          "hypothesis": "评估者要求修订时，生成者带着意见改一版；循环在评估者判定通过、评估者输出不合格式、修订后没有变化或达到 max_iters 时停止，停止原因写进报告。",
           "arms": [
             {
               "id": "three",
@@ -726,7 +744,7 @@
               "observe": "revision"
             },
             {
-              "text": "循环为什么停：评估者判定通过，还是到了上限。",
+              "text": "循环为什么停：评估者判定通过、修订后没有变化，还是到了上限。",
               "observe": "stop",
               "stage": "runtime"
             },
@@ -849,7 +867,7 @@
             },
             {
               "id": "q4",
-              "prompt": "max_iters 为 3，评估者每一轮都给 revise，题目格式每轮都正确。这次运行一共调用几次模型？",
+              "prompt": "max_iters 为 3，评估者每一轮都给 revise，生成者每轮都交回一道新题，格式也都正确。这次运行一共调用几次模型？",
               "options": [
                 {
                   "id": "a",

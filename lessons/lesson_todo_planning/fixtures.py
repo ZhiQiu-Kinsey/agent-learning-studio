@@ -1,31 +1,43 @@
-"""TODO 规划课的离线测试模型：按固定脚本提出调用，只服务自动化测试，不代表任何真实模型的行为。
+"""Offline test model for todo-planning: proposes calls from a fixed script; serves automated tests only and stands for no real model.
 
-无 TODO 的脚本故意漏掉 context-budget 一课却声称完成，用来测试验收器不采信模型的说法。
+The no-TODO script deliberately skips the context-budget lesson yet claims to be done, to test
+that the acceptance check does not trust the model's claim.
 """
 import json
 
 MC, AS, CB = "messages-context", "application-state", "context-budget"
-PLAN = [{"id": "ctx", "content": "查 messages-context 要点", "status": "in_progress"},
-        {"id": "state", "content": "查 application-state 要点", "status": "pending"},
-        {"id": "budget", "content": "查 context-budget 要点", "status": "pending"},
-        {"id": "card", "content": "保存复习卡", "status": "pending"}]
-
-
-def _plan(**statuses):
-    return [{**item, "status": statuses.get(item["id"], item["status"])} for item in PLAN]
-
-
-SCRIPTS = {
-    "no_todo": [("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}), ("save_card", [MC, AS]),
-                "复习卡已经做好了。"],
-    "todo": [("todo_write", {"todos": PLAN}), ("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}),
-             ("lookup_note", {"lesson": CB}), ("save_card", [MC, AS, CB]), "三条要点都存进复习卡了。"],
-    "todo_reminder": [("todo_write", {"todos": PLAN}), ("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}),
-                      ("todo_write", {"todos": _plan(ctx="done", state="done", budget="in_progress")}),
-                      ("lookup_note", {"lesson": CB}), ("save_card", [MC, AS, CB]),
-                      ("todo_write", {"todos": _plan(ctx="done", state="done", budget="done", card="done")}),
-                      "三条要点都存进复习卡了，清单也已全部完成。"],
+# What the scripted "model" writes, per run language: the plan items and its last words.
+WORDS = {
+    "zh-CN": {"ctx": "查 messages-context 要点", "state": "查 application-state 要点",
+              "budget": "查 context-budget 要点", "card": "保存复习卡",
+              "no_todo": "复习卡已经做好了。", "todo": "三条要点都存进复习卡了。",
+              "todo_reminder": "三条要点都存进复习卡了，清单也已全部完成。"},
+    "en": {"ctx": "Look up the messages-context point", "state": "Look up the application-state point",
+           "budget": "Look up the context-budget point", "card": "Save the review card",
+           "no_todo": "The review card is done.", "todo": "All three points are on the review card.",
+           "todo_reminder": "All three points are on the review card, and every item on the list is done."},
 }
+
+
+def _scripts(words):
+    plan = [{"id": key, "content": words[key], "status": "in_progress" if key == "ctx" else "pending"}
+            for key in ("ctx", "state", "budget", "card")]
+
+    def updated(**statuses):
+        return [{**item, "status": statuses.get(item["id"], item["status"])} for item in plan]
+
+    return {
+        "no_todo": [("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}), ("save_card", [MC, AS]),
+                    words["no_todo"]],
+        "todo": [("todo_write", {"todos": plan}), ("lookup_note", {"lesson": MC}), ("lookup_note", {"lesson": AS}),
+                 ("lookup_note", {"lesson": CB}), ("save_card", [MC, AS, CB]), words["todo"]],
+        "todo_reminder": [("todo_write", {"todos": plan}), ("lookup_note", {"lesson": MC}),
+                          ("lookup_note", {"lesson": AS}),
+                          ("todo_write", {"todos": updated(ctx="done", state="done", budget="in_progress")}),
+                          ("lookup_note", {"lesson": CB}), ("save_card", [MC, AS, CB]),
+                          ("todo_write", {"todos": updated(ctx="done", state="done", budget="done", card="done")}),
+                          words["todo_reminder"]],
+    }
 
 
 def _looked_up(messages):
@@ -38,9 +50,9 @@ def _looked_up(messages):
     return found
 
 
-def create_completion(exercise_id, inputs=None):
+def create_completion(exercise_id, inputs=None, locale="zh-CN"):
     condition = (inputs or {}).get("condition") or {"no-todo": "no_todo", "todo": "todo"}.get(exercise_id, "todo_reminder")
-    script = SCRIPTS[condition]
+    script = _scripts(WORDS[locale])[condition]
 
     def complete(body, api_key):
         messages = body["messages"]

@@ -1,24 +1,28 @@
-# Skills 与渐进式披露（`skills-disclosure`）
+# Skills and progressive disclosure (`skills-disclosure`)
 
-同一个任务，用两种方式把技能（Skill）提供给模型，比较常驻上下文的规模、触发情况和每次请求的提示 Token。本课需要真实模型连接。
+English · [简体中文](README.zh-CN.md)
 
-| 方式 | 系统提示词 | 工具 | 需要技能时的请求数 |
+The same task, with skills given to the model in two ways; compare the size of the resident context, the triggering, and the prompt tokens of each request. This lesson needs a real model connection.
+
+| Mode | System prompt | Tools | Requests when a skill is needed |
 | --- | --- | --- | --- |
-| 全量注入 | 四个技能的描述和正文（约 2000 字符） | 无 | 1 |
-| 目录 + 按需加载 | 每个技能一行 name 和 description（约 480 字符） | `load_skill(name)` | 2（提出加载，拿到正文后回答） |
+| Full injection | Description and body of all four skills (about 6,000 characters in English, 2,000 in Chinese) | None | 1 |
+| Catalog + on-demand loading | One line of name and description per skill (about 1,400 characters in English, 480 in Chinese) | `load_skill(name)` | 2 (propose a load, answer with the body) |
 
-技能文件在 `skills/<name>/SKILL.md`：开头两行 `---` 之间写 `name` 和 `description`，后面是正文。四个技能（`review-cards`、`error-question`、`unit-test-checklist`、`three-sentence-summary`）是本课自己写的教学材料。`load_skill` 只读登记在 `SKILL_NAMES` 里的技能，模型写的名字只拿来查表，不拼进任意路径；名字不在目录里时返回结构化错误。
+The skill files use the SKILL.md format and are per language in `locales/skills/<name>/zh_CN.md` and `en.md`: `name` and `description` between the first two `---` lines, then the body. The four skills (`review-cards`, `error-question`, `unit-test-checklist`, `three-sentence-summary`) are this lesson's own teaching material. `load_skill` reads only skills registered in `SKILL_NAMES`; the name the model writes is only looked up, never joined into an arbitrary path, and a name not in the catalog returns a structured error.
 
-| 预设 | 方式 | 任务 | review-cards 的描述 |
+| Preset | Mode | Task | Description of review-cards |
 | --- | --- | --- | --- |
-| 整理复习卡：两种方式对照 | 两种都跑 | 整理复习卡（应加载 review-cards） | 精确 |
-| 闲聊：两种方式对照 | 两种都跑 | 闲聊（不该加载） | 精确 |
-| 整理复习卡：精确 / 模糊描述 | 按需加载 | 整理复习卡 | 精确 / “帮助学习。” |
-| 复习提问：精确 / 模糊描述 | 按需加载 | 复习提问（不该加载，容易误触发） | 精确 / “帮助学习。” |
+| Make review cards: both modes compared | Both | Make review cards (should load review-cards) | Precise |
+| Small talk: both modes compared | Both | Small talk (should not load) | Precise |
+| Make review cards: precise / vague description | On-demand loading | Make review cards | Precise / "Helps with studying." |
+| Review question: precise / vague description | On-demand loading | Review question (should not load, easy to trigger falsely) | Precise / "Helps with studying." |
 
-每次请求后发布 `lesson.skill_request`：服务商在 usage 里报告的 `prompt_tokens`（没有报告时为 null，报告里写“未报告”）、这次实际发出的消息里有哪些技能正文、响应提出加载哪些技能。最后的 `lesson.report` 把两种方式并排：每次提示 Token、合计、加载记录、加载判定（正确 / 漏触发 / 误触发 / 加载错技能）和格式初筛。格式初筛只数回答里以“问：”“答：”开头的行，不判断内容对错。
+After every request the runner publishes `lesson.skill_request`: the `prompt_tokens` the provider reported in usage (null when not reported, and the report says "not reported"), which skill bodies were in the messages actually sent, and which skills the response proposed to load. The final `lesson.report` puts the two modes side by side: prompt tokens per request, the total, the loading record, the loading verdict (correct / missed trigger / false trigger / wrong skill loaded) and the format screen. The format screen only counts lines starting with "Q:" and "A:" ("问：" and "答：" in a Chinese run); it does not judge whether the content is right.
 
-模型会不会加载、加载哪个技能，取决于所用模型和这一次采样，以本次记录为准；“该不该加载”是本课对三个任务的认定。两种都跑时一次运行最多 4 次模型调用，只跑按需加载最多 3 次。`fixtures.py` 只服务自动化测试，其中的漏触发和误触发由脚本写定，响应不带 usage，不代表任何真实模型。
+Whether the model loads a skill, and which one, depends on the model used and on this particular sample; the record of this run is what counts. "Should it load" is this lesson's judgement for the three tasks. Running both modes makes at most 4 model calls per run; on-demand loading alone makes at most 3. `fixtures.py` serves automated tests only: its missed and false triggers are scripted, its responses carry no usage, and it stands for no real model.
+
+**Run language:** this lesson runs in Chinese and in English. The system prompts, the description and error of `load_skill`, the user messages of the three tasks, the vague description and the lab report texts are in `locales/zh_CN.py` and `locales/en.py`; the skill files are read in the run's language. The web page picks the language from the UI language, and every run record states the language it ran in. The English skills are longer, so prompt tokens cannot be compared across languages.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_skills_disclosure.test_lesson -v

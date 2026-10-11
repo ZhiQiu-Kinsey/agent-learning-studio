@@ -1,27 +1,31 @@
-# 多轮对话：程序重发历史（`multi-turn-history`）
+# Multi-turn conversation: the program resends history (`multi-turn-history`)
 
-**目标：**连续提问几轮，比较带上与不带上一轮消息的请求，看清模型不会自己记住上一轮：多轮对话靠程序把消息历史重新发出去。
+English · [简体中文](README.zh-CN.md)
 
-本课是独立运行器（`runtime.py`）。`run` 用一个 Python 列表 `history` 保存消息历史：
+**Goal:** ask several turns in a row and compare requests with and without the previous turn's messages, to see that the model does not remember the last turn on its own: a multi-turn conversation works because the program sends the message history again.
 
-1. 每轮先把这一轮的 user 问题追加进 `history`。
-2. 按 `history` 输入决定这次发什么：`full` 发整段历史，`latest_only` 只发 system 和这一轮的问题。
-3. 调用 `context.complete` 发请求，再把回答作为 assistant 消息追加进 `history`。
+This lesson is a custom runner (`runtime.py`). `run` keeps the message history in a Python list, `history`:
 
-练习：
+1. Each turn first appends that turn's user question to `history`.
+2. The `history` input decides what to send: `full` sends the whole history, `latest_only` sends only system and this turn's question.
+3. `context.complete` sends the request, then the answer is appended to `history` as an assistant message.
 
-| 练习 | 设置 | 看什么 |
+Exercises:
+
+| Exercise | Settings | What to look at |
 | --- | --- | --- |
-| `with-history` 带历史追问 | `full`，2 轮 | 第二轮请求的四条消息、回答里有没有猫的名字 |
-| `without-history` 不带历史追问 | `latest_only`，2 轮 | 第二轮请求只有两条消息；第一轮与上一组完全相同 |
-| `three-turns` 三轮对话 | `full`，3 轮 | 每轮的 `prompt_tokens` 怎样增长 |
+| `with-history` Ask a follow-up with history | `full`, 2 turns | The four messages of the turn 2 request; whether the answer has the cat's name |
+| `without-history` Ask a follow-up without history | `latest_only`, 2 turns | The turn 2 request has only two messages; turn 1 is identical to the other arm |
+| `three-turns` Three-turn conversation | `full`, 3 turns | How `prompt_tokens` grows turn by turn |
 
-实验报告列出每轮发出的消息数、提示 Token 和完成 Token；服务商没有报告的用量写“未报告”。
+The lab report lists the messages sent, prompt tokens and completion tokens of each turn; usage the provider did not report says "not reported".
 
-在网页课程导航中进入本课，可以查看源码、真实运行事件和回放。离线测试：
+**Run language:** this lesson runs in Chinese and in English. The system prompt, the three questions and the lab report texts are in `locales/zh_CN.py` and `locales/en.py`; the exercise descriptions are written per language in `lesson.json`. The web page picks the run language from the UI language, and every run record states the language it ran in.
+
+Open this lesson from the course navigation on the web page to see the source, real run events and replay. Offline tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_multi_turn_history.test_lesson -v
 ```
 
-`fixtures.py` 只服务自动化测试，回答和用量都是假数据。
+`fixtures.py` serves automated tests only; its answers and usage are fake data.

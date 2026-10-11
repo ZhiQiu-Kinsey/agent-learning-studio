@@ -1,1 +1,1 @@
-"""课程实现；以 curriculum/catalog.json 中的状态为准。"""
+"""Lesson implementations; whether a lesson is open is decided by curriculum/catalog.json."""

@@ -1,1 +1,1 @@
-"""结构化输出与业务校验：分层检查模型输出的 JSON 格式、字段约束和业务事实。"""
+"""Lesson implementations; whether a lesson is open is decided by curriculum/catalog.json."""

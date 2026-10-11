@@ -1,1 +1,1 @@
-"""课程实现；以 curriculum/catalog.json 中的状态为准。"""
+"""Tool definitions and call proposals: the model proposes calls; this lesson only records them and executes nothing."""
