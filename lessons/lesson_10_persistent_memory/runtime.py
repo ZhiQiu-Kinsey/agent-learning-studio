@@ -11,12 +11,20 @@ from typing import Literal
 from pydantic import Field
 
 from course.execution import LessonInputs, RunContext
+from course.i18n import SOURCE_LOCALE
 from lessons.lesson_10_persistent_memory.locales import texts_for
 from lessons.lesson_10_persistent_memory.locales.shared import texts_for as shared_texts_for
 from lessons.lesson_10_persistent_memory.store import MemoryStore
 
 # Real runs write a fixed teaching store under the project's .runtime, readable next run; offline tests use a temporary one.
-DB_PATH = Path(__file__).resolve().parents[2] / ".runtime" / "persistent-memory.sqlite3"
+# One store per run language: a recalled record goes straight into the system message, so an English run must not
+# get Chinese memories (and vice versa). The source language keeps the original file name, so existing memories stay.
+RUNTIME_DIR = Path(__file__).resolve().parents[2] / ".runtime"
+
+
+def db_path(locale: str) -> Path:
+    suffix = "" if locale == SOURCE_LOCALE else "." + locale
+    return RUNTIME_DIR / f"persistent-memory{suffix}.sqlite3"
 NAME = r"^[A-Za-z][A-Za-z0-9_-]{0,31}$"
 
 
@@ -116,8 +124,9 @@ def run(context: RunContext) -> str:
     values = Inputs.model_validate(context.inputs)
     flow = {"reopen": save_and_reopen, "recall_only": recall_only, "recall_answer": recall_answer}[values.scenario]
     if context.mode != "offline":
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        return flow(context, DB_PATH, values)
+        path = db_path(context.locale)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return flow(context, path, values)
     # Offline tests use a throwaway store; the two read-only exercises get a controlled sample first, or nothing is there.
     with tempfile.TemporaryDirectory(prefix="persistent-memory-") as directory:
         path = Path(directory) / "memory.sqlite3"

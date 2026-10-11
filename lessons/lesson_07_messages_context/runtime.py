@@ -205,6 +205,6 @@ def _report(context: RunContext, t, values: Inputs, rows: list[list], sent: int)
         "metrics": [{"label": t.label_model_calls, "value": sent}, {"label": t.label_blocked, "value": len(blocked)},
                     {"label": t.label_tool_calls, "value": 1}, {"label": t.label_student_id, "value": values.student_id},
                     {"label": t.label_free_day, "value": t.weekdays[values.free_day]},
-                    {"label": t.label_note, "value": context.question or t.note_empty}],
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.columns), "rows": rows},
     })

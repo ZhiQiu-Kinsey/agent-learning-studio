@@ -28,7 +28,7 @@ TEXTS = Texts(
     ),
     value_not_reported="not reported",
     value_empty="(empty)",
-    separator=", ",
+    list_separator=", ",
     check_hash="Every request has the same prefix hash",
     check_hash_detail="{count} requests produced {distinct} distinct prefix hashes{suffix}",
     hash_suffix_warmup=" (the warmup request included).",
@@ -36,7 +36,7 @@ TEXTS = Texts(
     check_reported="Every response reported a cache field",
     check_reported_all="All reported.",
     check_reported_missing=(
-        "Request {rounds} reported none; the table says \"not reported\" instead of recording 0."
+        "No cache field in request {rounds}; the table says \"not reported\" instead of recording 0."
     ),
     check_explained="Every request that reported a hit had its prefix sent earlier in this run",
     check_explained_all="Every hit came on a request whose prefix repeated.",

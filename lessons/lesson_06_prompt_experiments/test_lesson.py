@@ -149,6 +149,8 @@ class PromptExperimentTests(unittest.TestCase):
         self.assertIn("人工复核", prompts.evaluate("flow_rule", "19+23=42", ZH)[1])
         self.assertFalse(prompts.evaluate("flow_rule", "It is not 42 but 43", EN)[0])
         self.assertFalse(prompts.evaluate("flow_rule", "The sum isn't 42.", EN)[0])
+        self.assertFalse(prompts.evaluate("flow_rule", "It does not equal 42.", EN)[0])
+        self.assertFalse(prompts.evaluate("flow_rule", "It doesn't equal to 42.", EN)[0])
         self.assertTrue(prompts.evaluate("flow_rule", "19 + 23 = 42.", EN)[0])
         self.assertFalse(prompts.evaluate("missing_input", "Compute 1+1=2", EN)[0])
         self.assertTrue(prompts.evaluate("missing_input", "Which two numbers should I add?", EN)[0])

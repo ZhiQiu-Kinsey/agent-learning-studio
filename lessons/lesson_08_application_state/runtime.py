@@ -132,7 +132,7 @@ def _report(context: RunContext, t, state: TaskState, messages: list[dict], valu
         "metrics": [{"label": t.label_status, "value": state.status}, {"label": t.label_evidence, "value": len(state.evidence)},
                     {"label": t.label_messages, "value": len(messages)}, {"label": t.label_step_budget, "value": values.step_budget},
                     {"label": t.label_used_steps, "value": state.used_steps},
-                    {"label": t.label_note, "value": context.question or t.note_empty}],
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.columns), "rows": [["run_id", state.run_id], ["goal", state.goal],
                                                       ["status", state.status],
                                                       ["terminal_reason", state.terminal_reason or ""]]},

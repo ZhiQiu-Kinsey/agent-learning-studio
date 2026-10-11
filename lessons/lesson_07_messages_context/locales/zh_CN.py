@@ -45,6 +45,6 @@ TEXTS = Texts(
     label_student_id="学号",
     label_free_day="能复习的日子",
     label_note="学习者备注",
-    note_empty="（空）",
+    value_empty="（空）",
     columns=("上下文", "消息数", "协议检查", "回答", "提到分数", "提到复习日", "写了依据行"),
 )

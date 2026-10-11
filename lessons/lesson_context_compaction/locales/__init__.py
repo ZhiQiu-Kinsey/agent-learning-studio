@@ -49,7 +49,7 @@ class Texts:
     label_summary_text: str
     label_probe: str
     label_note: str
-    note_empty: str
+    value_empty: str
     hit: str
     miss: str
     columns: tuple[str, ...]

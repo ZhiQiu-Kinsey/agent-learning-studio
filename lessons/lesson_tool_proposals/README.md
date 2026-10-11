@@ -18,7 +18,7 @@ This lesson is a custom runner (`runtime.py`) that sends one request:
 
 Executing call proposals and handing the results back to the model is the next lesson, "Executing tools and returning results".
 
-**Run language:** this lesson runs in Chinese and in English. The system prompt, the answer the runner writes and the lab report texts are in `locales/zh_CN.py` and `locales/en.py`; the tool descriptions are in `locales/tools/`, shared with `tool-selection`; the exercise questions are written per language in `lesson.json`. The web page picks the run language from the UI language, and every run record states the language it ran in. Tool and parameter names are code and the same in both languages.
+**Run language:** this lesson runs in Chinese and in English. The system prompt, the answer the runner writes and the lab report texts are in `locales/zh_CN.py` and `locales/en.py`; the tool descriptions are in `lessons/lesson_01_tool_selection/locales/tools/`, shared with `tool-selection`; the exercise questions are written per language in `lesson.json`. The web page picks the run language from the UI language, and every run record states the language it ran in. Tool and parameter names are code and the same in both languages.
 
 Open this lesson from the course navigation on the web page to see the source, real run events and replay. Offline tests:
 

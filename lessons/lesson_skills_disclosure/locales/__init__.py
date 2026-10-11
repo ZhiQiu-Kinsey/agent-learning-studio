@@ -48,7 +48,7 @@ class Texts:
     value_not_reported: str
     tokens_partly_reported: str  # {total} {missing}
     value_empty: str
-    separator: str
+    list_separator: str
     # Lab report.
     label_task: str
     label_description: str

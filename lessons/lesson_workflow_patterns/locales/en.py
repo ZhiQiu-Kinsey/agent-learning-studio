@@ -83,7 +83,7 @@ TEXTS = Texts(
     routing_columns=("Ticket", "Text", "Label", "Predicted", "Raw reply before fallback"),
     confusion_title="Confusion matrix",
     confusion_summary="Rows are the labels, columns the routing results; every cell off the diagonal counts misrouted tickets.",
-    confusion_corner="label → predicted",
+    confusion_corner="Label → predicted",
     fanout_summary=("Wall-clock time and branch durations are measured on the backend with perf_counter; network and "
                     "provider queues make every run different."),
     fanout_check="All three subtasks have an answer",

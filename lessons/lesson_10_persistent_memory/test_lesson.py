@@ -62,8 +62,14 @@ class MemoryTests(unittest.TestCase):
             self.assertEqual(second.recall("learner_b"), ([], []))
             second.close()
 
+    def test_each_run_language_has_its_own_store(self):
+        # Recalled records go into the system message verbatim, so languages must not share a store.
+        self.assertEqual(runtime.db_path("zh-CN").name, "persistent-memory.sqlite3")
+        self.assertEqual(runtime.db_path("en").name, "persistent-memory.en.sqlite3")
+        self.assertEqual(runtime.db_path("en").parent, runtime.db_path("zh-CN").parent)
+
     def test_offline_reopen_uses_temporary_storage_without_a_model(self):
-        path = runtime.DB_PATH
+        path = runtime.db_path("zh-CN")
         before = path.stat().st_mtime_ns if path.exists() else None
         run, events, _ = memory_context("reopen", {"scenario": "reopen"})
         answer = runtime.run(run)

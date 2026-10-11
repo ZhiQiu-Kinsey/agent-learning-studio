@@ -339,15 +339,15 @@ class BoundaryTests(unittest.TestCase):
                 validate_inputs(runtime, bad)
 
     def test_runs_use_scratch_storage_and_leave_the_persistent_lesson_db_alone(self):
-        path = persistent_runtime.DB_PATH
-        before = path.stat().st_mtime_ns if path.exists() else None
+        paths = [persistent_runtime.db_path(locale) for locale in ("zh-CN", "en")]
+        before = [path.stat().st_mtime_ns if path.exists() else None for path in paths]
         for scenario in ("conflict", "expiry_delete", "scope_filter"):
             with self.subTest(scenario=scenario):
                 _, events = run_case({"scenario": scenario}, "live")
                 self.assertEqual(of(events, "lesson.memory")[0]["storage"], "scratch")
                 report = of(events, "lesson.report")[0]
                 self.assertTrue(all(check["passed"] for check in report["checks"]), report["checks"])
-        self.assertEqual(path.stat().st_mtime_ns if path.exists() else None, before)
+        self.assertEqual([path.stat().st_mtime_ns if path.exists() else None for path in paths], before)
 
 
 if __name__ == "__main__":

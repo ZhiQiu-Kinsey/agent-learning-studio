@@ -13,7 +13,7 @@ Reading order:
 3. `tools.py`: `tool_definitions` (the tool definitions sent to the model), the implementations of `add_numbers` and `get_current_time`, and `available_tools`.
 4. `main.py`: `setup(locale)` returns one run's system prompt, tool definitions and allowlist; `main` is the command-line entry.
 
-Exercises: `sum` (add two numbers) and `time` (look up local time). Two independent calls in the same round come in the lesson "Dependent multi-round calls".
+Exercises: `sum` (add two numbers) and `time` (look up local time). Two independent calls in the same round come in the lesson "Dependent calls across rounds".
 
 **Run language:** the system prompt, tool descriptions and tool error messages are in `locales/` (`locales/tools/` holds the part for `tools.py`, which the call-proposal and dependent-call lessons share), one file each for Chinese and English. Tool and parameter names are code and the same in both languages. The web page picks the run language from the UI language.
 

@@ -287,7 +287,7 @@ def _report(context: RunContext, strategy: str, checks: list[dict], outcome: dic
         "checks": checks,
         "metrics": [{"label": t.label_verdict, "value": t.value_passed if accepted else t.value_failed},
                     *({"label": labels[key], "value": value} for key, value in outcome["stats"].items()),
-                    {"label": t.label_note, "value": context.question or t.value_empty_note}],
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": columns, "rows": history},
     })
     return t.answer.format(verdict=t.verdict_passed if accepted else t.verdict_failed, report=report or t.no_report)

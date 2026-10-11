@@ -5,7 +5,7 @@ TEXTS = Texts(
     facts_lesson_title="Task goals and acceptance",
     system_prompt=(
         "Output only one JSON object with the fields lesson_id, lesson_title, prerequisite and exercise. "
-        "Do not make up the given facts; exercise is an exercise description of 8 to 120 characters."
+        "Do not invent or alter the given facts; exercise is a description of the exercise, 8 to 120 characters long."
     ),
     user_prompt=("Turn these trusted lesson facts into a study task card: {facts}. The exercise: use the fixed "
                  "input 19+23 to compare a run that finished with a run that passed acceptance."),

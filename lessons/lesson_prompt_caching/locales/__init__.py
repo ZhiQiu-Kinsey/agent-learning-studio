@@ -29,7 +29,7 @@ class Texts:
     # Lab report.
     value_not_reported: str
     value_empty: str
-    separator: str
+    list_separator: str
     check_hash: str
     check_hash_detail: str  # {count} {distinct} {suffix}
     hash_suffix_warmup: str

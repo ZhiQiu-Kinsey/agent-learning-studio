@@ -51,7 +51,7 @@ class Texts:
     label_student_id: str
     label_free_day: str
     label_note: str
-    note_empty: str
+    value_empty: str
     columns: tuple[str, ...]
 
 

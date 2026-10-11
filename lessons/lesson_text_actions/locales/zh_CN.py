@@ -46,7 +46,7 @@ Final Answer: 给用户的回答""",
     label_fabricated="模型自写 Observation",
     label_student="学号",
     label_note="学习者备注",
-    value_empty_note="（空）",
+    value_empty="（空）",
     text_columns=("步", "finish_reason", "解析结果", "错误"),
     native_columns=("步", "finish_reason", "模型输出"),
 )

@@ -39,6 +39,6 @@ TEXTS = Texts(
     label_step_budget="步骤预算",
     label_used_steps="已执行步骤",
     label_note="学习者备注",
-    note_empty="无",
+    value_empty="无",
     columns=("字段", "本次值"),
 )

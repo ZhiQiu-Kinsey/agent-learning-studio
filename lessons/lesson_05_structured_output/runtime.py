@@ -12,7 +12,7 @@ WRONG_PREREQUISITE = "dependent-calls"
 
 
 def trusted_facts(t) -> dict:
-    """The facts this lesson trusts. Lessons are identified by slug: the displayed lesson number moves when lessons are inserted, so it is no fact."""
+    """The facts this lesson trusts. Lessons are identified by slug: the displayed lesson number moves when lessons are inserted, so it cannot be a trusted fact."""
     return {"lesson_id": "task-contract", "lesson_title": t.facts_lesson_title, "prerequisite": "fail-safely"}
 
 

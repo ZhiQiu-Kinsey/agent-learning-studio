@@ -56,7 +56,7 @@ class Texts:
     label_fabricated: str
     label_student: str
     label_note: str
-    value_empty_note: str
+    value_empty: str
     text_columns: tuple[str, ...]
     native_columns: tuple[str, ...]
 

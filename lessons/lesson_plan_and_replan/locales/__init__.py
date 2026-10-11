@@ -65,7 +65,7 @@ class Texts:
     label_note: str
     value_passed: str
     value_failed: str
-    value_empty_note: str
+    value_empty: str
     # The final answer written by the runner.
     verdict_passed: str
     verdict_failed: str

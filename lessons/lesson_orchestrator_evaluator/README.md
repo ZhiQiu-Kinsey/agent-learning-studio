@@ -15,7 +15,7 @@ The task is fixed: write one four-option multiple-choice question for each of th
 - The revision loop has four stop reasons: the review passed, the review output had the wrong format, the revision made no change, the iteration limit was reached. When the generator hands back the previous question unchanged (`unchanged` is true in `lesson.draft`), the evaluator is not asked again and the loop stops.
 - Every call goes into the ledger (`lesson.cost`): role, round, branch and the `total_tokens` the provider reported; when it was not reported, the ledger says so and does not estimate.
 
-**Run language:** this lesson runs in Chinese and in English. The key points of the three lessons, the task, the system prompts of the four roles, the format problems, the stop reasons and the report text are in `locales/zh_CN.py` and `locales/en.py`; lesson slugs, role codes and review verdicts are code and the same in every language. The web page picks the language from the UI language, and every run record states the language it ran in.
+**Run language:** this lesson runs in Chinese and in English. The key points of the three lessons, the task, the system prompts of the four roles, the format problems, the stop reasons and the report text are in `locales/zh_CN.py` and `locales/en.py`; lesson slugs and review verdicts (pass, revise) are code and the same in every language, while the role names in the ledger follow the run language. The web page picks the language from the UI language, and every run record states the language it ran in.
 
 Passing the format check does not mean a question is good; judge quality by reading it. `fixtures.py` serves automated tests only; in it the evaluator always asks for a revision the first time, and the usage numbers are scripted.
 

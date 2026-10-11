@@ -49,7 +49,7 @@ def load_skill(locale, /, name: str) -> dict:
     if name not in SKILL_NAMES:
         # execute_tool turns the ValueError into a structured error with ok false and hands it back to the model.
         t = texts_for(locale)
-        raise ValueError(t.unknown_skill.format(name=name, names=t.separator.join(SKILL_NAMES)))
+        raise ValueError(t.unknown_skill.format(name=name, names=t.list_separator.join(SKILL_NAMES)))
     return {"name": name, "instructions": read_skill(name, locale)["body"]}
 
 
@@ -144,7 +144,7 @@ def judge_loading(t, expected: str | None, loaded: list[str] | None) -> tuple[bo
         return None, t.loading_not_applicable
     if not loaded:
         return (True, t.loading_none_correct) if expected is None else (False, t.loading_missed)
-    names = t.separator.join(dict.fromkeys(loaded))
+    names = t.list_separator.join(dict.fromkeys(loaded))
     if expected is None:
         return False, t.loading_false.format(names=names)
     return (True, t.loading_correct.format(names=names)) if set(loaded) == {expected} else (
@@ -231,7 +231,7 @@ def _report(context: RunContext, values: Inputs, expected: str | None, passes: l
         loading_ok, loading = judge_loading(t, expected, item["loaded"])
         format_ok, format_detail = format_screen(t, expected, item["answer"])
         proposals = t.proposals_separator.join(
-            t.proposals.format(round=record["round"], names=t.separator.join(record["proposed_loads"]))
+            t.proposals.format(round=record["round"], names=t.list_separator.join(record["proposed_loads"]))
             for record in item["requests"] if record["proposed_loads"])
         rows.append([label, len(item["requests"]), shown, total,
                      proposals or (t.value_all_resident if item["loaded"] is None else t.value_no_proposal),
@@ -251,7 +251,7 @@ def _report(context: RunContext, values: Inputs, expected: str | None, passes: l
                         if name not in SKILL_NAMES]
             if rejected:
                 checks.append({"label": t.check_rejected, "passed": True,
-                               "detail": t.check_rejected_detail.format(names=t.separator.join(rejected))})
+                               "detail": t.check_rejected_detail.format(names=t.list_separator.join(rejected))})
         checks.append({"label": t.check_format.format(mode=label), "passed": format_ok,
                        "detail": t.check_format_detail.format(detail=format_detail)})
     metrics += [{"label": t.label_model_calls, "value": sum(len(item["requests"]) for item in passes)},

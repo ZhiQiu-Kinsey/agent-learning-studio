@@ -201,7 +201,7 @@ def _report_text(context: RunContext, protocol: str, student_id: str, rows: list
                     {"label": t.label_parse_failures, "value": parse_failures},
                     {"label": t.label_fabricated, "value": len(fabrications)},
                     {"label": t.label_student, "value": student_id},
-                    {"label": t.label_note, "value": context.question or t.value_empty_note}],
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.text_columns), "rows": rows},
     })
 
@@ -216,6 +216,6 @@ def _report_native(context: RunContext, student_id: str, rows: list[list], answe
                     else t.detail_native_unfinished.format(limit=max_steps)}],
         "metrics": [{"label": t.label_protocol, "value": "native"}, {"label": t.label_model_calls, "value": len(rows)},
                     {"label": t.label_student, "value": student_id},
-                    {"label": t.label_note, "value": context.question or t.value_empty_note}],
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.native_columns), "rows": rows},
     })

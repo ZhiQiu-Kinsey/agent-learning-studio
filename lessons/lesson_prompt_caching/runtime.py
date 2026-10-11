@@ -136,7 +136,7 @@ def _report(context: RunContext, values: Inputs, session: str, records: list[dic
              suffix=t.hash_suffix_warmup if values.layout == "warmup" else t.hash_suffix_plain)},
         {"label": t.check_reported, "passed": not missing,
          "detail": t.check_reported_all if not missing else
-         t.check_reported_missing.format(rounds=t.separator.join(missing))},
+         t.check_reported_missing.format(rounds=t.list_separator.join(missing))},
     ]
     if reported:
         seen, unexplained = set(), []
@@ -147,7 +147,7 @@ def _report(context: RunContext, values: Inputs, session: str, records: list[dic
         checks.append({
             "label": t.check_explained, "passed": not unexplained,
             "detail": t.check_explained_all if not unexplained else
-            t.check_explained_detail.format(items=t.separator.join(unexplained))})
+            t.check_explained_detail.format(items=t.list_separator.join(unexplained))})
     known = [record for record in measured if record["cached_tokens"] is not None and record["input_tokens"]]
     total_ratio = (f"{sum(r['cached_tokens'] for r in known) / sum(r['input_tokens'] for r in known):.1%}"
                    if known else t.value_not_reported)
@@ -167,7 +167,7 @@ def _report(context: RunContext, values: Inputs, session: str, records: list[dic
             {"label": t.label_reported, "value": f"{len(reported)} / {len(records)}"},
             {"label": t.label_hits, "value": hits},
             {"label": t.label_ratio, "value": total_ratio},
-            {"label": t.label_fields, "value": t.separator.join(fields) or t.value_not_reported},
+            {"label": t.label_fields, "value": t.list_separator.join(fields) or t.value_not_reported},
             {"label": t.label_session, "value": session},
             {"label": t.label_note, "value": context.question or t.value_empty},
         ],

@@ -137,7 +137,7 @@ def _report(context: RunContext, t, values: Inputs, rows: list[dict], refused: s
                     {"label": t.label_summary_style, "value": values.summary_style},
                     {"label": t.label_summary_text, "value": answer_text(summary_response, context.locale)},
                     {"label": t.label_probe, "value": t.probe},
-                    {"label": t.label_note, "value": context.question or t.note_empty}],
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.columns),
                   "rows": [[row["name"], len(row["messages"]), message_chars(row["messages"]),
                             has_text(row["messages"], t.probe_phrase), row["answer"],

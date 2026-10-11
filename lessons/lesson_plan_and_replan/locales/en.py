@@ -60,7 +60,7 @@ When revising the plan, list only the steps that still need to run, and do not r
     label_note="Learner note",
     value_passed="passed",
     value_failed="failed",
-    value_empty_note="(empty)",
+    value_empty="(empty)",
     verdict_passed="Acceptance passed.",
     verdict_failed="Acceptance failed.",
     no_report="No report was written.",

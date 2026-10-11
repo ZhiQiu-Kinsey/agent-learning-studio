@@ -56,7 +56,7 @@ TEXTS = Texts(
     label_student_id="Student ID",
     label_free_day="Review day",
     label_note="Learner note",
-    note_empty="(empty)",
+    value_empty="(empty)",
     columns=("Context", "Messages", "Protocol check", "Answer", "Mentions score", "Mentions review day",
              "Has basis line"),
 )

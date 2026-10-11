@@ -30,6 +30,6 @@
 
 这条路径最多用三轮模型请求。`main.py` 的 `setup(locale)` 与“执行工具与回传结果”一课写法相同，本课只换了系统提示词；工具定义与白名单沿用那一课的 `tools.py`，执行循环是 `course/runner.py` 的 `run_agent`。每轮的完整请求 JSON 会显示在终端中，认证头不会打印。实际百炼调用会产生用量。
 
-**运行语言：**系统提示词在 `locales/zh_CN.py`、`locales/en.py`，工具描述和工具错误在 `tool-selection` 共用的 `locales/tools/`。工具名和参数名是代码，两种语言相同。网页按界面语言选择运行语言。
+**运行语言：**系统提示词在 `locales/zh_CN.py`、`locales/en.py`，工具描述和工具错误在与 `tool-selection` 共用的 `lessons/lesson_01_tool_selection/locales/tools/`。工具名和参数名是代码，两种语言相同。网页按界面语言选择运行语言。
 
 本课也可在网页课程导航中进入，查看源码、真实运行事件和回放。

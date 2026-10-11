@@ -51,7 +51,7 @@ class Texts:
     label_step_budget: str
     label_used_steps: str
     label_note: str
-    note_empty: str
+    value_empty: str
     columns: tuple[str, ...]
 
 

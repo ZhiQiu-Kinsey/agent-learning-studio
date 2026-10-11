@@ -30,6 +30,6 @@ The two tasks don't depend on each other, so the model may propose both calls in
 
 This path uses at most three model requests. `setup(locale)` in `main.py` is written exactly like the one in the lesson "Executing tools and returning results"; only the system prompt changes. The tool definitions and the allowlist come from that lesson's `tools.py`, and the loop is `run_agent` in `course/runner.py`. The terminal shows the full request JSON of every round without the authentication header. Real Bailian calls incur usage.
 
-**Run language:** the system prompt is in `locales/zh_CN.py` and `locales/en.py`; the tool descriptions and tool errors are in `locales/tools/`, shared with `tool-selection`. Tool and parameter names are code and the same in both languages. The web page picks the run language from the UI language.
+**Run language:** the system prompt is in `locales/zh_CN.py` and `locales/en.py`; the tool descriptions and tool errors are in `lessons/lesson_01_tool_selection/locales/tools/`, shared with `tool-selection`. Tool and parameter names are code and the same in both languages. The web page picks the run language from the UI language.
 
 You can also open this lesson from the course navigation on the web page to see the source, real run events and replay.

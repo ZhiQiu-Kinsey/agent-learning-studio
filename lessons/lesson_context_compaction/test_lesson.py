@@ -212,7 +212,7 @@ class EnglishRunTests(unittest.TestCase):
         t = texts_for("en")
         reads = [("messages-context", {"ok": True, "result": lookup_lesson(helper_texts("en"), "messages-context")})]
         record = runtime.rule_record(reads, 300, t, "en")["content"]
-        self.assertIn("read 1 messages-context", record)
+        self.assertIn("read #1: messages-context", record)
         self.assertIn(t.probe_phrase, record)
         with self.assertRaisesRegex(ValueError, "character budget of 100"):
             runtime.rule_record(reads, 100, t, "en")

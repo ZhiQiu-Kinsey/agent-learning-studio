@@ -24,11 +24,11 @@ TEXTS = Texts(
         "brief": "Summarize the conversation above in one or two sentences.",
     },
     cleared_note="Old tool result cleared; its original content is not in the context.",
-    source_entry="read {number} {key}",
+    source_entry="read #{number}: {key}",
     list_separator="; ",
     rule_record=(
-        "Rule-built record of earlier turns\nGoal: read two sources, then answer\n"
-        "Constraint: no unsourced guesses as facts\nSources: {sources}\nFacts: {facts}\nTodo: answer the user"
+        "Record of earlier turns (built by rules)\nGoal: read two materials, then answer\n"
+        "Constraint: no unsourced guess as fact\nSources: {sources}\nFacts: {facts}\nTo do: answer the user"
     ),
     budget_too_small="A character budget of {budget} is less than the {needed} characters needed to keep the key evidence.",
     layout_names={"none": "No compression", "rule": "Rule-based compression", "clear": "Clearing old tool results",
@@ -57,7 +57,7 @@ TEXTS = Texts(
     label_summary_text="Summary text",
     label_probe="Probe question",
     label_note="Learner note",
-    note_empty="(empty)",
+    value_empty="(empty)",
     hit="hit",
     miss="miss",
     columns=("Method", "Messages", "JSON characters", "Original wording still in context", "Probe answer",

@@ -47,6 +47,6 @@ TEXTS = Texts(
     label_step_budget="Step budget",
     label_used_steps="Steps run",
     label_note="Learner note",
-    note_empty="none",
+    value_empty="none",
     columns=("Field", "Value in this run"),
 )

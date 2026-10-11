@@ -51,7 +51,7 @@ Final Answer: your answer to the user""",
     label_fabricated="Observations the model wrote",
     label_student="Student ID",
     label_note="Learner note",
-    value_empty_note="(empty)",
+    value_empty="(empty)",
     text_columns=("Step", "finish_reason", "Parse result", "Error"),
     native_columns=("Step", "finish_reason", "Model output"),
 )
