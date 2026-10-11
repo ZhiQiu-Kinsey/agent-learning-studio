@@ -1,0 +1,140 @@
+# Terms and code names: how to write, annotate and check them
+
+**English** · [简体中文](terminology.md)
+
+> Translated from the Chinese original; if they disagree, the Chinese version is authoritative.
+
+**Scope note.** The checks described here run on the Chinese lesson text. Chinese terms that are the subject of a rule stay in Chinese, followed by an English explanation. English text uses the `en` name from `curriculum/glossary.json` for each concept, consistently. The "write 中文（English）on first use" convention and the Chinese wording table (section 3) apply to the Chinese text only; the English text writes the term once, in lowercase running text, and never gives both languages side by side.
+
+In lesson text, the words a reader might stop at and ask "what is this?" fall into four classes. Each class looks different on the web page and asks something different of the author.
+The rules are checked by `server/vocabulary.py`. A change cannot be merged until `validate_lessons` and `tests/test_lesson_vocabulary.py` pass.
+
+## 1. The four classes
+
+| Class | Examples | On the web page | What the author does |
+| --- | --- | --- | --- |
+| Course concept | 工具调用 (tool calling), 上下文预算 (context budget), 任务卡 (task card), ReAct | Underlined at its first occurrence on each page, with a hover card giving the definition. In the **introducing lesson** the underline is a solid gradient; in other lessons it is dotted (a review) | Add it to `curriculum/glossary.json`; set `first_lesson` to the earliest runnable lesson that uses it. In the introducing lesson, write it on first use as "中文（English）"; in other lessons write the Chinese only |
+| Background word | 分词器 (tokenizer), 消融 (ablation), 基线 (baseline), 夹具 (fixture), 混淆矩阵 (confusion matrix) | Dashed underline; the hover card is labelled "background knowledge" | Add it to the glossary with `kind` set to `background` and no `first_lesson`. In the text write Chinese only; no lesson writes the English alongside |
+| Code name | `evidence`, `stop`, `lesson.plan`, `assistant` | Code style; if the author wrote a note, it also gets a dotted underline and a hover | Write the name as is; the frontend recognizes it automatically from the sources registered for the lesson. When the text depends on the reader understanding what it means, add an entry to `code_notes` in `content.json` |
+| Ordinary word | 重试 (retry), 修订 (revision), 提示词 (prompt), JSON, HTTP, 正则表达式 (regular expression) | No annotation | Do not add it |
+
+**Inclusion criteria.** A word goes into the glossary if it meets any one of these:
+
+- It has a specific meaning in agent / LLM engineering that differs from, or is narrower than, its everyday meaning, such as 上下文 (context), 终态 (terminal state), 召回 (recall).
+- It appears in two or more lessons and readers need to review it.
+- It is machine-learning, testing or experiment-method vocabulary that even programmers may not know.
+
+Words that appear in only one lesson and are fully explained on the spot are not added — for example 探针问题 (probe question) in the lesson on context compaction and probe questions. Words every programmer knows are not added either.
+
+**Make names specific.** Chinese has no word boundaries, so the matcher finds short names inside longer words, for example 验收 (acceptance) inside 验收器 (acceptor). Therefore:
+
+- Do not use common single-word nouns or verbs as term names or aliases. 引用 (citation/quote) became 来源引用 (source citation), 产物 (artifact) became A2A 产物 (A2A artifact), and aliases such as 压缩 (compaction) and 验收 (acceptance) were removed.
+- When a name really does occur inside a longer phrase with a different meaning, list that phrase in `not_in`. For example the `not_in` of 评估 (evaluation) lists 评估者 (evaluator), so 评估者 in the text is skipped as a whole.
+
+## 2. Code names and code notes
+
+From the Python sources registered for each lesson (`sources` in `lesson.json`), the backend extracts identifiers and short string literals. (For runtime text under `locales/` it takes only identifiers and dict keys; the string values are natural language and do not count as code names.) It then adds platform names:
+
+- message roles;
+- JSON literals;
+- run event names and run terminal states.
+
+Names that are already in the glossary are removed (terms take priority). All the rest go into `code_names` in the lesson detail (`server/code_names.py`). When the text mentions these names, the frontend renders them in code style; no backticks are needed.
+
+`code_notes` is only for names whose meaning the text **depends on the reader understanding**:
+
+- Each note is at most 60 characters. Say what it is and what role it plays in this lesson; do not repeat the text.
+- The name must really appear in this lesson's source and in this lesson's text, or the check fails.
+- If the name explains itself (`goal`, `add_numbers`), or is only mentioned in passing, write no note.
+
+```json
+"code_notes": [
+  {"name": "evidence", "note": "任务卡字段：验收要看哪条工具证据、满足什么条件（工具成功且结果为 42）。"}
+]
+```
+
+(The example note reads: "Task card field: which tool evidence acceptance looks at, and what condition it must meet (the tool succeeded and the result is 42).")
+
+The text must not contain lowercase English words that are neither terms nor this lesson's code names, such as `tokenizer`, `live`, `regex`:
+
+- If it is a term, add it to the glossary and write it in Chinese.
+- If it is code outside this lesson, rewrite it as a Chinese explanation.
+- If it is an exercise id (such as `flow-rule`), use the exercise's Chinese name shown in the UI instead.
+
+## 3. Writing rules
+
+- **Explain before use.** A paragraph introduces at most two new concepts. A new word in a concept card must either be in the glossary (so it has a hover card) or be explained in the card itself.
+- **One name per thing.** Use the standard wording in the table below. When a new lesson brings a new synonym, add it to this table first.
+- **English appears once, in the introducing lesson.** Pairing Chinese and English everywhere reads as wordy: write it once in the introducing lesson; other lessons rely on the hover card for review.
+
+The table is a Chinese wording table: it lists the Chinese wording to use and the Chinese wordings that are retired. The third column gives the meaning in English, with the English name the glossary or UI uses where there is one.
+
+| Standard wording | No longer used | Meaning / English equivalent |
+| --- | --- | --- |
+| 工具结果 (the event name is written `tool_result`) | 回执, 工具回执, tool 回执, 收据 (all: "receipt") | tool result |
+| 验收器 (decides whether the task is done), 验证器 (generic: a program that checks against rules) | 校验器, 检查器 (when meaning a program) | acceptor / validator. The glossary `en` name for 验证器 is Validator |
+| 协议检查 (`validate_tool_history` in `messages-context`) | 验证器, 校验器 | protocol check |
+| 运行器 (each lesson's run code), 运行层 (the concept) | 运行程序, 课程程序 | runner / run layer (harness) |
+| 运行器发起的调用 (the event field is `origin: course_program`; the UI shows "运行器调用工具") | 程序发起, 课程程序发起 | a call initiated by the runner (the lesson's run code), as opposed to one proposed by the model |
+| 未报告 (a number the provider did not report: usage, cache hits and so on; English: not reported) | 未知, when it means this kind of number | not reported |
+| 运行语言 (the language of a run, written as `locale` in `run_start`), 运行时文本 (the prompts and messages in `locales/`) | 运行时语言, 多语言提示词 | run language / runtime text |
+| 白名单 (noun), 登记 (verb) | 允许列表, 登记表 | allowlist / register |
+| 工具定义 (the whole definition), 工具描述 (the `description` field) | 工具说明, 接口说明 | tool definition / tool description |
+| 调用提议 (introduced by `tool-proposals`) | 提议行动, 行动请求, 调用请求 | tool call proposal |
+| 调用 id (`tool_call_id`) | 调用标识 | call id |
+| 消息历史 | 会话历史, 对话记录 | message history |
+| 轮数上限 | 轮次预算, 有限轮数 | round limit |
+| 提示词, 系统提示词 | Prompt, system 提示 | prompt, system prompt |
+| 轨迹 | 正文里的 trace (trace written in English in the text) | trace |
+| 结构化错误 | 结构化观察, 结构化失败 | structured error |
+| 业务规则 | 领域规则 | business rule |
+| 终态 | 运行生命周期结束 | terminal state |
+| 服务商 | 供应商 | provider |
+| 后端 (this platform's server process) | 服务端 | backend |
+| 离线测试模式 | 离线模式, 测试模式, offline | offline test mode |
+| 真实运行 | live, 现场 | real run |
+| 故障注入 | 离线注入 | fault injection |
+| Token | token (lowercase) | token (in Chinese text the English word is capitalized) |
+| 分词器 | tokenizer | tokenizer |
+| 并行 | 并发 (use 并发 only when describing the execution mechanism) | parallel / concurrent |
+| 模型调用数 (the counting basis) | 模型请求数, 请求次数, 调用次数 | number of model calls |
+| 有上限的 (of a loop) | 有界 | bounded (with a stated limit) |
+| 迭代上限 (`max_iters`; introduced by `reflection-revision`) | 评估循环上限 | iteration limit |
+| 评估者 (the role), 评审 (the action, the event, the stop reason) | 评估循环, 评估通过, 评委 | evaluator / review |
+| 评审模型 (introduced by `prompt-experiments`; written "评审模型（LLM-as-a-Judge）") | 评委, LLM 评审 | review model (LLM-as-a-Judge) |
+| 推理模型 (a model that generates reasoning content first and then gives the answer; a background word, Chinese only; at first use a one-sentence Chinese explanation may be added in parentheses, no English) | 先推理的模型, 先推理再回答的模型, 思考模型 | reasoning model |
+| 人工标注 | 标注, 或 gold, in the text | human annotation |
+| 实验报告 (the report panel on the lab bench) | 证据板 | lab report |
+| 编码 Agent (tools like Claude Code and Cursor; a background word, no English in parentheses) | 编程助手, 编码助手 | coding agent |
+| 学习者备注 | 问题栏 | learner notes |
+
+The boundary between 评审 (review) and 评估者 (evaluator):
+
+- 评审 refers to actions, events and stop reasons (phrases like 评审意见 "review comments" and 评审通过 "review passed"). It also refers to the review model in `reflection-revision`.
+- 评估者 is only a role name in `orchestrator-evaluator`, the counterpart of the generator.
+- 评估 on its own is a course concept in the glossary, introduced by the `evaluation-sets` lesson (see `evaluation` in `curriculum/glossary.json`). Earlier lessons do not use it for anything else.
+
+The boundary between "未报告" (not reported) and "未知" (unknown):
+
+- A number the provider did not report in the response (usage, cache hits, reasoning tokens) is written 未报告 (English: not reported). The number may exist; it just was not given this time, and it must not be replaced by a local estimate or by 0.
+- 未知 (English: unknown) is only for values the program truly cannot know.
+- `validate_lessons` and `tests/test_lesson_vocabulary.py` reject phrasings such as "用量未知" (usage unknown) and "命中数未知" (hit count unknown). The check is a regular expression over Chinese text (`UNREPORTED` in `server/vocabulary.py`).
+
+Names within a single lesson must also stay fixed. For example:
+
+- `context-budget`: 截取窗口 (truncating to a window). `context-compaction`: 规则压缩 (rule-based compaction), 清理旧工具结果 (clearing old tool results), 摘要压缩 (summary compaction), 探针问题 (probe questions).
+- `persistent-memory`: 召回 (recall); 命名空间 (namespace) is already a course concept, introduced by `persistent-memory`, and the field name is written `namespace`. `memory-lifecycle`: 范围 (scope, field `scope`), 乐观并发控制 (optimistic concurrency control), 过时写入 (stale writes).
+- `todo-planning`: messages the run layer **inserts**.
+- `plan-and-replan`: 失败后重新规划 (re-planning after a failure, the strategy) and 修订计划 (revising the plan, the action).
+
+## 4. Author workflow (for new and revised lessons)
+
+1. Before writing, check the glossary and the standard wording table above.
+2. After writing, run `.\.venv\Scripts\python.exe scripts/term_report.py --lesson <slug> --full` and look at three things:
+   - which introduced, review and background terms the lesson has;
+   - which code names carry a note;
+   - what problems remain.
+3. **Read the whole text and look for Chinese terms.** The machine can only check words that are already in the glossary; unlisted Chinese terms have to be found by a human:
+   - Go paragraph by paragraph and ask: would a reader who has only studied the earlier lessons get stuck on this word?
+   - For those that would, use the criteria in section 1 to decide whether to add the word to the glossary or explain it on the spot.
+4. Run `validate_lessons` and `tests/test_lesson_vocabulary.py`. The number of problems must be zero.

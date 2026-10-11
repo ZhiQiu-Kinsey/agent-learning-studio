@@ -1,5 +1,7 @@
 # 术语与代码名：写法、标注与检查
 
+[English](terminology.en.md) · **简体中文**
+
 课程正文里，读者可能停下来想“这是什么”的词分四类，每类在网页上的样子和作者要做的事不同。
 规则由 `server/vocabulary.py` 检查，`validate_lessons` 和 `tests/test_lesson_vocabulary.py` 不通过就不能合入。
 

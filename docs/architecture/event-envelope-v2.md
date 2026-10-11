@@ -1,5 +1,7 @@
 # 事件信封 v2 与运行存储
 
+[English](event-envelope-v2.en.md) · **简体中文**
+
 确认日期：2026-10-01。对应[重构方案](redesign-plan.md)第一阶段子任务 3，约束来自[课程调研](curriculum-research.md) 6.1、6.3、6.5 与决策 4、5。
 
 ## 1. 运行是服务端资源

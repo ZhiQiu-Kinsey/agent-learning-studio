@@ -1,5 +1,7 @@
 # Agent Learning Studio：架构与长期课程设计
 
+[English](platform.en.md) · **简体中文**
+
 ## 目标与当前边界
 
 把课程讲解、真实 Python 源码、运行输入和执行证据放在同一学习环境中。先从手写 Agent 循环理解机制，再学习框架如何封装这些机制。

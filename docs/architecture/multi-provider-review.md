@@ -1,5 +1,7 @@
 # 模型接入与执行证据
 
+[English](multi-provider-review.en.md) · **简体中文**
+
 平台保留原生 HTTP 教学路径，并使用 LiteLLM SDK 适配其他服务商。课程仍负责自己的消息、工具与循环，模型连接统一由后端管理。
 
 ## 实现位置

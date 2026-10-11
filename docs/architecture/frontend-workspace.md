@@ -1,5 +1,7 @@
 # 前端结构
 
+[English](frontend-workspace.en.md) · **简体中文**
+
 前端使用 React、TypeScript、Vite 和 Tailwind CSS。全站只有一个视觉母题，即 **Agent 舞台**：舞台、上下文胶片、时间线和工具卡片都由真实运行事件推导。教学示意使用同一个舞台渲染，但会画成虚线，并加上“教学示意 · 非运行记录”水印。
 
 ## 页面
