@@ -80,10 +80,15 @@
 
 ## 文案与多语言
 
-- 界面文案全部放在 `locales/<语言>/<命名空间>.json`，`npm run i18n:check` 检查各语言的键是否一致。
+- 已注册 `zh-CN`（源语言）与 `en`（`src/i18n/locales.ts`）。新增语言 = 在注册表加一项 + 新建 `locales/<语言>/*.json`，键与 zh-CN 一致。
+- 界面文案全部放在 `locales/<语言>/<命名空间>.json`，`npm run i18n:check` 检查各语言的键、占位符与复数形式。zh-CN 只写普通键；需要单复数的语言可以把同一个键写成 `<键>_one` / `<键>_other`，此时源文本必须用 `{{count}}`。
 - `src/i18n/__tests__/hardcoded-cjk.test.ts` 用 AST 统计组件里的硬编码中文，数量只许减少；目前已经为 0。
-- 后端错误带 `code`，由前端翻译。
-- 课程内容的译文是独立的译文层（`content.<语言>.json`），接口通过 `?lang=` 合并。
+- 后端错误带 `code`，由前端翻译。服务商名称按 `provider_id` 查 `settings:providerNames`，没有对应键的用服务端的名字（品牌名）。
+- 语言切换：顶栏的 `LocaleSwitch`（与主题同一个 GlideSelect）和命令面板的“界面语言”条目都调用 `changeLocale`，选择存在 localStorage（`agent-lab-locale`），`<html lang dir>` 与页面标题随之更新。手机宽度下语言与主题收成图标加箭头。
+- 课程内容（课程目录、课程详情、读码、导学、术语表）按界面语言请求 `?lang=`（`api.ts` 的 `withLocale`）。取这些接口的副作用都把 `useContentLanguage()` 列为依赖，共享缓存按语言分开（`lib/languageCache.ts`、`hooks/useCurriculum`、`useGlossary`、`useOnboarding`）；切换语言就地重取，不刷新页面，当前课程、场景、练习、输入和屏幕上的运行都保留。
+- 回落与标注：译文缺失时那条文本显示中文原文。界面不是中文时，主要以中文为主的课程文本标 `lang="zh-CN"`（`i18n/textLanguage.ts`，正文、标题、导航课名、课程表）；整课或导学没有译文、或只译了一部分时，标题下显示一行说明（`TranslationNotice`）。
+- 术语与代码名：英文正文按英文名与别名匹配术语（见 `content/glossary/match.ts`）。中文正文里源码名字一律显示为代码；英文正文里只标“像代码”的名字（含 `_ . - ( ) :`、数字或词中大写），`messages`、`is` 这类普通词保持正文。
+- 日期与数字一律用 `Intl` 加当前界面语言格式化，组件里不写死语言代码。
 
 ## 验证
 

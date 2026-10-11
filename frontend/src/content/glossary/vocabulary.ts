@@ -8,12 +8,16 @@ import type { GlossaryEntry } from "./match";
  */
 export interface Vocabulary {
   lessonId?: string;
+  /** Every source name: Chinese prose, where a bare Latin name is code. */
   names: RegExp | null;
+  /** Code-shaped names only, for English prose (see `isCodeShaped`). */
+  latinNames?: RegExp | null;
   notes: ReadonlyMap<string, string>;
 }
 
 export const VocabularyContext = createContext<Vocabulary>({
   names: null,
+  latinNames: null,
   notes: new Map(),
 });
 

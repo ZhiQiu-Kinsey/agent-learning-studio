@@ -41,19 +41,31 @@ async function errorFrom(
   );
 }
 
-/** Content endpoints serve translation overlays; the source locale needs no parameter. */
-const localizedPaths = /^\/api\/(lessons\/[^/?]+(\/code)?|onboarding)(\?|$)/;
-export function withLocale(path: string) {
-  const language = i18n.resolvedLanguage ?? sourceLocale;
+/**
+ * Content endpoints serve translation overlays; the source locale needs no
+ * parameter. Callers that fetch these must refetch when the language changes
+ * (see `hooks/useContentLanguage`).
+ */
+const localizedPaths =
+  /^\/api\/(lessons(\/[^/?]+(\/code)?)?|onboarding|curriculum|glossary)(\?|$)/;
+export function withLocale(path: string, language?: string) {
+  language ??= contentLanguage();
   if (language === sourceLocale || !localizedPaths.test(path)) return path;
   return `${path}${path.includes("?") ? "&" : "?"}lang=${encodeURIComponent(language)}`;
 }
 
+/** The language content requests ask for right now (the UI language). */
+export function contentLanguage() {
+  return i18n.resolvedLanguage ?? i18n.language ?? sourceLocale;
+}
+
+/** `language` pins a localized request to the language its caller keys it by. */
 export async function jsonFetch<T>(
   path: string,
   init?: RequestInit,
+  language?: string,
 ): Promise<T> {
-  const response = await fetch(withLocale(path), init);
+  const response = await fetch(withLocale(path, language), init);
   if (!response.ok) throw await errorFrom(response, "requestFailed");
   return response.json();
 }

@@ -49,7 +49,8 @@ export default function CountUp({
 
   const formatValue = useCallback(
     (latest: number) => {
-      const formatted = Intl.NumberFormat('en-US', {
+      // Local change: format in the page language (<html lang>), not a fixed 'en-US'.
+      const formatted = Intl.NumberFormat(document.documentElement.lang || undefined, {
         useGrouping: !!separator,
         minimumFractionDigits: maxDecimals,
         maximumFractionDigits: maxDecimals

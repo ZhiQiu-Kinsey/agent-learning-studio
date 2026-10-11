@@ -15,6 +15,8 @@ import { useStudio } from "./hooks/useStudio";
 import { ModelSettings } from "./components/workspace/ModelSettings";
 import { connectionState } from "./components/workspace/connectionState";
 import { ThemeSwitch } from "./components/ThemeSwitch";
+import { LocaleSwitch } from "./components/LocaleSwitch";
+import { providerName } from "./lib/providerName";
 import {
   CommandButton,
   CommandMenu,
@@ -285,6 +287,7 @@ export default function App() {
           </div>
           <div className="app-preferences">
             <CommandButton />
+            <LocaleSwitch />
             <ThemeSwitch />
             <Button
               ref={settingsRef}
@@ -297,7 +300,10 @@ export default function App() {
             >
               <i className={ready ? "is-ready" : ""} aria-hidden="true" />
               <span>
-                {studio.status?.provider_label || t("shell.connection.connect")}
+                {providerName(
+                  studio.status?.provider_id,
+                  studio.status?.provider_label,
+                ) || t("shell.connection.connect")}
               </span>
               <Settings2 size={15} aria-hidden="true" />
             </Button>

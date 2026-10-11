@@ -44,7 +44,7 @@ export function RoadmapPanel({
       )}
       {unknown > 0 && (
         <p className="curriculum-planned-note">
-          {t("roadmap.unknownPrerequisites", { n: unknown })}
+          {t("roadmap.unknownPrerequisites", { count: unknown })}
         </p>
       )}
     </>

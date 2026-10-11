@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { jsonFetch } from "../../api";
+import { useContentLanguage } from "../../hooks/useContentLanguage";
 import type { CurriculumData } from "../../types";
 import {
   buildCurriculumGraph,
@@ -15,10 +16,11 @@ export function useCurriculumData() {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
 
+  const language = useContentLanguage();
   useEffect(() => {
     let ignore = false;
     setError("");
-    jsonFetch<CurriculumData>("/api/curriculum")
+    jsonFetch<CurriculumData>("/api/curriculum", undefined, language)
       .then((data) => {
         if (!ignore) setCurriculum(data);
       })
@@ -29,7 +31,7 @@ export function useCurriculumData() {
     return () => {
       ignore = true;
     };
-  }, [attempt]);
+  }, [attempt, language]);
 
   const graphResult = useMemo<GraphResult | null>(() => {
     if (!curriculum) return null;

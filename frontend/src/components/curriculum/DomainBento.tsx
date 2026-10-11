@@ -197,7 +197,7 @@ export function DomainBento({
                       {t("domains.planned")}
                     </span>
                     <span>
-                      {t("domains.modules", { n: category.modules.length })}
+                      {t("domains.modules", { count: category.modules.length })}
                     </span>
                   </span>
                   <span className="curriculum-domain-meter" aria-hidden="true">
@@ -215,10 +215,10 @@ export function DomainBento({
                     </span>
                     {hasProgress ? (
                       <>
-                        <span>{t("domains.opened", { n: marks.opened })}</span>
-                        <span>{t("domains.ran", { n: marks.ran })}</span>
+                        <span>{t("domains.opened", { count: marks.opened })}</span>
+                        <span>{t("domains.ran", { count: marks.ran })}</span>
                         <span>
-                          {t("domains.quizzed", { n: marks.quizzed })}
+                          {t("domains.quizzed", { count: marks.quizzed })}
                         </span>
                       </>
                     ) : (

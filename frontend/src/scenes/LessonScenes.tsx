@@ -7,6 +7,7 @@ import { track } from "../progress";
 import { Tabs, TabsContent } from "../components/ui/tabs";
 import { LessonVocabulary } from "../content/glossary/Glossary";
 import type { StudioState } from "../hooks/useStudio";
+import { TranslationNotice } from "../components/TranslationNotice";
 import { LessonMasthead } from "./LessonMasthead";
 import { sceneIds, type SceneId, type SceneProps } from "./types";
 import "../styles/scenes.css";
@@ -157,6 +158,7 @@ function LessonScenesBody({ studio, visible, onConfigure }: LessonScenesProps) {
         visible={visible}
         onSource={() => goTo("code")}
       />
+      <TranslationNotice info={detail.learning_i18n} />
       {sceneIds.map((id) => {
         const Scene = scenes[id];
         return (

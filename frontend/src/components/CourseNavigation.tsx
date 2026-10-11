@@ -1,8 +1,12 @@
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
 import { BookOpen, ChevronRight, LockKeyhole } from "lucide-react";
 import { jsonFetch } from "../api";
+import {
+  useContentLanguage,
+  useFallbackLang,
+} from "../hooks/useContentLanguage";
 import { formatLessonNumber } from "../lib/lessonIds";
 import { useReducedMotion } from "../motion";
 import type { CurriculumData, Lesson } from "../types";
@@ -45,12 +49,22 @@ export function CourseNavigation({
   const [expanded, setExpanded] = useState<string[]>([]);
   // Categories still animating closed; collapsed ones are `hidden` afterwards.
   const [closing, setClosing] = useState<string[]>([]);
+  const language = useContentLanguage();
+  const langOf = useFallbackLang();
+  // Only the first load opens a category; a language switch keeps the tree as it is.
+  const initialized = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     setError(false);
-    jsonFetch<CurriculumData>("/api/curriculum", { signal: controller.signal })
+    jsonFetch<CurriculumData>(
+      "/api/curriculum",
+      { signal: controller.signal },
+      language,
+    )
       .then((value) => {
         setData(value);
+        if (initialized.current) return;
+        initialized.current = true;
         setExpanded([
           value.categories.find((category) =>
             category.modules.some((module) =>
@@ -64,7 +78,7 @@ export function CourseNavigation({
       });
     return () => controller.abort();
     // Selection does not refetch or collapse the curriculum tree.
-  }, [attempt]);
+  }, [attempt, language]);
   useEffect(() => {
     if (!current || !data) return;
     const category = data.categories.find((item) =>
@@ -115,7 +129,11 @@ export function CourseNavigation({
         <span className="nav-lesson-number">
           {formatLessonNumber(lesson.number)}
         </span>
-        <span className="nav-lesson-title" data-branch-anchor="">
+        <span
+          className="nav-lesson-title"
+          data-branch-anchor=""
+          lang={langOf(lesson.title)}
+        >
           {lesson.title.replace(/^第\s*\d+\s*课[：:]?\s*/, "")}
         </span>
         {active && (

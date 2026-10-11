@@ -19,7 +19,7 @@ import re
 import types
 import typing
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
@@ -65,12 +65,16 @@ def _text_kind(annotation: Any, metadata: list[Any]) -> str | None:
 
 @dataclass
 class Slot:
+    """一个可译位置。译文写到 container[key]；source 不为空时摘要按 source 计算
+    （目标字段在源文件里不存在，如术语的英文显示名）。kind 为 list 时译文是字符串数组（术语别名）。"""
     container: Any = field(repr=False)
     key: Any
+    source: str | None = None
+    kind: str = "text"
 
     @property
     def value(self) -> str:
-        return self.container[self.key]
+        return self.source if self.source is not None else self.container[self.key]
 
 
 def _walk(model: BaseModel, data: dict[str, Any], prefix: str, out: dict[str, Slot]) -> None:
@@ -124,8 +128,16 @@ class Coverage:
                 "missing": self.missing, "stale": self.stale}
 
 
-def validate_overlay(raw: Any, source_texts: dict[str, str], locale: str) -> dict[str, dict[str, str]]:
-    """在原始译文文件上校验：结构、语言、只能覆盖可译路径、文本非空。"""
+def _valid_text(value: Any, as_list: bool) -> bool:
+    if as_list:
+        # 空数组表示“该语言没有别的叫法”，与未翻译区分开。
+        return isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value)
+    return isinstance(value, str) and bool(value.strip())
+
+
+def validate_overlay(raw: Any, source_texts: dict[str, str], locale: str,
+                     lists: frozenset[str] | set[str] = frozenset()) -> dict[str, dict[str, Any]]:
+    """在原始译文文件上校验：结构、语言、只能覆盖可译路径、文本非空。lists 中的路径译文是非空字符串数组。"""
     if not isinstance(raw, dict) or set(raw) - {"$schema", "schema_version", "locale", "texts"}:
         raise OverlayError("译文文件必须是只含 schema_version、locale、texts 的对象")
     if raw.get("schema_version") != OVERLAY_VERSION:
@@ -139,16 +151,17 @@ def validate_overlay(raw: Any, source_texts: dict[str, str], locale: str) -> dic
         if path not in source_texts:
             raise OverlayError(f"{path} 不是可翻译的文本路径（事实字段或不存在的 id 不能覆盖）")
         if (not isinstance(entry, dict) or set(entry) != {"text", "source"}
-                or not isinstance(entry["text"], str) or not entry["text"].strip()
+                or not _valid_text(entry["text"], path in lists)
                 or not isinstance(entry["source"], str)):
-            raise OverlayError(f"{path} 必须是 {{text, source}}，且 text 非空")
+            shape = "是字符串数组（元素非空）" if path in lists else "非空"
+            raise OverlayError(f"{path} 必须是 {{text, source}}，且 text {shape}")
     return texts
 
 
-def coverage(raw: Any, model: BaseModel, data: dict[str, Any], locale: str) -> Coverage:
-    slots = text_slots(model, data)
+def slot_coverage(raw: Any, slots: dict[str, Slot], locale: str) -> Coverage:
+    """任意文档的覆盖率：slots 由调用方按该文档的路径规则给出。"""
     source_texts = {path: slot.value for path, slot in slots.items()}
-    texts = validate_overlay(raw, source_texts, locale)
+    texts = validate_overlay(raw, source_texts, locale, {path for path, slot in slots.items() if slot.kind == "list"})
     result = Coverage(locale=locale, total=len(slots))
     for path, text in source_texts.items():
         entry = texts.get(path)
@@ -161,12 +174,25 @@ def coverage(raw: Any, model: BaseModel, data: dict[str, Any], locale: str) -> C
     return result
 
 
-def merge(raw: Any, model: BaseModel, data: dict[str, Any], locale: str) -> Coverage:
-    """把有效且未过期的译文写入 data（就地修改），返回覆盖情况。"""
-    result = coverage(raw, model, data, locale)
-    slots = text_slots(model, data)
+def merge_slots(raw: Any, slots: dict[str, Slot], locale: str,
+                finish: Callable[[str], str] | None = None) -> Coverage:
+    """把有效且未过期的译文写入各 slot（就地修改）；finish 只作用于写入的译文（如按目标语言换课号）。"""
+    result = slot_coverage(raw, slots, locale)
     texts = raw["texts"]
     for path in result.translated:
-        slot = slots[path]
-        slot.container[slot.key] = texts[path]["text"]
+        slot, text = slots[path], texts[path]["text"]
+        if isinstance(text, list):
+            slot.container[slot.key] = [finish(item) if finish else item for item in text]
+        else:
+            slot.container[slot.key] = finish(text) if finish else text
     return result
+
+
+def coverage(raw: Any, model: BaseModel, data: dict[str, Any], locale: str) -> Coverage:
+    return slot_coverage(raw, text_slots(model, data), locale)
+
+
+def merge(raw: Any, model: BaseModel, data: dict[str, Any], locale: str,
+          finish: Callable[[str], str] | None = None) -> Coverage:
+    """把有效且未过期的译文写入 data（就地修改），返回覆盖情况。"""
+    return merge_slots(raw, text_slots(model, data), locale, finish)

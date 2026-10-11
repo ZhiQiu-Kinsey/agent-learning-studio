@@ -9,13 +9,15 @@ import {
   Search,
 } from "lucide-react";
 import { useReducedMotion } from "../../motion";
+import { useOnboarding } from "../../hooks/useOnboarding";
 import type { Lesson } from "../../types";
 import { CourseNavigation } from "../CourseNavigation";
 import { Button } from "../ui/button";
 import { BrandMark } from "./BrandMark";
 import { RailGroup, RailItem } from "./Rail";
 
-// Same order as the chapters in curriculum/onboarding.json.
+// Same order as the chapters in curriculum/onboarding.json. Shown until the
+// (localized) onboarding content arrives; its chapter titles take over then.
 const preludeKeys = [
   "preface",
   "origins",
@@ -57,6 +59,10 @@ export function RailNavigation({
 }: RailNavigationProps) {
   const { t } = useTranslation(["common", "home", "command"]);
   const reduced = useReducedMotion();
+  const chapters = useOnboarding()?.chapters;
+  const prelude = chapters?.length
+    ? chapters.map((chapter) => ({ key: chapter.id, title: chapter.title }))
+    : preludeKeys.map((key) => ({ key, title: t(`shell.prelude.${key}`) }));
   return (
     <RailGroup id={id}>
       <BrandMark running={running} onHome={onHome} />
@@ -104,7 +110,7 @@ export function RailNavigation({
         {/* The ordered chapters use the same rail items and sliding pills
             as home / full curriculum, with a numbered badge on the icon column. */}
         <ol className="nav-prelude-list">
-          {preludeKeys.map((key, index) => {
+          {prelude.map(({ key, title }, index) => {
             const active = view === "intro" && introChapter === index;
             return (
               <li key={key}>
@@ -120,9 +126,7 @@ export function RailNavigation({
                   <span className="nav-prelude-badge" aria-hidden="true">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <span className="rail-label">
-                    {t(`shell.prelude.${key}`)}
-                  </span>
+                  <span className="rail-label">{title}</span>
                 </RailItem>
               </li>
             );

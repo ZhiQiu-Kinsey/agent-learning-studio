@@ -18,7 +18,12 @@ REF = re.compile(r"\{\{lesson:([^{}]*)\}\}")
 LOOSE = re.compile(r"\{\s*\{?\s*lesson\s*[:：]\s*[a-z0-9-]+\s*\}?\s*\}", re.IGNORECASE)
 # 多了一个括号：替换后会残留一个 “{” 或 “}”。
 EXTRA = re.compile(r"\{\{\{lesson:|\{\{lesson:[^{}]*\}\}\}")
-TEMPLATES = {"zh-CN": "第 {number} 课", "en-US": "Lesson {number}"}
+# 按语言（不分地区）选模板：en 与 en-US 都写 “Lesson N”；未知语言用源语言写法。
+TEMPLATES = {"zh": "第 {number} 课", "en": "Lesson {number}"}
+
+
+def template_for(locale: str | None) -> str:
+    return TEMPLATES.get((locale or "zh-CN").split("-")[0].lower(), TEMPLATES["zh"])
 
 
 def _strings(value: Any):
@@ -52,8 +57,7 @@ def render_ref(slug: str, numbers: dict[str, int], locale: str | None = None) ->
     """未登记的 slug 直接报错：加载时已校验，走到这里说明有文件绕过了校验，不能把 slug 当课号显示。"""
     if slug not in numbers:
         raise LessonValidationError(f"课程引用 {{{{lesson:{slug}}}}} 指向未登记的课程")
-    template = TEMPLATES.get(locale or "zh-CN", TEMPLATES["zh-CN"])
-    return template.format(number=numbers[slug])
+    return template_for(locale).format(number=numbers[slug])
 
 
 def resolve_refs(value: Any, numbers: dict[str, int], locale: str | None = None) -> Any:

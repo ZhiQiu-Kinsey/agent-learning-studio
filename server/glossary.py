@@ -2,8 +2,9 @@
 
 结构约定（schema_version 1）：
 - 术语映射（不可被译文层改动）：id、zh、en、first_lesson。
-- 可译文本：definition、aliases。将来的 ``glossary.{locale}.json`` 只按 id 覆盖这些字段，
-  并可为该语言提供 term（显示名）；本模块暂不实现译文合并。
+- 可译文本：definition、aliases。``glossary.{locale}.json`` 按术语 id 覆盖 definition，
+  并为该语言提供显示名 term 与别名 aliases（路径见 server/data_overlay.py 的 glossary_slots）；
+  缺失或过期的条目回落到源文件：显示名用 en，释义用中文。
 - 显示形式为“中文（English）”；zh 与 en 相同（如 JSON Schema）时只显示一次。
 - kind：concept（课程概念，默认）在 first_lesson 那一课写一次中英并列，之后只写中文；
   background（背景词，如分词器）不是课程主线，只靠悬浮卡解释，不设 first_lesson。
@@ -100,14 +101,38 @@ def load_glossary(root, catalog_index):
     return validate_glossary(data, catalog_index, str(path))
 
 
-def public_glossary(root, catalog_index):
-    """附加显示名与首次出现课程的显示课号；不改变源数据。"""
+def public_glossary(root, catalog_index, locale=None):
+    """附加显示名与首次出现课程的显示课号；不改变源数据。
+
+    源语言：display 是“中文（English）”。其他语言（如 en）：term 与 display 是该语言的显示名
+    （没有译文时用 en），definition 合并译文层，local_aliases 是该语言的别名，
+    definition_locale 标出这条释义实际是哪种语言（回落时界面据此标注 lang）。
+    中文名、中文别名与 not_in 原样保留，回落成中文的正文仍能匹配术语。
+    """
+    from server.content import localize  # 延迟导入：content 依赖 curriculum 的错误类型
+    from server.data_overlay import glossary_slots
+
     data = load_glossary(root, catalog_index)
+    source = data["locale"]
+    localized = bool(locale) and locale != source
     terms = []
     for term in data["terms"]:
         item = {**term, "kind": term.get("kind", "concept"), "aliases": list(term.get("aliases", [])),
                 "not_in": list(term.get("not_in", [])), "display": display_label(term)}
         if "first_lesson" in term:
             item["first_lesson_number"] = catalog_index.numbers[term["first_lesson"]]
+        if localized:
+            item.update(term=term["en"], local_aliases=[])
         terms.append(item)
-    return {"schema_version": data["schema_version"], "locale": data["locale"], "terms": terms}
+    if not localized:
+        # 源语言不读译文层；每条术语有 term、definition、aliases 三个可译位置。
+        info = {"requested": locale or source, "locale": source, "source_language": source,
+                "total": 3 * len(terms), "translated": 3 * len(terms), "missing": [], "stale": []}
+        return {"schema_version": data["schema_version"], "locale": source, "i18n": info, "terms": terms}
+    slots = glossary_slots(terms)
+    info = localize(root.joinpath(*GLOSSARY_FILE), slots, locale, source)
+    pending = set(info["missing"]) | set(info["stale"])
+    for item in terms:
+        item["display"] = item["term"]
+        item["definition_locale"] = source if f"{item['id']}.definition" in pending else locale
+    return {"schema_version": data["schema_version"], "locale": info["locale"], "i18n": info, "terms": terms}

@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { jsonFetch } from "../../api";
+import { useMemo } from "react";
 import { useProgress } from "../../progress";
 import { useCurriculum } from "../../hooks/useCurriculum";
+import { useOnboarding } from "../../hooks/useOnboarding";
 import { blocksOfType, sceneBlocks } from "../../content/view";
-import type { Onboarding } from "../../content/types.gen";
 import type { Lesson } from "../../types";
 import { HomeHero, type HeroStat } from "./HomeHero";
 import { HomeStage } from "./HomeStage";
@@ -34,15 +33,7 @@ export function Home({
 }) {
   const progress = useProgress();
   const curriculum = useCurriculum();
-  const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
-
-  useEffect(() => {
-    const abort = new AbortController();
-    jsonFetch<Onboarding>("/api/onboarding", { signal: abort.signal })
-      .then((value) => !abort.signal.aborted && setOnboarding(value))
-      .catch(() => undefined);
-    return () => abort.abort();
-  }, []);
+  const onboarding = useOnboarding();
 
   const lastLesson = lessons.find(
     (lesson) => lesson.id === progress.lastLessonId && lesson.available,
@@ -106,6 +97,7 @@ export function Home({
       {curriculum && <HomeTopics curriculum={curriculum} />}
       <HomeJourney
         curriculum={curriculum}
+        chapterCount={onboarding?.chapters.length}
         onOpenLesson={onOpenLesson}
         onStartOnboarding={onStartOnboarding}
       />

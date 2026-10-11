@@ -55,6 +55,7 @@ export function ChapterTabs({
             type="button"
             key={item.id}
             className={active ? "is-active" : ""}
+            title={item.title}
             aria-current={active ? "step" : undefined}
             data-complete={total > 0 && done === total}
             style={
@@ -74,7 +75,7 @@ export function ChapterTabs({
             )}
             <span className="onboarding-tab-number">{numeral(index)}</span>
             <strong>{item.title}</strong>
-            <small>{t("minutes", { n: item.estimated_minutes })}</small>
+            <small>{t("minutes", { count: item.estimated_minutes })}</small>
             {/* Self-check progress, not a selection mark: say so with the count. */}
             <span className="onboarding-tab-checks">
               <span className="onboarding-tab-count" aria-hidden="true">

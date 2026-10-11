@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Check, MessageSquare } from "lucide-react";
 import type { StudioState } from "../../../hooks/useStudio";
+import { providerName } from "../../../lib/providerName";
 import LatticeLoader from "../../react-bits/LatticeLoader";
 import { Answer } from "../../Answer";
 import { Button } from "../../ui/button";
@@ -54,7 +55,10 @@ function ConnectionBar({
     <div className="lab-connection">
       <i />
       <span>
-        {s.requiresModel ? s.status?.provider_label || t("none") : t("local")}
+        {s.requiresModel
+          ? providerName(s.status?.provider_id, s.status?.provider_label) ||
+            t("none")
+          : t("local")}
         <small>
           {s.requiresModel ? s.status?.model || t("noModel") : t("localNote")}
         </small>

@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import ValidationError
 
 from server.content_migrations import LESSON_STEPS, ONBOARDING_STEPS, ContentVersionError, migrate
-from server.content_overlay import LOCALE, OverlayError, coverage, merge, text_slots
+from server.content_overlay import LOCALE, OverlayError, Slot, coverage, merge_slots, text_slots
 from server.content_schema import LessonContent, Onboarding
 from server.curriculum import LessonValidationError
 
@@ -44,10 +44,14 @@ def overlay_path(path: Path, locale: str) -> Path:
     return path.with_name(f"{path.stem}.{locale}.json")
 
 
-def _localize(path: Path, model, data: dict[str, Any], locale: str | None) -> dict[str, Any]:
-    """合并译文层并返回本次实际使用的语言与缺失情况；译文损坏时回落到源语言。"""
-    source = model.source_language
-    total = len(text_slots(model, data))
+def localize(path: Path, slots: dict[str, Slot], locale: str | None, source: str = "zh-CN",
+             finish: Callable[[str], str] | None = None) -> dict[str, Any]:
+    """把 path 旁的 <stem>.<locale>.json 合并进 slots，返回本次实际使用的语言与缺失情况。
+
+    目录、术语表、实现清单与课程内容共用：缺文件或译文损坏时整份回落到源语言，
+    单条缺失或过期只回落那一条。finish 只作用于写入的译文。
+    """
+    total = len(slots)
     info: dict[str, Any] = {"requested": locale or source, "locale": source, "source_language": source,
                             "total": total, "translated": 0, "missing": [], "stale": []}
     if not locale or locale == source:
@@ -55,15 +59,21 @@ def _localize(path: Path, model, data: dict[str, Any], locale: str | None) -> di
         return info
     file = overlay_path(path, locale)
     if not file.is_file():
-        info["missing"] = list(text_slots(model, data))
+        info["missing"] = list(slots)
         return info
     try:
-        result = merge(_read(file), model, data, locale)
+        result = merge_slots(_read(file), slots, locale, finish)
     except (OverlayError, LessonValidationError) as error:
-        info["missing"] = list(text_slots(model, data))
+        info["missing"] = list(slots)
         info["error"] = str(error)
         return info
     return {**info, **result.public(), "locale": locale if result.translated else source}
+
+
+def _localize(path: Path, model, data: dict[str, Any], locale: str | None,
+              finish: Callable[[str], str] | None = None) -> dict[str, Any]:
+    """合并译文层并返回本次实际使用的语言与缺失情况；译文损坏时回落到源语言。"""
+    return localize(path, text_slots(model, data), locale, model.source_language, finish)
 
 
 def overlay_report(path: Path, model, locale: str) -> dict[str, Any]:
@@ -97,12 +107,12 @@ def lesson_content_model(path: Path, lesson: dict[str, Any]) -> LessonContent:
     return model
 
 
-def load_lesson_content(path: Path, lesson: dict[str, Any], locale: str | None = None
-                        ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """返回（内容, 语言信息）。"""
+def load_lesson_content(path: Path, lesson: dict[str, Any], locale: str | None = None,
+                        finish: Callable[[str], str] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """返回（内容, 语言信息）。finish 只作用于合并进来的译文（调用方用它按目标语言写课号）。"""
     model = lesson_content_model(path, lesson)
     data = _public(model)
-    return data, _localize(path, model, data, locale)
+    return data, _localize(path, model, data, locale, finish)
 
 
 def onboarding_model(path: Path) -> Onboarding:
@@ -114,7 +124,10 @@ def onboarding_model(path: Path) -> Onboarding:
         raise LessonValidationError(f"{path}: {_describe(error)}") from None
 
 
-def load_onboarding(path: Path, locale: str | None = None) -> dict[str, Any]:
+def load_onboarding(path: Path, locale: str | None = None,
+                    finish: Callable[[str], str] | None = None) -> dict[str, Any]:
     model = onboarding_model(path)
     data = _public(model)
-    return {**data, "i18n": _localize(path, model, data, locale)}
+    # 先合并再展开：顶层字段（title、description）是字符串，展开后再合并就改不到返回值了。
+    info = _localize(path, model, data, locale, finish)
+    return {**data, "i18n": info}

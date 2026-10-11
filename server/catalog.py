@@ -234,10 +234,77 @@ def catalog_lesson(lesson_id):
     return None if slug is None else {**CATALOG_INDEX.entries[slug], "number": CATALOG_INDEX.numbers[slug]}
 
 
+_manifest_cache: dict = {}
+
+
+def _manifest_text(spec):
+    """实现清单里可译的那几项（按文件修改时间缓存）。"""
+    path = spec["root"] / "lessons" / spec["module"] / "lesson.json"
+    stat = path.stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in _manifest_cache:
+        if len(_manifest_cache) > 256:
+            _manifest_cache.clear()
+        _manifest_cache[key] = _json(path)
+    raw = _manifest_cache[key]
+    return path, {name: raw[name] for name in ("subtitle", "exercises", "ui") if name in raw}
+
+
+def localized_manifest(spec, locale=None):
+    """返回（subtitle, exercises, ui, 语言信息）：合并 lesson.<locale>.json，只换标题与说明文字。
+
+    subtitle 为 None 表示清单没写，沿用目录简介。
+    """
+    import copy
+
+    from server.content import localize
+    from server.data_overlay import manifest_slots
+
+    path, raw = _manifest_text(spec)
+    text = copy.deepcopy(raw)
+    info = localize(path, manifest_slots(text), locale, finish=_refs_in(locale))
+    titles = {exercise["id"]: exercise["title"] for exercise in text.get("exercises", [])}
+    exercises = [{**exercise, "title": titles.get(exercise["id"], exercise["title"])} for exercise in spec["exercises"]]
+    ui = {**spec["ui"], **{key: value for key, value in text.get("ui", {}).items()
+                           if key in ("question_label", "question_help")}}
+    return text.get("subtitle"), exercises, ui, info
+
+
+_catalog_cache: dict = {}
+
+
+def localized_entries(locale=None):
+    """{slug: 已合并译文的目录条目}；目录或译文文件变化时重新读取。"""
+    from server.content import overlay_path
+    from server.curriculum import CATALOG_PATH, public_curriculum
+
+    files = [CATALOG_PATH] + ([overlay_path(CATALOG_PATH, locale)] if locale else [])
+    key = (locale, tuple((file.stat().st_mtime_ns, file.stat().st_size) if file.is_file() else None
+                         for file in files))
+    if key not in _catalog_cache:
+        if len(_catalog_cache) > 16:
+            _catalog_cache.clear()
+        _catalog_cache[key] = {lesson["id"]: lesson for lesson in public_curriculum(locale)["lessons"]}
+    return _catalog_cache[key]
+
+
 def public_lesson(spec, locale=None):
+    """课程卡片与详情共用的公开字段。locale 选择目录与实现清单的译文层，逐条回落到源语言。"""
     public = {key: spec[key] for key in ("id", "number", "aliases", "title", "description", "objectives", "subtitle",
                                          "exercises", "available", "ui", "capabilities", "input_defaults")}
-    return resolve_refs(public, CATALOG_INDEX.numbers, locale)
+    if locale:
+        entry = localized_entries(locale).get(spec["id"])
+        if entry is not None:
+            public.update(title=entry["title"], description=entry["summary"], objectives=entry["objectives"])
+        subtitle, exercises, ui, _ = localized_manifest(spec, locale)
+        # 没写 subtitle 的课在加载时沿用了目录简介，译文也跟着目录走。
+        public.update(subtitle=public["description"] if subtitle is None else subtitle, exercises=exercises, ui=ui)
+    return resolve_refs(public, CATALOG_INDEX.numbers)
+
+
+def _refs_in(locale):
+    """只作用于合并进来的译文：按目标语言写课号；其余文本随后按源语言写。"""
+    return lambda text: resolve_refs(text, CATALOG_INDEX.numbers, locale)
 
 
 def lesson_runtime(spec):
@@ -257,8 +324,8 @@ def lesson_callable(spec, reference):
 def lesson_code_view(spec, locale=None):
     """读码场景数据：只读本课 sources 白名单，批注取自已合并译文层的内容。"""
     content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
-    learning, info = load_lesson_content(content_path, spec, locale)
-    return lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers, info["locale"]))
+    learning, _ = load_lesson_content(content_path, spec, locale, _refs_in(locale))
+    return lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers))
 
 
 def lesson_detail(spec, locale=None):
@@ -271,15 +338,19 @@ def lesson_detail(spec, locale=None):
         sources.append({**source, "role": source_role(source["path"]), "content": path.read_text(encoding="utf-8")})
     # Publish actual validated presets, including model defaults, so the parameter
     # editor shows every value the lesson will receive rather than hidden values.
-    learning, learning_i18n = load_lesson_content(content_path, spec, locale)
-    exercises = [{**exercise, "inputs": validate_inputs(module, {**spec["input_defaults"], **exercise.get("inputs", {})})}
+    learning, learning_i18n = load_lesson_content(content_path, spec, locale, _refs_in(locale))
+    public = public_lesson(spec, locale)
+    # 练习标题来自实现清单译文层；问题与预设输入是发给模型的事实，保持源语言。
+    titles = {exercise["id"]: exercise["title"] for exercise in public["exercises"]}
+    exercises = [{**exercise, "title": titles[exercise["id"]],
+                  "inputs": validate_inputs(module, {**spec["input_defaults"], **exercise.get("inputs", {})})}
                  for exercise in spec["exercises"]]
     # 自定义运行器的输入模型导出 JSON Schema，前端据此生成参数控件；最终仍由后端校验。
     input_model = getattr(module, "INPUT_MODEL", None)
     input_schema = input_model.model_json_schema() if spec["capabilities"]["supports_inputs"] and input_model else None
-    learning = resolve_refs(learning, CATALOG_INDEX.numbers, learning_i18n["locale"])
-    exercises = resolve_refs(exercises, CATALOG_INDEX.numbers, learning_i18n["locale"])
-    return {**public_lesson(spec, learning_i18n["locale"]), "exercises": exercises, "input_schema": input_schema,
+    learning = resolve_refs(learning, CATALOG_INDEX.numbers)
+    exercises = resolve_refs(exercises, CATALOG_INDEX.numbers)
+    return {**public, "exercises": exercises, "input_schema": input_schema,
             "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
             "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
             "sources": sources, "code_names": lesson_code_names(spec, sources)}
@@ -288,35 +359,39 @@ def lesson_detail(spec, locale=None):
 _learning_cache: dict = {}
 
 
-def _learning(spec):
-    """课程表细纲用的 content 输出（已换好课号），按文件修改时间缓存。"""
+def _learning(spec, locale=None):
+    """课程表细纲用的 content 输出（已换好课号），按内容与译文文件的修改时间缓存。"""
+    from server.content import overlay_path
+
     path = spec["content_path"]
-    stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    files = [path] + ([overlay_path(path, locale)] if locale else [])
+    key = (str(path), locale, tuple((file.stat().st_mtime_ns, file.stat().st_size) if file.is_file() else None
+                                    for file in files))
     if key not in _learning_cache:
-        if len(_learning_cache) > 128:
+        if len(_learning_cache) > 256:
             _learning_cache.clear()
-        learning, _ = load_lesson_content(path, spec)
+        learning, _ = load_lesson_content(path, spec, locale, _refs_in(locale))
         _learning_cache[key] = resolve_refs(learning, CATALOG_INDEX.numbers)
     return _learning_cache[key]
 
 
-def curriculum_outline(*, strict: bool = False):
+def curriculum_outline(*, strict: bool = False, locale=None):
     """/api/curriculum 与课程表文档：在 catalog 之上补小节、是否调用模型与本课术语（见 server/outline.py）。
 
     strict（导出文档时用）：术语表有错直接抛出，不生成缺了“本课术语”的文档。
+    locale：目录、正文小节与本课术语换成该语言的译文，缺的条目回落到源语言。
     """
     from server.curriculum import public_curriculum
-    from server.glossary import load_glossary
+    from server.glossary import public_glossary
     try:
-        terms = load_glossary(ROOT, CATALOG_INDEX)["terms"]
+        terms = public_glossary(ROOT, CATALOG_INDEX, locale)["terms"]
     except (LessonValidationError, OSError) as error:
         if strict:
             raise
         # 网页照常显示课程表，只是没有“本课术语”；原因写进服务端日志，不悄悄吞掉。
         logging.getLogger(__name__).warning("术语表加载失败，课程表暂不显示本课术语：%s", error)
         terms = []
-    return enrich(public_curriculum(), LESSONS, _learning, terms)
+    return enrich(public_curriculum(locale), LESSONS, lambda spec: _learning(spec, locale), terms)
 
 
 def lesson_code_names(spec, sources=None):

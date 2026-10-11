@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Braces, Cpu, Eye, Network, Quote } from "lucide-react";
 import { revealProps, useReducedMotion } from "../../motion";
+import { useFallbackLang } from "../../hooks/useContentLanguage";
 import type { Detail, Trace } from "../../types";
 import SpotlightCard from "../../components/react-bits/SpotlightCard";
 import ScrollReveal from "../../components/react-bits/ScrollReveal";
@@ -55,6 +56,7 @@ export function UnderstandBlocks({
   onRun: (exerciseId?: string | null) => void;
 }) {
   const { t } = useTranslation("blocks");
+  const langOf = useFallbackLang();
   const reduced = useReducedMotion();
   const content = detail.learning;
   const blocks = sceneBlocks(content, "understand");
@@ -146,7 +148,7 @@ export function UnderstandBlocks({
           >
             <div className="reading-section-heading">
               <span aria-hidden="true">{String(section).padStart(2, "0")}</span>
-              {block.title && <h2>{block.title}</h2>}
+              {block.title && <h2 lang={langOf(block.title)}>{block.title}</h2>}
             </div>
             <div className="reading-prose">
               {block.paragraphs.map((paragraph, index) => (

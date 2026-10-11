@@ -4,6 +4,7 @@ import { ArrowRight, ExternalLink } from "lucide-react";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import { httpUrl } from "../../lib/url";
 import { useProgress } from "../../progress";
+import { useFallbackLang } from "../../hooks/useContentLanguage";
 import type { CurriculumData, CurriculumLesson } from "../../types";
 import {
   Accordion,
@@ -17,11 +18,21 @@ import { lessonMarks } from "./graph";
 import { ProgressMarks } from "./ProgressMarks";
 import { TextList } from "./TextList";
 
+/** Level label in the UI language; an unknown catalogue value is shown as written. */
+export function levelLabel(
+  t: (key: `level.${NonNullable<CurriculumLesson["level_code"]>}`) => string,
+  lesson: Pick<CurriculumLesson, "level" | "level_code">,
+) {
+  return lesson.level_code ? t(`level.${lesson.level_code}`) : lesson.level;
+}
+
 /** 难度、预计时长与是否调用模型，跟在课号后面的一行小字。 */
 export function LessonFacts({ lesson }: { lesson: CurriculumLesson }) {
   const { t } = useTranslation("curriculum");
   const facts = [
-    lesson.difficulty,
+    lesson.difficulty_code
+      ? t(`difficulty.${lesson.difficulty_code}`)
+      : lesson.difficulty,
     lesson.estimated_minutes
       ? t("facts.minutes", { value: lesson.estimated_minutes })
       : null,
@@ -48,6 +59,7 @@ export function LessonPlan({
   onSelectLesson: (id: string) => void;
 }) {
   const { t } = useTranslation("curriculum");
+  const langOf = useFallbackLang();
   const marks = lessonMarks(useProgress(), lesson);
   // Electric outline only on lessons that can really be opened, while hovered/focused.
   const [hot, setHot] = useState(false);
@@ -91,11 +103,11 @@ export function LessonPlan({
           data-testid="curriculum-lesson-trigger"
         >
           <span className="curriculum-lesson-title">
-            <strong>{lesson.title}</strong>
+            <strong lang={langOf(lesson.title)}>{lesson.title}</strong>
             <small>
               {t("lessonMeta", {
                 number: formatLessonNumber(lesson.number),
-                level: lesson.level,
+                level: levelLabel(t, lesson),
               })}
               <LessonFacts lesson={lesson} />
             </small>
@@ -106,7 +118,9 @@ export function LessonPlan({
           </span>
         </AccordionTrigger>
         <AccordionContent className="curriculum-lesson-body">
-          <p className="curriculum-summary">{lesson.summary}</p>
+          <p className="curriculum-summary" lang={langOf(lesson.summary)}>
+            {lesson.summary}
+          </p>
           <div className="curriculum-prerequisites">
             <strong>{t("list.prerequisites")}</strong>
             <p>

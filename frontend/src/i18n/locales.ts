@@ -11,6 +11,7 @@ interface LocaleInfo {
 
 export const locales = {
   "zh-CN": { label: "简体中文", dir: "ltr" },
+  en: { label: "English", dir: "ltr" },
 } as const satisfies Record<string, LocaleInfo>;
 
 export type Locale = keyof typeof locales;

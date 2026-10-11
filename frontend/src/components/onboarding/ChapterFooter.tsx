@@ -26,7 +26,7 @@ function ChapterSources({
     >
       <AccordionItem value="sources">
         <AccordionTrigger>
-          {t("sources", { n: references.length })}
+          {t("sources", { count: references.length })}
         </AccordionTrigger>
         <AccordionContent>
           <ul>

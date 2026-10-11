@@ -24,7 +24,7 @@
 npm.cmd --prefix frontend run build
 Set-Location frontend
 npx.cmd vitest run               # 纯逻辑单元测试，含内容类型、i18n 与选择器基线
-npm.cmd run i18n:check           # 各语言的翻译键一致
+npm.cmd run i18n:check           # 各语言的翻译键、占位符与复数形式一致
 Set-Location ..
 .\.venv\Scripts\python.exe run_web.py
 # 后端保持运行，在另一个终端执行：
@@ -32,7 +32,15 @@ Set-Location frontend
 npx.cmd playwright test
 ```
 
-浏览器测试默认访问 http://127.0.0.1:8765，使用系统 Chrome。可通过 AGENT_LAB_URL 设置测试入口。
+浏览器测试默认访问 http://127.0.0.1:8765，使用系统 Chrome。可通过 AGENT_LAB_URL 设置测试入口。现有用例在 zh-CN 下运行（`playwright.config.ts` 的 `locale`），按 `e2e/i18n.ts` 的 `t()` 读中文文案；`e2e/locale.spec.ts` 切到英文，用 `tIn("en", …)` 断言英文界面、语言持久化、`<html lang>`，以及有译文的课显示英文、没有译文的课保持中文并标 `lang="zh-CN"`。
+
+## 译文层
+
+```powershell
+.\.venv\Scripts\python.exe scripts/translation_kit.py status --locale en   # 各目标的覆盖率与过期条数
+```
+
+`validate_lessons.py` 也会列出每份译文层（课程内容、导学、课程目录、术语表、实现清单）的覆盖率；结构错误、不可译路径与写错的课程引用直接失败，缺失与过期只报告。`tests/test_content_overlay.py` 与 `tests/test_data_overlay.py` 检查路径、事实保护、过期回落、`?lang=` 接口与译文工具的各个目标。
 
 ## 测试模式与真实运行
 

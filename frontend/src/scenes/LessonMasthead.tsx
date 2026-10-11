@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "../motion";
 import { useResolvedTheme } from "../hooks/useTheme";
+import { useFallbackLang } from "../hooks/useContentLanguage";
 import { Backdrop } from "../components/backdrops/Backdrop";
 import { backdropFor } from "../components/backdrops/presets";
 import ShinyText from "../components/react-bits/ShinyText";
@@ -47,14 +48,23 @@ function RiseTokens({ text }: { text: string }) {
  * accessible text is the plain title; titles wider than one line fall back to
  * the blur-rise tokens, and static motion renders plain text.
  */
-function BandTitle({ text }: { text: string }) {
+function BandTitle({ text, lang }: { text: string; lang?: string }) {
   const reduced = useReducedMotion();
   const [stroke, setStroke] = useState(true);
   const overflow = useCallback(() => setStroke(false), []);
   const dark = useResolvedTheme() === "dark";
-  if (reduced) return <h1 className="band-title">{text}</h1>;
+  if (reduced)
+    return (
+      <h1 className="band-title" lang={lang}>
+        {text}
+      </h1>
+    );
   return (
-    <h1 className="band-title" data-effect={stroke ? "stroke" : "rise"}>
+    <h1
+      className="band-title"
+      lang={lang}
+      data-effect={stroke ? "stroke" : "rise"}
+    >
       <span className="sr-only">{text}</span>
       {stroke ? (
         <StrokeText
@@ -110,6 +120,7 @@ export function LessonMasthead({
   onSource: () => void;
 }) {
   const { t } = useTranslation("lesson");
+  const langOf = useFallbackLang();
   const reduced = useReducedMotion();
   const dark = useResolvedTheme() === "dark";
   const ref = useRef<HTMLElement>(null);
@@ -184,17 +195,35 @@ export function LessonMasthead({
               className="band-kicker-text"
             />
             {categoryTitle && (
-              <span className="band-category">{categoryTitle}</span>
+              <span className="band-category" lang={langOf(categoryTitle)}>
+                {categoryTitle}
+              </span>
             )}
-            {moduleTitle && <span className="band-module">{moduleTitle}</span>}
+            {moduleTitle && (
+              <span className="band-module" lang={langOf(moduleTitle)}>
+                {moduleTitle}
+              </span>
+            )}
           </p>
-          <BandTitle key={`${lessonId}-${title}`} text={title} />
+          <BandTitle
+            key={`${lessonId}-${title}`}
+            text={title}
+            lang={langOf(title)}
+          />
           {subtitle && (
-            <motion.p className="band-subtitle" {...rise(0)}>
+            <motion.p
+              className="band-subtitle"
+              lang={langOf(subtitle)}
+              {...rise(0)}
+            >
               {subtitle}
             </motion.p>
           )}
-          <motion.p className="band-description" {...rise(1)}>
+          <motion.p
+            className="band-description"
+            lang={langOf(description)}
+            {...rise(1)}
+          >
             {description}
           </motion.p>
         </div>
@@ -208,7 +237,7 @@ export function LessonMasthead({
             <h2>{t("objectives.title")}</h2>
             <ul>
               {objectives.map((objective, item) => (
-                <li key={item}>
+                <li key={item} lang={langOf(objective)}>
                   <span className="band-goal-index" aria-hidden="true">
                     {String(item + 1).padStart(2, "0")}
                   </span>

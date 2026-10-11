@@ -7,15 +7,18 @@ import {
   Check,
   Compass,
   Download,
+  Languages,
   Map as MapIcon,
   Monitor,
   Search,
   Settings2,
 } from "lucide-react";
-import { jsonFetch } from "../../api";
-import type { Onboarding } from "../../content/types.gen";
+import { changeLocale, locales, type Locale } from "../../i18n";
+import { useContentLanguage } from "../../hooks/useContentLanguage";
+import { useCurriculum } from "../../hooks/useCurriculum";
+import { useOnboarding } from "../../hooks/useOnboarding";
 import type { StudioState } from "../../hooks/useStudio";
-import type { CurriculumData, Lesson } from "../../types";
+import type { Lesson } from "../../types";
 import { formatLessonNumber } from "../../lib/lessonIds";
 import { requestScene } from "../../scenes/LessonScenes";
 import { sceneIds } from "../../scenes/types";
@@ -73,37 +76,17 @@ export function CommandPalette({
     height: number;
   } | null>(null);
   const reduced = useReducedMotion();
-  const [chapters, setChapters] = useState<string[]>([]);
-  const [planned, setPlanned] = useState<PaletteLesson[]>([]);
+  // Onboarding entries are simply absent if the content is unavailable.
+  const chapters =
+    useOnboarding()?.chapters.map((chapter) => chapter.title) ?? [];
+  // Planned lessons live only in the curriculum; they are listed, never run.
+  const planned: PaletteLesson[] = (useCurriculum()?.lessons ?? [])
+    .filter((lesson) => lesson.status === "planned")
+    .map((lesson) => ({ ...lesson, available: false }));
+  const language = useContentLanguage();
   // Whether closing should return focus to where the palette opened from.
   const restoreFocus = useRef(true);
   const focus = useReturnFocus();
-
-  useEffect(() => {
-    const abort = new AbortController();
-    jsonFetch<Onboarding>("/api/onboarding", { signal: abort.signal })
-      .then((value) => {
-        if (!abort.signal.aborted)
-          setChapters(value.chapters.map((chapter) => chapter.title));
-      })
-      .catch(() => {
-        /* Onboarding entries are simply absent if the content is unavailable. */
-      });
-    // Planned lessons live only in the curriculum; they are listed, never run.
-    jsonFetch<CurriculumData>("/api/curriculum", { signal: abort.signal })
-      .then((value) => {
-        if (!abort.signal.aborted)
-          setPlanned(
-            value.lessons
-              .filter((lesson) => lesson.status === "planned")
-              .map((lesson) => ({ ...lesson, available: false })),
-          );
-      })
-      .catch(() => {
-        /* Runnable lessons from the studio are still listed. */
-      });
-    return () => abort.abort();
-  }, []);
 
   useEffect(() => {
     if (open) setSearch("");
@@ -299,6 +282,22 @@ export function CommandPalette({
                     testId={`command-theme-${value}`}
                     icon={<Monitor size={15} />}
                     current={theme === value ? t("current") : undefined}
+                  >
+                    {label}
+                  </Item>
+                );
+              })}
+              {(Object.keys(locales) as Locale[]).map((code) => {
+                const label = t("language", { value: locales[code].label });
+                return (
+                  <Item
+                    key={`language-${code}`}
+                    value={`language ${code}`}
+                    keywords={[label, locales[code].label, tCommon("language.label")]}
+                    onSelect={run(() => void changeLocale(code))}
+                    testId={`command-language-${code}`}
+                    icon={<Languages size={15} />}
+                    current={language === code ? t("current") : undefined}
                   >
                     {label}
                   </Item>

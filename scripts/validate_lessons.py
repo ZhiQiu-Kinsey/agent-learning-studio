@@ -39,23 +39,46 @@ def validate_recordings(root, specs):
 
 
 def validate_overlays(root, specs):
-    """内容译文层：结构与可译路径错误直接失败，缺失与过期只报告覆盖率；课程引用写错也直接失败。"""
-    from server.content import lesson_content_model, onboarding_model, overlay_locales, overlay_path, overlay_report
+    """译文层：结构与可译路径错误直接失败，缺失与过期只报告覆盖率；课程引用写错也直接失败。
+
+    覆盖课程内容（content.<locale>.json）、导学、课程目录、术语表与各课实现清单（lesson.<locale>.json）。
+    """
+    from server.content import lesson_content_model, onboarding_model, overlay_locales, overlay_path
+    from server.content_overlay import slot_coverage, text_slots
     from server.curriculum import index_catalog
+    from server.data_overlay import catalog_slots, glossary_slots, manifest_slots
+    from server.glossary import GLOSSARY_FILE, load_glossary
     from server.lesson_refs import check_refs
 
-    numbers = index_catalog(json.loads((Path(root) / "curriculum" / "catalog.json").read_text(encoding="utf-8"))).numbers
+    root = Path(root).resolve()
+    catalog_path = root / "curriculum" / "catalog.json"
+    index = index_catalog(json.loads(catalog_path.read_text(encoding="utf-8")))
 
-    documents = [(spec["content_path"], lesson_content_model(spec["content_path"], spec)) for spec in specs]
-    onboarding = Path(root) / "curriculum" / "onboarding.json"
+    def content(model):
+        return lambda: text_slots(model, model.model_dump(mode="json", by_alias=True))
+
+    def read(path):
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    documents = [(spec["content_path"], content(lesson_content_model(spec["content_path"], spec))) for spec in specs]
+    onboarding = root / "curriculum" / "onboarding.json"
     if onboarding.is_file():
-        documents.append((onboarding, onboarding_model(onboarding)))
+        documents.append((onboarding, content(onboarding_model(onboarding))))
+    documents.append((catalog_path, lambda: catalog_slots(read(catalog_path))))
+    glossary = root.joinpath(*GLOSSARY_FILE)
+    if glossary.is_file():
+        documents.append((glossary, lambda: glossary_slots(
+            [{**term, "term": term["en"], "local_aliases": []} for term in load_glossary(root, index)["terms"]])))
+    for spec in specs:
+        manifest = root / "lessons" / spec["module"] / "lesson.json"
+        documents.append((manifest, lambda manifest=manifest: manifest_slots(read(manifest))))
     reports = []
-    for path, model in documents:
+    for path, slots in documents:
         for locale in overlay_locales(path):
             overlay = overlay_path(path, locale)
-            check_refs(json.loads(overlay.read_text(encoding="utf-8")), numbers, str(overlay))
-            reports.append((path, overlay_report(path, model, locale)))
+            raw = read(overlay)
+            check_refs(raw, index.numbers, str(overlay))
+            reports.append((path, slot_coverage(raw, slots(), locale).public()))
     return reports
 
 
@@ -164,7 +187,7 @@ def main(argv=None):
                 print(f"录制无效 {path}：{message}", file=sys.stderr)
             return 1
         reports = validate_overlays(args.root, specs)
-        print(f"内容译文层：{len(reports)} 份。")
+        print(f"译文层：{len(reports)} 份。")
         for path, report in reports:
             print(f"  {Path(path).relative_to(args.root.resolve()).as_posix()} [{report['locale']}] "
                   f"{report['translated']}/{report['total']}，缺失 {len(report['missing'])}，过期 {len(report['stale'])}")

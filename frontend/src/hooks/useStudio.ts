@@ -7,6 +7,7 @@ import {
   jsonFetch,
 } from "../api";
 import { resolveLessonId } from "../lib/lessonIds";
+import { useContentLanguage } from "./useContentLanguage";
 import { clientError } from "../i18n/errors";
 import { track } from "../progress";
 import {
@@ -69,6 +70,11 @@ export function useStudio() {
   const restoreToken = useRef(0);
   const eventCount = useRef(0);
   const statusRequest = useRef(0);
+  // Course text comes in the UI language. A switch refetches the catalogue and
+  // the open lesson in place: lesson, exercise, inputs and the run on screen stay.
+  const language = useContentLanguage();
+  const listLanguage = useRef(language);
+  const detailLanguage = useRef(language);
 
   const refreshStatus = useCallback(async () => {
     const request = ++statusRequest.current;
@@ -85,9 +91,12 @@ export function useStudio() {
   useEffect(() => {
     mounted.current = true;
     const abort = new AbortController();
-    jsonFetch<{ lessons: Lesson[]; roadmap: Roadmap[] }>("/api/lessons", {
-      signal: abort.signal,
-    })
+    listLanguage.current = language;
+    jsonFetch<{ lessons: Lesson[]; roadmap: Roadmap[] }>(
+      "/api/lessons",
+      { signal: abort.signal },
+      language,
+    )
       .then((catalog) => {
         if (abort.signal.aborted) return;
         setLessons(catalog.lessons);
@@ -126,16 +135,41 @@ export function useStudio() {
       runController.current?.abort();
       ++statusRequest.current;
     };
+    // The first catalogue load picks the lesson; language switches are handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (listLanguage.current === language) return;
+    listLanguage.current = language;
+    const abort = new AbortController();
+    jsonFetch<{ lessons: Lesson[]; roadmap: Roadmap[] }>(
+      "/api/lessons",
+      { signal: abort.signal },
+      language,
+    )
+      .then((catalog) => {
+        if (abort.signal.aborted) return;
+        setLessons(catalog.lessons);
+        setRoadmap(catalog.roadmap);
+      })
+      .catch(() => {
+        /* Titles stay in the previous language; the lesson keeps working. */
+      });
+    return () => abort.abort();
+  }, [language]);
 
   useEffect(() => {
     if (!lessonId) return;
     const abort = new AbortController();
     setDetail(null);
     setLessonError("");
-    jsonFetch<Detail>(`/api/lessons/${encodeURIComponent(lessonId)}`, {
-      signal: abort.signal,
-    })
+    detailLanguage.current = language;
+    jsonFetch<Detail>(
+      `/api/lessons/${encodeURIComponent(lessonId)}`,
+      { signal: abort.signal },
+      language,
+    )
       .then((value) => {
         if (abort.signal.aborted) return;
         setDetail(value);
@@ -151,7 +185,31 @@ export function useStudio() {
         if (!abort.signal.aborted) setLessonError(messageOf(reason));
       });
     return () => abort.abort();
+    // A language switch must not reset the exercise; see the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
+
+  // Same lesson, new language: only the text changes. Questions, presets and
+  // sources are facts of the lesson and identical in every language.
+  useEffect(() => {
+    if (!lessonId || detailLanguage.current === language) return;
+    detailLanguage.current = language;
+    const abort = new AbortController();
+    jsonFetch<Detail>(
+      `/api/lessons/${encodeURIComponent(lessonId)}`,
+      { signal: abort.signal },
+      language,
+    )
+      .then((value) => {
+        if (!abort.signal.aborted)
+          setDetail((current) => (current?.id === value.id ? value : current));
+      })
+      .catch(() => {
+        /* The lesson stays readable in the previous language. */
+      });
+    return () => abort.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   // Replay only steps through recorded events. Any change of play state, events or
   // pacing disposes the clock, whose generation token drops stale timers.

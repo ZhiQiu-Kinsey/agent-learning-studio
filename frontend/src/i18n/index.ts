@@ -33,6 +33,7 @@ function syncDocument(code: string) {
   const info = locales[code as Locale] ?? locales[sourceLocale];
   document.documentElement.lang = code;
   document.documentElement.dir = info.dir;
+  document.title = i18n.t("common:shell.documentTitle", { lng: code });
 }
 
 i18n.on("languageChanged", syncDocument);

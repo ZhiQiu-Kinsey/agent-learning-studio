@@ -67,7 +67,7 @@
 
 悬浮卡的标题显示为“中文（English）”，`zh` 与 `en` 相同时只显示一次；接口返回的每条术语附带计算出的 `display` 与 `first_lesson_number`。测试会检查 `first_lesson` 指向的课程目录条目或教学内容中确实出现该术语，避免登记课程中并不存在的知识点。收录标准、四类词（课程概念、背景词、代码名、普通词）的写法与统一用词表见 [术语与代码名](terminology.md)。
 
-**多语言预留（本阶段未实现合并）：** 术语映射字段 `id`、`zh`、`en`、`first_lesson` 只在源文件中维护，译文层不得改动；可译文本字段是 `definition` 与 `aliases`（`server/glossary.py` 的 `TRANSLATABLE_FIELDS`）。将来的 `curriculum/glossary.{locale}.json` 以术语 `id` 为键，只提供这些字段及该语言的显示名 `term`，按 id 覆盖源文件；缺失的条目回退到 zh-CN 源文本。英文界面只显示 `en`，不附中文。
+**多语言：** 术语映射字段 `id`、`zh`、`en`、`first_lesson`、`kind` 只在源文件中维护，译文层不得改动。`curriculum/glossary.<语言>.json` 以术语 `id` 为键提供三项：显示名 `<id>.term`、释义 `<id>.definition`、该语言的别名 `<id>.aliases`（字符串数组，没有别的叫法写 `[]`；源文本是 `en`，英文名改了显示名与别名一起过期）。`GET /api/glossary?lang=en` 返回 `term`、`local_aliases` 与 `definition_locale`；没有译文的条目显示名用 `en`、释义回落中文。英文界面的悬浮卡只显示英文名，回落的中文释义标 `lang="zh-CN"`；英文正文按英文名与别名匹配术语（不分大小写、整词、最长优先、允许复数词尾，连字符等同空格），中文别名仍保留给回落成中文的段落。
 
 ## 节奏与读码规范（2026-10-03 起）
 
@@ -173,7 +173,28 @@
 
 **版本与迁移**：旧版本内容会在加载时走 `server/content_migrations.py` 的迁移阶梯。写回磁盘并规范格式用 `scripts/migrate_content.py`，加 `--check` 只检查。修改 schema 后，运行 `scripts/export_content_schema.py`，再在 frontend 目录运行 `npm run content:types`；测试会检查三者同步。
 
-**译文层**：在源文件旁放 `content.<语言>.json`，按 id 路径覆盖文本，例如 `hero.headline`、`concepts.<条目>.title`、`inputs.<字段>.label`。事实字段（id、正确答案、代码、选择器、URL 等）不能被覆盖。每条译文记录源文本摘要，源文本改动后这条译文视为过期，回落到源文本。`scripts/validate_lessons.py` 会报告每个译文层的覆盖率。
+**译文层（多语言）**：源语言是 zh-CN，其他语言是源文件旁的译文层，格式统一为 `{"schema_version": 1, "locale": "en", "texts": {路径: {"text": 译文, "source": 源文本摘要}}}`。网页按界面语言请求 `?lang=<语言>`，逐条合并：缺失或过期（源文本改了、摘要对不上）的条目回落到源文本，文件损坏或写了不可译路径时整份回落。
+
+| 源文件 | 译文层 | 可译路径（以 id 为键） | 规则 |
+| --- | --- | --- | --- |
+| `lessons/*/content.json` | `content.<语言>.json` | `hero.headline`、`concepts.<条目>.title`、`inputs.<字段>.label` 等 | `server/content_overlay.py` |
+| `curriculum/onboarding.json` | `onboarding.<语言>.json` | 同上，前面带章节 id | 同上 |
+| `curriculum/catalog.json` | `catalog.<语言>.json` | `category.<id>.title`、`module.<id>.description`、`lesson.<slug>.title/summary/objectives.<n>/topics.<n>/acceptance.<n>/experiments.<n>.steps.<m>`、规划课的 `sections.<n>.gist`、`elective.<id>.*`、`source.<id>.role/adaptation`、`principles.<n>`、`title` | `server/data_overlay.py` |
+| `curriculum/glossary.json` | `glossary.<语言>.json` | `<术语 id>.term/definition/aliases` | 同上 |
+| `lessons/*/lesson.json` | `lesson.<语言>.json` | `subtitle`、`exercises.<练习 id>.title`、`ui.question_label`、`ui.question_help` | 同上 |
+
+事实字段不能被覆盖：id、slug、状态、先修、课时、难度、正确答案、代码、选择器、URL，以及练习的 `question` 与预设输入（它们原样发给模型，属于运行事实，英文界面也保持中文）；源码、系统提示词和运行事件同理不翻译。课程级别与难度是固定取值，接口附带 `level_code`、`difficulty_code`，界面按代码翻译。译文里的 `{{lesson:<slug>}}` 按目标语言写成 “Lesson N”，没翻译的文本仍写“第 N 课”。
+
+翻译用 `scripts/translation_kit.py`，目标写 `lesson:<slug>`、`onboarding`、`catalog`、`glossary`、`manifest:<slug>`：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/translation_kit.py status --locale en                       # 各目标覆盖率与过期条数
+.\.venv\Scripts\python.exe scripts/translation_kit.py export catalog --locale en -o todo.json  # 只导出缺失或过期的条目；--all 导出全部
+.\.venv\Scripts\python.exe scripts/translation_kit.py apply catalog --locale en -i done.json --check   # 只校验
+.\.venv\Scripts\python.exe scripts/translation_kit.py apply catalog --locale en -i done.json   # 合并写回，自动记源文本摘要
+```
+
+`apply` 拒绝不可译路径，以及占位符（`{{...}}`）或行内代码（反引号）与源文本不一致的译文。英文译文的术语一律用术语表的 `en` 名，标题只首字母大写，代码名、事件名与字段名原样保留。`scripts/validate_lessons.py` 报告每份译文层的覆盖率，结构错误直接失败。
 
 **随课录制**：真实模型运行后，用 `scripts/export_recording.py --run <run_id> --name <名称>` 原样导出到 `lessons/<目录>/recordings/`。录制只能来自 live 运行，带源码哈希和完整性哈希；源码变化后会提示重新录制。
 

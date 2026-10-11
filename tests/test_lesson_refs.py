@@ -1,6 +1,7 @@
 """正文里的课程引用 {{lesson:<slug>}}：校验、显示与“不写死课号”。"""
 import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -28,10 +29,36 @@ class LessonRefTests(unittest.TestCase):
         self.assertEqual(resolve_refs(value, numbers),
                          {"a": ["见第 7 课", {"b": "第 1 课与第 7 课"}], "n": 3})
         self.assertEqual(resolve_refs("{{lesson:beta}}", numbers, "en-US"), "Lesson 7")
+        self.assertEqual(resolve_refs("{{lesson:beta}}", numbers, "en"), "Lesson 7")
+        self.assertEqual(resolve_refs("{{lesson:beta}}", numbers, "fr"), "第 7 课")
         with self.assertRaisesRegex(LessonValidationError, "未登记"):
             check_refs({"x": "{{lesson:gamma}}"}, numbers, "where")
         with self.assertRaisesRegex(LessonValidationError, "未登记"):
             resolve_refs("{{lesson:gamma}}", numbers)
+
+    def test_translated_text_says_lesson_n_and_fallback_text_keeps_the_source_form(self):
+        from server.content import lesson_content_model, load_lesson_content
+        from server.content_overlay import digest, text_slots
+
+        spec = next(spec for spec in LESSONS
+                    if len(lesson_refs(json.loads(spec["content_path"].read_text(encoding="utf-8")))) >= 2)
+        numbers = CATALOG_INDEX.numbers
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "content.json"
+            path.write_bytes(spec["content_path"].read_bytes())
+            model = lesson_content_model(path, spec)
+            texts = [(key, slot.value) for key, slot in text_slots(model, model.model_dump(mode="json")).items()
+                     if "{{lesson:" in slot.value]
+            (first, source), (_, untouched) = texts[0], texts[-1]
+            refs = " ".join("{{lesson:%s}}" % slug for slug in lesson_refs(source))
+            overlay = {"schema_version": 1, "locale": "en",
+                       "texts": {first: {"text": "See " + refs, "source": digest(source)}}}
+            path.with_name("content.en.json").write_text(json.dumps(overlay), encoding="utf-8")
+            merged, info = load_lesson_content(path, spec, "en", lambda text: resolve_refs(text, numbers, "en"))
+        rendered = json.dumps(resolve_refs(merged, numbers), ensure_ascii=False)
+        self.assertEqual(info["translated"], 1)
+        self.assertIn("See Lesson ", rendered)
+        self.assertIn(json.dumps(resolve_refs(untouched, numbers), ensure_ascii=False)[1:-1], rendered)
 
     def test_malformed_refs_are_rejected_instead_of_shown(self):
         numbers = {"alpha": 1}

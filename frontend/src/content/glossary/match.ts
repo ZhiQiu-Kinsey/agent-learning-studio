@@ -18,6 +18,11 @@ export interface GlossaryEntry {
   display?: string;
   first_lesson?: string;
   first_lesson_number?: number;
+  /** Only in a non-source language: the term's name and aliases in that language. */
+  term?: string;
+  local_aliases?: string[];
+  /** Language the definition is actually in (it falls back to the source). */
+  definition_locale?: string;
 }
 
 export interface GlossaryMatcher {
@@ -25,55 +30,91 @@ export interface GlossaryMatcher {
   /** Lower-cased surface form (spaces collapsed) -> entry; null for a blocked phrase. */
   forms: Map<string, GlossaryEntry | null>;
   byId: Map<string, GlossaryEntry>;
+  /** English prose: hyphens count as spaces and Latin names may take a plural ending. */
+  english: boolean;
 }
 
 export type Segment = string | { entry: GlossaryEntry; text: string };
 
 const LATIN_EDGE = /[A-Za-z0-9]/;
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const normalise = (value: string) => value.toLowerCase().replace(/\s+/g, " ");
+const normalise = (value: string, english = false) =>
+  (english ? value.replace(/-/g, " ") : value)
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+/** True when prose in `language` should be matched with English rules. */
+export const isEnglishProse = (language?: string) =>
+  !!language && !language.toLowerCase().startsWith("zh");
 
 /**
  * One alternation for every zh / en / alias form; longest forms win. Chinese
  * has no word boundaries, so a term lists the longer phrases (not_in) that
  * contain its name with another meaning; those phrases match first and mark
  * nothing.
+ *
+ * `language` is the content language. In English prose the term's English
+ * name and aliases (`term`, `local_aliases`) match case-insensitively as whole
+ * words, a hyphen equals a space ("tool-calling" / "tool calling") and a
+ * Latin name may take a plural ending ("tokens", "caches"). The Chinese forms
+ * stay in the matcher for paragraphs that fall back to Chinese.
  */
 export function buildMatcher(
   entries: readonly GlossaryEntry[],
+  language?: string,
 ): GlossaryMatcher | null {
+  const english = isEnglishProse(language);
   const forms = new Map<string, GlossaryEntry | null>();
-  for (const entry of entries)
-    for (const form of [entry.zh, entry.en, ...(entry.aliases ?? [])]) {
-      const key = normalise(form.trim());
+  for (const entry of entries) {
+    const names = [entry.zh, entry.en, ...(entry.aliases ?? [])];
+    if (english)
+      names.unshift(
+        ...(entry.term ? [entry.term] : []),
+        ...(entry.local_aliases ?? []),
+      );
+    for (const form of names) {
+      const key = normalise(form.trim(), english);
       if (key && !forms.has(key)) forms.set(key, entry);
     }
+  }
   for (const entry of entries)
     for (const phrase of entry.not_in ?? []) {
-      const key = normalise(phrase.trim());
+      const key = normalise(phrase.trim(), english);
       if (key && !forms.has(key)) forms.set(key, null);
     }
   if (!forms.size) return null;
+  const gap = english ? "(?:\\s+|-)" : "\\s*";
   const pattern = [...forms.keys()]
     .sort((a, b) => b.length - a.length)
     .map((form) => {
-      // Latin edges need word boundaries ("Token" must not match "tokens").
+      // Latin edges need word boundaries: in Chinese prose "Token" must not
+      // match "tokens"; English prose allows the plural ending only.
       const head = LATIN_EDGE.test(form[0]) ? "(?<![A-Za-z0-9_])" : "";
+      const plural = english && /[a-z]$/.test(form) ? "(?:e?s)?" : "";
       const tail = LATIN_EDGE.test(form[form.length - 1])
         ? "(?![A-Za-z0-9_])"
         : "";
-      return head + form.split(" ").map(escape).join("\\s*") + tail;
+      return head + form.split(" ").map(escape).join(gap) + plural + tail;
     })
     .join("|");
   return {
     regex: new RegExp(pattern, "giu"),
     forms,
     byId: new Map(entries.map((entry) => [entry.id, entry])),
+    english,
   };
 }
 
-const lookup = (matcher: GlossaryMatcher, text: string) =>
-  matcher.forms.get(normalise(text)) ?? undefined;
+function lookup(matcher: GlossaryMatcher, text: string) {
+  const key = normalise(text, matcher.english);
+  const exact = matcher.forms.get(key);
+  if (exact !== undefined || !matcher.english) return exact ?? undefined;
+  // The pattern allowed a plural ending: look the singular up.
+  for (const stem of [key.replace(/es$/, ""), key.replace(/s$/, "")])
+    if (stem !== key && matcher.forms.has(stem))
+      return matcher.forms.get(stem) ?? undefined;
+  return undefined;
+}
 
 /**
  * Code-like tokens written as plain prose (lesson content has no backticks):
@@ -81,8 +122,9 @@ const lookup = (matcher: GlossaryMatcher, text: string) =>
  * parentheses — e.g. role=tool, function.name, tool_calls[0].function,
  * tool_call_id, add_numbers(19, 23), messages[3].
  */
+// English abbreviations (e.g., i.e.) look like dotted access and are skipped.
 const CODE_TOKEN =
-  /(?<![\w.$])(?:[a-z_]\w*=[\w"'.-]+|[A-Za-z_]\w*(?:\[\d+\])?(?:\.[A-Za-z_]\w*(?:\[\d+\])?)+(?:\([^()\n]{0,30}\))?|[A-Za-z_]\w*_\w*(?:\[\d+\])*(?:\.[A-Za-z_]\w*)*(?:\([^()\n]{0,30}\))?|[A-Za-z_]\w*\[\d+\](?:\.[A-Za-z_]\w*)*)(?!\w)/g;
+  /(?<![\w.$])(?!(?:e\.g|i\.e)\.)(?:[a-z_]\w*=[\w"'.-]+|[A-Za-z_]\w*(?:\[\d+\])?(?:\.[A-Za-z_]\w*(?:\[\d+\])?)+(?:\([^()\n]{0,30}\))?|[A-Za-z_]\w*_\w*(?:\[\d+\])*(?:\.[A-Za-z_]\w*)*(?:\([^()\n]{0,30}\))?|[A-Za-z_]\w*\[\d+\](?:\.[A-Za-z_]\w*)*)(?!\w)/g;
 
 /** Split plain prose into text and code-like tokens (text is never changed). */
 export function splitCode(text: string): (string | { code: string })[] {
@@ -112,6 +154,18 @@ export function buildNamePattern(names: readonly string[]): RegExp | null {
     `(?<![\\w.$-])(?:${forms.map(escape).join("|")})(?![\\w-]|\\.\\w)`,
     "g",
   );
+}
+
+/**
+ * A name that cannot be an ordinary English word: it has `_ . - ( ) :` or a
+ * digit, or a capital after its first letter (RunContext, API_URL, Final
+ * Answer). In Chinese prose every bare Latin name from the source is code; in
+ * English prose "messages", "model" or "is" are mostly plain words, so only
+ * code-shaped names are marked there (snake_case and dotted names are caught
+ * by the code-token pass anyway).
+ */
+export function isCodeShaped(name: string) {
+  return /[_.\-():\d]/.test(name) || /[A-Z]/.test(name.slice(1));
 }
 
 /** Split plain text into text and code-name pieces (text is never changed). */

@@ -98,21 +98,37 @@ export function checkLocales(dir, sourceLocale = "zh-CN") {
       const src = groupPlurals(new Set(base.keys()));
       const dst = groupPlurals(new Set(target.keys()));
       const where = `${locale}/${ns}`;
-      for (const key of src.plain) if (!dst.plain.has(key)) errors.push(`${where}: missing "${key}"`);
+      // A source key without plural forms (zh-CN has only "other") may become a
+      // plural group in a language that needs one; i18next picks the form by
+      // `count`, so the source text must pass {{count}}.
+      const pluralized = new Set(
+        [...src.plain].filter((key) => !dst.plain.has(key) && dst.plural.has(key)),
+      );
+      for (const key of pluralized)
+        if (!placeholders(base.get(key)).split(",").includes("count"))
+          errors.push(`${where}: "${key}" has plural forms but the source has no {{count}}`);
+      for (const key of src.plain)
+        if (!dst.plain.has(key) && !pluralized.has(key)) errors.push(`${where}: missing "${key}"`);
       for (const key of dst.plain) if (!src.plain.has(key)) errors.push(`${where}: extra "${key}"`);
-      for (const [key, forms] of src.plural) {
-        const got = dst.plural.get(key) ?? new Set();
+      const checkForms = (key, got) => {
         const missing = categories.filter((form) => !got.has(form));
         if (missing.length) errors.push(`${where}: "${key}" lacks plural forms ${missing.join(", ")}`);
         for (const form of got)
           if (!categories.includes(form) && form !== "zero")
             errors.push(`${where}: "${key}_${form}" is not a plural form of ${locale}`);
+      };
+      for (const [key, forms] of src.plural) {
+        checkForms(key, dst.plural.get(key) ?? new Set());
         if (!forms.size) errors.push(`${where}: "${key}" has no source forms`);
       }
+      for (const key of pluralized) checkForms(key, dst.plural.get(key));
       for (const key of dst.plural.keys())
-        if (!src.plural.has(key)) errors.push(`${where}: extra plural "${key}"`);
+        if (!src.plural.has(key) && !pluralized.has(key)) errors.push(`${where}: extra plural "${key}"`);
 
-      const sourceOther = (key) => base.get(key) ?? base.get(key.replace(PLURAL, "_other"));
+      const sourceOther = (key) =>
+        base.get(key) ??
+        base.get(key.replace(PLURAL, "_other")) ??
+        base.get(key.replace(PLURAL, ""));
       for (const [key, value] of target) {
         const reference = sourceOther(key);
         if (reference === undefined) continue;

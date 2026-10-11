@@ -49,10 +49,13 @@ function Reveal({
  */
 export function HomeJourney({
   curriculum,
+  chapterCount,
   onOpenLesson,
   onStartOnboarding,
 }: {
   curriculum: CurriculumData | null;
+  /** Onboarding chapters, once loaded; the help line names the real count. */
+  chapterCount?: number;
   onOpenLesson: (id: string) => void;
   onStartOnboarding: () => void;
 }) {
@@ -103,7 +106,9 @@ export function HomeJourney({
               <span className="home-domain-body">
                 <strong>{t("journey.chapter0")}</strong>
                 <span className="home-domain-desc">
-                  {t("journey.chapter0Help")}
+                  {chapterCount
+                    ? t("journey.chapter0Help", { count: chapterCount })
+                    : t("journey.chapter0HelpPending")}
                 </span>
                 <span className="home-domain-foot">
                   <small>

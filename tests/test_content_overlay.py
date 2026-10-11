@@ -93,6 +93,18 @@ class OverlayTests(unittest.TestCase):
         self.assertTrue(any(path.startswith("what-is-agent.boundaries.rows.0.") for path in missing))
         self.assertFalse(any(path.endswith(".url") for path in missing))
 
+    def test_onboarding_top_level_text_is_merged(self):
+        # 顶层 title/description 是字符串：必须在拷贝返回值之前合并，否则译文丢失。
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "onboarding.json"
+            shutil.copy(ROOT / "curriculum" / "onboarding.json", path)
+            source = load_onboarding(path)
+            payload = {"schema_version": 1, "locale": "en", "texts": {
+                "title": {"text": "Before the first line", "source": digest(source["title"])}}}
+            path.with_name("onboarding.en.json").write_text(json.dumps(payload), encoding="utf-8")
+            data = load_onboarding(path, "en")
+        self.assertEqual((data["title"], data["i18n"]["translated"]), ("Before the first line", 1))
+
 
 class OverlayApiTests(unittest.TestCase):
     def setUp(self):

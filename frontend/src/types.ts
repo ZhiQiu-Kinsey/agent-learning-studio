@@ -1,6 +1,7 @@
 import type { InputSchema } from "./components/lab/SchemaInputs";
 import type { LessonContent } from "./content/types.gen";
 import type { TRACE_CONTRACT } from "./generated/trace-contract";
+import type { ContentI18n } from "./i18n/textLanguage";
 
 export type Exercise = {
   id: string;
@@ -54,6 +55,8 @@ export type Detail = Lesson & {
   system_prompt: string;
   tools: unknown;
   learning?: LessonContent;
+  /** Which language `learning` is actually in; strings fall back one by one. */
+  learning_i18n?: ContentI18n;
 };
 export type { LessonContent, QuizQuestion } from "./content/types.gen";
 export type Status = {
@@ -141,6 +144,8 @@ export type CurriculumLesson = {
   category_id: string;
   module_id: string;
   level: string;
+  /** Stable code of `level` / `difficulty` for translated labels; absent for unknown values. */
+  level_code?: "core" | "advanced" | "elective";
   status: "available" | "planned";
   prerequisites: string[];
   summary: string;
@@ -152,6 +157,7 @@ export type CurriculumLesson = {
   /** 预计学习时长（分钟）与难度，来自 catalog。 */
   estimated_minutes?: number;
   difficulty?: string;
+  difficulty_code?: "beginner" | "intermediate" | "challenge";
   /** 小节：可运行课来自正文节标题，规划课来自 catalog 的计划。 */
   sections?: { title: string; gist: string }[];
   /** 是否调用真实模型；规划课未定时为 null。 */
@@ -191,4 +197,6 @@ export type CurriculumData = {
     topics: string[];
   }[];
   principles: string[];
+  /** Which language the catalogue text is actually in. */
+  i18n?: ContentI18n;
 };

@@ -73,6 +73,7 @@ npm.cmd --prefix frontend run dev               # Vite 开发服务器，/api �
 .\.venv\Scripts\python.exe scripts/export_curriculum.py            # 改了 catalog.json、正文小节的标题或第一句、lesson.json 或术语表后重新生成 docs/course-plan.md（--check 只检查）
 .\.venv\Scripts\python.exe scripts/export_trace_contract.py        # 改了 server/envelope.py 后生成前端镜像（--check 只检查）
 .\.venv\Scripts\python.exe scripts/migrate_content.py --check      # 内容 v2 迁移与格式规范
+.\.venv\Scripts\python.exe scripts/translation_kit.py status --locale en   # 译文层覆盖率；export/apply 导出待译条目、校验并写回（目标 lesson:<slug>、onboarding、catalog、glossary、manifest:<slug>）
 .\.venv\Scripts\python.exe scripts/export_content_schema.py        # 改了 server/content_schema.py 后导出 schema
 npm.cmd --prefix frontend run content:types                        # 再由 schema 生成前端类型
 npm.cmd --prefix frontend exec vitest run                          # 前端单元测试

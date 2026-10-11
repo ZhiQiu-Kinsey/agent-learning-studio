@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { jsonFetch } from "../../api";
+import { useContentLanguage } from "../../hooks/useContentLanguage";
 import type { LessonCode } from "./model";
 
 type State =
@@ -14,16 +15,23 @@ export function useLessonCode(lessonId: string | undefined): State {
     code: null,
     error: "",
   });
+  const language = useContentLanguage();
+  // A language switch swaps the notes in place; only a new lesson shows "loading".
+  const loaded = useRef("");
   useEffect(() => {
     if (!lessonId) return;
     const abort = new AbortController();
-    setState({ status: "loading", code: null, error: "" });
-    jsonFetch<LessonCode>(`/api/lessons/${encodeURIComponent(lessonId)}/code`, {
-      signal: abort.signal,
-    })
+    if (loaded.current !== lessonId)
+      setState({ status: "loading", code: null, error: "" });
+    jsonFetch<LessonCode>(
+      `/api/lessons/${encodeURIComponent(lessonId)}/code`,
+      { signal: abort.signal },
+      language,
+    )
       .then((code) => {
-        if (!abort.signal.aborted)
-          setState({ status: "ready", code, error: "" });
+        if (abort.signal.aborted) return;
+        loaded.current = lessonId;
+        setState({ status: "ready", code, error: "" });
       })
       .catch((reason: unknown) => {
         if (!abort.signal.aborted)
@@ -34,6 +42,6 @@ export function useLessonCode(lessonId: string | undefined): State {
           });
       });
     return () => abort.abort();
-  }, [lessonId]);
+  }, [lessonId, language]);
   return state;
 }

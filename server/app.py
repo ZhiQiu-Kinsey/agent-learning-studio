@@ -187,13 +187,14 @@ async def settings(request: Request):
 
 
 @app.get("/api/lessons")
-def lessons():
-    return {"lessons": [public_lesson(s) for s in LESSONS], "roadmap": roadmap()}
+def lessons(lang: str | None = None):
+    locale = require_locale(lang)
+    return {"lessons": [public_lesson(s, locale) for s in LESSONS], "roadmap": roadmap(locale)}
 
 
 @app.get("/api/curriculum")
-def curriculum():
-    return curriculum_outline()
+def curriculum(lang: str | None = None):
+    return curriculum_outline(locale=require_locale(lang))
 
 
 @app.get("/api/onboarding")
@@ -201,17 +202,20 @@ def onboarding(lang: str | None = None):
     """提供独立的前置阅读内容；不加载课程运行器或调用模型。"""
     locale = require_locale(lang)
     try:
-        data = load_onboarding(ROOT / "curriculum" / "onboarding.json", locale)
-        return resolve_refs(data, CATALOG_INDEX.numbers, data["i18n"]["locale"])
+        # 译文里的课程引用按目标语言写课号，没翻译的文本按源语言写。
+        data = load_onboarding(ROOT / "curriculum" / "onboarding.json", locale,
+                               lambda text: resolve_refs(text, CATALOG_INDEX.numbers, locale))
+        return resolve_refs(data, CATALOG_INDEX.numbers)
     except LessonValidationError:
         raise ApiError(503, "onboarding_unavailable", "前置学习内容暂时不可用，请稍后重试。") from None
 
 
 @app.get("/api/glossary")
-def glossary():
-    """术语表单一来源；只读 JSON，不加载课程运行器。"""
+def glossary(lang: str | None = None):
+    """术语表单一来源；只读 JSON，不加载课程运行器。?lang= 合并该语言的显示名、释义与别名。"""
+    locale = require_locale(lang)
     try:
-        return public_glossary(ROOT, CATALOG_INDEX)
+        return public_glossary(ROOT, CATALOG_INDEX, locale)
     except (OSError, LessonValidationError):
         raise ApiError(503, "glossary_unavailable", "术语表暂时不可用，请稍后重试。") from None
 

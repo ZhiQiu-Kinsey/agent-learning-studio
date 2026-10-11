@@ -3,6 +3,7 @@ import {
   assignFirstOccurrences,
   buildMatcher,
   buildNamePattern,
+  isCodeShaped,
   keywordKind,
   splitCode,
   splitNames,
@@ -82,6 +83,80 @@ describe("code keywords", () => {
     expect(keywordKind("tool_call_id").kind).toBe("field");
     expect(keywordKind("add_numbers(19, 23)").kind).toBe("call");
     expect(keywordKind("42").kind).toBe("literal");
+  });
+});
+
+describe("English prose", () => {
+  const english = (
+    id: string,
+    zh: string,
+    en: string,
+    term: string,
+    local: string[] = [],
+  ) => ({ ...entry(id, zh, en), term, local_aliases: local });
+  const en = buildMatcher(
+    [
+      english("tool-calling", "工具调用", "Tool Calling", "tool calling", ["function calling"]),
+      english("tool", "工具", "Tool", "tool"),
+      english("token", "Token", "Token", "token"),
+      english("finish-reason", "结束原因", "Finish Reason", "finish reason"),
+      english("cache", "缓存", "Cache", "cache"),
+    ],
+    "en",
+  )!;
+
+  it("matches English names and aliases case-insensitively as whole words, longest first", () => {
+    expect(termsIn("Tool calling lets the model ask for a tool.", en)).toEqual([
+      "tool-calling",
+      "tool",
+    ]);
+    expect(termsIn("This is function calling.", en)).toEqual(["tool-calling"]);
+    expect(termsIn("tool-calling and Finish Reason", en)).toEqual([
+      "tool-calling",
+      "finish-reason",
+    ]);
+    // Whole words only: no match inside a longer word or identifier.
+    expect(termsIn("toolbox, tokenizer, finish_reason", en)).toEqual([]);
+  });
+
+  it("accepts a plural ending and keeps the matched text unchanged", () => {
+    expect(termsIn("Count the tokens and the caches.", en)).toEqual([
+      "token",
+      "cache",
+    ]);
+    const text = "Tokens cost money.";
+    const segments = splitText(text, en, new Set(["token"]));
+    expect(segments[0]).toEqual({ entry: expect.objectContaining({ id: "token" }), text: "Tokens" });
+    expect(
+      segments
+        .map((segment) => (typeof segment === "string" ? segment : segment.text))
+        .join(""),
+    ).toBe(text);
+  });
+
+  it("does not take English abbreviations or plain words for code", () => {
+    const codes = (text: string) =>
+      splitCode(text)
+        .filter((piece) => typeof piece !== "string")
+        .map((piece) => (piece as { code: string }).code);
+    expect(codes("Fields, e.g. usage.total_tokens, i.e. the sum.")).toEqual([
+      "usage.total_tokens",
+    ]);
+    expect(
+      ["messages", "is", "model", "Bearer", "tool_calls", "RunContext", "Final Answer", "lesson.report", "s-1042"].filter(
+        isCodeShaped,
+      ),
+    ).toEqual(["tool_calls", "RunContext", "Final Answer", "lesson.report", "s-1042"]);
+  });
+
+  it("still finds Chinese forms in a paragraph that fell back to Chinese", () => {
+    expect(termsIn("模型发起工具调用", en)).toEqual(["tool-calling"]);
+  });
+
+  it("leaves Chinese matching unchanged without an English language", () => {
+    const zh = buildMatcher([english("token", "Token", "Token", "token")])!;
+    expect(termsIn("tokens 不算，Token 才算", zh)).toEqual(["token"]);
+    expect(zh.english).toBe(false);
   });
 });
 

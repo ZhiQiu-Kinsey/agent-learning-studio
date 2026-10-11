@@ -54,13 +54,13 @@ def content_sections(learning: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def lesson_terms(terms: list[dict[str, Any]]) -> dict[str, list[str]]:
-    """{课程 slug: [本课引入的课程概念显示名]}。"""
+    """{课程 slug: [本课引入的课程概念显示名]}；公开术语（public_glossary）带好了所选语言的 display。"""
     from server.glossary import display_label
 
     result: dict[str, list[str]] = {}
     for term in terms:
         if term.get("kind", "concept") == "concept" and term.get("first_lesson"):
-            result.setdefault(term["first_lesson"], []).append(display_label(term))
+            result.setdefault(term["first_lesson"], []).append(term.get("display") or display_label(term))
     return result
 
 

@@ -86,7 +86,7 @@ function ModuleBlock({
         <h3>{module.title}</h3>
         <p>{module.description}</p>
         <span className="curriculum-module-count">
-          {t("list.lessons", { n: ids.length })}
+          {t("list.lessons", { count: ids.length })}
           <ArrowRight size={12} />
         </span>
       </div>
@@ -159,7 +159,7 @@ export function CategoryBlock({
             <p>{category.description}</p>
           </div>
           <span className="curriculum-category-label">
-            {t("list.modules", { n: modules.length })}
+            {t("list.modules", { count: modules.length })}
             <ArrowDown size={13} />
           </span>
         </div>

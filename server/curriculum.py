@@ -139,21 +139,42 @@ def load_curriculum():
     return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
 
 
-def public_curriculum():
-    """附加计算出的显示课号；local_path 只供本机调研，不公开。"""
+# 课时级别与难度是固定的几个中文取值；公开数据附带稳定代码，界面按代码翻译，未知取值照原文显示。
+LEVEL_CODES = {"必修": "core", "进阶": "advanced", "选修": "elective"}
+DIFFICULTY_CODES = {"入门": "beginner", "进阶": "intermediate", "挑战": "challenge"}
+
+
+def public_curriculum(locale=None):
+    """附加计算出的显示课号；local_path 只供本机调研，不公开。
+
+    locale 选择 curriculum/catalog.<locale>.json 译文层（规则见 server/data_overlay.py），
+    逐条回落到源语言；i18n 字段说明实际使用的语言与缺失条目。
+    """
+    from server.content import localize  # 延迟导入：content 依赖本模块的错误类型
+    from server.data_overlay import catalog_slots
+    from server.lesson_refs import resolve_refs
+
     catalog = load_curriculum()
     index = index_catalog(catalog)
     for lesson in catalog["lessons"]:
         lesson["number"] = index.numbers[lesson["id"]]
         lesson.setdefault("aliases", [])
+        if lesson.get("level") in LEVEL_CODES:
+            lesson["level_code"] = LEVEL_CODES[lesson["level"]]
+        if lesson.get("difficulty") in DIFFICULTY_CODES:
+            lesson["difficulty_code"] = DIFFICULTY_CODES[lesson["difficulty"]]
     for source in catalog["sources"]:
         source.pop("local_path", None)
-    from server.lesson_refs import resolve_refs  # 延迟导入：lesson_refs 依赖本模块的错误类型
-    return resolve_refs(catalog, index.numbers)
+    # 译文里的课程引用按目标语言写课号；没翻译的条目随后按源语言写。
+    info = localize(CATALOG_PATH, catalog_slots(catalog), locale,
+                    finish=lambda text: resolve_refs(text, index.numbers, locale))
+    catalog = resolve_refs(catalog, index.numbers)
+    catalog["i18n"] = info
+    return catalog
 
 
-def roadmap():
-    catalog = public_curriculum()  # 已换好课号
+def roadmap(locale=None):
+    catalog = public_curriculum(locale)  # 已换好课号
     planned_categories = {lesson["category_id"] for lesson in catalog["lessons"]
                           if lesson["status"] == "planned"}
     return [{"id": category["id"], "title": category["title"],

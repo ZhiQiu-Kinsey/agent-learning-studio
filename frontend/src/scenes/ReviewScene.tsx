@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Check, Circle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { jsonFetch } from "../api";
+import { useContentLanguage } from "../hooks/useContentLanguage";
 import CountUp from "../components/react-bits/CountUp";
 import { Button } from "../components/ui/button";
 import { LearningBadge } from "../components/learning/LearningBadge";
@@ -62,15 +63,20 @@ export function ReviewScene({ studio }: SceneProps) {
   const [curriculum, setCurriculum] = useState<CurriculumData | "error" | null>(
     null,
   );
+  const language = useContentLanguage();
   useEffect(() => {
     const controller = new AbortController();
-    jsonFetch<CurriculumData>("/api/curriculum", { signal: controller.signal })
+    jsonFetch<CurriculumData>(
+      "/api/curriculum",
+      { signal: controller.signal },
+      language,
+    )
       .then(setCurriculum)
       .catch(() => {
         if (!controller.signal.aborted) setCurriculum("error");
       });
     return () => controller.abort();
-  }, []);
+  }, [language]);
   const lessons =
     curriculum && curriculum !== "error"
       ? [...curriculum.lessons].sort((a, b) => a.number - b.number)

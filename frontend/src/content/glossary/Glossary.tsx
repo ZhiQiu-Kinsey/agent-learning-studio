@@ -9,11 +9,18 @@ import Markdown, { type Components } from "react-markdown";
 import { Tooltip } from "radix-ui";
 import { useTranslation } from "react-i18next";
 import { useGlossaryMatcher } from "../../hooks/useGlossary";
+import {
+  useContentLanguage,
+  useFallbackLang,
+} from "../../hooks/useContentLanguage";
+import { isChineseText } from "../../i18n/textLanguage";
 import DecryptedText from "../../components/react-bits/DecryptedText";
 import { useReducedMotion } from "../../motion";
 import {
   assignFirstOccurrences,
   buildNamePattern,
+  isCodeShaped,
+  isEnglishProse,
   keywordKind,
   rehypeGlossary,
   splitProse,
@@ -46,8 +53,11 @@ export function LessonVocabulary({
   children: ReactNode;
 }) {
   const signature = codeNames.join("\u0000");
-  const names = useMemo(
-    () => buildNamePattern(codeNames),
+  const [names, latinNames] = useMemo(
+    () => [
+      buildNamePattern(codeNames),
+      buildNamePattern(codeNames.filter(isCodeShaped)),
+    ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [signature],
   );
@@ -55,9 +65,10 @@ export function LessonVocabulary({
     () => ({
       lessonId,
       names,
+      latinNames,
       notes: new Map(notes.map((item) => [item.name, item.note])),
     }),
-    [lessonId, names, notes],
+    [lessonId, names, latinNames, notes],
   );
   return (
     <VocabularyContext.Provider value={value}>
@@ -111,7 +122,10 @@ export function GlossaryTerm({
   const reduced = useReducedMotion();
   const { lessonId } = useVocabulary();
   const tier = termTier(entry, lessonId);
-  const same = entry.zh.toLowerCase() === entry.en.toLowerCase();
+  // A non-source glossary carries `term`: the card shows only that name, no
+  // Chinese, and marks a definition that fell back to Chinese with its language.
+  const localized = entry.term !== undefined;
+  const same = localized || entry.zh.toLowerCase() === entry.en.toLowerCase();
   const kicker =
     tier === "new"
       ? t("kickerNew")
@@ -144,7 +158,7 @@ export function GlossaryTerm({
             {kicker}
           </span>
           <strong className="glossary-card-title">
-            {entry.zh}
+            {localized ? entry.term : entry.zh}
             {!same && (
               <span className="glossary-card-en">
                 {t("enBefore")}
@@ -157,7 +171,16 @@ export function GlossaryTerm({
               </span>
             )}
           </strong>
-          <span className="glossary-card-definition">{entry.definition}</span>
+          <span
+            className="glossary-card-definition"
+            lang={
+              localized && entry.definition_locale
+                ? entry.definition_locale
+                : undefined
+            }
+          >
+            {entry.definition}
+          </span>
           {tier !== "new" && entry.first_lesson_number !== undefined && (
             <span className="glossary-card-first">
               {t("firstLesson", { number: entry.first_lesson_number })}
@@ -172,6 +195,18 @@ export function GlossaryTerm({
       </Tooltip.Portal>
     </Tooltip.Root>
   );
+}
+
+/**
+ * The code-name pattern for one string: all source names in Chinese text,
+ * only code-shaped ones in English text (a plain word like "is" stays prose).
+ */
+function useNames(text: string) {
+  const { names, latinNames } = useVocabulary();
+  const language = useContentLanguage();
+  return !isEnglishProse(language) || isChineseText(text)
+    ? names
+    : (latinNames ?? null);
 }
 
 function useOwned(text: string) {
@@ -239,24 +274,23 @@ export function CodeName({
 /** Plain string with its owned terms marked and code names as inline code. */
 export function GlossaryText({ text }: { text: string }) {
   const { matcher, allowed } = useOwned(text);
-  const { names } = useVocabulary();
+  const names = useNames(text);
+  const lang = useFallbackLang()(text);
   const pieces = useMemo(
     () => splitProse(text, matcher, new Set(allowed ?? []), names),
     [matcher, allowed, names, text],
   );
-  return (
-    <>
-      {pieces.map((piece, index) => {
-        if (typeof piece === "string") return piece;
-        if ("code" in piece) return <CodeName key={index} code={piece.code} />;
-        return (
-          <GlossaryTerm key={index} entry={piece.entry}>
-            {piece.text}
-          </GlossaryTerm>
-        );
-      })}
-    </>
-  );
+  const body = pieces.map((piece, index) => {
+    if (typeof piece === "string") return piece;
+    if ("code" in piece) return <CodeName key={index} code={piece.code} />;
+    return (
+      <GlossaryTerm key={index} entry={piece.entry}>
+        {piece.text}
+      </GlossaryTerm>
+    );
+  });
+  // A string that fell back to Chinese under another UI language says so.
+  return lang ? <span lang={lang}>{body}</span> : <>{body}</>;
 }
 
 /** Inline code in markdown: same text, coloured by what it names, note on hover. */
@@ -276,7 +310,7 @@ function CodeKeyword(props: ComponentProps<"code"> & { node?: unknown }) {
 /** Markdown with owned terms marked and inline code styled as keywords. */
 export function GlossaryMarkdown({ children }: { children: string }) {
   const { matcher, allowed } = useOwned(children);
-  const { names } = useVocabulary();
+  const names = useNames(children);
   const plugins = useMemo(
     () =>
       [[rehypeGlossary, { matcher, allowed, names }]] as ComponentProps<
@@ -300,9 +334,18 @@ export function GlossaryMarkdown({ children }: { children: string }) {
     }),
     [matcher],
   );
-  return (
+  const lang = useFallbackLang()(children);
+  const body = (
     <Markdown rehypePlugins={plugins} components={components}>
       {children}
     </Markdown>
+  );
+  // display: contents keeps the markdown's own block layout.
+  return lang ? (
+    <div lang={lang} className="lang-fallback">
+      {body}
+    </div>
+  ) : (
+    body
   );
 }

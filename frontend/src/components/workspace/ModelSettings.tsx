@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Check, LoaderCircle, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { jsonFetch } from "../../api";
+import { providerName } from "../../lib/providerName";
 import type { ProviderCatalog, ProviderProfile } from "../../types";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -125,7 +126,7 @@ export function ModelSettings({
         tone: "success",
         title: tc("toast.settingsSaved"),
         description: tc("toast.settingsSavedBody", {
-          provider: provider?.label || providerId,
+          provider: providerName(providerId, provider?.label),
           model: modelId.trim(),
         }),
       });
@@ -237,7 +238,7 @@ export function ModelSettings({
               accentColor="var(--primary)"
               options={providers.map((item) => ({
                 value: item.id,
-                label: item.label,
+                label: providerName(item.id, item.label),
               }))}
               placeholder={t("providerPlaceholder")}
             />

@@ -50,6 +50,32 @@ describe("locale files", () => {
     );
   });
 
+  it("lets a plain source key become a plural group that needs {{count}}", () => {
+    const dir = fixture({
+      "zh-CN/common.json": { runs: "{{count}} 次运行", items: "{{n}} 项" },
+      "en/common.json": {
+        runs_one: "{{count}} run",
+        runs_other: "{{count}} runs",
+        items_one: "{{n}} item",
+        items_other: "{{n}} items",
+      },
+    });
+    const { errors } = checkLocales(dir);
+    expect(errors).toEqual([
+      'en/common.json: "items" has plural forms but the source has no {{count}}',
+    ]);
+    const partial = fixture({
+      "zh-CN/common.json": { runs: "{{count}} 次运行" },
+      "en/common.json": { runs_other: "{{count}} runs", runs_many: "x" },
+    });
+    expect(checkLocales(partial).errors).toEqual(
+      expect.arrayContaining([
+        'en/common.json: "runs" lacks plural forms one',
+        'en/common.json: "runs_many" is not a plural form of en',
+      ]),
+    );
+  });
+
   it("warns when a translation equals the source text", () => {
     const dir = fixture({
       "zh-CN/common.json": { a: "Agent Lab" },
@@ -66,5 +92,8 @@ describe("pickLocale", () => {
     expect(pickLocale("zh-CN", ["en-US"])).toBe("zh-CN");
     expect(pickLocale("xx", ["zh-TW"])).toBe("zh-CN");
     expect(pickLocale(null, ["fr-FR"])).toBe("zh-CN");
+    expect(pickLocale(null, ["en-US", "zh-CN"])).toBe("en");
+    expect(pickLocale(null, ["zh-TW", "en"])).toBe("zh-CN");
+    expect(pickLocale("en", ["zh-CN"])).toBe("en");
   });
 });

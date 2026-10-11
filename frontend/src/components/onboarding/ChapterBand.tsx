@@ -47,11 +47,11 @@ export function ChapterBand({
             <span>{t("chapterIndex", { index: index + 1, total })}</span>
             <span>
               <Clock3 size={13} aria-hidden="true" />
-              {t("minutes", { n: chapter.estimated_minutes })}
+              {t("minutes", { count: chapter.estimated_minutes })}
             </span>
             <span>
               <ListChecks size={13} aria-hidden="true" />
-              {t("sections", { n: chapter.sections.length })}
+              {t("sections", { count: chapter.sections.length })}
             </span>
           </motion.div>
         </div>

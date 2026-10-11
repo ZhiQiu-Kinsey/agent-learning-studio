@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { FlaskConical, History } from "lucide-react";
 import type { StudioState } from "../../../hooks/useStudio";
+import { useFallbackLang } from "../../../hooks/useContentLanguage";
 import PromptBar from "../../react-bits/PromptBar";
 import { Button } from "../../ui/button";
 
@@ -34,6 +35,7 @@ export function Composer({
       (s.status.requires_api_key === false || s.status.api_key_configured)
     );
   const help = s.detail?.ui?.question_help;
+  const langOf = useFallbackLang();
   return (
     <section className="lab-composer">
       <div className="pane-heading">
@@ -44,7 +46,10 @@ export function Composer({
         <small>LIVE</small>
       </div>
       <div className="form-field">
-        <label htmlFor="lab-question">
+        <label
+          htmlFor="lab-question"
+          lang={langOf(s.detail?.ui?.question_label)}
+        >
           {s.detail?.ui?.question_label || t("question")}
         </label>
         <PromptBar
@@ -84,7 +89,11 @@ export function Composer({
           }}
         />
         {help && (
-          <p id="lab-question-help" className="composer-note">
+          <p
+            id="lab-question-help"
+            className="composer-note"
+            lang={langOf(help)}
+          >
             {help}
           </p>
         )}

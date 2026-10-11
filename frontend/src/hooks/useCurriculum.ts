@@ -1,27 +1,34 @@
 import { useEffect, useState } from "react";
 import { jsonFetch } from "../api";
+import { createLanguageCache } from "../lib/languageCache";
 import type { CurriculumData } from "../types";
+import { useContentLanguage } from "./useContentLanguage";
 
-// One request per page load; every caller shares the same promise.
-let pending: Promise<CurriculumData> | null = null;
-const load = () =>
-  (pending ??= jsonFetch<CurriculumData>("/api/curriculum").catch((error) => {
-    pending = null;
-    throw error;
-  }));
+// One request per language; every caller shares the same promise.
+const catalogues = createLanguageCache((language) =>
+  jsonFetch<CurriculumData>("/api/curriculum", undefined, language),
+);
 
-/** Shared, cached curriculum catalogue; null until loaded or on failure. */
+/**
+ * Shared, cached curriculum catalogue in the UI language; null until loaded
+ * or on failure. The previous language's catalogue stays until the new one
+ * arrives.
+ */
 export function useCurriculum() {
-  const [data, setData] = useState<CurriculumData | null>(null);
+  const language = useContentLanguage();
+  const [data, setData] = useState<CurriculumData | null>(
+    () => catalogues.peek(language) ?? null,
+  );
   useEffect(() => {
     let alive = true;
-    load()
+    catalogues
+      .load(language)
       .then((value) => alive && setData(value))
       .catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, []);
+  }, [language]);
   return data;
 }
 

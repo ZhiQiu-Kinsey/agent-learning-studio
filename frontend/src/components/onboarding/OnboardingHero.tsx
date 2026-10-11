@@ -145,15 +145,15 @@ export function OnboardingHero({
         >
           <span>
             <BookOpen size={14} />
-            {t("metaChapters", { n: content.chapters.length })}
+            {t("metaChapters", { count: content.chapters.length })}
           </span>
           <span>
             <Clock3 size={14} />
-            {t("metaMinutes", { n: minutes })}
+            {t("metaMinutes", { count: minutes })}
           </span>
           <span>
             <CheckCheck size={14} />
-            {t("metaChecked", { n: completed })}
+            {t("metaChecked", { count: completed })}
           </span>
         </motion.div>
       </div>

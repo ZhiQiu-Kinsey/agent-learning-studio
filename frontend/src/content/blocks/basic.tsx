@@ -188,7 +188,7 @@ export function ReferencesBlock({ block }: { block: BlockOf<"references"> }) {
           <span className="references-heading">
             <strong>{t("title")}</strong>
             <span className="references-count">
-              {t("count", { n: block.items.length })}
+              {t("count", { count: block.items.length })}
             </span>
           </span>
         </AccordionTrigger>

@@ -9,6 +9,7 @@ import { ObjectivesAside } from "./onboarding/ObjectivesAside";
 import { OnboardingHero } from "./onboarding/OnboardingHero";
 import { OnboardingLoading } from "./onboarding/OnboardingLoading";
 import { useOnboardingContent } from "./onboarding/useOnboardingContent";
+import { TranslationNotice } from "./TranslationNotice";
 
 /** Chapter 0: hero, chapter tabs, the current chapter and its objectives. */
 export function Onboarding({
@@ -61,6 +62,7 @@ export function Onboarding({
   return (
     <div className="onboarding-page" data-testid="onboarding-page">
       <OnboardingHero content={content} completed={completed} onMap={onMap} />
+      <TranslationNotice info={content.i18n} />
       <ChapterTabs
         chapters={content.chapters}
         activeIndex={chapterIndex}
