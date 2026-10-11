@@ -264,7 +264,7 @@ lessons/<directory>/locales/en.py         TEXTS = Texts(...)
 - `scripts/cjk_baseline.py --check` (`tests/test_python_cjk_baseline.py`): string literals (docstrings included) containing Chinese in the Python files of `course/` and `lessons/` may only decrease. `locales/zh_CN.py` and test files are exempt.
 - Lesson text and runtime text stay consistent: the Chinese text quotes the original from the Chinese catalog, and the English translation layer quotes the original from the English catalog (no more "Chinese original plus English gloss"). After source moves, re-align code-reading notes with `realign_notes.py` and review both the Chinese and the English notes.
 
-The step-by-step checklist for converting a lesson (for people and agents doing the conversion) is in `.claude/briefs/i18n/convert-lesson.md`.
+The step-by-step checklist for converting a lesson, the pitfalls we hit and the English style guide are in [Localizing a lesson](localizing-lessons.en.md).
 
 ## Custom runners
 

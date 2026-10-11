@@ -149,7 +149,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 ## 扩展课程
 
 - **自定义运行器**：用 `RunContext` 的方法，不自建 SSE、不直接读密钥、不伪造生命周期事件；运行时文本用 `texts_for(context.locale)`。
-- **改造已有课程为多语言运行时**：按 `.claude/briefs/i18n/convert-lesson.md` 的清单逐课进行（参考课 `chat-request`、`tool-selection`）。
+- **改造已有课程为多语言运行时**：按 `docs/architecture/localizing-lessons.md` 的清单逐课进行（参考课 `chat-request`、`tool-selection`）。
   - 并行请求给每个分支不同的 `branch`，时间线按它配对请求和响应。
   - 长循环和副作用操作之前调用 `check_cancelled()`。
 - **新事件**：课程事件一律用 `lesson.` 前缀。
@@ -194,6 +194,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
   - 名字确实会出现在意思不同的更长词组里时，在 `not_in` 里列出该词组。
 - **同一个东西只用一个叫法**：按 `terminology.md` 的统一用词表写；出现新的同义叫法时，先补进那张表。
 - **中文术语人工审读**：机器只能检查已收录的词，没收录的中文术语靠作者对照 `term_report.py --full` 逐段审读。
+- **英文文本**：英文译文层、英文运行时文本（`locales/**/en.py`、`en.md`）和英文界面文案不能有中文（确需保留的登记到 `server/vocabulary.py` 的 `ENGLISH_CJK_ALLOWED` 并写明理由），服务商没有报告的数写 not reported，引用运行时文本时直接写英文原文，不写 `"中文" ("gloss")`。规则见 `terminology.md` 第 5 节，由 `validate_lessons` 和 `tests/test_english_text.py` 检查。
 
 ## 前端规范
 
@@ -227,6 +228,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 | --- | --- |
 | 课程实现 / `lesson.json` | 该课 `test_lesson.py`、完整 Python 测试（含 `tests/test_runtime_locales.py`）、`validate_lessons.py`、`cjk_baseline.py --check` |
 | `content.json` / 术语表 | `validate_lessons.py`、`term_report.py --lesson <slug>`、`migrate_content.py --check`、`export_curriculum.py`（课程表的小节和本课术语来自这里）、`tests/test_lesson_experiments.py`、`tests/test_lesson_vocabulary.py` |
+| 英文译文层、英文运行时文本或界面文案 | `validate_lessons.py`、`tests/test_english_text.py`、`translation_kit.py status --locale en` |
 | `catalog.json` | `export_curriculum.py`、完整 Python 测试 |
 | 执行流程、服务商适配、事件信封 | 完整 Python 测试，并补回归测试；改了信封常量时运行 `export_trace_contract.py --check` |
 | 前端 | `run build`、`run test`（vitest）、`i18n:check`；交互变化还要跑相关 Playwright 测试 |

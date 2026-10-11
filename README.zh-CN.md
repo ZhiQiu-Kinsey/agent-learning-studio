@@ -207,8 +207,9 @@ npm --prefix frontend run i18n:check              # 各语言翻译键一致
 - [新增课程](docs/architecture/adding-lessons.md)：从登记课程到开放的完整流程
 - [术语与代码名](docs/architecture/terminology.md)：术语收录标准与统一用词表
 - [开发验证](docs/architecture/validation.md)：测试与校验命令
-- **翻译**：`scripts/translation_kit.py` 导出待译条目，校验占位符与行内代码，写回译文层（`content.<语言>.json`、`lesson.<语言>.json`、`catalog.<语言>.json` 等）。流程见 [新增课程](docs/architecture/adding-lessons.md) 的多语言一节。
+- **翻译**：`scripts/translation_kit.py` 导出待译条目，校验占位符与行内代码，写回译文层（`content.<语言>.json`、`lesson.<语言>.json`、`catalog.<语言>.json` 等）。逐课清单与英文写法见 [课程本地化](docs/architecture/localizing-lessons.md)。
 - [平台架构](docs/architecture/platform.md) · [前端结构](docs/architecture/frontend-workspace.md) · [事件信封 v2](docs/architecture/event-envelope-v2.md)
+- [文档索引](docs/README.zh-CN.md)：全部文档及其语言版本
 
 几条红线，都有测试或校验守着：
 

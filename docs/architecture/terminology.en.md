@@ -118,7 +118,10 @@ The boundary between "未报告" (not reported) and "未知" (unknown):
 
 - A number the provider did not report in the response (usage, cache hits, reasoning tokens) is written 未报告 (English: not reported). The number may exist; it just was not given this time, and it must not be replaced by a local estimate or by 0.
 - 未知 (English: unknown) is only for values the program truly cannot know.
-- `validate_lessons` and `tests/test_lesson_vocabulary.py` reject phrasings such as "用量未知" (usage unknown) and "命中数未知" (hit count unknown). The check is a regular expression over Chinese text (`UNREPORTED` in `server/vocabulary.py`).
+- `validate_lessons` and `tests/test_lesson_vocabulary.py` use `UNREPORTED` in `server/vocabulary.py` to check the text of runnable lessons (all readable text in every scene) and the `code_notes` notes. It rejects two patterns:
+  - 用量 (usage), Token, 命中 (hit), 命中数 (hit count) or 缓存命中 (cache hit), followed within at most 4 characters (no 。；，、 or line break in between) by 未知, for example "用量未知", "Token 数未知", "缓存命中数仍未知";
+  - 未知 or 未知的 immediately followed by 用量, Token 数 or 命中数, for example "未知用量", "未知的用量", "未知命中数".
+- The regular expression covers only these phrasings. Reworded sentences such as "记为未知" (recorded as unknown), and text in the course catalog, glossary and onboarding, are left to the author. The matching check for English is in section 5.
 
 Names within a single lesson must also stay fixed. For example:
 
@@ -138,3 +141,25 @@ Names within a single lesson must also stay fixed. For example:
    - Go paragraph by paragraph and ask: would a reader who has only studied the earlier lessons get stuck on this word?
    - For those that would, use the criteria in section 1 to decide whether to add the word to the glossary or explain it on the spot.
 4. Run `validate_lessons` and `tests/test_lesson_vocabulary.py`. The number of problems must be zero.
+
+## 5. Checks on English text
+
+The rules above only look at the Chinese source text. English text has three checks of its own, implemented by `english_problems` in `server/vocabulary.py`; a change cannot be merged unless `validate_lessons` and `tests/test_english_text.py` pass. They cover:
+
+- translation overlays: each lesson's `content.en.json` and `lesson.en.json`, and `catalog.en.json`, `glossary.en.json` and `onboarding.en.json` under `curriculum/` (every translation in `texts`, stale entries included);
+- English runtime text: `lessons/*/locales/**/en.py`, `en.md` and `course/locales/en.py` (whole files);
+- English UI strings: `frontend/src/i18n/locales/en/*.json`.
+
+The three rules:
+
+1. **No Chinese.** English text must not contain Chinese characters, Chinese punctuation or full-width characters. Anything that has to stay goes into `ENGLISH_CJK_ALLOWED`; each entry is a file, a text path, an exact substring and a reason, and the file and path may be `*`. Allowed substrings are removed first, and what remains must contain no Chinese. Entries that are no longer used are reported too and must be deleted (`validate_lessons` checks entries that name a file; `tests/test_english_text.py` checks the `*` entries). Current entries:
+   - any file: `(深入理解 AI Agent)`, the Chinese title of the reference book, in parentheses after the English title, so readers can find the book;
+   - `how-llm-works.tokens.paragraphs.1` in `curriculum/onboarding.en.json`: the tokenization example "函数式编程" and the three pieces it is cut into;
+   - `section-4.paragraphs.2` in `lessons/lesson_reflection_revision/content.en.json`: `` `s-1０４２` ``, showing that the digit class of Python regular expressions also matches full-width digits.
+2. **Numbers the provider did not report are "not reported".** The counterpart of `UNREPORTED` in section 3 (`EN_UNREPORTED`, case-insensitive) rejects two patterns:
+   - usage, token count, cache hit, hit count, or prompt / completion / reasoning / cached / input / output tokens, followed — with only linking words such as is, was, shown, as or still in between and no punctuation — by an optional colon, parenthesis or quote and then unknown, for example "usage unknown", "cache hits: unknown", "prompt tokens (unknown)";
+   - unknown immediately followed by one of those nouns, for example "unknown usage", "unknown token count".
+   Plain "tokens" is not included ("unknown tokens" in a tokenizer means something else). In the course catalog only the entries of runnable lessons (`lesson.<slug>.*`) are checked; entries of planned lessons and the source notes are planning text and, as in Chinese, are not checked yet.
+3. **No "Chinese original plus English gloss".** Before the runtimes became bilingual, English translations could only quote the Chinese original, written as `"未报告" ("not reported")`. An English run now sends English, so English text quotes the English runtime text directly (`"not reported"`). A quoted string containing Chinese followed by a parenthesis and a quote is always rejected; the allowlist does not exempt it.
+
+The other English style rules (sentence case, glossary `en` names for terms, the fixed UI vocabulary) are in "English style" in [Localizing a lesson](localizing-lessons.en.md).

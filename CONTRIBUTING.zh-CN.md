@@ -9,5 +9,7 @@
 - [新增课程](docs/architecture/adding-lessons.md)
 - [术语与代码名](docs/architecture/terminology.md)
 - [开发验证](docs/architecture/validation.md)
+- [课程本地化](docs/architecture/localizing-lessons.md)（双语运行时与英文译文）
+- [文档索引](docs/README.zh-CN.md)
 
 参与即表示同意遵守[行为准则](CODE_OF_CONDUCT.md)。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要开公开 issue。

@@ -110,7 +110,10 @@
 
 - 服务商没有在响应里报告的数（用量、缓存命中、推理 Token）写“未报告”，英文 not reported：这个数可能存在，只是这次没给，也不能用本地估算或 0 冒充；
 - “未知”只用于程序确实无法知道的值，英文 unknown；
-- `validate_lessons` 与 `tests/test_lesson_vocabulary.py` 会拒绝“用量未知”“命中数未知”这类写法。
+- `validate_lessons` 与 `tests/test_lesson_vocabulary.py` 用 `server/vocabulary.py` 的 `UNREPORTED` 检查可运行课程的正文（各场景的全部可读文字）和 `code_notes` 说明，拒绝两种写法：
+  - “用量”“Token”“命中”“命中数”“缓存命中”后面隔最多 4 个字（中间没有。；，、或换行）出现“未知”，如“用量未知”“Token 数未知”“缓存命中数仍未知”；
+  - “未知”或“未知的”后面紧跟“用量”“Token 数”“命中数”，如“未知用量”“未知的用量”“未知命中数”。
+- 这条正则只覆盖上面的说法；“记为未知”这类换了说法的句子，以及课程目录、术语表、导学里的文字，要靠作者自己检查。英文写法的对应检查见第 5 节。
 
 单课内部的叫法也要固定。例如：
 
@@ -130,3 +133,25 @@
    - 逐段问自己：一个只学过前面几课的读者，会不会卡在这个词上？
    - 会卡住的，按第 1 节的标准决定是收进术语表还是当场讲清。
 4. 运行 `validate_lessons` 和 `tests/test_lesson_vocabulary.py`，问题必须为零。
+
+## 5. 英文文本的检查
+
+上面的规则只看中文源文本。英文文字另有三条检查，由 `server/vocabulary.py` 的 `english_problems` 实现，`validate_lessons` 与 `tests/test_english_text.py` 不通过就不能合入。检查范围：
+
+- 译文层：各课 `content.en.json`、`lesson.en.json`，`curriculum/` 下的 `catalog.en.json`、`glossary.en.json`、`onboarding.en.json`（逐条检查 `texts` 里的译文，过期条目也查）；
+- 英文运行时文本：`lessons/*/locales/**/en.py`、`en.md` 与 `course/locales/en.py`（整份文件）；
+- 英文界面文案：`frontend/src/i18n/locales/en/*.json`。
+
+三条规则：
+
+1. **不含中文。** 英文文字里不能有汉字、中文标点和全角字符。确需保留的写进 `ENGLISH_CJK_ALLOWED`，每条是“文件、文本路径、精确子串、理由”，文件和路径可以写 `*`。子串先从文字里去掉，剩下的不能再有中文；白名单里用不上的条目也会报出来，要删掉（`validate_lessons` 查写明文件的条目，`*` 条目由 `tests/test_english_text.py` 检查）。现有条目：
+   - 任意文件：`(深入理解 AI Agent)`，参考书的中文原书名，括在英文书名后面，读者凭它找到原书；
+   - `curriculum/onboarding.en.json` 的 `how-llm-works.tokens.paragraphs.1`：分词示例“函数式编程”和它切出的三段；
+   - `lessons/lesson_reflection_revision/content.en.json` 的 `section-4.paragraphs.2`：`` `s-1０４２` ``，说明 Python 正则的数字类也匹配全角数字。
+2. **没报告的数写 not reported。** 与第 3 节的 `UNREPORTED` 对应（`EN_UNREPORTED`），不区分大小写，拒绝两种写法：
+   - usage、token count、cache hit、hit count，或 prompt / completion / reasoning / cached / input / output tokens 后面只隔系动词或 as、still 这类词（中间没有标点），可带冒号、括号或引号，接着是 unknown，如 “usage unknown”“cache hits: unknown”“prompt tokens (unknown)”；
+   - unknown 后面紧跟上面这些名词，如 “unknown usage”“unknown token count”。
+   单独的 tokens 不算（分词器里的 “unknown tokens” 是另一回事）。课程目录里只检查可运行课程的条目（`lesson.<slug>.*`）；规划中课程的条目和来源说明是计划文字，和中文一样暂不检查。
+3. **不写“中文原文加英文注释”。** 运行时改成双语以前，英文译文只能引用中文原文，写成 `"未报告" ("not reported")`。现在英文运行发的就是英文，英文文字要直接引用英文运行时文本（`"not reported"`）。引号里含中文、后面紧跟括号和引号的写法一律拒绝，白名单不豁免。
+
+英文文本的其他写法（句首大写、术语用术语表的 `en` 名称、界面固定叫法）见 [课程本地化](localizing-lessons.md) 的“英文写法”。

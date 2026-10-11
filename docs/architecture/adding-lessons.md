@@ -262,7 +262,7 @@ lessons/<目录>/locales/en.py         TEXTS = Texts(...)
 - `scripts/cjk_baseline.py --check`（`tests/test_python_cjk_baseline.py`）：`course/` 与 `lessons/` 的 Python 文件里含中文的字符串字面量（含文档字符串）只许减少；`locales/zh_CN.py` 和测试文件豁免。
 - 正文与运行时文本保持一致：中文正文引用中文目录里的原文，英文译文层引用英文目录里的原文（不再写“中文原文加英文注释”）。读码批注在源码移动后用 `realign_notes.py` 重新对准，中英两份批注都要复核。
 
-逐课改造的步骤清单（给改课的人和代理）见 `.claude/briefs/i18n/convert-lesson.md`。
+逐课改造的步骤清单、常见的坑和英文写法见 [课程本地化](localizing-lessons.md)。
 
 ## 独立运行器
 

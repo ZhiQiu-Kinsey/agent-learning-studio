@@ -204,11 +204,12 @@ Automated tests swap the model for deterministic fixtures at the network boundar
 Contributions of all kinds are welcome — new lessons, clearer prose, bug fixes and translations. Please read these first:
 
 - [AGENTS.md](AGENTS.md) — project rules, commands and conventions (for humans and coding agents alike)
-- [Adding lessons](docs/architecture/adding-lessons.md) — from registering a lesson to opening it
-- [Terminology](docs/architecture/terminology.md) — glossary rules and the unified wording table
-- [Validation](docs/architecture/validation.md) — test and check commands
-- **Translations:** `scripts/translation_kit.py` exports untranslated strings, checks placeholders and inline code, and writes the overlay files (`content.<lang>.json`, `lesson.<lang>.json`, `catalog.<lang>.json`, …). See the multilingual section of [Adding lessons](docs/architecture/adding-lessons.md).
-- [Platform](docs/architecture/platform.md) · [Frontend](docs/architecture/frontend-workspace.md) · [Event envelope v2](docs/architecture/event-envelope-v2.md)
+- [Adding lessons](docs/architecture/adding-lessons.en.md) — from registering a lesson to opening it
+- [Terminology](docs/architecture/terminology.en.md) — glossary rules, the unified wording table and the checks on English text
+- [Validation](docs/architecture/validation.en.md) — test and check commands
+- **Translations:** `scripts/translation_kit.py` exports untranslated strings, checks placeholders and inline code, and writes the overlay files (`content.<lang>.json`, `lesson.<lang>.json`, `catalog.<lang>.json`, …). See [Localizing a lesson](docs/architecture/localizing-lessons.en.md) for the checklist and English style.
+- [Platform](docs/architecture/platform.en.md) · [Frontend](docs/architecture/frontend-workspace.en.md) · [Event envelope v2](docs/architecture/event-envelope-v2.en.md)
+- [Documentation index](docs/README.md) — every doc, with its languages
 
 A few non-negotiables, each guarded by tests or validators:
 

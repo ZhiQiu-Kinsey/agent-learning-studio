@@ -4,7 +4,7 @@
 
 > Translated from the Chinese original; if they disagree, the Chinese version is authoritative.
 
-Last updated: 2026-10-04. The reference sources for the course are the formal tutorials in the table in section 1. The pinned versions and reading scopes exist so that what was actually borrowed can be checked; the lesson explanations and Python experiments are written by this project.
+Last updated: 2026-10-12. The reference sources for the course are the formal tutorials in the table in section 1. The pinned versions and reading scopes exist so that what was actually borrowed can be checked; the lesson explanations and Python experiments are written by this project.
 
 ## 1. Pinned reference snapshots
 

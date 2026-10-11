@@ -4,7 +4,7 @@
 
 Thanks for your interest in improving Agent Learning Studio. New lessons, clearer prose, bug fixes and translations are all welcome.
 
-This guide is a short English summary. The authoritative project rules live in [AGENTS.md](AGENTS.md) and [docs/architecture/](docs/architecture/), which are written in Chinese. If this file and AGENTS.md disagree, AGENTS.md wins.
+This guide is a short English summary. The authoritative project rules live in [AGENTS.md](AGENTS.md) (in Chinese) and [docs/architecture/](docs/architecture/). The architecture docs have English translations; the Chinese versions are authoritative. See the [documentation index](docs/README.md) for what exists in which language. If this file and AGENTS.md disagree, AGENTS.md wins.
 
 By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md). To report a security issue, see [SECURITY.md](SECURITY.md) — please don't open a public issue for it.
 
@@ -93,7 +93,7 @@ AGENT_LAB_URL=http://127.0.0.1:8790 npx playwright test   # in frontend/
 
 ## Adding a lesson
 
-The full guide is [docs/architecture/adding-lessons.md](docs/architecture/adding-lessons.md) (in Chinese). In short:
+The full guide is [docs/architecture/adding-lessons.en.md](docs/architecture/adding-lessons.en.md). In short:
 
 1. Register the lesson in `curriculum/catalog.json` with status `planned`, then run `scripts/export_curriculum.py`.
 2. Scaffold it: `uv run python scripts/new_lesson.py --id <slug> --dry-run` to preview, then without `--dry-run`. Add `--kind custom` for flows that need their own runner.
@@ -103,7 +103,7 @@ The full guide is [docs/architecture/adding-lessons.md](docs/architecture/adding
 6. After review, switch the status to `available`, regenerate the syllabus, run each exercise once against a real model and check the replay.
 7. Record any references you drew on in [docs/architecture/reference-study.md](docs/architecture/reference-study.md) (pinned version, scope, license).
 
-Terminology and the unified wording table are in [docs/architecture/terminology.md](docs/architecture/terminology.md) (in Chinese).
+Terminology and the unified wording table are in [docs/architecture/terminology.en.md](docs/architecture/terminology.en.md).
 
 ## Translations
 
@@ -118,7 +118,7 @@ uv run python scripts/translation_kit.py apply catalog --locale en -i done.json 
 uv run python scripts/translation_kit.py apply catalog --locale en -i done.json          # merge and write back
 ```
 
-`apply` rejects untranslatable paths and translations whose placeholders (`{{...}}`) or inline code (backticks) differ from the source. In English text, use the glossary's `en` term names, sentence-case titles, and keep code names, event names and field names unchanged.
+`apply` rejects untranslatable paths and translations whose placeholders (`{{...}}`) or inline code (backticks) differ from the source. In English text, use the glossary's `en` term names, sentence-case titles, and keep code names, event names and field names unchanged. `validate_lessons.py` also checks English text: no Chinese outside a documented allowlist, "not reported" (never "unknown") for usage the provider did not report, and English runtime literals quoted directly rather than as `"中文" ("gloss")`. The full checklist and style guide are in [Localizing a lesson](docs/architecture/localizing-lessons.en.md).
 
 UI strings live only in `frontend/src/i18n/locales/<lang>/*.json` — don't hard-code text in components. When you add or change a UI string, update every locale and run `npm --prefix frontend run i18n:check`.
 

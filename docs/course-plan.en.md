@@ -102,7 +102,7 @@ Deliverable: Field annotations on one real response that was cut off.
 **Acceptance**
 
 - You can point to model, messages, and each message's role in the request body.
-- You can read the answer, finish reason, and provider-reported usage from the response; usage the provider did not report is written as "未报告" ("not reported").
+- You can read the answer, finish reason, and provider-reported usage from the response; usage the provider did not report is written as "not reported".
 - You can explain why finish_reason is length when the output is cut off, and how to tell the cause from usage when content is empty.
 
 **References**
@@ -644,8 +644,8 @@ Fix the model, task, and budget, and change only one thing at a time, either the
 
 Change one thing at a time: tool description and system rules:
 
-1. Request the same task once each: change only the description of add_numbers from "计算工具。" ("Calculation tool.") to one that states its responsibility and parameters, and compare the call proposals and arguments.
-2. Change only the system rule: the baseline "请给出答案" ("Give the answer") against a version that spells out the steps of identifying, calculating, and checking. When the user gives no numbers, the comparison arm is told to ask only for the missing numbers.
+1. Request the same task once each: change only the description of add_numbers from "Calculation tool." to one that states its responsibility and parameters, and compare the call proposals and arguments.
+2. Change only the system rule: the baseline "Give the answer." against a version that spells out the steps of identifying, calculating, and checking. When the user gives no numbers, the comparison arm is told to ask only for the missing numbers.
 3. The tool description matrix: run two questions each with the blank, good, and misleading descriptions, and see how the model's decision and the execution result diverge when the description disagrees with the code.
 
 Deliverable: A comparison of each arm's request, call proposal, tool result, and answer, stating which one thing that arm changed.
@@ -710,7 +710,7 @@ Split one request's context into four parts: the system prompt, earlier conversa
 Remove one part at a time:
 
 1. Predict first: one of the five context arms removes only the tool result. How many model calls will this run make?
-2. Run "Remove each of the four parts". Compare each arm's request messages with its answer, and mark which part the score, the review day, and the "依据：" ("Basis:") line each come from.
+2. Run "Remove each of the four parts". Compare each arm's request messages with its answer, and mark which part the score, the review day, and the "Basis:" line each come from.
 3. Find the arm stopped by the protocol check and say which rule it breaks. Then run once more with a failing student and see whether the answer follows the tool result.
 
 Deliverable: A message comparison table for the five context arms, with attribution notes.
@@ -1114,9 +1114,9 @@ Deliverable: A per-request usage table for two arms, with a prefix hash comparis
 
 The warmup request:
 
-1. Before the stable-prefix arm, send one warmup request that asks only for the reply "已读" ("read"), then send 4 measured requests in a row.
+1. Before the stable-prefix arm, send one warmup request that asks only for the reply "Read", then send 4 measured requests in a row.
 2. Compare the hit reported by the first measured request with and without the warmup.
-3. When a response has no cache field, the report shows "未报告" ("not reported") and does not record it as 0.
+3. When a response has no cache field, the report shows "not reported" and does not record it as 0.
 
 Deliverable: For two arms of measured requests, the number of hits, the overall hit ratio, and a note on the "not reported" state.
 
@@ -1124,7 +1124,7 @@ Deliverable: For two arms of measured requests, the number of hits, the overall 
 
 - Each request's cached tokens and hit ratio come from fields the response actually reports, and the report states where the field comes from.
 - You can use the prefix hash to point out the line that breaks the prefix in the "dynamic content first" arm.
-- A cache field that was not reported is shown as "未报告" ("not reported") and not recorded as 0. The normalization function has unit tests for the fields of all three providers.
+- A cache field that was not reported is shown as "not reported" and not recorded as 0. The normalization function has unit tests for the fields of all three providers.
 
 **References**
 
@@ -1180,7 +1180,7 @@ Deliverable: A prompt-token comparison table and loading records for the two app
 
 Description precision and triggering:
 
-1. Change only the description of review-cards: a precise version and a vague one, "帮助学习。" ("Helps with learning.").
+1. Change only the description of review-cards: a precise version and a vague one, "Helps with studying."
 2. Run once each on making review cards (should load) and a review question (should not load), and record missed triggers and false triggers.
 3. Compare the load verdicts and the format screening of the answers, and explain why you cannot tell from the answer alone whether the skill was loaded.
 
@@ -2479,7 +2479,7 @@ Correlate the requests, tools, state, latency, and usage of one real run, and us
 
 1. **The whole picture of one run**: String requests, tools, state, and timing into one trace, layered by span.
 2. **Finding slow steps and repeated calls**: Locate the slowest step and the repeated requests from real data.
-3. **Usage and cost**: Separate provider-reported usage, local estimates, and unknown usage, and compute cost by price version.
+3. **Usage and cost**: Separate provider-reported usage, local estimates, and usage that was not reported, and compute cost by price version.
 4. **Caching and optimization regressions**: After an optimization, rerun the same question set to confirm it saved money without getting worse.
 
 **Objectives**
@@ -2494,7 +2494,7 @@ Correlate the requests, tools, state, latency, and usage of one real run, and us
 - Model, tool, and state events
 - Raw HTTP vs. adapter-layer data
 - End-to-end and per-step latency
-- Measured, estimated, and unknown usage
+- Measured, estimated, and not-reported usage
 - Price versions, caching, and optimization regressions
 
 **Experiments**
@@ -2502,7 +2502,7 @@ Correlate the requests, tools, state, latency, and usage of one real run, and us
 Locating a slow run and repeated calls:
 
 1. For a fixed task, record the actual duration of the whole run and of each step, the number of requests, the usage from the raw response, and the terminal state.
-2. Use a mature observability component or a unified inspector to find slow steps and repeated calls, and keep usage unknown where it is missing.
+2. Use a mature observability component or a unified inspector to find slow steps and repeated calls, and write "not reported" when the provider reports no usage.
 3. Change only one call or caching strategy, rerun the same question set, and compare quality, latency, and usage together.
 
 Deliverable: An expandable full trace, an explanation of the performance bottleneck, and a before-and-after quality report for the optimization.
@@ -3284,7 +3284,7 @@ Reference snapshot: `b3946b1d09d29c65736e219d48a8a736a2c52154`.
 
 What we borrow: Fills in task acceptance, context experiments, tool contracts, independent validators, the run lifecycle, cost, and the engineering trade-offs of multi-agent systems.
 
-How we adapt it: Draws on the text and concrete implementations of a pinned snapshot, while the exercises are written from scratch for this platform. It does not claim that all the companion experiments have been reproduced. Unknown usage is not counted as zero cost, deployment needs real protocol probing, and training and external environments are optional electives placed later.
+How we adapt it: Draws on the text and concrete implementations of a pinned snapshot, while the exercises are written from scratch for this platform. It does not claim that all the companion experiments have been reproduced. Usage that was not reported is not counted as zero cost, deployment needs real protocol probing, and training and external environments are optional electives placed later.
 
 Reference snapshot: `b789c97a8f3de5b405a6f6dfa8289208d679d0b8`.
 
