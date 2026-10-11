@@ -17,6 +17,7 @@ import { connectionState } from "./components/workspace/connectionState";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { LocaleSwitch } from "./components/LocaleSwitch";
 import { providerName } from "./lib/providerName";
+import { shortProviderName } from "./lib/shortProviderName";
 import {
   CommandButton,
   CommandMenu,
@@ -222,6 +223,10 @@ export default function App() {
   // ready only once the server reports one is set.
   const connection = connectionState(studio.status);
   const ready = connection === "ready";
+  const provider = providerName(
+    studio.status?.provider_id,
+    studio.status?.provider_label,
+  );
   return (
     <div className="studio-shell experience-shell" ref={shellRef}>
       <ShellAmbient />
@@ -295,15 +300,23 @@ export default function App() {
               className="connection-button"
               data-testid="app-connection-button"
               data-ready={ready || undefined}
-              title={t("shell.connection.title")}
+              title={
+                provider
+                  ? t("shell.connection.titleWith", { provider })
+                  : t("shell.connection.title")
+              }
               onClick={() => setSettings(true)}
             >
               <i className={ready ? "is-ready" : ""} aria-hidden="true" />
-              <span>
-                {providerName(
-                  studio.status?.provider_id,
-                  studio.status?.provider_label,
-                ) || t("shell.connection.connect")}
+              {/* Full name everywhere for assistive tech; narrow screens show
+                  the short form and keep the full one visually hidden. */}
+              <span className="connection-label-full">
+                {provider || t("shell.connection.connect")}
+              </span>
+              <span className="connection-label-short" aria-hidden="true">
+                {provider
+                  ? shortProviderName(provider)
+                  : t("shell.connection.connectShort")}
               </span>
               <Settings2 size={15} aria-hidden="true" />
             </Button>

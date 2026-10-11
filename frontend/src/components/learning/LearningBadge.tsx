@@ -15,6 +15,7 @@ import {
 } from "../../motion";
 import { scenes, type LessonProgress } from "../../progress";
 import Shuffle from "../react-bits/Shuffle";
+import { fitText, type FitStep } from "./badgeText";
 
 const Lanyard = lazy(() => import("../react-bits/Lanyard"));
 
@@ -86,45 +87,79 @@ function drawFace(face: Face) {
   }
   const left = 72;
   const width = FACE_W - left * 2;
+  /** Fit text into `maxWidth`, shrinking and wrapping (by word, or by character for CJK). */
+  const fit = (text: string, weight: number, maxWidth: number, steps: FitStep[]) =>
+    fitText(text, maxWidth, steps, (value, size) => {
+      ctx.font = `${weight} ${size}px ${family}`;
+      return ctx.measureText(value).width;
+    });
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = "#8ff0de";
-  ctx.font = `800 32px ${family}`;
-  ctx.fillText(face.brand.split("").join(" "), left, 150);
+  const brand = fit(face.brand.split("").join(" "), 800, width, [
+    { size: 32, maxLines: 1 },
+  ]);
+  ctx.font = `800 ${brand.size}px ${family}`;
+  ctx.fillText(brand.lines[0] ?? "", left, 150);
   ctx.fillStyle = "#d9cfff";
-  ctx.font = `700 46px ${family}`;
-  ctx.fillText(face.lesson, left, 252);
-  // Title: wrap by measured width, at most two lines.
+  const lesson = fit(face.lesson, 700, width, [
+    { size: 46, maxLines: 1 },
+    { size: 38, maxLines: 1 },
+  ]);
+  ctx.font = `700 ${lesson.size}px ${family}`;
+  ctx.fillText(lesson.lines[0] ?? "", left, 252);
+  // Title: shrink until it fits in the band above the divider (two lines at
+  // full size, up to four when small); an ellipsis only if even that is too long.
   ctx.fillStyle = "#ffffff";
-  ctx.font = `800 80px ${family}`;
-  const lines: string[] = [];
-  let line = "";
-  for (const char of Array.from(face.title)) {
-    if (ctx.measureText(line + char).width > width && line) {
-      lines.push(line);
-      line = char;
-    } else line += char;
-  }
-  lines.push(line);
-  lines.slice(0, 2).forEach((text, index) => {
-    const last = index === 1 && lines.length > 2;
-    ctx.fillText(last ? `${text.slice(0, -1)}…` : text, left, 352 + index * 94);
+  const title = fit(face.title, 800, width, [
+    { size: 80, maxLines: 2 },
+    { size: 68, maxLines: 2 },
+    { size: 58, maxLines: 3 },
+    { size: 50, maxLines: 3 },
+    { size: 44, maxLines: 4 },
+  ]);
+  ctx.font = `800 ${title.size}px ${family}`;
+  title.lines.forEach((text, index) => {
+    ctx.fillText(text, left, 290 + title.size * (0.8 + index * 1.15));
   });
   ctx.fillStyle = "rgba(255,255,255,0.14)";
   ctx.fillRect(left, 520, width, 2);
   const accent = ["#b98aff", "#49dec6", "#ff9473"];
+  const labelLeft = left + 250;
+  const labelWidth = FACE_W - left - labelLeft;
   face.facts.forEach((fact, index) => {
     const y = 630 + index * 112;
     ctx.fillStyle = accent[index];
     ctx.fillRect(left, y - 66, 8, 84);
-    ctx.font = `800 84px ${family}`;
-    ctx.fillText(fact.value, left + 34, y + 10);
+    const value = fit(fact.value, 800, labelLeft - left - 34 - 16, [
+      { size: 84, maxLines: 1 },
+      { size: 64, maxLines: 1 },
+      { size: 48, maxLines: 1 },
+    ]);
+    ctx.font = `800 ${value.size}px ${family}`;
+    ctx.fillText(value.lines[0] ?? "", left + 34, y + 10);
     ctx.fillStyle = "rgba(244,241,255,0.92)";
-    ctx.font = `700 42px ${family}`;
-    ctx.fillText(fact.label, left + 250, y - 2);
+    // Labels: one line if it fits at a readable size, otherwise two lines
+    // centred on the row.
+    const label = fit(fact.label, 700, labelWidth, [
+      { size: 42, maxLines: 1 },
+      { size: 36, maxLines: 1 },
+      { size: 34, maxLines: 2 },
+      { size: 30, maxLines: 2 },
+    ]);
+    ctx.font = `700 ${label.size}px ${family}`;
+    const lineHeight = label.size * 1.15;
+    const first = y - 2 - ((label.lines.length - 1) * lineHeight) / 2;
+    label.lines.forEach((text, line) => {
+      ctx.fillText(text, labelLeft, first + line * lineHeight);
+    });
   });
   ctx.fillStyle = "rgba(236,232,255,0.7)";
-  ctx.font = `600 30px ${family}`;
-  ctx.fillText(face.footer, left, 952);
+  const footer = fit(face.footer, 600, width, [
+    { size: 30, maxLines: 1 },
+    { size: 26, maxLines: 1 },
+  ]);
+  ctx.font = `600 ${footer.size}px ${family}`;
+  ctx.fillText(footer.lines[0] ?? "", left, 952);
   return canvas.toDataURL("image/png");
 }
 
