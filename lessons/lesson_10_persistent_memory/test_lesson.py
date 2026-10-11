@@ -18,6 +18,7 @@ from lessons.lesson_10_persistent_memory import runtime
 from lessons.lesson_10_persistent_memory.locales import texts_for
 from lessons.lesson_10_persistent_memory.locales.shared import texts_for as shared_texts_for
 from lessons.lesson_10_persistent_memory.store import MemoryStore
+from server.selectors import resolve_path
 
 CJK = re.compile(r"[　-〿一-鿿＀-￯]")
 # The presets lesson.json supplies for value and source, per run language.
@@ -160,6 +161,19 @@ class MemoryTests(unittest.TestCase):
         report = report_of(events)
         self.assertEqual(report["checks"][2]["label"], "数据块为空时，回答没有引用任何 key")
         self.assertTrue(report["checks"][2]["passed"])
+
+    def test_grounding_check_is_found_by_id_in_both_languages(self):
+        # The lab selects the grounding check by id; both branches (with and without records) share it.
+        cases = (("recall_answer", {"scenario": "recall_answer"}, "recall_check_grounded"),
+                 ("recall_other_namespace", {"scenario": "recall_answer", "namespace": "new_learner"},
+                  "recall_check_empty"))
+        for locale in ("zh-CN", "en"):
+            for exercise, inputs, field in cases:
+                with self.subTest(locale=locale, exercise=exercise):
+                    run, events, _ = memory_context(exercise, inputs, locale=locale)
+                    runtime.run(run)
+                    check = resolve_path({"data": report_of(events)}, "data.checks[id=cited_grounded]")
+                    self.assertEqual(check["label"], getattr(texts_for(locale), field))
 
     def test_grounding_check_fails_when_the_answer_cites_a_key_not_in_the_request(self):
         def reply(text):

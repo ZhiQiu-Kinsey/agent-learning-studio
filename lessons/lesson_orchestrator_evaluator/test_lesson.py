@@ -10,6 +10,7 @@ from lessons.lesson_orchestrator_evaluator import runtime
 from lessons.lesson_orchestrator_evaluator.fixtures import create_completion
 from lessons.lesson_orchestrator_evaluator.locales import texts_for
 from server.envelope import SpanTracker
+from server.selectors import resolve_path
 
 LOCALES = ("zh-CN", "en")
 
@@ -142,6 +143,20 @@ class PatternTests(unittest.TestCase):
         self.assertIn("\n评审意见：[\"干扰项太容易排除\"]\n请修订。", revision)
         _, events = run_case("evaluator", {"pattern": "evaluator", "max_iters": 3}, locale="en")
         self.assertIn("(revised)", of(events, "lesson.draft")[1]["question"]["question"])
+
+    def test_observed_metrics_are_found_by_id_in_both_languages(self):
+        # The lab selects these metrics by id: the stop reason only exists for the evaluator, so positions would shift.
+        cases = (("orchestrator", {"pattern": "orchestrator"}, ("model_calls", "total_tokens")),
+                 ("evaluator", {"pattern": "evaluator", "max_iters": 3}, ("model_calls", "total_tokens", "stop_reason")))
+        fields = {"model_calls": "label_model_calls", "total_tokens": "label_total_tokens", "stop_reason": "label_stop_reason"}
+        for locale in LOCALES:
+            for exercise, inputs, ids in cases:
+                with self.subTest(locale=locale, exercise=exercise):
+                    _, events = run_case(exercise, inputs, locale=locale)
+                    data = {"data": of(events, "lesson.report")[-1]}
+                    for metric_id in ids:
+                        entry = resolve_path(data, f"data.metrics[id={metric_id}]")
+                        self.assertEqual(entry["label"], getattr(texts_for(locale), fields[metric_id]))
 
     def test_evaluator_limit_and_format_gate(self):
         _, events = run_case("evaluator-once", {"pattern": "evaluator", "max_iters": 1})

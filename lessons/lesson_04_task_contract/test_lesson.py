@@ -118,13 +118,26 @@ class TaskContractTests(unittest.TestCase):
         self.assertIn("第 2 次", result)
         card = next(data for kind, data, _ in events if kind == "lesson.task_card")
         self.assertIn("3 次", card["stop"])
-        self.assertIn({"label": "停止原因", "value": "验收通过"}, report(events)["metrics"])
+        self.assertIn({"id": "stop_reason", "label": "停止原因", "value": "验收通过"}, report(events)["metrics"])
 
         result, events = run_case("goal-loop-once", {"scenario": "goal_loop", "max_attempts": 1})
         goal_checks = [data for kind, data, _ in events if kind == "lesson.goal_check"]
         self.assertEqual([(data["passed"], data["next"]) for data in goal_checks], [(False, "stop")])
         self.assertIn("未通过", result)
-        self.assertIn({"label": "停止原因", "value": "达到尝试上限"}, report(events)["metrics"])
+        self.assertIn({"id": "stop_reason", "label": "停止原因", "value": "达到尝试上限"}, report(events)["metrics"])
+
+    def test_observed_report_entries_are_found_by_id_in_both_languages(self):
+        # The lab's observation points select these entries by id, so adding a check does not shift them.
+        from server.selectors import resolve_path
+        expected = {"checks[id=run_ended]": "check_ended", "checks[id=arguments_match]": "check_arguments",
+                    "checks[id=value_matches]": "check_value", "checks[id=claim_consistent]": "check_consistent",
+                    "metrics[id=stop_reason]": "label_stop_reason"}
+        for locale in ("zh-CN", "en"):
+            _, events = run_case("goal-loop", {"scenario": "goal_loop", "max_attempts": 3}, locale=locale)
+            for path, field in expected.items():
+                with self.subTest(locale=locale, path=path):
+                    entry = resolve_path({"data": report(events)}, f"data.{path}")
+                    self.assertEqual(entry["label"], getattr(texts_for(locale), field))
 
     def test_single_attempt_scenarios_ignore_attempt_limit(self):
         _, events = run_case("normal", {"scenario": "normal", "max_attempts": 3})

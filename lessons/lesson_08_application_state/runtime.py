@@ -125,7 +125,7 @@ def _report(context: RunContext, t, state: TaskState, messages: list[dict], valu
         "title": t.report_title,
         "summary": t.report_summary,
         "checks": [
-            {"label": t.check_reason, "passed": bool(state.terminal_reason), "detail": state.terminal_reason or ""},
+            {"id": "terminal_reason", "label": t.check_reason, "passed": bool(state.terminal_reason), "detail": state.terminal_reason or ""},
             success,
             {"label": t.check_separate, "passed": len(messages) == 1, "detail": t.check_separate_detail},
         ],

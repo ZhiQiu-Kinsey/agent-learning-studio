@@ -123,7 +123,7 @@ def run(context: RunContext) -> str:
 def _report(context: RunContext, t, values: Inputs, rows: list[dict], refused: str | None,
             summary_response: dict) -> dict:
     checks = [{"label": t.check_protocol, "passed": True, "detail": t.check_protocol_detail},
-              {"label": t.check_rule_fits, "passed": refused is None,
+              {"id": "rule_fits", "label": t.check_rule_fits, "passed": refused is None,
                "detail": refused or t.check_rule_fits_detail.format(budget=values.char_budget)}]
     checks += [{"label": t.check_probe.format(name=row["name"]), "passed": probe_hit(row["answer"], t),
                 "detail": t.probe_both if probe_hit(row["answer"], t) else t.probe_missing}
@@ -132,7 +132,7 @@ def _report(context: RunContext, t, values: Inputs, rows: list[dict], refused: s
         "title": t.report_title,
         "summary": t.report_summary,
         "checks": checks,
-        "metrics": [{"label": t.label_model_calls, "value": len(rows) + 1},
+        "metrics": [{"id": "model_calls", "label": t.label_model_calls, "value": len(rows) + 1},
                     {"label": t.label_summary_usage, "value": usage_text(summary_response, context.locale)},
                     {"label": t.label_summary_style, "value": values.summary_style},
                     {"label": t.label_summary_text, "value": answer_text(summary_response, context.locale)},

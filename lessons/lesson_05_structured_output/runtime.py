@@ -40,17 +40,17 @@ def inspect_output(raw: str, t) -> tuple[TaskCard | None, list[dict]]:
     try:
         parsed = json.loads(raw, parse_constant=reject_non_json_constant)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        return None, [{"label": t.layer_json, "passed": False, "detail": str(exc)}]
-    checks.append({"label": t.layer_json, "passed": True, "detail": t.detail_json_ok})
+        return None, [{"id": "json_layer", "label": t.layer_json, "passed": False, "detail": str(exc)}]
+    checks.append({"id": "json_layer", "label": t.layer_json, "passed": True, "detail": t.detail_json_ok})
     try:
         card = TaskCard.model_validate(parsed)
     except ValidationError as exc:
-        checks.append({"label": t.layer_schema, "passed": False,
+        checks.append({"id": "schema_layer", "label": t.layer_schema, "passed": False,
                        "detail": "; ".join(".".join(map(str, e["loc"])) + ": " + e["type"] for e in exc.errors())[:300]})
         return None, checks
-    checks.append({"label": t.layer_schema, "passed": True, "detail": t.detail_schema_ok})
+    checks.append({"id": "schema_layer", "label": t.layer_schema, "passed": True, "detail": t.detail_schema_ok})
     mismatches = [key for key, expected in trusted_facts(t).items() if getattr(card, key) != expected]
-    checks.append({"label": t.layer_facts, "passed": not mismatches,
+    checks.append({"id": "fact_layer", "label": t.layer_facts, "passed": not mismatches,
                    "detail": t.detail_facts_ok if not mismatches else t.detail_facts_mismatch.format(fields=", ".join(mismatches))})
     return card, checks
 

@@ -204,8 +204,8 @@ def _report_pair(context: RunContext, scenario: str, rows: list[dict]) -> None:
     t = texts_for(context.locale)
     context.emit("lesson.report", {
         "title": t.pair_report_title, "summary": t.pair_report_summary,
-        "checks": [{"label": t.check_screen.format(label=row["label"]), "passed": row["passed"], "detail": row["detail"]}
-                   for row in rows],
+        "checks": [{"id": f"{group}_screen", "label": t.check_screen.format(label=row["label"]), "passed": row["passed"],
+                    "detail": row["detail"]} for group, row in zip(("baseline", "variant"), rows)],
         "metrics": [{"label": t.label_same_model, "value": context.model}, {"label": t.label_model_calls, "value": 2},
                     {"label": t.label_budget, "value": context.max_model_calls}, {"label": t.label_temperature, "value": 0},
                     {"label": t.label_sample, "value": context.inputs["sample_label"]},

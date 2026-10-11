@@ -42,17 +42,17 @@ def verify(claim: dict, evidence: dict[str, dict], t) -> list[dict]:
     arguments = record.get("arguments") if record else None
     shown = t.arguments_format.format(**arguments) if arguments else t.value_none
     return [
-        {"label": t.check_ended, "passed": True, "detail": t.detail_ended},
+        {"id": "run_ended", "label": t.check_ended, "passed": True, "detail": t.detail_ended},
         {"label": t.check_referenced, "passed": record is not None,
          "detail": t.detail_referenced if record else t.detail_not_referenced},
         {"label": t.check_tool_ok, "passed": ok, "detail": t.detail_tool_ok if ok else t.detail_tool_not_ok},
-        {"label": t.check_arguments, "passed": arguments == EXPECTED_ARGUMENTS,
+        {"id": "arguments_match", "label": t.check_arguments, "passed": arguments == EXPECTED_ARGUMENTS,
          "detail": t.detail_expected.format(expected=t.arguments_format.format(**EXPECTED_ARGUMENTS), actual=shown)},
-        {"label": t.check_value, "passed": value == EXPECTED,
+        {"id": "value_matches", "label": t.check_value, "passed": value == EXPECTED,
          "detail": t.detail_expected.format(expected=EXPECTED, actual=value if ok else t.value_none)},
         # Compare claim and evidence on their own: the reference and the evidence can be right
         # while the number in the claim was written separately.
-        {"label": t.check_consistent, "passed": ok and claim.get("answer") == value,
+        {"id": "claim_consistent", "label": t.check_consistent, "passed": ok and claim.get("answer") == value,
          "detail": t.detail_consistent.format(claimed=claim.get("answer"), actual=value if ok else t.value_none)},
     ]
 
@@ -136,7 +136,7 @@ def _report(context: RunContext, scenario: str, limit: int, checks: list[dict], 
                {"label": t.label_note, "value": context.question or t.value_empty}]
     if scenario == "goal_loop":
         metrics[1:1] = [{"label": t.label_attempts, "value": len(history)}, {"label": t.label_limit, "value": limit},
-                        {"label": t.label_stop_reason, "value": t.stop_passed if ok else t.stop_limit}]
+                        {"id": "stop_reason", "label": t.label_stop_reason, "value": t.stop_passed if ok else t.stop_limit}]
     context.emit("lesson.report", {
         "title": t.report_title, "summary": t.summary_passed if ok else t.summary_failed,
         "checks": checks,

@@ -226,10 +226,10 @@ def _report_recall_answer(context, values, records, messages, cited, writes):
     placed = sent == [item["value"] for item in records] and system == shared_texts_for(context.locale).memory_rules
     cited_detail = t.recall_cited_detail.format(keys=t.separator.join(cited) if cited else t.value_none)
     if records:
-        grounded = {"label": t.recall_check_grounded, "passed": bool(cited) and set(cited) <= keys,
+        grounded = {"id": "cited_grounded", "label": t.recall_check_grounded, "passed": bool(cited) and set(cited) <= keys,
                     "detail": cited_detail}
     else:
-        grounded = {"label": t.recall_check_empty, "passed": not cited, "detail": cited_detail}
+        grounded = {"id": "cited_grounded", "label": t.recall_check_empty, "passed": not cited, "detail": cited_detail}
     context.emit("lesson.report", {
         "title": t.recall_title,
         "summary": t.recall_summary,

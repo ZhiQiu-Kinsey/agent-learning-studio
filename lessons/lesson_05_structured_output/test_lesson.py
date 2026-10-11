@@ -47,7 +47,7 @@ class StructuredOutputTests(unittest.TestCase):
                 _, checks = structured.inspect_output(raw, ZH)
                 self.assertEqual([c["passed"] for c in checks], expected)
         _, checks = structured.inspect_output("NaN", ZH)
-        self.assertEqual(checks[0]["detail"], "非标准 JSON 常量：NaN")
+        self.assertEqual((checks[0]["id"], checks[0]["detail"]), ("json_layer", "非标准 JSON 常量：NaN"))
         _, checks = structured.inspect_output("NaN", texts_for("en"))
         self.assertEqual(checks[0]["detail"], "non-standard JSON constant: NaN")
 
@@ -66,6 +66,8 @@ class StructuredOutputTests(unittest.TestCase):
                     completion = create_completion(scenario, {"scenario": scenario}, locale)
                     _, events = run_case(scenario, {"scenario": scenario}, completion, locale=locale)
                     self.assertTrue(all(c["passed"] for c in report(events)["checks"]))
+                    # The lab's observation points select each layer by id, the same in both languages.
+                    self.assertEqual([c["id"] for c in report(events)["checks"]], ["json_layer", "schema_layer", "fact_layer"])
                     self.assertEqual(len([e for e in events if e[0] == "request"]), calls)
                     self.assertEqual(len(reports(events)), calls)
                     # Each report is recorded on the round of its draft, so the guided tour can point at the first draft's report.

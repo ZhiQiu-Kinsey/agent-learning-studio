@@ -71,6 +71,15 @@ class EnglishRunTests(unittest.TestCase):
         self.assertEqual(report["table"]["rows"][0][3], t.refused_offline.format(status=400))
         self.assertEqual(report["table"]["rows"][1][3], t.accepted)
 
+    def test_local_checks_are_found_by_id_in_both_languages(self):
+        # The lab selects the naive cut's local check by id, so another truncation would not shift it.
+        for locale in ("zh-CN", "en"):
+            with self.subTest(locale=locale):
+                _, _, events = run_case("broken-pair", {"experiment": "broken_pair", "noise_repeats": 4}, locale=locale)
+                checks = of(events, "lesson.report")[0]["checks"]
+                self.assertEqual([check["id"] for check in checks], ["local_naive", "local_pair_aware"])
+                self.assertFalse(checks[0]["passed"])
+
     def test_helpers_speak_the_run_language(self):
         proposal = {"choices": [{"message": {"content": None, "tool_calls": [{"function": {"name": "lookup_lesson"}},
                                                                              {"function": {}}]}}]}

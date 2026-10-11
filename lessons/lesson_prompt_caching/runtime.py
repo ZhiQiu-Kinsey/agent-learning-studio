@@ -130,7 +130,7 @@ def _report(context: RunContext, values: Inputs, session: str, records: list[dic
     hashes = {record["prefix_hash"] for record in records}
     missing = [str(record["round"]) for record in records if record["cached_tokens"] is None]
     checks = [
-        {"label": t.check_hash, "passed": len(hashes) == 1,
+        {"id": "prefix_hash", "label": t.check_hash, "passed": len(hashes) == 1,
          "detail": t.check_hash_detail.format(
              count=len(records), distinct=len(hashes),
              suffix=t.hash_suffix_warmup if values.layout == "warmup" else t.hash_suffix_plain)},

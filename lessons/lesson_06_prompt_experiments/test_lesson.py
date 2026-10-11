@@ -71,6 +71,9 @@ class PromptExperimentTests(unittest.TestCase):
                     _, events = run_case(scenario, {"scenario": scenario},
                                          create_completion(scenario, {"scenario": scenario}, locale), locale=locale)
                     self.assertEqual([check["passed"] for check in report(events)["checks"]], [False, True])
+                    # The lab selects the rewrite's screening by id, the same in both languages.
+                    self.assertEqual([check["id"] for check in report(events)["checks"]],
+                                     ["baseline_screen", "variant_screen"])
 
     def test_description_matrix_changes_only_the_description_and_runs_proposals(self):
         result, events = run_case("tool-matrix", {"scenario": "tool_matrix"},

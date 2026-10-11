@@ -196,10 +196,10 @@ def _report_conflict(context, seen_b, saved_a, error, kept, retried) -> str:
 def _report_expiry(context, expires_in, visible, stored, deleted, absent) -> str:
     t = texts_for(context.locale)
     if expires_in <= 0:
-        hidden_check = {"label": t.expiry_check_hidden, "passed": not visible and stored,
+        hidden_check = {"id": "expiry_visibility", "label": t.expiry_check_hidden, "passed": not visible and stored,
                         "detail": t.expiry_check_hidden_detail}
     else:
-        hidden_check = {"label": t.expiry_check_live, "passed": visible and stored,
+        hidden_check = {"id": "expiry_visibility", "label": t.expiry_check_live, "passed": visible and stored,
                         "detail": t.expiry_check_live_detail.format(seconds=expires_in)}
     context.emit("lesson.report", {
         "title": t.expiry_title,
@@ -233,7 +233,7 @@ def _report_scope(context, included, excluded, messages, flagged, before, after,
              "detail": t.scope_check_draft_detail},
             {"label": t.scope_check_flagged, "passed": flagged == ["pasted_note"]
              and injected in user and injected not in messages[0]["content"], "detail": t.scope_check_flagged_detail},
-            {"label": t.scope_check_not_executed, "passed": before == after == len(SEEDS),
+            {"id": "not_executed", "label": t.scope_check_not_executed, "passed": before == after == len(SEEDS),
              "detail": t.scope_check_not_executed_detail.format(count=after)},
             {"label": t.scope_check_end_task, "passed": ended == 1
              and next_keys == {"learning_goal", "pasted_note"}, "detail": t.scope_check_end_task_detail},

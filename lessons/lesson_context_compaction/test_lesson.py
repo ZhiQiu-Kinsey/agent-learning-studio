@@ -13,6 +13,7 @@ from lessons.lesson_09_context_budget.runtime import has_text, lookup_lesson
 from lessons.lesson_context_compaction import runtime
 from lessons.lesson_context_compaction.fixtures import create_completion
 from lessons.lesson_context_compaction.locales import texts_for
+from server.selectors import resolve_path
 
 FACTS = helper_texts("zh-CN").facts
 ZH = texts_for("zh-CN")
@@ -73,6 +74,17 @@ class CompactionRunTests(unittest.TestCase):
         rows = report["table"]["rows"]
         self.assertEqual([row[3] for row in rows], [True, True, False, True])
         self.assertEqual([row[5] for row in rows], ["命中", "命中", "未命中", "命中"])
+
+    def test_observed_report_entries_are_found_by_id_in_both_languages(self):
+        # The lab selects these entries by id, so adding a check or metric does not shift them.
+        for locale in ("zh-CN", "en"):
+            with self.subTest(locale=locale):
+                t = texts_for(locale)
+                _, events = run_case("compare", {}, locale=locale)
+                data = {"data": of(events, "lesson.report")[0]}
+                self.assertEqual(resolve_path(data, "data.checks[id=rule_fits]")["label"], t.check_rule_fits)
+                self.assertEqual(resolve_path(data, "data.metrics[id=model_calls]"),
+                                 {"id": "model_calls", "label": t.label_model_calls, "value": 5})
 
     def test_tight_budget_refuses_the_rule_record_without_a_request(self):
         _, events = run_case("tight-budget", {"char_budget": 100})

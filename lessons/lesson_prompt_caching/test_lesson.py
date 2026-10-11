@@ -11,6 +11,7 @@ from lessons.lesson_prompt_caching import runtime
 from lessons.lesson_prompt_caching.cache_usage import hit_ratio, normalize_cache_usage
 from lessons.lesson_prompt_caching.fixtures import create_completion
 from lessons.lesson_prompt_caching.locales import texts_for
+from server.selectors import resolve_path
 
 MANIFEST = json.loads(Path(runtime.__file__).with_name("lesson.json").read_text(encoding="utf-8"))
 ZH = texts_for("zh-CN")
@@ -185,6 +186,15 @@ class RunTests(unittest.TestCase):
         bodies = [data["body"] for data in of(events, "request")]
         self.assertEqual([body["messages"][1]["content"].split("\n")[0] for body in bodies],
                          list(ZH.questions[:4]))
+
+    def test_prefix_hash_check_is_found_by_id_in_both_languages(self):
+        # The lab selects the prefix-hash check by id; the explained-hits check is only added when hits are reported.
+        for locale in ("zh-CN", "en"):
+            for exercise, layout, same in (("dynamic-first", "dynamic_first", False), ("stable-prefix", "stable_prefix", True)):
+                with self.subTest(locale=locale, layout=layout):
+                    _, events = run_case(exercise, {"layout": layout}, locale=locale)
+                    check = resolve_path({"data": report(events)}, "data.checks[id=prefix_hash]")
+                    self.assertEqual((check["label"], check["passed"]), (texts_for(locale).check_hash, same))
 
     def test_warmup_sends_one_extra_request_and_unreported_is_never_zero(self):
         _, events = run_case("warmup", {"layout": "warmup", "repeats": 5})

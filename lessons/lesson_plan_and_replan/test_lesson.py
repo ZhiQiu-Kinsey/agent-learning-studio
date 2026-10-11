@@ -9,6 +9,7 @@ from course.runner import RunCancelled
 from lessons.lesson_plan_and_replan import runtime
 from lessons.lesson_plan_and_replan.fixtures import create_completion
 from lessons.lesson_plan_and_replan.locales import texts_for
+from server.selectors import resolve_path
 
 ZH, EN = texts_for("zh-CN"), texts_for("en")
 
@@ -129,11 +130,20 @@ class StrategyTests(unittest.TestCase):
                 self.assertEqual(len(failed), 1)
                 self.assertTrue(answer.startswith(t.verdict_passed))
                 self.assertEqual(metrics(events, locale)["label_revisions"], 1)
-                self.assertEqual(report(events)["metrics"][1]["label"], t.label_model_calls)
         _, events = run_case("replan", {"strategy": "replan"})
         revised = [p for p in of(events, "lesson.plan") if p["event"] == "revised"]
         self.assertIn("备份", revised[0]["reason"])
         self.assertTrue(of(events, "request")[1]["body"]["messages"][-1]["content"].startswith("执行情况："))
+
+    def test_model_call_metric_is_found_by_id_in_both_languages(self):
+        # The lab's cost observation point selects data.metrics[id=model_calls], not a position.
+        for locale in ("zh-CN", "en"):
+            for strategy in ("static", "replan", "react"):
+                with self.subTest(locale=locale, strategy=strategy):
+                    _, events = run_case(strategy, {"strategy": strategy}, locale=locale)
+                    entry = resolve_path({"data": report(events)}, "data.metrics[id=model_calls]")
+                    self.assertEqual(entry["label"], texts_for(locale).label_model_calls)
+                    self.assertEqual(entry["value"], len(of(events, "request")))
 
     def test_react_baseline_recovers_without_a_plan(self):
         for locale in ("zh-CN", "en"):

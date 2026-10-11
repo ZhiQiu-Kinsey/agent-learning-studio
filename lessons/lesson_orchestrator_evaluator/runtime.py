@@ -257,11 +257,11 @@ def _report(context: RunContext, t: Texts, pattern: str, ledger: Ledger, rows: l
         "summary": t.report_summary,
         "checks": [{"label": t.check_format, "passed": len(ok) == len(expected),
                     "detail": t.check_format_detail.format(ok=len(ok), total=len(expected))}],
-        "metrics": [{"label": t.label_model_calls, "value": len(ledger.rows)},
-                    {"label": t.label_total_tokens, "value": ledger.total()},
+        "metrics": [{"id": "model_calls", "label": t.label_model_calls, "value": len(ledger.rows)},
+                    {"id": "total_tokens", "label": t.label_total_tokens, "value": ledger.total()},
                     {"label": t.label_role_calls, "value": t.role_separator.join(
                         t.role_count.format(role=role, count=sum(r["role"] == role for r in ledger.rows)) for role in roles)},
-                    *([{"label": t.label_stop_reason, "value": stop_reason}] if stop_reason else []),
+                    *([{"id": "stop_reason", "label": t.label_stop_reason, "value": stop_reason}] if stop_reason else []),
                     {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": columns, "rows": rows},
     })

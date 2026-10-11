@@ -95,7 +95,7 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual([r["ticket"] for r in routes if "misrouted" in r], ["t18", "t20"])
         self.assertEqual(sum(r["correct"] for r in routes), 18)
         reports = of(events, "lesson.report")
-        self.assertEqual(reports[0]["metrics"][0], {"label": "准确率", "value": "18/20"})
+        self.assertEqual(reports[0]["metrics"][0], {"id": "accuracy", "label": "准确率", "value": "18/20"})
         matrix = reports[1]["table"]["rows"]
         self.assertEqual(sum(sum(row[1:]) for row in matrix), 20)
         diagonal = sum(row[index + 1] for index, row in enumerate(matrix))
@@ -112,7 +112,7 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(first[1]["content"], t.tickets["t01"])
         self.assertEqual([r["ticket"] for r in of(events, "lesson.route") if "misrouted" in r], ["t18", "t20"])
         reports = of(events, "lesson.report")
-        self.assertEqual(reports[0]["metrics"][0], {"label": "Accuracy", "value": "18/20"})
+        self.assertEqual(reports[0]["metrics"][0], {"id": "accuracy", "label": "Accuracy", "value": "18/20"})
         self.assertEqual(reports[1]["table"]["rows"][1], ["account and sign-in", 0, 4, 1, 0])
         self.assertEqual(answer, "Routing finished: 18/20 match the labels, 1 took the fallback.")
 

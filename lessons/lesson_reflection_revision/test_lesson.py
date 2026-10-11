@@ -9,6 +9,7 @@ from course.runner import RunCancelled
 from lessons.lesson_reflection_revision import runtime
 from lessons.lesson_reflection_revision.fixtures import FIRST, FIXED, create_completion
 from lessons.lesson_reflection_revision.locales import texts_for
+from server.selectors import resolve_path
 
 LOCALES = ("zh-CN", "en")
 
@@ -99,6 +100,19 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(metric(events, "label_stop_reason"), "评审通过")
         self.assertEqual(metric(events, "label_total_tokens"), 120)
         self.assertIn("通过（9/9）", answer)
+
+    def test_observed_report_entries_are_found_by_id_in_both_languages(self):
+        # The lab selects these entries by id, so adding a metric does not shift them.
+        fields = {"checks[id=final_tests]": "check_final", "metrics[id=stop_reason]": "label_stop_reason",
+                  "metrics[id=model_calls]": "label_model_calls", "metrics[id=total_tokens]": "label_total_tokens"}
+        for locale in LOCALES:
+            for exercise, inputs in (("test-review", {"reviewer": "tests", "max_iters": 3}),
+                                     ("test-review-once", {"reviewer": "tests", "max_iters": 1})):
+                _, events = run_case(exercise, inputs, locale=locale)
+                data = {"data": of(events, "lesson.report")[-1]}
+                for path, field in fields.items():
+                    with self.subTest(locale=locale, exercise=exercise, path=path):
+                        self.assertEqual(resolve_path(data, f"data.{path}")["label"], getattr(texts_for(locale), field))
 
     def test_english_run_sends_and_reports_english(self):
         t = texts_for("en")

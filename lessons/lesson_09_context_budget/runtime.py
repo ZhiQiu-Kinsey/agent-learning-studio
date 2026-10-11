@@ -172,7 +172,7 @@ def run_broken_pair(context: RunContext, t, values: Inputs) -> str:
             local = t.local_valid
         except ValueError as error:
             local = t.local_rejected.format(error=error)
-        checks.append({"label": t.check_local.format(name=name), "passed": local == t.local_valid, "detail": local})
+        checks.append({"id": f"local_{code}", "label": t.check_local.format(name=name), "passed": local == t.local_valid, "detail": local})
         try:
             response = context.complete({"messages": messages, "temperature": 0}, round_number=index)
         except Exception as error:  # 3. Record a provider rejection as it is; no retry, no rewrite

@@ -15,6 +15,7 @@ from lessons.lesson_10_persistent_memory.locales.shared import texts_for as shar
 from lessons.lesson_10_persistent_memory.store import MemoryStore, VersionConflict
 from lessons.lesson_memory_lifecycle import runtime
 from lessons.lesson_memory_lifecycle.locales import texts_for
+from server.selectors import resolve_path
 
 ZH = "zh-CN"
 CJK = re.compile(r"[　-〿一-鿿＀-￯]")
@@ -300,6 +301,18 @@ class EnglishRunTests(unittest.TestCase):
                 report = of(events, "lesson.report")[0]
                 self.assertTrue(all(check["passed"] for check in report["checks"]), report["checks"])
                 self.assertFalse(CJK.search(json.dumps([answer, events], ensure_ascii=False)))
+
+    def test_observed_checks_are_found_by_id_in_both_languages(self):
+        # The lab selects these checks by id; both expiry branches (expired, still live) share one id.
+        cases = (({"scenario": "expiry_delete"}, "expiry_visibility", "expiry_check_hidden"),
+                 ({"scenario": "expiry_delete", "expires_in_seconds": 60}, "expiry_visibility", "expiry_check_live"),
+                 ({"scenario": "scope_filter"}, "not_executed", "scope_check_not_executed"))
+        for locale in (ZH, "en"):
+            for inputs, check_id, field in cases:
+                with self.subTest(locale=locale, inputs=inputs):
+                    _, events = run_case(inputs, locale=locale)
+                    check = resolve_path({"data": of(events, "lesson.report")[0]}, f"data.checks[id={check_id}]")
+                    self.assertEqual(check["label"], getattr(texts_for(locale), field))
 
     def test_conflict_error_and_values_come_from_the_english_catalogs(self):
         t, shared = texts_for("en"), shared_texts_for("en")

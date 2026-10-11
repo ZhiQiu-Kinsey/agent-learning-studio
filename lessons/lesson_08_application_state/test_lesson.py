@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from course.execution import RunContext, validate_inputs
 from lessons.lesson_08_application_state import runtime
 from lessons.lesson_08_application_state.locales import texts_for
+from server.selectors import resolve_path
 
 CJK = re.compile(r"[　-〿㐀-䶿一-鿿＀-￯]")
 GOALS = {"zh-CN": "说明消息与应用状态的区别", "en": "Explain the difference between messages and application state"}
@@ -43,6 +44,9 @@ class EnglishRunTests(unittest.TestCase):
                 for locale, (_, run_events) in answers.items():
                     states = [data["state"] for data in of(run_events, "lesson.state")]
                     self.assertEqual(states[-1]["status"], status)
+                    # The lab selects the terminal-reason check by id, the same in both languages.
+                    reason = resolve_path({"data": of(run_events, "lesson.report")[0]}, "data.checks[id=terminal_reason]")
+                    self.assertEqual(reason["detail"], states[-1]["terminal_reason"])
                 # Both languages walk the same states with the same number of steps.
                 self.assertEqual([[data["state"]["status"], data["state"]["used_steps"]] for data in of(events, "lesson.state")],
                                  [[data["state"]["status"], data["state"]["used_steps"]]
