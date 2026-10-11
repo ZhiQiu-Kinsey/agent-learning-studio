@@ -28,6 +28,30 @@ class CodeNameTests(unittest.TestCase):
         # 平台名字（角色、事件、终态）每课都可用。
         self.assertTrue({"assistant", "tool_result", "completed", "true"} <= set(names))
 
+    def test_catalog_files_give_identifiers_and_keys_not_string_values(self):
+        """消息目录里的字符串值是自然语言（英文目录的 "passed"、"yes"），不当代码名；字段名与字典键仍是代码名。"""
+        catalog = 'from . import Texts\nTEXTS = Texts(\n    check_passed="passed",\n    answer_yes="yes",\n' \
+                  '    label_messages="Messages",\n    probes={"vague": "Sum these", "precise": "none"},\n)\n'
+        names = set(code_names([], catalogs=[catalog]))
+        self.assertTrue({"TEXTS", "Texts", "check_passed", "answer_yes", "label_messages", "probes",
+                         "vague", "precise"} <= names)
+        self.assertFalse({"passed", "yes", "Messages", "Sum these", "none"} & names)
+        # 同样的值写在课程代码里仍是代码名：那里的短字面量是程序用的值。
+        self.assertIn("passed", code_names(['CHECK = {"passed": True}\n']))
+
+    def test_lesson_code_names_skip_values_only_found_in_catalogs(self):
+        from server.code_reading import source_role
+        for spec in LESSONS:
+            with self.subTest(lesson=spec["id"]):
+                files = [(source_role(source["path"]), (ROOT / source["path"]).read_text(encoding="utf-8"))
+                         for source in spec["sources"] if source["language"] == "python"]
+                code = set().union(*(names_in_source(text) for role, text in files if role != "texts"))
+                catalog_values = set().union(*(names_in_source(text) - names_in_source(text, literals=False)
+                                               for role, text in files if role == "texts"))
+                leaked = (catalog_values - code) & set(lesson_code_names(spec))
+                self.assertEqual(leaked, set(), "消息目录里的字符串值不应成为代码名")
+                self.assertFalse({"Messages", "yes", "no"} & set(lesson_code_names(spec)))
+
     def test_lesson_detail_publishes_code_names(self):
         spec = next(spec for spec in LESSONS if spec["id"] == "task-contract")
         names = lesson_code_names(spec)

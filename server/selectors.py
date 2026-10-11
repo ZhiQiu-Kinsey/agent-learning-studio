@@ -6,7 +6,9 @@ tests/fixtures/selector_vectors.json 约束：Python 测试与 vitest 读取同�
 
 与 TS 对应的关键约定：
 - 路径如 ``data.body.choices[0].message.tool_calls[1].function.name``，按正则
-  ``[^.[\\]]+|\\[\\d+\\]`` 切分；对象段只读自有键，数组段只读数组；任何一步不存在即“未找到”。
+  ``[^.[\\]]+|\\[\\d+\\]|\\[id=[A-Za-z0-9_.:-]+\\]`` 切分；对象段只读自有键，数组段只读数组；任何一步不存在即“未找到”。
+- ``[id=<值>]`` 是按键取的数组段：取数组里第一个 ``id`` 字段（字符串）等于该值的对象，例如
+  ``data.metrics[id=last_claim]``。报告的指标与检查按位置取，会随课程增删条目错位；按 id 取不会。
 - 路径末端的值为 null（Python 的 None）、false、0 或空串时仍算找到；只有“不存在”才不匹配。
 - 工具名先取 ``data.function.name``（必须是字符串），否则取 ``data.name``（必须是字符串）。
 - 各条件之间是“与”关系；未给出的条件（None）不参与比较。
@@ -19,7 +21,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-_PATH_PART = re.compile(r"[^.\[\]]+|\[\d+\]")
+_PATH_PART = re.compile(r"[^.\[\]]+|\[\d+\]|\[id=[A-Za-z0-9_.:-]+\]")
 
 
 class _Missing:
@@ -54,7 +56,16 @@ def resolve_path(value: Any, path: str) -> Any:
     for part in parts:
         if current is None or current is MISSING:
             return MISSING
-        if part.startswith("["):
+        if part.startswith("[id="):
+            if not isinstance(current, list):
+                return MISSING
+            key = part[4:-1]
+            current = next((item for item in current
+                            if isinstance(item, Mapping) and isinstance(item.get("id"), str) and item["id"] == key),
+                           MISSING)
+            if current is MISSING:
+                return MISSING
+        elif part.startswith("["):
             if not isinstance(current, list):
                 return MISSING
             index = int(part[1:-1])

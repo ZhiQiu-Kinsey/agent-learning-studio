@@ -1,3 +1,4 @@
+import { positionalPath } from "../../../content/selector";
 import type { Trace } from "../../../types";
 
 export type LineRange = { from: number; to: number };
@@ -74,9 +75,12 @@ export const shownValue = (event: Trace) =>
 /**
  * Turns a selector path (relative to the event, e.g. `data.body.messages`)
  * into a path inside the JSON the inspector shows (`messages`), or null when
- * the field lies outside it.
+ * the field lies outside it. Keyed segments (`metrics[id=last_claim]`) become
+ * the position they name in this event (`metrics[5]`).
  */
-export function shownPath(event: Trace, path: string): string | null {
+export function shownPath(event: Trace, selectorPath: string): string | null {
+  const path = positionalPath(event, selectorPath);
+  if (path === undefined) return null;
   const root = isExchange(event) ? "data.body" : "data";
   if (path === root) return "";
   if (path.startsWith(`${root}.`)) return path.slice(root.length + 1);

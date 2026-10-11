@@ -65,7 +65,7 @@ class Texts:
     value_failed: str
     value_no_list: str
     value_unfinished: str
-    value_empty_note: str
+    value_empty: str
     columns: tuple[str, ...]
     # The final answer written by the runner.
     verdict_passed: str

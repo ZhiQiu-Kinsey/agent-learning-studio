@@ -537,5 +537,8 @@ def lesson_code_names(spec, sources=None):
     except (LessonValidationError, OSError):
         terms = []  # 术语表缺失或损坏时课程照常打开，只是代码名不扣除术语
     forms = [form for term in terms for form in (term["zh"], term["en"], *term.get("aliases", []))]
-    return code_names([source["content"] for source in sources if source["language"] == "python"], forms)
+    python = [source for source in sources if source["language"] == "python"]
+    # 运行时文本（locales/ 下的消息目录）里的字符串值是自然语言，不当代码名；见 server/code_names.py。
+    return code_names([source["content"] for source in python if source_role(source["path"]) != "texts"], forms,
+                      catalogs=[source["content"] for source in python if source_role(source["path"]) == "texts"])
 

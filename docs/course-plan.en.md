@@ -1531,7 +1531,7 @@ Implement two patterns: an orchestrator that splits a task among workers, and an
 Orchestration and review-and-revise:
 
 1. The orchestrator produces a plan, and the workers each send one parallel request carrying a branch in the same round.
-2. The evaluator reviews and the generator revises, repeating within the iteration limit max_iters, and each round's review verdict is recorded.
+2. The evaluator reviews and the generator revises, repeating within the iteration limit max_iters; the loop stops early when the review passes or a revision comes back unchanged, and each round's review verdict is recorded.
 3. Count the extra cost relative to a single call.
 
 Deliverable: A request timeline with branches, the review records, and a cost comparison.

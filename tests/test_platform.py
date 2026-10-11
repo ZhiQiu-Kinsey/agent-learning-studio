@@ -110,6 +110,36 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(events[0]["data"]["function"]["arguments"], "{bad json")
         self.assertEqual(events[0]["data"]["origin"], "course_program")
 
+    def test_call_without_id_gets_a_marked_synthesized_id_that_pairs_and_reaches_the_history(self):
+        """服务商漏发或发空调用 id 时，平台补一个确定的 id，并在 tool_call 事件里标明是补的；记录的响应保持原样。"""
+        replies = iter([
+            {"choices": [{"message": {"role": "assistant", "content": None, "tool_calls": [
+                {"type": "function", "function": {"name": "add", "arguments": '{"a": 1, "b": 2}'}},
+                {"id": "", "type": "function", "function": {"name": "add", "arguments": '{"a": 3, "b": 4}'}},
+                {"id": "call_kept", "type": "function", "function": {"name": "add", "arguments": '{"a": 5, "b": 6}'}},
+            ]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "done"}}]},
+        ])
+        events = []
+        module = SimpleNamespace(setup=lambda locale: AgentSetup("system", [], {"add": lambda a, b: a + b}))
+        answer = native_context(events, lambda body, key: next(replies)).run_native(module, 3, publish_answer=True)
+        self.assertEqual(answer, "done")
+        calls = [e["data"] for e in events if e["type"] == "tool_call"]
+        results = [e["data"] for e in events if e["type"] == "tool_result"]
+        self.assertEqual([c["id"] for c in calls], ["synthesized_call_1_1", "synthesized_call_1_2", "call_kept"])
+        self.assertEqual([c.get("id_synthesized") for c in calls], [True, True, None])
+        self.assertEqual([r["tool_call_id"] for r in results], [c["id"] for c in calls])
+        self.assertEqual([r["result"] for r in results], [{"ok": True, "result": n} for n in (3, 7, 11)])
+        # 响应证据是服务商发来的原样：第一个调用没有 id，第二个是空字符串。
+        response_calls = [e for e in events if e["type"] == "response"][0]["data"]["body"]["choices"][0]["message"]["tool_calls"]
+        self.assertNotIn("id", response_calls[0])
+        self.assertEqual(response_calls[1]["id"], "")
+        # 下一轮请求里，助手消息的调用与工具消息用同一个补上的 id，请求格式正确。
+        history = [e for e in events if e["type"] == "request"][1]["data"]["body"]["messages"]
+        self.assertEqual([c["id"] for c in history[2]["tool_calls"]], [c["id"] for c in calls])
+        self.assertEqual([m["tool_call_id"] for m in history if m["role"] == "tool"], [c["id"] for c in calls])
+        self.assertNotIn("id_synthesized", json.dumps(history))
+
     def test_offline_does_not_import_local_config(self):
         with patch.dict("sys.modules", {"local_config": None}):
             self.assertEqual(execute("tool-selection", "sum")[-1]["type"], "answer")

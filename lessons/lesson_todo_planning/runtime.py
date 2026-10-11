@@ -209,8 +209,8 @@ def _report(context: RunContext, condition: str, checks: list[dict], workspace: 
                     {"label": t.label_todo_writes, "value": len(timeline)},
                     {"label": t.label_reminders, "value": reminders},
                     {"label": t.label_todo_done, "value": f"{done}/{len(workspace.todos)}" if workspace.todos else t.value_no_list},
-                    {"label": t.label_last_claim, "value": answer if answer is not None else t.value_unfinished},
-                    {"label": t.label_note, "value": context.question or t.value_empty_note}],
+                    {"id": "last_claim", "label": t.label_last_claim, "value":answer if answer is not None else t.value_unfinished},
+                    {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.columns), "rows": timeline},
     })
     verdict = t.verdict_passed if accepted else t.verdict_failed

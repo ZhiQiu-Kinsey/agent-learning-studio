@@ -122,13 +122,36 @@ class RunContext:
         return self.completion(body, api_key)
 
     def execute_proposal(self, tool_call: dict, available_tools: dict) -> dict:
-        """Execute one call the model proposed: record the proposal, then the tool result, paired by the call id."""
+        """Execute one call the model proposed: record the proposal, then the tool result, paired by the call id.
+
+        Some providers omit the call id (or send an empty one). Rejecting the call would
+        hide a proposal the model really made, so the platform gives it an id instead:
+        ``synthesized_call_<round>_<n>``, deterministic within the run. The id is written
+        into the call dict itself, so the assistant message the lesson puts back into the
+        history and the tool message that answers it carry the same id, and the next
+        request stays well formed. The recorded ``response`` event keeps the provider's
+        call as it arrived (without an id); the ``tool_call`` event says
+        ``id_synthesized: true``, so nobody mistakes the id for one the provider sent.
+        """
         self.check_cancelled()
-        self.emit("tool_call", tool_call, self._round)
+        synthesized = self._ensure_call_id(tool_call)
+        self.emit("tool_call", {**tool_call, "id_synthesized": True} if synthesized else tool_call, self._round)
         result = execute_tool(tool_call, available_tools, self.locale)
         self.emit("tool_result", {"tool_call_id": tool_call["id"], "name": tool_call["function"]["name"],
                                   "result": result}, self._round)
         return result
+
+    def _ensure_call_id(self, tool_call: dict) -> bool:
+        """Give a call without a usable id (missing, empty or not a string) a synthesized one; True when it did."""
+        if not isinstance(tool_call, dict):
+            raise ValueError("a tool call proposal must be a JSON object")
+        call_id = tool_call.get("id")
+        if isinstance(call_id, str) and call_id.strip():
+            return False
+        # Shares the counter with submit_call, so the id is unique within the run.
+        self._tool_count += 1
+        tool_call["id"] = f"synthesized_call_{self._round}_{self._tool_count}"
+        return True
 
     def call_tool(self, name: str, arguments: dict, available_tools: dict,
                   round_number: int = 1, call_id: str | None = None) -> dict:

@@ -155,11 +155,13 @@ class RunTests(unittest.TestCase):
         self.assertEqual(runtime.reminder_text(2, ZH),
                          "<reminder>已经 2 轮没有更新 TODO。请先用 todo_write 更新清单，再继续。</reminder>")
 
-    def test_self_report_stays_at_metrics_index_5(self):
-        # The lab's observation point selects data.metrics[5]; the order must not change with the language.
+    def test_self_report_metric_is_found_by_its_id(self):
+        # The lab's observation point selects data.metrics[id=last_claim], not a position.
+        from server.selectors import resolve_path
         for locale in ("zh-CN", "en"):
             _, events = run_case("todo", {"condition": "todo"}, locale=locale)
-            self.assertEqual(report(events)["metrics"][5]["label"], texts_for(locale).label_last_claim)
+            metric = resolve_path({"data": report(events)}, "data.metrics[id=last_claim]")
+            self.assertEqual(metric["label"], texts_for(locale).label_last_claim)
 
     def test_todo_claims_do_not_override_the_card(self):
         def lying(body, key):

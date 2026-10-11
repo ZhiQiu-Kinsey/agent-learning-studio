@@ -206,19 +206,46 @@ test.describe("runtime language", () => {
     page,
     request,
   }) => {
+    // Every lesson has an English runtime now, so the Chinese-only case is
+    // simulated: the lesson detail says the runner only speaks zh-CN, the way
+    // the backend answers ?lang=en for such a lesson (English page text, Chinese
+    // questions and presets, runtime_locale zh-CN). Everything else is real.
     const catalog: CurriculumData = await (
       await request.get("/api/curriculum?lang=en")
     ).json();
-    const english: Detail[] = (
-      await (await request.get("/api/lessons?lang=en")).json()
-    ).lessons;
-    const pending = english.find(
-      (lesson) => lesson.available && lesson.runtime_locale !== "en",
-    );
-    test.skip(!pending, "每门课都已有英文运行时");
+    // Not the lesson the workspace opens first: reach it through the navigation.
+    const lesson = catalog.lessons.find(
+      (item) => item.status === "available" && item.id !== lessonId,
+    )!;
+    const zh: Detail = await (
+      await request.get(`/api/lessons/${lesson.id}`)
+    ).json();
+    await page.route(`**/api/lessons/${lesson.id}?*`, async (route) => {
+      const url = new URL(route.request().url());
+      const response = await route.fetch();
+      if (url.searchParams.get("lang") !== "en")
+        return route.fulfill({ response });
+      const en: Detail = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...en,
+          runtime_locale: "zh-CN",
+          runtime_locales: ["zh-CN"],
+          input_defaults: zh.input_defaults,
+          exercises: en.exercises.map((exercise) => {
+            const source = zh.exercises.find((item) => item.id === exercise.id)!;
+            return {
+              ...exercise,
+              question: source.question,
+              inputs: source.inputs,
+            };
+          }),
+        },
+      });
+    });
     await openLab(page, "en");
     // Open it through the course navigation, by its English titles.
-    const lesson = catalog.lessons.find((item) => item.id === pending!.id)!;
     const category = catalog.categories.find(
       (item) => item.id === lesson.category_id,
     )!;
@@ -237,6 +264,11 @@ test.describe("runtime language", () => {
       tIn("en", "lab:bench.composer.runtimeLocale", {
         language: tIn("en", "lab:language.zh-CN"),
       }),
+    );
+    // The preset is the question the Chinese runner would really send.
+    const first = zh.exercises.find((item) => !item.offline_only)!;
+    await expect(page.getByTestId("lab-question-input")).toHaveValue(
+      first.question,
     );
   });
 });

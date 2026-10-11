@@ -67,6 +67,26 @@ describe("shownPath", () => {
     expect(shownPath(request, "data.representation")).toBeNull();
     expect(shownPath(request, "seq")).toBeNull();
   });
+
+  it("frames a report metric named by id, wherever it sits", () => {
+    const report = {
+      type: "lesson.report",
+      data: {
+        metrics: [
+          { label: "Verdict", value: "passed" },
+          { id: "last_claim", label: "Last claim", value: "done" },
+        ],
+      },
+    } as unknown as Trace;
+    const path = shownPath(report, "data.metrics[id=last_claim]");
+    expect(path).toBe("metrics[1]");
+    const { text, ranges } = printJson(report.data);
+    const range = ranges.get(path!)!;
+    expect(text.split("\n").slice(range.from, range.to + 1).join("\n")).toContain(
+      '"id": "last_claim"',
+    );
+    expect(shownPath(report, "data.metrics[id=missing].value")).toBeNull();
+  });
 });
 
 describe("Code mark", () => {

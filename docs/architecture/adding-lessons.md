@@ -160,7 +160,7 @@
   - `hypothesis`：可检验的假设；
   - `arms`：对照组，用 `exercise` 引用 lesson.json 的练习；
   - `observe`：观察点，带选择器（条件 `event`、`round`、`path`、`span_kind`、`name`，可加 `nth`）；
-  - `guide`：导览，每步 `{ "text", "observe"?, "stage"? }`：一小段讲解（一两句），加上这段话要看的地方。`observe` 引用观察点，界面在学习者自己的运行里跳到证据并用遮罩框住（JSON 字段精确到行）；`stage` 写这一步讲的是哪个舞台角色（`user`、`runtime`、`model`、`tool`、`memory`），没有 `observe` 时框住该节点；两者都不填的一步居中显示，只用于开场。每个观察点都要讲到，每步的话不重复。观察点选择器匹配的是第一个符合的事件，路径只要存在就算命中（值为 null 也算）：同类事件有多个时用 `round` 或只在目标事件上出现的字段钉住，实在没有可钉的字段（如同一轮的第二个 `tool_call`）再写 `nth`，按运行顺序取第几个命中（从 1 数），否则导览会框到别的事件。`nth` 依赖事件顺序，真实运行的顺序和次数可能与确定性运行不同，能用字段钉住时优先用字段；
+  - `guide`：导览，每步 `{ "text", "observe"?, "stage"? }`：一小段讲解（一两句），加上这段话要看的地方。`observe` 引用观察点，界面在学习者自己的运行里跳到证据并用遮罩框住（JSON 字段精确到行）；`stage` 写这一步讲的是哪个舞台角色（`user`、`runtime`、`model`、`tool`、`memory`），没有 `observe` 时框住该节点；两者都不填的一步居中显示，只用于开场。每个观察点都要讲到，每步的话不重复。观察点选择器匹配的是第一个符合的事件，路径只要存在就算命中（值为 null 也算）：同类事件有多个时用 `round` 或只在目标事件上出现的字段钉住，实在没有可钉的字段（如同一轮的第二个 `tool_call`）再写 `nth`，按运行顺序取第几个命中（从 1 数），否则导览会框到别的事件。`nth` 依赖事件顺序，真实运行的顺序和次数可能与确定性运行不同，能用字段钉住时优先用字段。指向报告里的某一条指标或检查时，给这一条加稳定的 `id`，路径写 `data.metrics[id=<id>]`（取数组里第一个 `id` 等于它的对象），不写 `data.metrics[5]` 这样的位置：报告增删条目时位置会变；
   - `conclusion`：`proves` 写能证明的，`does_not_prove` 写不能证明的。
 
   选择器的语义由 `server/selectors.py` 和 `frontend/src/content/selector.ts` 共同实现，两边跑同一份共享测试向量。`tests/test_lesson_experiments.py` 会用确定性运行逐个检查观察点和导览目标都能命中；在这次运行中找不到的证据，界面会如实显示“本次运行没有出现这条证据”。
@@ -294,7 +294,7 @@ def run(context: RunContext):
 | 方法 | 用途 |
 | --- | --- |
 | `context.complete(body, round_number=1, branch=None)` | 使用当前模型连接并记录请求、响应与表示方式；并行发出多个请求时给每个分支一个不同的 `branch`，时间线按它配对请求与响应 |
-| `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
+| `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。服务商漏发或发空调用 id 时，平台补一个本次运行内确定的 `synthesized_call_<轮次>_<序号>`，写回调用本身（课程放回历史的助手消息与工具消息因此用同一个 id，下一轮请求格式正确），`tool_call` 事件标 `id_synthesized: true`；记录的 `response` 保持服务商原样。不拒绝这类调用，是因为模型确实提出了它，拒绝会藏起真实的提议。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
 | `context.call_tool(name, arguments, available_tools, round_number=1)` | 由运行器（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
 | `context.submit_call(name, raw_arguments, available_tools, round_number=1)` | 运行器原样提交一条调用（名字可以未登记，参数是原样的 JSON 字符串、可以是坏的），走与模型提议相同的检查；用于演示拒绝路径，事件标为运行器发起（`origin: course_program`，界面显示“运行器调用工具”） |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
@@ -322,7 +322,7 @@ def run(context: RunContext):
 
 三个插槽分别是 `guide`、`lab`、`inspector`。`structured-inputs` 是共用结构化输入面板；`tool-outcomes` 展示工具结果；`evidence-board` 展示实际事件中的检查、指标、对照表。没有设置插槽的课程继续用通用页面。固定任务实验可以配置 `ui.question_label` 和 `ui.question_help`，明确问题框是学习者备注，避免学生误以为修改了受控实验条件。
 
-`evidence-board` 消费当前回放位置的 `lesson.report` 事件：`title`、`summary` 为文本，`checks` 为 `{label, passed, detail}` 数组，`metrics` 为 `{label, value}` 数组，可选 `table` 为 `{columns: string[], rows: (string|number|boolean)[][]}`。同一运行可发布初稿、修复、最终等多份报告，界面允许选取并查看原始事件。只有真正执行过的检查才能标记通过，未执行项目应省略或不提供 `passed`。
+`evidence-board` 消费当前回放位置的 `lesson.report` 事件：`title`、`summary` 为文本，`checks` 为 `{label, passed, detail}` 数组，`metrics` 为 `{label, value}` 数组（两者都可带稳定的 `id`，供观察点按 `[id=…]` 选取），可选 `table` 为 `{columns: string[], rows: (string|number|boolean)[][]}`。同一运行可发布初稿、修复、最终等多份报告，界面允许选取并查看原始事件。只有真正执行过的检查才能标记通过，未执行项目应省略或不提供 `passed`。
 
 指标和表格单元格按值的形状显示（`frontend/src/lesson-extensions/shared/reportValue.ts`）：数字用大号指标字体；短文本用正文字体；超过 32 字（单元格 160 字）或带换行的文本单独占一行，默认折叠成四行；对象和内容是 JSON 对象的字符串（如服务商用量）显示成键值列表，嵌套键用点号连接。值本身不改写，原始记录里仍是原样。
 
