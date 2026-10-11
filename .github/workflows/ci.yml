@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22.x"
+
+jobs:
+  python:
+    name: Python tests and content checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # setup-uv does not publish moving major tags; Dependabot keeps this pin current.
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev --locked
+
+      # Tests swap the model for deterministic fixtures at the network boundary; no API key is needed.
+      - name: Unit tests
+        run: uv run python -m unittest discover -s tests
+
+      - name: Validate lessons
+        run: uv run python scripts/validate_lessons.py
+
+      - name: Content v2 migration check
+        run: uv run python scripts/migrate_content.py --check
+
+      - name: Course plan in sync
+        run: uv run python scripts/export_curriculum.py --check
+
+      - name: Trace contract in sync
+        run: uv run python scripts/export_trace_contract.py --check
+
+      - name: Content JSON Schema in sync
+        run: uv run python scripts/export_content_schema.py --check
+
+      - name: Code-reading notes aligned
+        run: uv run python scripts/realign_notes.py --check
+
+  frontend:
+    name: Frontend build and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix frontend
+
+      - name: Type-check and build
+        run: npm --prefix frontend run build
+
+      # "run test" runs vitest inside frontend/ so it uses frontend/vitest.config.ts;
+      # "exec vitest run" from the repo root would also collect the Playwright specs.
+      - name: Unit tests
+        run: npm --prefix frontend run test
+
+      - name: Translation keys
+        run: npm --prefix frontend run i18n:check
+
+  e2e:
+    name: Browser tests (Playwright, system Chrome)
+    needs: [python, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      AGENT_LAB_URL: http://127.0.0.1:8765
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          uv sync --dev --locked
+          npm ci --prefix frontend
+
+      # The backend serves frontend/dist only if it exists at startup, so build first.
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Start backend
+        run: |
+          nohup uv run uvicorn server.app:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/server.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS "$AGENT_LAB_URL/api/status" > /dev/null; then
+              echo "Backend is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend did not start in 60 s." >&2
+          cat "$RUNNER_TEMP/server.log" >&2
+          exit 1
+
+      # playwright.config.ts uses channel 'chrome'; ubuntu-latest runners ship Google Chrome.
+      - name: Playwright tests
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npx playwright test --reporter=list,html
+
+      - name: Server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/server.log"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
