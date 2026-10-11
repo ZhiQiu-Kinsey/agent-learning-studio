@@ -196,6 +196,26 @@ class RunTests(unittest.TestCase):
                     check = resolve_path({"data": report(events)}, "data.checks[id=prefix_hash]")
                     self.assertEqual((check["label"], check["passed"]), (texts_for(locale).check_hash, same))
 
+    def test_prefix_hash_detail_agrees_with_the_number_of_hashes(self):
+        # One shared hash gets its own sentence ("a single prefix hash"), never "1 distinct prefix hashes".
+        en = texts_for("en")
+        _, events = run_case("stable-prefix", {"layout": "stable_prefix"}, locale="en")
+        detail = resolve_path({"data": report(events)}, "data.checks[id=prefix_hash]")["detail"]
+        self.assertEqual(detail, "4 requests produced a single prefix hash.")
+        _, events = run_case("warmup", {"layout": "warmup", "repeats": 4}, locale="en")
+        detail = resolve_path({"data": report(events)}, "data.checks[id=prefix_hash]")["detail"]
+        self.assertEqual(detail, "5 requests produced a single prefix hash (the warmup request included).")
+        _, events = run_case("dynamic-first", {"layout": "dynamic_first"}, locale="en")
+        detail = resolve_path({"data": report(events)}, "data.checks[id=prefix_hash]")["detail"]
+        self.assertEqual(detail, en.check_hash_detail.format(count=4, distinct=4, suffix=en.hash_suffix_plain))
+        self.assertEqual(detail, "4 requests produced 4 distinct prefix hashes.")
+        # Chinese also gives the single-hash case its own sentence.
+        for layout, exercise, expected in (("stable_prefix", "stable-prefix", "4 次请求只出现了 1 个前缀哈希。"),
+                                           ("dynamic_first", "dynamic-first", "4 次请求共出现 4 个不同的前缀哈希。")):
+            _, events = run_case(exercise, {"layout": layout})
+            detail = resolve_path({"data": report(events)}, "data.checks[id=prefix_hash]")["detail"]
+            self.assertEqual(detail, expected)
+
     def test_warmup_sends_one_extra_request_and_unreported_is_never_zero(self):
         _, events = run_case("warmup", {"layout": "warmup", "repeats": 5})
         found = records(events)

@@ -32,6 +32,7 @@ class Texts:
     list_separator: str
     check_hash: str
     check_hash_detail: str  # {count} {distinct} {suffix}
+    check_hash_detail_one: str  # {count} {suffix}; all requests share one hash
     hash_suffix_warmup: str
     hash_suffix_plain: str
     check_reported: str

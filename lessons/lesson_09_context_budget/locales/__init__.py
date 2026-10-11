@@ -44,7 +44,10 @@ class Texts:
     refused_offline: str  # {status}
     no_answer: str
     accepted: str
-    pair_answer: str
+    # The broken-pair answer depends on what the provider did in this run.
+    pair_answer_accepted: str
+    pair_answer_rejected: str  # {names}
+    name_separator: str
     # Report of the broken-pair experiment.
     pair_title: str
     pair_summary: str

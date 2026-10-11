@@ -64,6 +64,28 @@ class EnglishRunTests(unittest.TestCase):
         self.assertEqual([check["label"] for check in report["checks"]], [t.check_reason, t.check_success, t.check_separate])
         self.assertEqual(report["table"]["columns"], list(t.columns))
 
+    def test_success_answer_has_no_doubled_punctuation(self):
+        # result is a full sentence (the excerpt ends with its own full stop), so the answer template must not
+        # append another separator after it ("。；" / ".;").
+        expected = {"zh-CN": "课内资料归纳流程已完成。资料 {key} 的要点：{excerpt}自由目标“{goal}”未被单独验收。",
+                    "en": "The lesson-material summary flow finished. Key points of material {key}: {excerpt} "
+                          "The free-form goal \"{goal}\" was not checked separately."}
+        for locale in ("zh-CN", "en"):
+            t = texts_for(locale)
+            for key, excerpt in t.source_excerpts.items():
+                with self.subTest(locale=locale, source_key=key):
+                    self.assertTrue(excerpt.endswith("。" if locale == "zh-CN" else "."), excerpt)
+                    events = []
+                    values = validate_inputs(runtime, {"goal": GOALS[locale], "source_key": key})
+                    context = RunContext(
+                        lesson_id="application-state", exercise_id="success", question="", mode="offline",
+                        model="local-python", representation="local", inputs=values, api_key="", completion=None,
+                        emit_event=lambda kind, data, number: events.append((kind, data, number)), locale=locale,
+                    )
+                    answer = runtime.run(context)
+                    self.assertEqual(answer, expected[locale].format(key=key, excerpt=excerpt, goal=GOALS[locale]))
+                    self.assertIsNone(re.search(r"[。.][；;，,。]", answer.replace("...", "")), answer)
+
     def test_state_machine_errors_follow_the_language(self):
         state = runtime.TaskState(run_id="one", goal="a checkable goal", locale="en")
         with self.assertRaisesRegex(ValueError, "Illegal state transition: ready → completed"):

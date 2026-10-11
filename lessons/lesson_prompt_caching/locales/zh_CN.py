@@ -27,6 +27,7 @@ TEXTS = Texts(
     list_separator="、",
     check_hash="各次请求的前缀哈希相同",
     check_hash_detail="{count} 次请求共出现 {distinct} 个不同的前缀哈希{suffix}",
+    check_hash_detail_one="{count} 次请求只出现了 1 个前缀哈希{suffix}",
     hash_suffix_warmup="（预热请求也算在内）。",
     hash_suffix_plain="。",
     check_reported="每次响应都报告了缓存字段",

@@ -187,6 +187,24 @@ class MemoryTests(unittest.TestCase):
                 runtime.run(run)
                 self.assertFalse(report_of(events)["checks"][2]["passed"])
 
+    def test_a_key_cited_twice_is_listed_once_in_first_cited_order(self):
+        def reply(text):
+            return lambda body, key: {"choices": [{"message": {"role": "assistant", "content": text}}]}
+        for locale in ("zh-CN", "en"):
+            t = texts_for(locale)
+            cases = (("[learning_goal] ... [learning_goal]", ["learning_goal"], True),
+                     ("[career_goal] [learning_goal] [career_goal]", ["career_goal", "learning_goal"], False))
+            for text, keys, passed in cases:
+                with self.subTest(locale=locale, text=text):
+                    run, events, _ = memory_context("recall_answer", {"scenario": "recall_answer"},
+                                                    completion=reply(text), locale=locale)
+                    runtime.run(run)
+                    report = report_of(events)
+                    check = resolve_path({"data": report}, "data.checks[id=cited_grounded]")
+                    self.assertEqual(check["detail"], t.recall_cited_detail.format(keys=t.separator.join(keys)))
+                    self.assertEqual(check["passed"], passed)
+                    self.assertEqual([row[-1] for row in report["table"]["rows"]], [t.value_yes])
+
     def test_short_value_that_appears_in_the_rules_is_not_a_false_failure(self):
         # "学习" is a word of the system rules; system was not changed, so this check must pass.
         with tempfile.TemporaryDirectory() as directory:

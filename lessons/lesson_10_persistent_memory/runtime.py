@@ -105,7 +105,7 @@ def recall_answer(context: RunContext, path: Path, values: Inputs) -> str:
     messages = build_messages(items, texts_for(context.locale).question, context.locale)
     answer = _content(context.complete({"messages": messages, "temperature": 0}), context.locale)
     # 3. What the answer relied on: every key in square brackets must be a record in this request's data block.
-    cited = CITED.findall(answer)
+    cited = list(dict.fromkeys(CITED.findall(answer)))  # each key once, in the order it was first cited
     _report_recall_answer(context, values, records, messages, cited, writes)
     return answer
 

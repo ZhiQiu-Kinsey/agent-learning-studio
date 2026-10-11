@@ -50,4 +50,10 @@ These documents record research, plans and source notes from the time they were 
 | --- | --- |
 | [SECURITY.md](../SECURITY.md) | English |
 | [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | English |
-| [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | Chinese |
+| [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | English + Chinese |
+
+## Verification records
+
+| Document | Description |
+| --- | --- |
+| [verification/live-runs-2026-10-12.md](verification/live-runs-2026-10-12.md) | Every exercise run once in zh-CN and en against a real model after the runtime became bilingual (English) |

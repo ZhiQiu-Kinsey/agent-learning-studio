@@ -27,7 +27,7 @@ TEXTS = Texts(
     reason_completed="The lesson-material summary flow finished; this does not mean an arbitrary free-form goal was achieved.",
     result="Key points of material {source_key}: {excerpt}",
     answer_completed=(
-        "The lesson-material summary flow finished: {result}; the free-form goal \"{goal}\" was not checked separately."
+        "The lesson-material summary flow finished. {result} The free-form goal \"{goal}\" was not checked separately."
     ),
     answer_failed="Not completed: {reason}",
     report_title="Application state versus messages",

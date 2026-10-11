@@ -62,7 +62,7 @@ class EnglishRunTests(unittest.TestCase):
     def test_english_broken_pair_report(self):
         t = texts_for("en")
         _, answer, events = run_case("broken-pair", {"experiment": "broken_pair", "noise_repeats": 4})
-        self.assertEqual(answer, t.pair_answer)
+        self.assertEqual(answer, t.pair_answer_rejected.format(names=t.truncation_names["naive"]))
         error = of(events, "lesson.provider_error")[0]
         self.assertEqual((error["status"], error["source"], error["layout"]), (400, "offline_fixture", t.truncation_names["naive"]))
         report = of(events, "lesson.report")[0]
@@ -70,6 +70,26 @@ class EnglishRunTests(unittest.TestCase):
         self.assertTrue(report["checks"][0]["detail"].startswith("rejected: "))
         self.assertEqual(report["table"]["rows"][0][3], t.refused_offline.format(status=400))
         self.assertEqual(report["table"]["rows"][1][3], t.accepted)
+
+    def test_broken_pair_answer_follows_what_the_provider_did(self):
+        # A real provider accepted both cuts: the answer must not point to lesson.provider_error events that do not exist.
+        def accept_all(body, api_key):
+            return {"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]}
+
+        for locale in ("zh-CN", "en"):
+            t = texts_for(locale)
+            with self.subTest(locale=locale, provider="accepts both"):
+                _, answer, events = run_case("broken-pair", {"experiment": "broken_pair"}, completion=accept_all,
+                                             locale=locale, mode="live")
+                self.assertEqual(of(events, "lesson.provider_error"), [])
+                self.assertEqual(answer, t.pair_answer_accepted)
+                self.assertEqual([row[3] for row in of(events, "lesson.report")[0]["table"]["rows"]], [t.accepted] * 2)
+            with self.subTest(locale=locale, provider="rejects the naive cut"):
+                _, answer, events = run_case("broken-pair", {"experiment": "broken_pair"}, locale=locale)
+                self.assertEqual(len(of(events, "lesson.provider_error")), 1)
+                self.assertEqual(answer, t.pair_answer_rejected.format(names=t.truncation_names["naive"]))
+                self.assertIn("lesson.provider_error", answer)
+                self.assertNotIn(t.truncation_names["pair_aware"], answer)
 
     def test_local_checks_are_found_by_id_in_both_languages(self):
         # The lab selects the naive cut's local check by id, so another truncation would not shift it.

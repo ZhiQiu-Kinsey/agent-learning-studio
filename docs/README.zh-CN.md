@@ -50,4 +50,10 @@
 | --- | --- |
 | [SECURITY.md](../SECURITY.md) | 英文 |
 | [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | 英文 |
-| [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | 中文 |
+| [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | 中英 |
+
+## 验证记录
+
+| 文档 | 说明 |
+| --- | --- |
+| [verification/live-runs-2026-10-12.md](verification/live-runs-2026-10-12.md) | 运行时双语化后，每个练习用真实模型中英文各跑一次的记录（英文） |

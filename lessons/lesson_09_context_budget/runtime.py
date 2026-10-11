@@ -187,11 +187,19 @@ def run_broken_pair(context: RunContext, t, values: Inputs) -> str:
             continue
         rows.append([name, len(messages), local, t.accepted, answer_text(response, context.locale)])
     context.emit("lesson.report", _pair_report(context, t, history, checks, rows))
-    return t.pair_answer
+    return _pair_answer(t, rows)
 
 
 def _refusal(t, status: int, source: str) -> str:
     return (t.refused_offline if source == "offline_fixture" else t.refused).format(status=status)
+
+
+def _pair_answer(t, rows: list) -> str:
+    # A provider may accept both cuts; only point to lesson.provider_error when this run actually recorded one.
+    rejected = [row[0] for row in rows if row[3] != t.accepted]
+    if not rejected:
+        return t.pair_answer_accepted
+    return t.pair_answer_rejected.format(names=t.name_separator.join(rejected))
 
 
 def _pair_report(context: RunContext, t, history: list[dict], checks: list[dict], rows: list) -> dict:

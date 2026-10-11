@@ -31,6 +31,7 @@ TEXTS = Texts(
     list_separator=", ",
     check_hash="Every request has the same prefix hash",
     check_hash_detail="{count} requests produced {distinct} distinct prefix hashes{suffix}",
+    check_hash_detail_one="{count} requests produced a single prefix hash{suffix}",
     hash_suffix_warmup=" (the warmup request included).",
     hash_suffix_plain=".",
     check_reported="Every response reported a cache field",

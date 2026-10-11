@@ -49,10 +49,15 @@ TEXTS = Texts(
     refused_offline="rejected (HTTP {status}), simulated by the offline fixture",
     no_answer="none",
     accepted="accepted",
-    pair_answer=(
-        "Both truncated requests were sent as they are; the provider's responses are in the report and in "
-        "the lesson.provider_error events."
+    pair_answer_accepted=(
+        "Both truncated requests were sent as they are and the provider accepted both, so this run has no "
+        "lesson.provider_error event; both answers are in the report."
     ),
+    pair_answer_rejected=(
+        "Both truncated requests were sent as they are. Rejected: {names}. The status code and the error text "
+        "are in the report and in lesson.provider_error."
+    ),
+    name_separator="; ",
     pair_title="Splitting a tool call from its result",
     pair_summary=(
         "The same history, cut in two ways and sent as it is. Whether the provider rejects it is what this run "
