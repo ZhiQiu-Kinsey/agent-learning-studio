@@ -13,6 +13,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Lessons](https://img.shields.io/badge/lessons-24%20available%20%2F%2053%20planned-8A5CF6)](docs/course-plan.en.md)
+[![CI](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -25,7 +26,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 </div>
 
 > [!NOTE]
-> **Available in English and 简体中文** — switch languages from the top bar. The UI, the onboarding, all 24 available lessons, the curriculum and the glossary are translated. Lesson source code, system prompts, preset inputs and run outputs stay in Chinese because they are exactly what runs; the English text quotes them verbatim with a gloss.
+> **Fully bilingual: English and 简体中文.** Switch languages from the top bar. The UI, the onboarding, all 24 available lessons, the curriculum and the glossary are translated — and so is the **runtime**: in English, the system prompts, tool descriptions, preset questions and lab reports your run sends and emits are English too, and the Code scene shows the English message catalog that actually runs. Each run records its language, and a replay always shows the run as it happened.
 
 <details>
 <summary><b>Table of contents</b></summary>
@@ -65,7 +66,7 @@ Most agent tutorials either hide the loop behind a framework or show static code
 | 📖 **Terms explained in place** | Course terms show a hover card and are marked as new, previously learned or background. Source names in the prose are rendered as code with short notes. |
 | 🔌 **Provider-agnostic** | Alibaba Bailian (DashScope) goes through a hand-written raw HTTP path that shows the full request body. OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Ollama and any OpenAI-compatible service go through LiteLLM, and the UI honestly labels them as *SDK-standardized* requests and responses. |
 | 🗂️ **Curriculum as data** | The catalog, glossary and every lesson's content are JSON validated against schemas. The backend discovers lessons automatically — adding a lesson needs no platform code changes. |
-| 🌐 **Bilingual** | English and Simplified Chinese UI and course text, switchable at any time without losing your place. Translations are overlays keyed by stable IDs: facts (answers, code references, selectors) can't be overridden, and a translation goes stale — falling back to the source — as soon as the Chinese source changes. |
+| 🌐 **Bilingual, down to the runtime** | English and Simplified Chinese UI, course text **and runtime**, switchable at any time without losing your place. Course text uses overlays keyed by stable IDs (facts can't be overridden; a translation goes stale and falls back as soon as its source changes). Runtime text lives in typed per-language message catalogs that you read in the Code scene, and tests guarantee an English run emits no Chinese. |
 | 🔒 **Local and private** | The server binds to `127.0.0.1` only. API keys stay in the backend and are never written to run records, logs or browser storage. |
 
 ## Screenshots
@@ -211,6 +212,8 @@ Contributions of all kinds are welcome — new lessons, clearer prose, bug fixes
 - [Platform](docs/architecture/platform.en.md) · [Frontend](docs/architecture/frontend-workspace.en.md) · [Event envelope v2](docs/architecture/event-envelope-v2.en.md)
 - [Documentation index](docs/README.md) — every doc, with its languages
 
+Community: [Contributing guide](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Security policy](SECURITY.md)
+
 A few non-negotiables, each guarded by tests or validators:
 
 1. Run data comes only from real events — never fabricated for effect.
@@ -230,12 +233,13 @@ A few non-negotiables, each guarded by tests or validators:
 - [ ] MCP and A2A
 - [ ] Multi-agent systems, long-running tasks and the capstone
 - [x] English UI and course translation (onboarding, 24 lessons, curriculum, glossary)
-- [ ] Per-language runtime (system prompts, presets and reports in the learner's language)
+- [x] Bilingual runtime: prompts, tool descriptions, presets and reports in the learner's language; English code comments
+- [x] Open-source essentials: contributing guide, code of conduct, security policy, issue/PR templates, CI
 - [ ] More languages
 
 ## Acknowledgements
 
-The curriculum design draws on the following tutorials. Reading scope, pinned versions and licenses are recorded in [docs/architecture/reference-study.md](docs/architecture/reference-study.md); none of them is a runtime dependency.
+The curriculum design draws on the following tutorials. Reading scope, pinned versions and licenses are recorded in [docs/architecture/reference-study.en.md](docs/architecture/reference-study.en.md); none of them is a runtime dependency.
 
 - [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners)
 - [Hugging Face Agents Course](https://github.com/huggingface/agents-course)

@@ -13,6 +13,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![课程](https://img.shields.io/badge/%E8%AF%BE%E7%A8%8B-24%20%E5%8F%AF%E5%AD%A6%20%2F%2053%20%E8%A7%84%E5%88%92-8A5CF6)](docs/course-plan.md)
+[![CI](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#参与贡献)
 
 [English](README.md) · **简体中文**
@@ -25,7 +26,7 @@
 </div>
 
 > [!NOTE]
-> **支持简体中文和 English**，在顶栏随时切换。界面、导学、24 门可学课程、课程目录和术语表都有英文版。课程源码、系统提示词、练习预设输入和运行输出保持中文，因为它们就是真实运行的内容；英文正文引用它们时保留原文并附英文说明。
+> **完整的中英双语。**在顶栏随时切换。界面、导学、24 门可学课程、课程目录和术语表都有英文版，**运行时也是**：英文界面下，运行发给模型的系统提示词、工具描述、预设问题和实验报告都是英文，读码场景显示的就是实际运行的英文消息目录。每次运行记录自己的语言，回放总按当时的样子显示。
 
 <details>
 <summary><b>目录</b></summary>
@@ -65,7 +66,7 @@
 | 📖 **术语就地解释** | 课程术语可悬停查看释义，并区分本课新术语、前面学过的术语和背景知识。正文提到的源码名字显示为代码样式，可附说明。 |
 | 🔌 **不绑定服务商** | 百炼走手写的原生 HTTP 路径，展示完整请求体。OpenAI、Anthropic、Gemini、DeepSeek、OpenRouter、Ollama 和 OpenAI 兼容服务经 LiteLLM 接入，界面如实标为“标准化请求/响应”。 |
 | 🗂️ **课程即数据** | 课程目录、术语表和每课内容都是带 schema 校验的 JSON。后端自动发现课程，新增一课不用改平台代码。 |
-| 🌐 **中英双语** | 界面和课程文本可在中英文之间随时切换，不丢当前进度。译文是按稳定 id 合并的译文层：事实字段（答案、代码引用、选择器）不可覆盖；中文源文本一改，对应译文就视为过期并回落到源文本。 |
+| 🌐 **双语一直到运行时** | 界面、课程文本和运行时都能在中英文之间随时切换，不丢当前进度。课程文本用按稳定 id 合并的译文层（事实字段不可覆盖，源文本一改译文就过期并回落）；运行时文字在按语言划分的类型化消息目录里，读码场景直接可读，测试保证英文运行不出现中文。 |
 | 🔒 **本地、私密** | 服务只监听 `127.0.0.1`。密钥只在后端，不写进运行记录、日志或浏览器存储。 |
 
 ## 界面预览
@@ -211,6 +212,8 @@ npm --prefix frontend run i18n:check              # 各语言翻译键一致
 - [平台架构](docs/architecture/platform.md) · [前端结构](docs/architecture/frontend-workspace.md) · [事件信封 v2](docs/architecture/event-envelope-v2.md)
 - [文档索引](docs/README.zh-CN.md)：全部文档及其语言版本
 
+社区：[贡献指南](CONTRIBUTING.zh-CN.md) · [行为准则](CODE_OF_CONDUCT.md) · [安全策略](SECURITY.md)
+
 几条红线，都有测试或校验守着：
 
 1. 运行数据只来自真实事件，不为效果伪造。
@@ -230,7 +233,8 @@ npm --prefix frontend run i18n:check              # 各语言翻译键一致
 - [ ] MCP 与 A2A
 - [ ] 多 Agent、长时任务与毕业项目
 - [x] 英文界面与课程译文（导学、24 课、课程目录、术语表）
-- [ ] 按语言运行（系统提示词、预设和报告使用学习者的语言）
+- [x] 双语运行时：提示词、工具描述、预设和报告使用学习者的语言；课程代码注释改为英文
+- [x] 开源必备：贡献指南、行为准则、安全策略、issue/PR 模板、持续集成
 - [ ] 更多语言
 
 ## 致谢
