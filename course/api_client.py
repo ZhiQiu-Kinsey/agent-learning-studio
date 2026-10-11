@@ -1,36 +1,23 @@
-"""负责构造、打印并发送百炼聊天补全请求。"""
+"""Send a Bailian chat-completion request over raw HTTP; the key goes into the header, never the body."""
 
 import json
 import urllib.error
 import urllib.request
 
+from course.i18n import SOURCE_LOCALE
+from course.locales import texts_for
+
 
 class ProviderHTTPError(RuntimeError):
-    """服务商返回了 HTTP 错误；保留状态码，课程可以如实记录而不必解析文案。"""
+    """The provider answered with an HTTP error; the status code is kept so lessons can record it honestly."""
 
     def __init__(self, message, status_code):
         super().__init__(message)
         self.status_code = status_code
 
 
-def call_bailian(messages, tools, api_key, timeout_seconds=60):
-    """发送完整请求体；打印请求参数，但不打印认证请求头。"""
-    from local_config import API_URL, MODEL
-
-    request_body = {
-        "model": MODEL,
-        "messages": messages,
-        "tools": tools,
-        "tool_choice": "auto",
-    }
-    print("\n本次百炼请求体（完整 JSON；不包含认证密钥）：", flush=True)
-    print(json.dumps(request_body, ensure_ascii=False, indent=2), flush=True)
-
-    return send_bailian(request_body, api_key, timeout_seconds)
-
-
-def send_bailian(request_body, api_key, timeout_seconds=60):
-    """发送已经记录的请求体；网页和 CLI 使用同一个传输层。"""
+def send_bailian(request_body, api_key, timeout_seconds=60, *, locale=SOURCE_LOCALE):
+    """Send a request body that has already been recorded; web runs and the CLI share this transport."""
     from local_config import API_URL
 
     request = urllib.request.Request(
@@ -48,16 +35,12 @@ def send_bailian(request_body, api_key, timeout_seconds=60):
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")[:2000]
+        # Never resend automatically: a retry could be billed twice.
         raise ProviderHTTPError(
-            "百炼返回 HTTP {}。请求没有自动重发，请先检查配置和余额；"
-            "确认原因后再手动重试，避免重复计费。\n{}".format(
-                error.code, detail
-            ),
+            texts_for(locale).bailian_http_error.format(status=error.code, detail=detail),
             error.code,
         ) from None
     except urllib.error.URLError as error:
         raise RuntimeError(
-            "连接百炼失败；请求没有自动重发。确认网络和服务状态后再手动重试。\n{}".format(
-                error.reason
-            )
+            texts_for(locale).bailian_unreachable.format(reason=error.reason)
         ) from None

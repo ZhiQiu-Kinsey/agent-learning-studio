@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
-import type { Detail } from "../src/types";
+import type { CurriculumData, Detail } from "../src/types";
 import { t, tIn } from "./i18n";
+import { runOffline } from "./runs";
 
 const lessonId = "chat-request";
 
@@ -113,4 +114,129 @@ test("a lesson without an English overlay stays Chinese and is marked zh-CN", as
   await expect(page.getByTestId("scene-tab-understand")).toContainText(
     tIn("en", "lesson:scenes.understand"),
   );
+});
+
+// Runtime language: what a run sends and records follows the UI language when
+// the lesson supports it. Runs go to the backend's offline test mode at the
+// network boundary (e2e/runs.ts); tools still really run.
+test.describe("runtime language", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/api/status", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json().catch(() => undefined);
+      if (body === undefined) return;
+      await route.fulfill({
+        response,
+        json: { ...body, config_ready: true, api_key_configured: true },
+      });
+    });
+  });
+
+  async function openLab(page: Page, locale: "zh-CN" | "en") {
+    await page.addInitScript((value) => {
+      localStorage.setItem("agent-lab-entry", "lesson");
+      localStorage.setItem("agent-lab-locale", value);
+    }, locale);
+    await page.goto("/");
+    await page.getByTestId("scene-tab-lab").click();
+  }
+
+  test("an English run sends the UI language and runs in English", async ({
+    page,
+    request,
+  }) => {
+    const en: Detail = await (
+      await request.get(`/api/lessons/${lessonId}?lang=en`)
+    ).json();
+    test.skip(en.runtime_locale !== "en", "这门课还没有英文运行时");
+    const payloads: Record<string, unknown>[] = [];
+    await runOffline(page, (payload) => payloads.push(payload));
+    await openLab(page, "en");
+    await expect(page.getByTestId("lab-question-input")).toHaveValue(
+      en.exercises[0].question,
+    );
+    await page.getByTestId("lab-run-button").click();
+    await expect(page.getByTestId("lab-trace-status")).toHaveText(
+      tIn("en", "lab:bench.status.completed"),
+    );
+    expect(payloads[0]).toMatchObject({ locale: "en", exercise_id: "basic" });
+    await expect(page.getByTestId("lab-answer")).toHaveAttribute("lang", "en");
+    await expect(page.getByTestId("lab-answer")).toContainText(
+      "Offline script answer",
+    );
+    // Same language as the UI: nothing to point out.
+    await expect(page.getByTestId("lab-run-locale")).toHaveCount(0);
+    await expect(page.getByTestId("lab-runtime-locale")).toHaveCount(0);
+  });
+
+  test("a Chinese run stays Chinese and is labelled after switching to English", async ({
+    page,
+    request,
+  }) => {
+    const en: Detail = await (
+      await request.get(`/api/lessons/${lessonId}?lang=en`)
+    ).json();
+    test.skip(en.runtime_locale !== "en", "这门课还没有英文运行时");
+    await runOffline(page);
+    await openLab(page, "zh-CN");
+    await page.getByTestId("lab-run-button").click();
+    await expect(page.getByTestId("lab-trace-status")).toHaveText(
+      t("lab:bench.status.completed"),
+    );
+    const answer = await page.getByTestId("lab-answer").innerText();
+    await switchToEnglish(page);
+    // Replay is read-only: the recorded run is unchanged and says which language it is in.
+    await expect(page.getByTestId("lab-answer")).toHaveText(answer);
+    await expect(page.getByTestId("lab-answer")).toHaveAttribute(
+      "lang",
+      "zh-CN",
+    );
+    await expect(page.getByTestId("lab-run-locale")).toHaveText(
+      tIn("en", "lab:bench.answer.runLocale", {
+        language: tIn("en", "lab:language.zh-CN"),
+      }),
+    );
+    // The untouched preset follows the new run language.
+    await expect(page.getByTestId("lab-question-input")).toHaveValue(
+      en.exercises[0].question,
+    );
+  });
+
+  test("a lesson whose runner is still Chinese-only says so in the English UI", async ({
+    page,
+    request,
+  }) => {
+    const catalog: CurriculumData = await (
+      await request.get("/api/curriculum?lang=en")
+    ).json();
+    const english: Detail[] = (
+      await (await request.get("/api/lessons?lang=en")).json()
+    ).lessons;
+    const pending = english.find(
+      (lesson) => lesson.available && lesson.runtime_locale !== "en",
+    );
+    test.skip(!pending, "每门课都已有英文运行时");
+    await openLab(page, "en");
+    // Open it through the course navigation, by its English titles.
+    const lesson = catalog.lessons.find((item) => item.id === pending!.id)!;
+    const category = catalog.categories.find(
+      (item) => item.id === lesson.category_id,
+    )!;
+    const nav = page.getByTestId("course-nav");
+    const toggle = nav
+      .getByTestId("course-nav-category-toggle")
+      .filter({ hasText: category.title });
+    if ((await toggle.getAttribute("aria-expanded")) !== "true")
+      await toggle.click();
+    await nav
+      .getByTestId("course-nav-lesson")
+      .filter({ hasText: lesson.title })
+      .click();
+    await page.getByTestId("scene-tab-lab").click();
+    await expect(page.getByTestId("lab-runtime-locale")).toHaveText(
+      tIn("en", "lab:bench.composer.runtimeLocale", {
+        language: tIn("en", "lab:language.zh-CN"),
+      }),
+    );
+  });
 });

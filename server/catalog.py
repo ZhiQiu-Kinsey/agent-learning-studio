@@ -6,6 +6,7 @@ import re
 from importlib import import_module
 from pathlib import Path, PurePosixPath
 
+from course.i18n import RUNTIME_LOCALES, SOURCE_LOCALE, module_name, resolve_locale
 # LessonValidationError 定义在 server.curriculum，这里继续导出以保持原有导入路径。
 from server.code_reading import compare_target, lesson_code, source_role, validate_code_scene
 from server.content import lesson_content_model, load_lesson_content
@@ -87,6 +88,78 @@ def _reference(root, module, reference, location, *, callable_required):
     return reference
 
 
+_CJK = re.compile(r"[　-〿㐀-䶿一-鿿豈-﫿＀-￯]")
+
+
+def _runtime_locales(value, location):
+    """runtime.locales：本课的运行语言，必须含源语言 zh-CN，且都在平台支持的运行语言里。"""
+    _require(isinstance(value, list) and value and all(isinstance(item, str) for item in value)
+             and len(set(value)) == len(value), location, "必须是不重复的语言代码数组")
+    _require(SOURCE_LOCALE in value, location, f"必须包含源语言 {SOURCE_LOCALE}")
+    unknown = [item for item in value if item not in RUNTIME_LOCALES]
+    _require(not unknown, location, f"不支持的运行语言 {unknown}；平台支持 {list(RUNTIME_LOCALES)}")
+    # 按平台顺序保存：源语言在前，各处列举语言时顺序一致。
+    return [locale for locale in RUNTIME_LOCALES if locale in value]
+
+
+def _check_source_locales(sources, locales, location):
+    """运行时文本目录（locales/ 及其子目录下的文件）的登记规则。
+
+    - zh_CN.py、en.py 这类语言文件必须写 locale，且与文件名一致；运行时读取的其他文本数据（如 Markdown 手册）
+      同样按语言放进 locales/ 下的子目录，写成 zh_CN.md、en.md；其他文件不能写 locale；
+    - 同一个 locales/ 目录登记了语言文件时，本课的每种运行语言都要有一份，读码页切换语言时总有对应文件。
+    """
+    groups: dict[str, set[str]] = {}
+    for source in sources:
+        parts = source["path"].split("/")
+        locale = source.get("locale")
+        texts_file = source_role(source["path"]) == "texts" and parts[-1] != "__init__.py"
+        if not texts_file:
+            _require(locale is None, location, f"{source['path']} 不是语言文件，不能写 locale")
+            continue
+        _require(locale in locales, location, f"{source['path']} 必须写 locale，且是本课的运行语言 {locales}")
+        _require(parts[-1].rsplit(".", 1)[0] == module_name(locale), location,
+                 f"{source['path']} 的文件名应为 {module_name(locale)}.<扩展名>（与 locale「{locale}」一致）")
+        groups.setdefault("/".join(parts[:-1]), set()).add(locale)
+    for directory, found in groups.items():
+        _require(found == set(locales), location,
+                 f"{directory}/ 只登记了 {sorted(found)}，本课的每种运行语言 {locales} 都要登记一份")
+
+
+def _preset(value, locales, location, *, text=False):
+    """练习问题与预设输入：标量，或按运行语言分别填写的 {"zh-CN": ..., "en": ...}。
+
+    支持多种运行语言的课里，含中文的字符串必须按语言分别填写，否则英文运行会发出中文。
+    """
+    if isinstance(value, dict):
+        _require(set(value) == set(locales), location, f"按语言填写时，键必须恰好是本课的运行语言 {locales}")
+        for locale, item in value.items():
+            _preset_scalar(item, f"{location}.{locale}", text)
+        return
+    _preset_scalar(value, location, text)
+    _require(len(locales) == 1 or not (isinstance(value, str) and _CJK.search(value)), location,
+             f"本课支持 {locales}，自然语言预设要按语言分别填写")
+
+
+def _preset_scalar(value, location, text):
+    if text:
+        _text(value, location)
+    _require(value is None or isinstance(value, (str, int, float, bool)), location,
+             "必须是字符串、数字、布尔值或 null")
+
+
+def localized(value, locale):
+    """按运行语言取预设值：{"zh-CN": ..., "en": ...} 取该语言那一项，标量原样返回。"""
+    return value[locale] if isinstance(value, dict) else value
+
+
+def _exercise_in(exercise, locale):
+    result = {**exercise, "question": localized(exercise["question"], locale)}
+    if "inputs" in exercise:
+        result["inputs"] = {name: localized(value, locale) for name, value in exercise["inputs"].items()}
+    return result
+
+
 def _manifest(root, path, catalog_lesson):
     data = _object(_json(path), path, _MANIFEST_FIELDS)
     _require(type(data.get("schema_version")) is int and data["schema_version"] == 1,
@@ -98,39 +171,44 @@ def _manifest(root, path, catalog_lesson):
     subtitle = _text(data.get("subtitle", catalog_lesson["summary"]), str(path) + ": subtitle")
     content_relative = _text(data.get("content"), str(path) + ": content")
     content_path = _safe_file(root / "lessons" / module, content_relative, str(path) + ": content")
+    runtime = _object(data.get("runtime"), str(path) + ": runtime",
+                      {"kind", "entrypoint", "max_rounds", "requires_model", "locales"})
+    locales = _runtime_locales(runtime.get("locales", [SOURCE_LOCALE]), str(path) + ": runtime.locales")
     sources = data.get("sources")
     _require(isinstance(sources, list) and sources, path, "sources 必须显式列出教学源码")
     source_paths = set()
     for source in sources:
-        _object(source, str(path) + ": sources", {"path", "language"})
+        _object(source, str(path) + ": sources", {"path", "language", "locale"})
         _safe_file(root, source.get("path"), str(path) + ": sources.path", source=True)
         _require(source["path"] not in source_paths, path, "sources.path 不能重复")
         source_paths.add(source["path"])
         _text(source.get("language"), str(path) + ": sources.language")
+    _check_source_locales(sources, locales, str(path) + ": sources")
     exercises = data.get("exercises")
     _require(isinstance(exercises, list) and exercises, path, "exercises 必须包含至少一个实验")
     exercise_ids = set()
     for exercise in exercises:
         _object(exercise, str(path) + ": exercises",
                 {"id", "title", "question", "offline_only", "requires_model", "inputs"})
-        for key in ("id", "title", "question"):
+        for key in ("id", "title"):
             _text(exercise.get(key), str(path) + ": exercises." + key)
         _require(exercise["id"] not in exercise_ids, path, "同一课程的 exercise.id 不能重复")
         exercise_ids.add(exercise["id"])
+        where = f"{path}: exercises[{exercise['id']}]"
+        _preset(exercise.get("question"), locales, where + ".question", text=True)
         _require(type(exercise.get("offline_only", False)) is bool, path, "offline_only 必须为布尔值")
         _require(type(exercise.get("requires_model", True)) is bool, path, "exercise.requires_model 必须为布尔值")
-        _object(exercise.get("inputs", {}), str(path) + ": exercises.inputs")
-    runtime = _object(data.get("runtime"), str(path) + ": runtime",
-                      {"kind", "entrypoint", "max_rounds", "requires_model"})
+        for name, value in _object(exercise.get("inputs", {}), where + ".inputs").items():
+            _preset(value, locales, f"{where}.inputs.{name}")
     kind = runtime.get("kind")
     _require(kind in ("native", "custom"), path, "runtime.kind 必须为 native 或 custom")
     _reference(root, module, runtime.get("entrypoint"), str(path) + ": runtime.entrypoint", callable_required=kind == "custom")
-    runtime = {"max_rounds": 3, "requires_model": True, **runtime}
+    runtime = {"max_rounds": 3, "requires_model": True, **runtime, "locales": locales}
     _require(type(runtime["max_rounds"]) is int and 1 <= runtime["max_rounds"] <= 100,
              path, "max_rounds 必须为 1 到 100 的整数")
     _require(type(runtime["requires_model"]) is bool, path, "requires_model 必须为布尔值")
     _require(kind != "native" or runtime["requires_model"], path, "native 运行器必须声明 requires_model=true")
-    # 单个练习可以不调用模型（如课程程序构造的故障注入），只在独立运行器里由课程代码分流。
+    # 单个练习可以不调用模型（如运行器构造的故障注入），只在独立运行器里由课程代码分流。
     _require(kind == "custom" or all(exercise.get("requires_model", True) for exercise in exercises),
              path, "只有 custom 运行器的练习可以声明 requires_model=false")
     testing = _object(data.get("testing", {}), str(path) + ": testing", {"completion_factory"})
@@ -145,6 +223,13 @@ def _manifest(root, path, catalog_lesson):
         else:
             _require(isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]*", value), path, f"ui.{key} 必须为扩展键")
     defaults = _object(data.get("input_defaults", {}), str(path) + ": input_defaults")
+    for name, value in defaults.items():
+        _preset(value, locales, f"{path}: input_defaults.{name}")
+    # 练习问题与预设输入按运行语言各存一份；spec["exercises"] 与 spec["input_defaults"] 是源语言那份。
+    presets = {locale: {"exercises": [_exercise_in(exercise, locale) for exercise in exercises],
+                        "input_defaults": {name: localized(value, locale) for name, value in defaults.items()}}
+               for locale in locales}
+    exercises, defaults = presets[SOURCE_LOCALE]["exercises"], presets[SOURCE_LOCALE]["input_defaults"]
     content_model = lesson_content_model(content_path, {"id": data["id"], "subtitle": subtitle, "exercises": exercises})
     # 读码批注必须对准本课白名单源码中真实存在的行。
     validate_code_scene(content_model, sources,
@@ -154,7 +239,7 @@ def _manifest(root, path, catalog_lesson):
     return {"id": data["id"], "number": catalog_lesson["number"], "aliases": list(catalog_lesson.get("aliases", [])),
             "title": catalog_lesson["title"], "description": catalog_lesson["summary"],
             "objectives": catalog_lesson["objectives"], "subtitle": subtitle, "exercises": exercises,
-            "runtime": runtime, "testing": testing, "ui": ui, "input_defaults": defaults,
+            "runtime": runtime, "testing": testing, "ui": ui, "input_defaults": defaults, "presets": presets,
             "status": catalog_lesson["status"], "available": catalog_lesson["status"] == "available",
             "capabilities": {"requires_model": runtime["requires_model"], "custom_runtime": kind == "custom", "supports_inputs": kind == "custom"},
             "root": root, "module": module, "package": "lessons." + module,
@@ -250,10 +335,10 @@ def _manifest_text(spec):
     return path, {name: raw[name] for name in ("subtitle", "exercises", "ui") if name in raw}
 
 
-def localized_manifest(spec, locale=None):
+def localized_manifest(spec, locale=None, exercises=None):
     """返回（subtitle, exercises, ui, 语言信息）：合并 lesson.<locale>.json，只换标题与说明文字。
 
-    subtitle 为 None 表示清单没写，沿用目录简介。
+    exercises 默认是源语言的练习（问题与预设输入）；subtitle 为 None 表示清单没写，沿用目录简介。
     """
     import copy
 
@@ -264,10 +349,32 @@ def localized_manifest(spec, locale=None):
     text = copy.deepcopy(raw)
     info = localize(path, manifest_slots(text), locale, finish=_refs_in(locale))
     titles = {exercise["id"]: exercise["title"] for exercise in text.get("exercises", [])}
-    exercises = [{**exercise, "title": titles.get(exercise["id"], exercise["title"])} for exercise in spec["exercises"]]
+    exercises = [{**exercise, "title": titles.get(exercise["id"], exercise["title"])}
+                 for exercise in (spec["exercises"] if exercises is None else exercises)]
     ui = {**spec["ui"], **{key: value for key, value in text.get("ui", {}).items()
                            if key in ("question_label", "question_help")}}
     return text.get("subtitle"), exercises, ui, info
+
+
+def run_locale(spec, requested=None):
+    """本课一次运行用的语言：请求的语言在本课 runtime.locales 里就用它，否则按 course/i18n.py 的规则回落。"""
+    return resolve_locale(requested, spec["runtime"].get("locales", [SOURCE_LOCALE]))
+
+
+def lesson_presets(spec, locale):
+    """（练习, input_defaults）：问题与自然语言预设输入取运行语言 locale 那一份。
+
+    不是由 load_lessons 生成的 spec（测试里手写的）没有 presets，按只有源语言处理。
+    """
+    if "presets" not in spec:
+        return spec["exercises"], spec.get("input_defaults", {})
+    entry = spec["presets"][locale]
+    return entry["exercises"], entry["input_defaults"]
+
+
+def lesson_sources(spec, locale):
+    """本课在运行语言 locale 下展示的源码：不分语言的文件，加上该语言的运行时文本文件。"""
+    return [source for source in spec["sources"] if source.get("locale") in (None, locale)]
 
 
 _catalog_cache: dict = {}
@@ -289,16 +396,25 @@ def localized_entries(locale=None):
 
 
 def public_lesson(spec, locale=None):
-    """课程卡片与详情共用的公开字段。locale 选择目录与实现清单的译文层，逐条回落到源语言。"""
+    """课程卡片与详情共用的公开字段。locale 选择目录与实现清单的译文层，逐条回落到源语言。
+
+    练习问题与预设输入是运行事实，取的是这次界面语言对应的运行语言（runtime_locale）那一份：
+    本课支持该语言时与界面一致，不支持时是源语言，运行和回放也都是这种语言。
+    """
+    language = run_locale(spec, locale)
+    exercises, defaults = lesson_presets(spec, language)
     public = {key: spec[key] for key in ("id", "number", "aliases", "title", "description", "objectives", "subtitle",
-                                         "exercises", "available", "ui", "capabilities", "input_defaults")}
+                                         "available", "ui", "capabilities")}
+    public.update(exercises=exercises, input_defaults=defaults, runtime_locale=language,
+                  runtime_locales=list(spec["runtime"]["locales"]))
     if locale:
         entry = localized_entries(locale).get(spec["id"])
         if entry is not None:
             public.update(title=entry["title"], description=entry["summary"], objectives=entry["objectives"])
-        subtitle, exercises, ui, _ = localized_manifest(spec, locale)
+        subtitle, exercises, ui, _ = localized_manifest(spec, locale, exercises)
         # 没写 subtitle 的课在加载时沿用了目录简介，译文也跟着目录走。
         public.update(subtitle=public["description"] if subtitle is None else subtitle, exercises=exercises, ui=ui)
+    public["exercises"] = resolve_refs(public["exercises"], CATALOG_INDEX.numbers, language)
     return resolve_refs(public, CATALOG_INDEX.numbers)
 
 
@@ -322,10 +438,13 @@ def lesson_callable(spec, reference):
 
 
 def lesson_code_view(spec, locale=None):
-    """读码场景数据：只读本课 sources 白名单，批注取自已合并译文层的内容。"""
+    """读码场景数据：只读本课 sources 白名单，批注取自已合并译文层的内容。
+
+    运行时文本文件只给出运行语言那一份：界面是英文、本课也有英文运行时，就看 en.py。
+    """
     content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
     learning, _ = load_lesson_content(content_path, spec, locale, _refs_in(locale))
-    view = lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers))
+    view = lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers), run_locale(spec, locale))
     # “本课新增”对照的那一课标题来自实现清单（源语言），这里按目录译文换成界面语言。
     compare = view["whats_new"]["compare_with"]
     entry = localized_entries(locale).get(compare["id"]) if compare and locale else None
@@ -338,27 +457,33 @@ def lesson_detail(spec, locale=None):
     from course.execution import validate_inputs
     module = lesson_runtime(spec)
     content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
+    public = public_lesson(spec, locale)
+    language = public["runtime_locale"]
     sources = []
-    for source in spec["sources"]:
+    for source in lesson_sources(spec, language):
         path = _safe_file(spec["root"], source["path"], "lesson sources", source=True)
         sources.append({**source, "role": source_role(source["path"]), "content": path.read_text(encoding="utf-8")})
     # Publish actual validated presets, including model defaults, so the parameter
     # editor shows every value the lesson will receive rather than hidden values.
     learning, learning_i18n = load_lesson_content(content_path, spec, locale, _refs_in(locale))
-    public = public_lesson(spec, locale)
-    # 练习标题来自实现清单译文层；问题与预设输入是发给模型的事实，保持源语言。
-    titles = {exercise["id"]: exercise["title"] for exercise in public["exercises"]}
-    exercises = [{**exercise, "title": titles[exercise["id"]],
-                  "inputs": validate_inputs(module, {**spec["input_defaults"], **exercise.get("inputs", {})})}
-                 for exercise in spec["exercises"]]
+    # 练习标题来自实现清单译文层；问题与预设输入是发给模型的事实，取运行语言那一份。
+    exercises = [{**exercise, "inputs": validate_inputs(module, {**public["input_defaults"],
+                                                                 **exercise.get("inputs", {})})}
+                 for exercise in public["exercises"]]
     # 自定义运行器的输入模型导出 JSON Schema，前端据此生成参数控件；最终仍由后端校验。
     input_model = getattr(module, "INPUT_MODEL", None)
     input_schema = input_model.model_json_schema() if spec["capabilities"]["supports_inputs"] and input_model else None
     learning = resolve_refs(learning, CATALOG_INDEX.numbers)
-    exercises = resolve_refs(exercises, CATALOG_INDEX.numbers)
+    # 原生课由 setup(locale) 给出这次运行发给模型的系统提示词与工具定义；独立运行器发工具时导出（或导入）
+    # tool_definitions(locale)，读码页据此给工具函数加“看运行证据”的入口。还没改造的课仍可导出常量。
+    setup = module.setup(language) if callable(getattr(module, "setup", None)) else None
+    definitions = getattr(module, "tool_definitions", None)
+    tools = (setup.tools if setup else definitions(language) if callable(definitions)
+             else getattr(module, "TOOLS", []))
     return {**public, "exercises": exercises, "input_schema": input_schema,
-            "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
-            "tools": getattr(module, "TOOLS", []), "learning": learning, "learning_i18n": learning_i18n,
+            "system_prompt": setup.system_prompt if setup else getattr(module, "SYSTEM_PROMPT", ""),
+            "tools": tools,
+            "learning": learning, "learning_i18n": learning_i18n,
             "sources": sources, "code_names": lesson_code_names(spec, sources)}
 
 

@@ -74,7 +74,8 @@ class RecordingTestCase(unittest.TestCase):
     def load_spec(self):
         return load_lessons(self.root, self.catalog, include_planned=True)[0]
 
-    def make_run(self, *, mode="live", status="completed", provider="bailian", extra=None, finish=True):
+    def make_run(self, *, mode="live", status="completed", provider="bailian", extra=None, finish=True,
+                 locale="zh-CN"):
         """按平台信封规则写入一次运行；只用于测试录制格式。"""
         representation = "http_body" if provider == "bailian" else "sdk_standardized"
         sdk = None if provider == "bailian" else dict(LITELLM)
@@ -85,14 +86,14 @@ class RecordingTestCase(unittest.TestCase):
         builder = EnvelopeBuilder(run_id, provenance="real_run", representation=representation, sdk=sdk)
         self.store.create_run(run_id=run_id, lesson_id=SLUG, exercise_id="sum", mode=mode, model="demo-model",
                               provider_id=provider, representation=representation, provenance="real_run",
-                              schema_version=SCHEMA_VERSION, created_at=utc_now())
+                              schema_version=SCHEMA_VERSION, created_at=utc_now(), locale=locale)
         body = {"model": "demo-model", "messages": [{"role": "user", "content": "19+23"}]}
         call = {"id": "call-1", "type": "function", "function": {"name": "add", "arguments": "{\"a\":19,\"b\":23}"}}
         events = [
             ("run_start", {"lesson_id": SLUG, "mode": mode, "model": "demo-model", "question": "19+23",
                            "inputs": {}, "runtime_kind": "native", "provider_id": provider,
                            "provider_label": LABELS.get(provider, "确定性测试"),
-                           "trace_representation": representation}, None),
+                           "trace_representation": representation, "locale": locale}, None),
             ("request", {"body": body, "representation": representation}, 1),
             ("response", {"body": {"choices": [{"message": {"role": "assistant", "tool_calls": [call]}}]},
                           "representation": representation}, 1),
@@ -150,6 +151,12 @@ class ExportTests(RecordingTestCase):
         failed = self.export(self.make_run(status="error"), name="failed-run")
         self.assertEqual(load_document(failed)["metadata"]["status"], "error")
 
+    def test_recording_carries_the_run_locale_and_it_must_be_supported(self):
+        # 录制元数据记下运行语言，与 run_start 一致；本课只支持 zh-CN 时，英文运行的录制不能通过校验。
+        run_id = self.make_run(locale="en")
+        with self.assertRaisesRegex(ExportRefused, "metadata.locale"):
+            self.export(run_id)
+
     def test_export_changes_only_provenance_and_records_metadata(self):
         run_id = self.make_run()
         target = self.export(run_id)
@@ -165,11 +172,11 @@ class ExportTests(RecordingTestCase):
         metadata = document["metadata"]
         self.assertEqual({key: metadata[key] for key in ("schema_version", "lesson", "exercise_id", "run_id", "status",
                                                          "model", "provider_id", "provider_label", "representation",
-                                                         "sdk", "event_count")},
-                         {"schema_version": 1, "lesson": SLUG, "exercise_id": "sum", "run_id": run_id,
+                                                         "sdk", "event_count", "locale")},
+                         {"schema_version": 2, "lesson": SLUG, "exercise_id": "sum", "run_id": run_id,
                           "status": "completed", "model": "demo-model", "provider_id": "bailian",
                           "provider_label": LABELS["bailian"], "representation": "http_body", "sdk": None,
-                          "event_count": len(stored)})
+                          "event_count": len(stored), "locale": "zh-CN"})
         self.assertEqual(metadata["recorded_at"], self.store.get_run(run_id)["created_at"])
         self.assertEqual(metadata["source_hash"], source_hash(self.spec))
         self.assertEqual(metadata["integrity_hash"], integrity_hash(document["events"]))

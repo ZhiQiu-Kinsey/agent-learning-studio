@@ -28,7 +28,10 @@ test.beforeEach(async ({ page }) => {
     // has its response disposed with the page. Nothing is waiting for it.
     const body = await response.json().catch(() => undefined);
     if (body === undefined) return;
-    await route.fulfill({ response, json: { ...body, config_ready: true } });
+    await route.fulfill({
+      response,
+      json: { ...body, config_ready: true, api_key_configured: true },
+    });
   });
   await runOffline(page);
 });

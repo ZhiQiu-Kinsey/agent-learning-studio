@@ -7,6 +7,7 @@ import { Timeline } from "../../stage/Timeline";
 import { ToolCards } from "../../stage/ToolCards";
 import { ContextFilm } from "../../stage/ContextFilm";
 import { useStageProjection } from "../../stage/useStageProjection";
+import { RuntimeLanguageNote } from "../../components/workspace/lab/RunLanguage";
 
 export interface RecordingMeta {
   name: string;
@@ -16,6 +17,8 @@ export interface RecordingMeta {
     model: string;
     recorded_at: string;
     provider_label?: string;
+    /** The run language of the recorded run. */
+    locale?: string;
   } | null;
 }
 
@@ -69,6 +72,11 @@ export function RecordingView({
     : "";
   return (
     <div className="recording-view" data-testid="recording-view">
+      <RuntimeLanguageNote
+        locale={recording.metadata?.locale}
+        kind="run"
+        testId="recording-locale"
+      />
       <AgentStage
         events={events}
         cursor={cursor}

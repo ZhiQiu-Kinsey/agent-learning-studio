@@ -4,7 +4,7 @@ import type { Detail } from "../types";
  * Which finished run answered which question, so coming back to a lesson does
  * not call the model again for the same thing. A run is reused only while the
  * lesson, the exercise, the question, the inputs, the system prompt, the tool
- * definitions and the lesson and platform code are all unchanged.
+ * definitions, the run language and the lesson and platform code are all unchanged.
  *
  * The browser keeps only run ids and a hash of those inputs; the events stay
  * in the server's run store and are read back unchanged (replay is read-only).
@@ -102,7 +102,7 @@ export function hashText(text: string) {
 }
 
 /** JSON with object keys sorted, so `{a, b}` and `{b, a}` compare equal. */
-function stable(value: unknown): string {
+export function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
   if (value && typeof value === "object")
     return `{${Object.keys(value)
@@ -117,7 +117,7 @@ function stable(value: unknown): string {
 
 /** Everything a run's result depends on that the learner or the course can change, as one key. */
 export function runKey(
-  detail: Pick<Detail, "id" | "system_prompt" | "tools" | "sources">,
+  detail: Pick<Detail, "id" | "system_prompt" | "tools" | "sources" | "runtime_locale">,
   exerciseId: string,
   question: string,
   inputs: Record<string, unknown>,
@@ -127,7 +127,14 @@ export function runKey(
     .filter((source) => source.role !== "fixture")
     .map((source) => `${source.path}\n${source.content}`);
   return `${detail.id}:${exerciseId}:${hashText(
-    stable([question, inputs, detail.system_prompt, detail.tools, code]),
+    stable([
+      question,
+      inputs,
+      detail.system_prompt,
+      detail.tools,
+      code,
+      detail.runtime_locale ?? null,
+    ]),
   )}`;
 }
 

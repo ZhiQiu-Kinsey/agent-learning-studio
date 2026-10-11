@@ -60,6 +60,25 @@ class RunLiveTests(unittest.TestCase):
         self.assertEqual([payload["exercise_id"] for payload in posted], ["divide", "unknown"])
         self.assertIn('"status": "rejected"', out)
 
+    def test_locale_picks_presets_and_is_sent_with_the_run(self):
+        # --locale 让课程详情按该语言返回问题与预设，创建运行时带上 locale；摘要写出实际运行语言。
+        paths, posted = [], []
+
+        def fake_call(base, path, payload=None, timeout=300):
+            paths.append(path)
+            if path.startswith("/api/lessons/"):
+                return json.dumps({"id": "chat-request", "exercises": [{"id": "basic", "question": "Explain."}]})
+            if path == "/api/runs":
+                posted.append(payload)
+                return json.dumps({"run_id": "r3"})
+            return 'data: {"type": "run_start", "data": {"locale": "en"}}\n\n' + DONE
+
+        code, out = self.run_main(fake_call, ["chat-request", "--offline", "--locale", "en"])
+        self.assertEqual(code, 0)
+        self.assertEqual(paths[0], "/api/lessons/chat-request?lang=en")
+        self.assertEqual((posted[0]["locale"], posted[0]["question"]), ("en", "Explain."))
+        self.assertIn('"locale": "en"', out)
+
 
 if __name__ == "__main__":
     unittest.main()

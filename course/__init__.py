@@ -1,1 +1,1 @@
-"""跨课程复用的百炼客户端和 agent 执行代码。"""
+"""Platform code shared by lessons: model connections, the native agent loop, RunContext and runtime locales."""

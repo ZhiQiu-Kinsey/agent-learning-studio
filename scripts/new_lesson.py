@@ -74,12 +74,17 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
         ],
         "runtime": {"kind": kind, "entrypoint": "main" if kind == "native" else "runtime:run", "requires_model": kind == "native"},
     }
+    # 新课从第一天起就是多语言的：运行时文本写在 locales/ 消息目录，问题与自然语言预设按语言分别填写。
+    manifest["runtime"]["locales"] = ["zh-CN", "en"]
+    manifest["exercises"][0]["question"] = {"zh-CN": "请复述：课程脚手架。", "en": "Please repeat: lesson scaffold."}
+    manifest["sources"] += [{"path": f"{prefix}/locales/zh_CN.py", "language": "python", "locale": "zh-CN"},
+                            {"path": f"{prefix}/locales/en.py", "language": "python", "locale": "en"}]
     if kind == "native":
         manifest["runtime"]["max_rounds"] = 3
         manifest["testing"] = {"completion_factory": "fixtures:create_completion"}
-        manifest["sources"].append({"path": f"{prefix}/tools.py", "language": "python"})
+        manifest["sources"].insert(1, {"path": f"{prefix}/tools.py", "language": "python"})
     else:
-        manifest["input_defaults"] = {"label": "课程脚手架"}
+        manifest["input_defaults"] = {"label": {"zh-CN": "课程脚手架", "en": "lesson scaffold"}}
         manifest["ui"] = {"lab": "structured-inputs"}
     manifest["sources"].append({"path": f"{prefix}/content.json", "language": "json"})
     content = {
@@ -114,7 +119,7 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
         },
     }
     files = {
-        "__init__.py": '"""课程实现；以 curriculum/catalog.json 中的状态为准。"""\n',
+        "__init__.py": '"""Lesson implementation; whether it is open is decided by curriculum/catalog.json."""\n',
         "lesson.json": _json(manifest),
         "content.json": _json(content),
         "README.md": (
@@ -133,55 +138,110 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
     }
     if kind == "native":
         files["main.py"] = textwrap.dedent(f'''\
-            """待实现：替换为本课教学提示词。"""
+            """TODO: replace with this lesson's agent setup."""
 
-            from lessons.{directory}.tools import AVAILABLE_TOOLS, TOOLS
+            from course.runner import AgentSetup
+            from lessons.{directory}.locales import texts_for
+            from lessons.{directory}.tools import available_tools, tool_definitions
 
 
-            SYSTEM_PROMPT = "调用 echo_text 工具复述文本，并依据工具结果回答。"
+            def setup(locale):
+                """What the native loop sends in one run, in the run's language."""
+                return AgentSetup(texts_for(locale).system_prompt, tool_definitions(locale), available_tools(locale))
             ''')
-        files["tools.py"] = textwrap.dedent('''\
-            """无副作用的接入示例；请替换为课程需要的真实工具。"""
+        files["tools.py"] = textwrap.dedent(f'''\
+            """A side-effect-free example tool; replace it with the tools this lesson needs."""
+
+            from functools import partial
+
+            from lessons.{directory}.locales import texts_for
 
 
-            def echo_text(text):
+            def tool_definitions(locale):
+                t = texts_for(locale)
+                return [{{
+                    "type": "function",
+                    "function": {{
+                        "name": "echo_text", "description": t.echo_text,
+                        "parameters": {{
+                            "type": "object", "properties": {{"text": {{"type": "string", "maxLength": 200}}}},
+                            "required": ["text"], "additionalProperties": False,
+                        }},
+                    }},
+                }}]
+
+
+            def echo_text(t, /, text):
+                # t (error messages of the run's language) is positional-only: model arguments cannot replace it.
                 if not isinstance(text, str) or not text.strip() or len(text) > 200:
-                    raise ValueError("text 必须是 1 至 200 字符的非空文本。")
-                return {"text": text.strip()}
+                    raise ValueError(t.text_invalid)
+                return {{"text": text.strip()}}
 
 
-            TOOLS = [{
-                "type": "function",
-                "function": {
-                    "name": "echo_text", "description": "原样返回待复述文本。",
-                    "parameters": {
-                        "type": "object", "properties": {"text": {"type": "string", "maxLength": 200}},
-                        "required": ["text"], "additionalProperties": False,
-                    },
-                },
-            }]
-            AVAILABLE_TOOLS = {"echo_text": echo_text}
+            def available_tools(locale):
+                return {{"echo_text": partial(echo_text, texts_for(locale))}}
+            ''')
+        files["locales/__init__.py"] = textwrap.dedent('''\
+            """Runtime text of this lesson; zh_CN.py and en.py each fill every field."""
+            from dataclasses import dataclass
+
+            from course.i18n import catalog
+
+
+            @dataclass(frozen=True)
+            class Texts:
+                system_prompt: str
+                echo_text: str
+                text_invalid: str
+
+
+            texts_for = catalog(__name__, Texts)
+            ''')
+        files["locales/zh_CN.py"] = textwrap.dedent(f'''\
+            """Runtime text: Simplified Chinese (the source language)."""
+            from lessons.{directory}.locales import Texts
+
+            TEXTS = Texts(
+                system_prompt="调用 echo_text 工具复述文本，并依据工具结果回答。",
+                echo_text="原样返回待复述文本。",
+                text_invalid="text 必须是 1 至 200 字符的非空文本。",
+            )
+            ''')
+        files["locales/en.py"] = textwrap.dedent(f'''\
+            """Runtime text: English."""
+            from lessons.{directory}.locales import Texts
+
+            TEXTS = Texts(
+                system_prompt="Call the echo_text tool to repeat the text, and answer from the tool result.",
+                echo_text="Return the text to repeat, unchanged.",
+                text_invalid="text must be non-empty text of 1 to 200 characters.",
+            )
             ''')
         files["fixtures.py"] = textwrap.dedent('''\
-            """仅供自动化测试的确定性模型响应；不会解释自由输入。"""
+            """Deterministic model responses for automated tests only; they never interpret free input."""
 
             import json
 
+            from server.offline import offline_marker
 
-            def create_completion(exercise_id, inputs=None):
+            REPEAT = {"zh-CN": "课程脚手架", "en": "lesson scaffold"}
+
+
+            def create_completion(exercise_id, inputs=None, locale="zh-CN"):
                 if exercise_id != "starter":
-                    raise ValueError("未知测试练习。")
+                    raise ValueError(f"unknown offline exercise {exercise_id!r}")
 
                 def complete(body, api_key):
                     results = [message for message in body["messages"] if message["role"] == "tool"]
                     message = {"role": "assistant", "content": None}
                     if results:
                         result = json.loads(results[-1]["content"])
-                        message["content"] = "【确定性测试】" + json.dumps(result, ensure_ascii=False)
+                        message["content"] = offline_marker(locale) + json.dumps(result, ensure_ascii=False)
                     else:
                         message["tool_calls"] = [{
                             "id": "starter_call", "type": "function",
-                            "function": {"name": "echo_text", "arguments": json.dumps({"text": "课程脚手架"}, ensure_ascii=False)},
+                            "function": {"name": "echo_text",
+                                         "arguments": json.dumps({"text": REPEAT[locale]}, ensure_ascii=False)},
                         }]
                     return {"id": "starter_response", "object": "chat.completion", "model": "offline-script",
                             "choices": [{"index": 0, "message": message,
@@ -189,58 +249,92 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
                 return complete
             ''')
         files["test_lesson.py"] = textwrap.dedent(f'''\
-            """接入冒烟测试；发布前补充本课验收，不调用外部模型。"""
+            """Smoke test of the scaffold; add this lesson's acceptance tests before release. Never calls a model."""
 
             import unittest
 
             from course.runner import execute_tool, run_agent
             from lessons.{directory} import main
-            from lessons.{directory}.fixtures import create_completion
+            from lessons.{directory}.fixtures import REPEAT, create_completion
 
 
             class LessonTests(unittest.TestCase):
-                def test_real_tool_round_trip(self):
-                    results = []
-                    completion = create_completion("starter")
+                def test_real_tool_round_trip_in_every_locale(self):
+                    for locale in ("zh-CN", "en"):
+                        with self.subTest(locale=locale):
+                            results = []
+                            completion = create_completion("starter", locale=locale)
+                            agent = main.setup(locale)
 
-                    def execute(tool_call, available_tools):
-                        results.append(execute_tool(tool_call, available_tools))
-                        return results[-1]
+                            def execute(tool_call, available_tools):
+                                results.append(execute_tool(tool_call, available_tools, locale))
+                                return results[-1]
 
-                    answer = run_agent("请复述：课程脚手架。", main.SYSTEM_PROMPT, main.TOOLS, main.AVAILABLE_TOOLS, 3,
-                                       complete=lambda body, number: completion(body, ""), execute=execute)
-                    self.assertEqual(results[0], {{"ok": True, "result": {{"text": "课程脚手架"}}}})
-                    self.assertIn("课程脚手架", answer)
+                            answer = run_agent("repeat", agent.system_prompt, agent.tools, agent.available_tools, 3,
+                                               complete=lambda body, number: completion(body, ""), execute=execute,
+                                               locale=locale)
+                            self.assertEqual(results[0], {{"ok": True, "result": {{"text": REPEAT[locale]}}}})
+                            self.assertIn(REPEAT[locale], answer)
 
 
             if __name__ == "__main__":
                 unittest.main()
             ''')
     else:
-        files["runtime.py"] = textwrap.dedent('''\
-            """无模型的定制运行器示例；替换为本课实际流程。"""
+        files["runtime.py"] = textwrap.dedent(f'''\
+            """A custom runner example without a model; replace it with this lesson's flow."""
 
             from pydantic import Field
 
             from course.execution import LessonInputs, RunContext
+            from lessons.{directory}.locales import texts_for
 
 
             class Inputs(LessonInputs):
-                label: str = Field(default="课程脚手架", min_length=1, max_length=200)
+                # No default: the preset in lesson.json supplies it in the run's language.
+                label: str = Field(min_length=1, max_length=200)
 
 
             INPUT_MODEL = Inputs
 
 
             def run(context: RunContext):
+                t = texts_for(context.locale)
                 context.check_cancelled()
                 label = context.inputs["label"]
-                context.emit("lesson.step", {"title": "本地示例步骤", "label": label})
-                # 平台记录返回值为 answer；此示例没有调用模型。
-                return "本地脚手架已执行：" + label
+                context.emit("lesson.step", {{"title": t.step_title, "label": label}})
+                # The platform records the return value as the answer; this example calls no model.
+                return t.answer.format(label=label)
+            ''')
+        files["locales/__init__.py"] = textwrap.dedent('''\
+            """Runtime text of this lesson; zh_CN.py and en.py each fill every field."""
+            from dataclasses import dataclass
+
+            from course.i18n import catalog
+
+
+            @dataclass(frozen=True)
+            class Texts:
+                step_title: str
+                answer: str  # {label}
+
+
+            texts_for = catalog(__name__, Texts)
+            ''')
+        files["locales/zh_CN.py"] = textwrap.dedent(f'''\
+            """Runtime text: Simplified Chinese (the source language)."""
+            from lessons.{directory}.locales import Texts
+
+            TEXTS = Texts(step_title="本地示例步骤", answer="本地脚手架已执行：{{label}}")
+            ''')
+        files["locales/en.py"] = textwrap.dedent(f'''\
+            """Runtime text: English."""
+            from lessons.{directory}.locales import Texts
+
+            TEXTS = Texts(step_title="Local example step", answer="The local scaffold ran: {{label}}")
             ''')
         files["test_lesson.py"] = textwrap.dedent(f'''\
-            """定制流程冒烟测试；发布前补充平台接入与本课验收测试。"""
+            """Smoke test of the custom flow; add platform and acceptance tests before release."""
 
             from types import SimpleNamespace
             import unittest
@@ -254,12 +348,12 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
                 def test_local_step_uses_validated_input(self):
                     events = []
                     context = SimpleNamespace(
-                        inputs=INPUT_MODEL(label="实验").model_dump(),
+                        inputs=INPUT_MODEL(label="demo").model_dump(), locale="en",
                         check_cancelled=lambda: None,
                         emit=lambda kind, data: events.append((kind, data)),
                     )
-                    self.assertEqual(run(context), "本地脚手架已执行：实验")
-                    self.assertEqual(events[0], ("lesson.step", {{"title": "本地示例步骤", "label": "实验"}}))
+                    self.assertEqual(run(context), "The local scaffold ran: demo")
+                    self.assertEqual(events[0], ("lesson.step", {{"title": "Local example step", "label": "demo"}}))
 
                 def test_rejects_invalid_input(self):
                     with self.assertRaises(ValidationError):
@@ -281,6 +375,7 @@ def write_scaffold(target, files):
     target.parent.mkdir(parents=True, exist_ok=True)
     target.mkdir(exist_ok=False)
     for name, source in files.items():
+        (target / name).parent.mkdir(parents=True, exist_ok=True)
         with (target / name).open("x", encoding="utf-8", newline="\n") as output:
             output.write(source)
 

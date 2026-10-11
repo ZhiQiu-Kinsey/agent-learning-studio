@@ -1,7 +1,8 @@
 """用真实模型运行一门课的一个或全部练习，打印事件摘要；会产生模型用量。
 
-用法：python scripts/run_live.py <课程 slug> [练习 id ...] [--url http://127.0.0.1:8765] [--offline] [--json]
+用法：python scripts/run_live.py <课程 slug> [练习 id ...] [--url http://127.0.0.1:8765] [--locale en] [--offline] [--json]
 需要先启动后端（run_web.py 或 uvicorn），后端从自己的环境读取密钥；本脚本不读取、不打印密钥。
+--locale 选择运行语言（默认 zh-CN）：练习的问题与预设输入取该语言，本课不支持时按平台规则回落，摘要里写实际语言。
 摘要只含事件类型、请求数、用量、回答、报告检查与错误，便于核对正文说法与真实运行是否一致。
 """
 import argparse
@@ -9,6 +10,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -27,8 +29,10 @@ def summarize(events):
     responses = [event["data"].get("body", {}) for event in events if event["type"] == "response"]
     reports = [event["data"] for event in events if event["type"] == "lesson.report"]
     done = next((event["data"] for event in events if event["type"] == "done"), {})
+    start = next((event["data"] for event in events if event["type"] == "run_start"), {})
     return {
         "status": done.get("status"),
+        "locale": start.get("locale"),
         "events": by_type,
         "finish_reasons": [(body.get("choices") or [{}])[0].get("finish_reason") for body in responses],
         "usage": [body.get("usage") for body in responses],
@@ -46,11 +50,13 @@ def main(argv=None):
     parser.add_argument("lesson")
     parser.add_argument("exercises", nargs="*")
     parser.add_argument("--url", default=os.environ.get("AGENT_LAB_URL", "http://127.0.0.1:8765"))
+    parser.add_argument("--locale", default="zh-CN", help="运行语言，如 zh-CN、en（默认 zh-CN）")
     parser.add_argument("--offline", action="store_true", help="用离线测试模式运行（不调用模型）")
     parser.add_argument("--json", action="store_true", help="同时打印完整事件 JSON")
     args = parser.parse_args(argv)
     base = args.url.rstrip("/")
-    detail = json.loads(call(base, f"/api/lessons/{args.lesson}"))
+    query = "" if args.locale == "zh-CN" else "?lang=" + urllib.parse.quote(args.locale)
+    detail = json.loads(call(base, f"/api/lessons/{urllib.parse.quote(args.lesson)}{query}"))
     exercises = [item for item in detail["exercises"] if not args.exercises or item["id"] in args.exercises]
     if not exercises:
         raise SystemExit("没有匹配的练习。")
@@ -62,7 +68,7 @@ def main(argv=None):
                               "reason": "offline_only：故障注入练习只在离线模式运行"}, ensure_ascii=False, indent=2))
             continue
         payload = {"lesson_id": detail["id"], "mode": "offline" if args.offline else "live",
-                   "question": exercise["question"], "exercise_id": exercise["id"]}
+                   "question": exercise["question"], "exercise_id": exercise["id"], "locale": args.locale}
         if exercise.get("inputs"):
             payload["inputs"] = exercise["inputs"]
         try:

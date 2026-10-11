@@ -16,7 +16,7 @@
 # 复杂流程可以改用 --kind custom（同一目录只能创建一次）
 ```
 
-生成目录为 `lessons/lesson_document_loading/`，包含 `lesson.json`、`content.json`、`README.md`、`__init__.py` 和冒烟测试 `test_lesson.py`。原生课程另有 `main.py`、`tools.py`、`fixtures.py`；定制课程另有 `runtime.py`。示例只验证接入通路，正文与练习明确标记待编写。
+生成目录为 `lessons/lesson_document_loading/`，包含 `lesson.json`、`content.json`、`README.md`、`__init__.py` 和冒烟测试 `test_lesson.py`。原生课程另有 `main.py`、`tools.py`、`fixtures.py`；定制课程另有 `runtime.py`。两类都带 `locales/` 消息目录（`__init__.py`、`zh_CN.py`、`en.py`），清单的 `runtime.locales` 已登记中英两种运行语言，练习问题按语言分别填写（见“多语言运行时”）。示例只验证接入通路，正文与练习明确标记待编写。
 
 1. 根据目录中的学习目标与验收要求实现本课。补齐引言、机制、示例、实验、观察点和自测，保留“概念 → 最小实现 → 运行证据 → 实验 → 自检”的顺序。
 2. 运行课程自己的测试，例如 `python -m unittest lessons.lesson_document_loading.test_lesson -v`。补充真实 Python 行为、错误处理、输入与停止等测试；冒烟示例通过不代表课程完成。各课目录下的 `test_lesson.py` 由 `tests/test_lesson_local_suites.py` 并入完整测试，不需要另外登记。
@@ -91,10 +91,10 @@
 | 批注带锚点 | `notes[].anchor` 写该行必须包含的一段原文；源码移动后跑 `scripts/realign_notes.py` | `validate_lessons` |
 | 批注密度 | 展示范围内每 8 个非空、未折叠行至少 1 条，连续无批注不超过 12 行；优先写函数签名、循环开头、停止条件 | `validate_lessons`、`tests/test_code_note_density.py`（旧块在只减不增的基线里） |
 | 平台代码折叠 | 事件发布、计时、报告拼装等与教学点无关的行，用 `folds: [{id, start, end, label}]` 收起，label 说清折叠了什么（如“平台：发布报告事件”） | 折叠内不能有批注 |
-| 行内注释 | 中文，写“为什么”而不是复述代码；主循环按步骤编号（`# 1.`、`# 2.`） | 人工 |
+| 行内注释 | `lessons/` 与 `course/` 的注释和文档字符串写英文（中文讲解放在读码批注里，批注有中英两份）；写“为什么”而不是复述代码；主循环按步骤编号（`# 1.`、`# 2.`） | 人工；文档字符串计入硬编码中文基线 |
 | 本课新增 | 由后端从 `lessons/` 下的课程文件计算，不含平台与测试夹具 | 自动 |
 
-运行器写法：把“记录证据”放在边界上。模型请求统一走 `context.complete`，模型提出的调用走 `context.execute_proposal`，课程程序自己发起的调用走 `context.call_tool`；课程循环里只留本课要讲的步骤。报告事件（`lesson.report`）的组装放进一个 `_report(...)` 函数，读码块不展示它，或用 `folds` 收起。
+运行器写法：把“记录证据”放在边界上。模型请求统一走 `context.complete`，模型提出的调用走 `context.execute_proposal`，运行器自己发起的调用走 `context.call_tool`；课程循环里只留本课要讲的步骤。报告事件（`lesson.report`）的组装放进一个 `_report(...)` 函数，读码块不展示它，或用 `folds` 收起。
 
 ### 验证
 
@@ -111,16 +111,20 @@
   "sources": [
     { "path": "lessons/lesson_document_loading/main.py", "language": "python" },
     { "path": "lessons/lesson_document_loading/tools.py", "language": "python" },
+    { "path": "lessons/lesson_document_loading/locales/zh_CN.py", "language": "python", "locale": "zh-CN" },
+    { "path": "lessons/lesson_document_loading/locales/en.py", "language": "python", "locale": "en" },
     { "path": "course/runner.py", "language": "python" }
   ],
   "exercises": [
-    { "id": "small-context", "title": "短上下文实验", "question": "本课实际问题" }
+    { "id": "small-context", "title": "短上下文实验",
+      "question": { "zh-CN": "本课实际问题", "en": "The real question of this lesson" } }
   ],
   "runtime": {
     "kind": "native",
     "entrypoint": "main",
     "max_rounds": 3,
-    "requires_model": true
+    "requires_model": true,
+    "locales": ["zh-CN", "en"]
   },
   "testing": { "completion_factory": "fixtures:create_completion" }
 }
@@ -128,9 +132,9 @@
 
 `content` 相对于课程目录；`sources.path` 相对于项目根目录，必须落在允许公开的课程与平台源码范围内。不要加入本地密钥或配置。执行入口和测试 factory 只指向同一课内的可信 Python 模块，不从浏览器传入路径或导入地址。不同课程可以使用相同的练习 ID，测试 fixture 按课程隔离。
 
-`main.py` 导出 `SYSTEM_PROMPT`、`TOOLS`、`AVAILABLE_TOOLS` 即可复用原生工具循环。每课可以引用已经存在的无副作用工具；源码清单应展示真实引用的实现。通用循环处理模型请求、工具调用与结果、错误和轮数上限。
+`main.py` 导出 `setup(locale)`，返回 `course.runner.AgentSetup(system_prompt, tools, available_tools)`，即可复用原生工具循环；它按运行语言给出系统提示词与工具定义（见下文“多语言运行时”）。每课可以引用已经存在的无副作用工具；源码清单应展示真实引用的实现。通用循环处理模型请求、工具调用与结果、错误和轮数上限。
 
-确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None)` 工厂，返回 `completion(body, api_key)`。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`（网页不能真实运行它）。要让学习者在网页上亲手检验失败路径，优先改成本地练习：在 custom 运行器里让课程程序构造有问题的调用（`context.submit_call`），并给这个练习声明 `requires_model: false`，例如 `fail-safely` 的两组故障注入。
+确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None, locale="zh-CN")` 工厂，返回 `completion(body, api_key)`；支持多种运行语言的课按 `locale` 给出该语言的确定性回答。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`（网页不能真实运行它）。要让学习者在网页上亲手检验失败路径，优先改成本地练习：在 custom 运行器里让运行器构造有问题的调用（`context.submit_call`），并给这个练习声明 `requires_model: false`，例如 `fail-safely` 的两组故障注入。
 
 ## 教学内容（content v2）
 
@@ -183,7 +187,7 @@
 | `curriculum/glossary.json` | `glossary.<语言>.json` | `<术语 id>.term/definition/aliases` | 同上 |
 | `lessons/*/lesson.json` | `lesson.<语言>.json` | `subtitle`、`exercises.<练习 id>.title`、`ui.question_label`、`ui.question_help` | 同上 |
 
-事实字段不能被覆盖：id、slug、状态、先修、课时、难度、正确答案、代码、选择器、URL，以及练习的 `question` 与预设输入（它们原样发给模型，属于运行事实，英文界面也保持中文）；源码、系统提示词和运行事件同理不翻译。课程级别与难度是固定取值，接口附带 `level_code`、`difficulty_code`，界面按代码翻译。译文里的 `{{lesson:<slug>}}` 按目标语言写成 “Lesson N”，没翻译的文本仍写“第 N 课”。
+事实字段不能被覆盖：id、slug、状态、先修、课时、难度、正确答案、代码、选择器、URL，以及练习的 `question` 与预设输入（它们原样发给模型，属于运行事实）；源码、系统提示词和运行事件同理不经过译文层。运行时的文字按运行语言写在 `lesson.json` 与 `locales/` 消息目录里，见下文“多语言运行时”。课程级别与难度是固定取值，接口附带 `level_code`、`difficulty_code`，界面按代码翻译。译文里的 `{{lesson:<slug>}}` 按目标语言写成 “Lesson N”，没翻译的文本仍写“第 N 课”。
 
 翻译用 `scripts/translation_kit.py`，目标写 `lesson:<slug>`、`onboarding`、`catalog`、`glossary`、`manifest:<slug>`：
 
@@ -198,6 +202,66 @@
 
 **随课录制**：真实模型运行后，用 `scripts/export_recording.py --run <run_id> --name <名称>` 原样导出到 `lessons/<目录>/recordings/`。录制只能来自 live 运行，带源码哈希和完整性哈希；源码变化后会提示重新录制。
 
+## 多语言运行时
+
+界面和课程正文按界面语言显示（上一节的译文层）；运行时同样分语言：英文界面运行练习时，程序发给模型和写进事件的文字都是英文——系统提示词、工具描述、工具错误、练习问题与预设输入、`lesson.*` 报告的标签与取值、程序写出的回答、`course/` 平台消息。中文界面的运行与以前完全一样。语言是运行的一部分：创建运行时确定，记在 `run_start` 里，回放按记录原样显示。
+
+### 运行语言怎么定
+
+1. 前端创建运行时带上界面语言：`POST /api/runs` 的 `locale`。
+2. 后端按本课 `lesson.json` 的 `runtime.locales`（没写时只有 `["zh-CN"]`）解析出运行语言，规则在 `course/i18n.py` 的 `resolve_locale`：完全相同的语言优先；其次是同一语言的其他地区写法（`en-US` → `en`，`zh-TW` → `zh-CN`）；都没有时用源语言 `zh-CN`。格式不合法的语言代码返回 422。
+3. `RunContext.locale` 是解析后的语言；`run_start.data.locale` 记录它，回落时另记 `requested_locale`；运行存储的 `runs.locale` 与 `GET /api/runs` 也带上它（加入这一列之前的旧运行记为 `zh-CN`）。录制元数据（版本 2）带 `locale`，必须与 `run_start` 一致、且在本课 `runtime.locales` 里。
+4. `GET /api/lessons/{id}?lang=` 与 `/code?lang=` 按同一规则返回 `runtime_locale`：练习问题、预设输入、系统提示词、工具定义和运行时文本文件都是这种语言。本课还不支持界面语言时，英文界面看到的是中文问题与中文源码，实验台写明“本课的运行器暂时只有中文版”；屏幕上的运行和界面语言不同时，回答区写明“这是一次中文运行”。
+
+### 消息目录（`locales/`）
+
+运行时文本写在类型化的消息目录里，每种语言一份 Python 文件：
+
+```text
+lessons/<目录>/locales/__init__.py   Texts：frozen dataclass，一个字段一条消息；texts_for = catalog(__name__, Texts)
+lessons/<目录>/locales/zh_CN.py      TEXTS = Texts(...)   源语言
+lessons/<目录>/locales/en.py         TEXTS = Texts(...)
+```
+
+- 代码里 `t = texts_for(context.locale)`，用 `t.system_prompt`、`t.report_title`。带变量的消息用具名占位符 `t.unknown_tool.format(name=name)`，不拼接字符串（各语言语序不同）。
+- 字段可以是字符串、字符串元组或 `{键: 字符串}` 字典。`Texts` 少一个字段在导入时就报错；`tests/test_runtime_locales.py` 再逐个叶子比较两种语言的结构、类型和占位符，并检查英文目录里没有中文。
+- 被多课共用的模块有自己的目录，例如 `lessons/lesson_01_tool_selection/locales/tools/` 只放 `tools.py` 的工具描述与错误；各课自己的系统提示词放在本课的 `locales/`。
+- 平台消息（未知工具、参数不是对象、轮数用完、停止、模型调用超限、百炼连接错误、命令行提示）在 `course/locales/`。只给开发者看的编程错误直接写英文，不进目录。
+- `texts_for` 对平台支持、但这个包没有对应文件的语言回落到源语言，所以只支持中文的课在英文请求下照常运行；不是运行语言的字符串（如 `fr`）是编程错误。
+
+**为什么不用 gettext、Babel 或 Fluent：**提示词很长、有结构，学习者要逐字读到真正发出去的那一段。消息目录就是普通 Python 数据，读码页显示的文件就是运行时用的文本；gettext 用一段源语言原文作消息 id，中文读者读代码时只能看到英文 id（或反过来），也看不到另一种语言的完整提示词。我们需要的复数、日期格式化在运行时文本里几乎用不到，类型化的 dataclass 加一个通用测试就能保证各语言字段齐全、占位符一致。
+
+### 清单与预设
+
+- `runtime.locales`：本课的运行语言，必须含源语言 `zh-CN`，都在平台的 `RUNTIME_LOCALES` 里。
+- 练习的 `question`，以及 `inputs`、`input_defaults` 里的自然语言值，按语言写成 `{"zh-CN": "…", "en": "…"}`；数字、布尔和代码取值（如 `Literal` 选项）照常写标量。支持多种运行语言的课里，含中文的标量会被拒绝。对象只用来表示“按语言分别填写”，键必须恰好是本课的运行语言。
+- `INPUT_MODEL` 的自然语言字段不设中文默认值（不写默认值，由 `input_defaults` 按语言给出），否则英文界面的参数表单会露出中文，显式提交 `{}` 时英文运行也会带上中文。
+- 输入控件的标签、帮助和选项文字仍写在 `content.json` 的 `lab.inputs`，走译文层。
+- 加载后 `spec["exercises"]` 与 `spec["input_defaults"]` 是源语言那份，各语言的预设在 `spec["presets"][locale]`；后端用 `server/catalog.py` 的 `run_locale`、`lesson_presets` 取用。
+
+### 原生课与独立运行器
+
+- 原生课的 `main.py` 导出 `setup(locale) -> AgentSetup`：系统提示词来自本课目录，工具定义由 `tool_definitions(locale)` 生成（工具名和参数名是代码，各语言相同，只翻译描述），白名单由 `available_tools(locale)` 生成。工具函数需要报错文字时，把消息目录作为**仅限位置参数**放在最前面（`def add_numbers(t, /, a, b)`），用 `functools.partial` 绑定；模型的参数总是按名字传，换不掉它，多传的参数仍是 `TypeError`。
+- 独立运行器在 `run(context)` 开头取 `t = texts_for(context.locale)`，报告、任务卡、提醒、程序写出的回答都用 `t`。
+- `course/` 的函数带 `locale` 参数：`execute_tool(call, tools, locale)`、`run_agent(..., locale=)`、`send_bailian(..., locale=)`、`SDKCompletion(profile, locale)`；`RunContext` 自动传入。
+- 命令行：`main(locale=None)` 用 `course.i18n.cli_locale()` 读 `--locale en`；根目录的 `main.py --locale en` 也一样。
+
+### 读码页
+
+- `sources` 里语言文件写 `locale`（文件名必须是 `zh_CN.py`、`en.py`），同一个目录要登记本课的每种运行语言；`__init__.py` 这类不分语言的文件不写。接口只返回运行语言那一份，角色是 `texts`（界面标“运行时文本”）。
+- “本课新增”也比较运行时文本：`TEXTS` 的每个字段记为 `t.<字段>`，按源语言那份比较，提示词改了就显示为变化，各语言结论一致。
+- 运行时文本也可以做读码块（讲提示词逐句写法的课需要）：块写在源语言文件上，写明 `start`、`end`，起止行、批注和折叠都落在字段里；块覆盖的字段在每种语言里行数相同（英文逐行对应中文，校验会检查）。英文界面里平台按“哪个字段的第几行”把块换算到 `en.py`，批注文字走译文层。读码块覆盖的运行时文本也计入批注密度。
+
+### 测试夹具与检查
+
+- fixture 写成 `create_completion(exercise_id, inputs=None, locale="zh-CN")`，确定性回答按 `locale` 分语言；开头的标记用 `server/offline.py` 的 `offline_marker(locale)`（英文是 `[Offline script answer] `），`result_answer(results, locale)` 同理。
+- `tests/test_runtime_locales.py`：每课 × 每个练习 × 本课每种运行语言都离线跑通；英文运行的全部事件（请求体、工具结果、报告、回答、`run_start`）里没有中文；中文运行仍是中文；消息目录逐字段对应；英文课的输入 Schema 没有中文；语言回落与 `?lang=` 接口。
+- `tests/test_lesson_experiments.py` 在每种运行语言下检查观察点与导览命中：选择器只能看事件结构，不能依赖某种语言的文字。
+- `scripts/cjk_baseline.py --check`（`tests/test_python_cjk_baseline.py`）：`course/` 与 `lessons/` 的 Python 文件里含中文的字符串字面量（含文档字符串）只许减少；`locales/zh_CN.py` 和测试文件豁免。
+- 正文与运行时文本保持一致：中文正文引用中文目录里的原文，英文译文层引用英文目录里的原文（不再写“中文原文加英文注释”）。读码批注在源码移动后用 `realign_notes.py` 重新对准，中英两份批注都要复核。
+
+逐课改造的步骤清单（给改课的人和代理）见 `.claude/briefs/i18n/convert-lesson.md`。
+
 ## 独立运行器
 
 选择 `--kind custom` 后，清单使用 `runtime.kind: custom`、`entrypoint: runtime:run`。自定义课程可以实现分支、图执行、多个阶段或本地算法，再按需要复用通用循环。
@@ -205,19 +269,22 @@
 ```python
 from pydantic import Field
 from course.execution import LessonInputs, RunContext
+from lessons.lesson_document_loading.locales import texts_for
 
 
 class Inputs(LessonInputs):
-    label: str = Field(default="样本", min_length=1, max_length=200)
+    # No default: lesson.json supplies the preset in the run's language.
+    label: str = Field(min_length=1, max_length=200)
 
 
 INPUT_MODEL = Inputs
 
 
 def run(context: RunContext):
+    t = texts_for(context.locale)
     context.check_cancelled()
-    context.emit("lesson.step", {"title": "准备样本", "label": context.inputs["label"]})
-    return "本地处理完成：" + context.inputs["label"]
+    context.emit("lesson.step", {"title": t.step_title, "label": context.inputs["label"]})
+    return t.done.format(label=context.inputs["label"])
 ```
 
 前端把课程 `input_defaults` 与练习 `inputs` 合并后显示在可编辑 JSON 中。请求未传 `inputs` 时后端使用这份合并预设；显式提交的 `inputs`（包括 `{}`）直接交给该课 `INPUT_MODEL` 校验，不偷偷补入界面里已经删除的参数。模型需要继承 `LessonInputs`，未知字段会被拒绝，省略字段可使用 Pydantic 字段默认值。`context.inputs` 是校验后的字典。没有声明输入模型的课程默认拒绝额外输入。`question`、`exercise_id`、`lesson_id`、`mode` 可从上下文读取；原生课程问题不能为空，定制课程可只使用结构化输入，并自行校验任务所需字段。
@@ -228,11 +295,12 @@ def run(context: RunContext):
 | --- | --- |
 | `context.complete(body, round_number=1, branch=None)` | 使用当前模型连接并记录请求、响应与表示方式；并行发出多个请求时给每个分支一个不同的 `branch`，时间线按它配对请求与响应 |
 | `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
-| `context.call_tool(name, arguments, available_tools, round_number=1)` | 由课程程序（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
-| `context.submit_call(name, raw_arguments, available_tools, round_number=1)` | 课程程序原样提交一条调用（名字可以未登记，参数是原样的 JSON 字符串、可以是坏的），走与模型提议相同的检查；用于演示拒绝路径，事件标为程序发起（`origin: course_program`） |
+| `context.call_tool(name, arguments, available_tools, round_number=1)` | 由运行器（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
+| `context.submit_call(name, raw_arguments, available_tools, round_number=1)` | 运行器原样提交一条调用（名字可以未登记，参数是原样的 JSON 字符串、可以是坏的），走与模型提议相同的检查；用于演示拒绝路径，事件标为运行器发起（`origin: course_program`，界面显示“运行器调用工具”） |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |
 | `context.check_cancelled()` | 在阶段与副作用操作前响应平台停止请求 |
+| `context.locale` | 这次运行的语言（`zh-CN`、`en`）；课程代码用 `texts_for(context.locale)` 取运行时文本 |
 
 运行器可以是同步或异步函数。返回字符串时平台自动记录最终回答；也可以自行发布 `answer` 后返回 `None`。开始、结束和执行锁由平台管理，课程不能自行伪造生命周期事件。共享服务统一保留模型连接、事件快照、脱敏与回放；不要从课程另建 SSE、绕过连接管理直读密钥，或从回放触发执行。
 

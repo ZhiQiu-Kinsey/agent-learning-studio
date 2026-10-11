@@ -163,6 +163,16 @@ describe("lessonMatches", () => {
     );
   });
 
+  it("matches the labels the UI shows for fixed values", () => {
+    const labels = () => ["Core", "Beginner"];
+    expect(
+      lessonMatches(target, curriculum, { ...none, query: "core" }, labels),
+    ).toBe(true);
+    expect(lessonMatches(target, curriculum, { ...none, query: "core" })).toBe(
+      false,
+    );
+  });
+
   it("applies the domain and availability filters", () => {
     expect(lessonMatches(target, curriculum, { ...none, categoryId: "B" })).toBe(
       false,

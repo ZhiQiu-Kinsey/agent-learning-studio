@@ -80,7 +80,7 @@
 ## 4. 运行存储
 
 - 文件：`.runtime/runs.sqlite3`（已在 `.gitignore`），首次创建运行时才打开；WAL 模式、`synchronous=FULL`、`secure_delete=ON`。
-- 表：`runs`（`run_id`、`lesson_id`、`exercise_id`、`mode`、`model`、`provider_id`、`representation`、`provenance`、`schema_version`、`status`、`created_at`、`finished_at`）与 `events`（`run_id`、`seq`、`type`、`event`），`(run_id, seq)` 为主键。
+- 表：`runs`（`run_id`、`lesson_id`、`exercise_id`、`mode`、`model`、`provider_id`、`representation`、`provenance`、`schema_version`、`status`、`created_at`、`finished_at`、`locale`）与 `events`（`run_id`、`seq`、`type`、`event`），`(run_id, seq)` 为主键。`locale` 是运行语言；加入它之前建的库在打开时补上这一列，旧运行都是中文运行，记为 `zh-CN`。
 - append-only：每个事件写入后立即提交；`events` 上的触发器拒绝 `UPDATE`。`done` 与运行状态在同一事务提交。唯一的删除路径是一键清除，清除后截断 WAL。
 - 只存储已脱敏的事件：`scrub()` 先作用于 `data`，再序列化写库；信封字段由平台生成，不含用户输入。存储中的事件文本就是 SSE 发送的文本。
 - 状态：`running`、`completed`、`error`、`cancelled`；服务启动时把遗留的 `running` 标为 `interrupted`，这类运行没有 `done`，读取到末尾即结束。
@@ -89,6 +89,7 @@
 ## 5. 兼容策略
 
 - 事件类型 `run_start/request/response/tool_call/tool_result/answer/error/done` 与 `lesson.*` 名称、`data` 内容均不变。
+- `run_start.data.locale` 记录运行语言（`zh-CN`、`en`）；界面请求的语言本课不支持、回落到源语言时，另记 `requested_locale`。没有 `locale` 的旧运行都是中文运行。运行语言决定事件里所有文字的语言，回放按记录原样显示，界面语言不同时只加标注，不翻译。
 - 前端 `Trace` 类型同时接受 v1 与 v2，v2 字段按可选读取；`isTraceV2()` 判断是否可以推导 span。v1 记录只能按数组顺序读取。
 - 下载的运行记录增加 `run_id`，事件为 v2；目前没有导入功能，将来导入时 v1 记录按上述规则读取。
 - 随课录制（`recorded_run`）见第 6 节；审批事件（`approval.requested/resolved`）与哈希链在后续子任务实现。
@@ -107,7 +108,7 @@
 
 | 元数据字段 | 说明 |
 | --- | --- |
-| `schema_version` | 录制格式版本，当前为 `1`（事件自身的信封版本仍是 `2`） |
+| `schema_version` | 录制格式版本，当前为 `2`（事件自身的信封版本仍是 `2`）；版本 2 起元数据带 `locale` |
 | `lesson` | 课程 slug，必须与所在课程目录的 `lesson.json` 一致 |
 | `exercise_id` | 练习 id，必须存在于当前课程 |
 | `run_id` | 来源运行编号，与事件中的 `run_id` 相同 |
@@ -120,6 +121,7 @@
 | `source_hash` | 课程源码哈希，规则见 6.2 |
 | `integrity_hash` | 事件完整性哈希，规则见 6.2 |
 | `event_count` | 事件条数 |
+| `locale` | 运行语言，取自运行记录，必须与 `run_start.data.locale` 一致，且是本课 `runtime.locales` 之一 |
 
 **platform_version 取法**：`pyproject.toml` 的 `project.version` 加 git 提交，形如 `0.1.0+g<12 位提交>`；已跟踪文件有未提交改动时追加 `.dirty`（`git status --porcelain --untracked-files=no` 非空）。没有 git 时只写 pyproject 版本，读不到版本时写 `unknown`。它只用于追溯，不参与校验；与源码是否一致以 `source_hash` 为准。
 
@@ -182,7 +184,7 @@
    - 每条事件都是 `recorded_run`；
    - 只有模型请求和响应带 `representation` 与 `sdk`。
 
-   此外还要满足：模型事件的 `data.representation`（v1 字段）与元数据一致；首条事件是唯一的 `run_start`，末条是唯一的 `done`；至少有一次模型请求；`run_start.data` 中的 `mode` 为 `live`，`lesson_id`、`model`、`provider_id`、`provider_label`、`trace_representation` 与元数据一致。
+   此外还要满足：模型事件的 `data.representation`（v1 字段）与元数据一致；首条事件是唯一的 `run_start`，末条是唯一的 `done`；至少有一次模型请求；`run_start.data` 中的 `mode` 为 `live`，`lesson_id`、`model`、`provider_id`、`provider_label`、`trace_representation`、`locale` 与元数据一致。
 7. `source_hash` 与当前源码一致。不一致时报“源码已变化，请重新录制”，不静默沿用。
 
 ### 6.5 只读接口

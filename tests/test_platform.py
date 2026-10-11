@@ -2,13 +2,14 @@
 import importlib
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from course.api_client import send_bailian
 from course.execution import RunContext, execute_lesson
-from course.runner import RunCancelled
+from course.runner import AgentSetup, RunCancelled
 from server.catalog import lesson_runtime, lesson_spec
 from server.offline import completion_for
 from run_support import run_and_read, use_temporary_run_store
@@ -73,7 +74,7 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("请修正", events[-1]["data"]["content"])
 
     def test_injected_faults_run_without_a_model_and_stop_before_any_function(self):
-        """故障注入不调用模型：课程程序构造的调用走同一个 execute_tool，事件标为程序发起。"""
+        """故障注入不调用模型：运行器构造的调用走同一个 execute_tool，事件标为运行器发起（origin: course_program）。"""
         spec = lesson_spec("fail-safely")
         module = lesson_runtime(spec)
         tools = importlib.import_module("lessons.lesson_03_fail_safely.tools")
@@ -120,12 +121,14 @@ class RunnerTests(unittest.TestCase):
             nonlocal should_stop
             should_stop = True
             return completion_for(lesson_spec("tool-selection"), "sum")(body, key)
-        with patch.dict(module.AVAILABLE_TOOLS, {"add_numbers": lambda **_: self.fail("cancelled tool ran")}):
-            with self.assertRaises(RunCancelled):
-                native_context([], complete, cancelled=lambda: should_stop).run_native(module, 3)
+        def setup(locale):
+            agent = module.setup(locale)
+            return AgentSetup(agent.system_prompt, agent.tools,
+                              {**agent.available_tools, "add_numbers": lambda **_: self.fail("cancelled tool ran")})
+        with self.assertRaises(RunCancelled):
+            native_context([], complete, cancelled=lambda: should_stop).run_native(SimpleNamespace(setup=setup), 3)
 
     def test_exact_transport_request_matches_trace(self):
-        from types import SimpleNamespace
         bodies = []
         class Response:
             def __enter__(self): return self
@@ -136,7 +139,7 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(request.get_header("Authorization"), "Bearer test-secret")
             return Response()
         events = []
-        module = SimpleNamespace(SYSTEM_PROMPT="system", TOOLS=[], AVAILABLE_TOOLS={})
+        module = SimpleNamespace(setup=lambda locale: AgentSetup("system", [], {}))
         with patch.dict("sys.modules", {"local_config": SimpleNamespace(API_URL="https://example.invalid/chat", MODEL="test")}):
             with patch("urllib.request.urlopen", open_request):
                 native_context(events, send_bailian, model="test", budget=1,

@@ -189,14 +189,15 @@ docs/          课程大纲与架构文档
 uv run python -m unittest discover -s tests       # 全部 Python 测试（含各课 test_lesson.py）
 uv run python scripts/validate_lessons.py         # 实现清单、内容、术语表、用词、录制、译文层
 uv run python scripts/translation_kit.py status --locale en   # 各课、导学、目录、术语表的译文覆盖率
+uv run python scripts/cjk_baseline.py --check     # 课程与平台代码里的硬编码中文只许减少
 npm --prefix frontend run build                   # 类型检查并构建
-npm --prefix frontend exec vitest run             # 前端单元测试
+npm --prefix frontend run test                    # 前端单元测试（vitest）
 npm --prefix frontend run i18n:check              # 各语言翻译键一致
 ```
 
 浏览器测试（Playwright，使用系统 Chrome）：先构建前端并启动后端，再在 `frontend/` 下执行 `npx playwright test`。要测别的端口，用环境变量 `AGENT_LAB_URL` 指定。
 
-自动化测试在网络边界把模型换成确定性夹具，**但仍真实执行 Python 工具**。夹具只服务测试，网页上没有模拟入口。
+自动化测试在网络边界把模型换成确定性夹具，**但仍真实执行 Python 工具**。夹具只服务测试，网页上没有模拟入口。每个练习都在本课支持的每种运行语言下离线跑一遍，英文运行的事件里不能出现中文。
 
 ## 参与贡献
 

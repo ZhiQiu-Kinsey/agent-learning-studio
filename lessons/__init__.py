@@ -1,1 +1,1 @@
-"""按学习顺序组织的 agent 课程。"""
+"""Agent lessons, organized in learning order."""

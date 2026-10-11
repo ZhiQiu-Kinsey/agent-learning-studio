@@ -169,6 +169,8 @@ export function lessonMatches(
   lesson: CurriculumLesson,
   curriculum: Pick<CurriculumData, "categories">,
   { query, onlyAvailable, categoryId }: LessonFilter,
+  /** Labels the UI shows for fixed values (level, difficulty) in its own language. */
+  labels: (lesson: CurriculumLesson) => readonly (string | undefined)[] = () => [],
 ): boolean {
   if (categoryId && lesson.category_id !== categoryId) return false;
   if (onlyAvailable && lesson.status !== "available") return false;
@@ -182,6 +184,7 @@ export function lessonMatches(
     lesson.title,
     lesson.summary,
     lesson.level,
+    ...labels(lesson),
     category?.title,
     module?.title,
     ...lesson.topics,

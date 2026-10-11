@@ -200,8 +200,10 @@ class ManifestOverlayTests(unittest.TestCase):
             "subtitle": stale}))
         subtitle, exercises, ui, info = localized_manifest(self.spec, "en")
         self.assertEqual(exercises[0]["title"], "With a system prompt")
-        self.assertEqual(exercises[0]["question"], exercise["question"])
-        self.assertEqual(exercises[0].get("inputs"), exercise.get("inputs"))
+        # 问题与预设输入不走译文层：它们按运行语言写在 lesson.json 里，这里拿到的是源语言那份。
+        self.assertEqual(exercises[0]["question"], self.spec["exercises"][0]["question"])
+        self.assertEqual(exercises[0].get("inputs"), self.spec["exercises"][0].get("inputs"))
+        self.assertIsInstance(exercises[0]["question"], str)
         self.assertEqual((ui["question_label"], ui["lab"]), ("User message", self.raw["ui"]["lab"]))
         self.assertEqual(subtitle, self.raw["subtitle"])
         self.assertEqual((info["locale"], info["stale"]), ("en", ["subtitle"]))

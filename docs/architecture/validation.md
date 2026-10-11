@@ -16,23 +16,32 @@
 
 源码改动让批注行号移动时，先运行 `scripts/realign_notes.py` 按锚点重新对准，再跑 `validate_lessons`。
 
+不要在仓库根目录用 `npm --prefix frontend exec vitest run`：那样不读 `frontend/vitest.config.ts`，会把 Playwright 用例也当成单元测试收进来。用 `npm --prefix frontend run test`。
+
+运行语言（中文、英文）相关的检查：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/cjk_baseline.py --check       # course/、lessons/ 里的硬编码中文只许减少（locales/zh_CN.py 与测试文件豁免）
+.\.venv\Scripts\python.exe scripts/export_curriculum.py --check  # 中英文两份课程大纲都要同步
+```
+
+`tests/test_runtime_locales.py` 让每课每个练习在本课支持的每种运行语言下离线跑通，检查英文运行的全部事件里没有中文、中文运行保持中文、消息目录逐字段对应（占位符一致）、英文课的输入 Schema 没有中文默认值，以及语言回落、运行存储的 locale 列与 `?lang=` 下的课程详情和读码接口。`tests/test_lesson_experiments.py` 在每种运行语言下都检查观察点与导览命中。
+
 清单校验包括 planned 草稿，但不会解锁课程。用词检查只针对可运行课程；中文术语有没有收录要靠作者通读，见 [术语与代码名](terminology.md)。新增课程既需要结构校验，也需要实际行为与教学验收。
 
 ## 前端与浏览器
 
 ```powershell
 npm.cmd --prefix frontend run build
-Set-Location frontend
-npx.cmd vitest run               # 纯逻辑单元测试，含内容类型、i18n 与选择器基线
-npm.cmd run i18n:check           # 各语言的翻译键、占位符与复数形式一致
-Set-Location ..
+npm.cmd --prefix frontend run test        # vitest 纯逻辑单元测试，含内容类型、i18n 与选择器基线
+npm.cmd --prefix frontend run i18n:check  # 各语言的翻译键、占位符与复数形式一致
 .\.venv\Scripts\python.exe run_web.py
 # 后端保持运行，在另一个终端执行：
 Set-Location frontend
 npx.cmd playwright test
 ```
 
-浏览器测试默认访问 http://127.0.0.1:8765，使用系统 Chrome。可通过 AGENT_LAB_URL 设置测试入口。现有用例在 zh-CN 下运行（`playwright.config.ts` 的 `locale`），按 `e2e/i18n.ts` 的 `t()` 读中文文案；`e2e/locale.spec.ts` 切到英文，用 `tIn("en", …)` 断言英文界面、语言持久化、`<html lang>`，以及有译文的课显示英文、没有译文的课保持中文并标 `lang="zh-CN"`。
+浏览器测试默认访问 http://127.0.0.1:8765，使用系统 Chrome。可通过 AGENT_LAB_URL 设置测试入口。现有用例在 zh-CN 下运行（`playwright.config.ts` 的 `locale`），按 `e2e/i18n.ts` 的 `t()` 读中文文案；`e2e/locale.spec.ts` 切到英文，用 `tIn("en", …)` 断言英文界面、语言持久化、`<html lang>`，以及有译文的课显示英文、没有译文的课保持中文并标 `lang="zh-CN"`；运行部分断言创建运行时带上界面语言、英文运行的回答是英文、切换语言后屏幕上的中文运行标明“这是一次中文运行”，以及运行器还只有中文的课在英文界面里说明这一点。整套浏览器测试不需要任何模型密钥：用例在网络边界把状态改成“已配置”，运行改走离线测试模式。
 
 ## 译文层
 

@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS runs (
     schema_version INTEGER NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    finished_at TEXT
+    finished_at TEXT,
+    locale TEXT NOT NULL DEFAULT 'zh-CN'
 );
 CREATE TABLE IF NOT EXISTS events (
     run_id TEXT NOT NULL REFERENCES runs(run_id),
@@ -37,7 +38,7 @@ BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
 """
 
 RUN_FIELDS = ("run_id", "lesson_id", "exercise_id", "mode", "model", "provider_id", "representation",
-              "provenance", "schema_version", "status", "created_at", "finished_at")
+              "provenance", "schema_version", "status", "created_at", "finished_at", "locale")
 FINAL_STATUSES = ("completed", "error", "cancelled", "interrupted")
 
 
@@ -59,6 +60,10 @@ class RunStore:
         # 清除记录时覆盖已释放的页面，避免脱敏后的历史内容残留在文件空闲页中。
         self._db.execute("PRAGMA secure_delete=ON")
         self._db.executescript(_SCHEMA)
+        # 加入运行语言之前建的库没有 locale 列：补上，旧运行都是中文运行，按默认值记为 zh-CN。
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(runs)")}
+        if "locale" not in columns:
+            self._db.execute("ALTER TABLE runs ADD COLUMN locale TEXT NOT NULL DEFAULT 'zh-CN'")
         # 新进程启动时不可能还有运行在执行；上次异常退出遗留的 running 如实标记为中断。
         with self._lock:
             self._db.execute("UPDATE runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'",
@@ -70,13 +75,14 @@ class RunStore:
 
     def create_run(self, *, run_id: str, lesson_id: str, exercise_id: str, mode: str, model: str,
                    provider_id: str, representation: str | None, provenance: str,
-                   schema_version: int, created_at: str):
+                   schema_version: int, created_at: str, locale: str = "zh-CN"):
         with self._lock:
             self._db.execute(
                 "INSERT INTO runs (run_id, lesson_id, exercise_id, mode, model, provider_id, representation,"
-                " provenance, schema_version, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)",
+                " provenance, schema_version, status, created_at, locale)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)",
                 (run_id, lesson_id, exercise_id, mode, model, provider_id, representation, provenance,
-                 schema_version, created_at))
+                 schema_version, created_at, locale))
 
     def append(self, run_id: str, seq: int, kind: str, event_json: str):
         """追加一条事件；(run_id, seq) 重复时由主键拒绝。自动提交。"""

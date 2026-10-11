@@ -1,7 +1,8 @@
 """实验、导览、预测与理解自测的内容校验：用确定性测试适配器真实运行每个实验组。
 
-每课每个实验的每个 arm 都以 mode=offline 跑一次（模型响应来自课程 fixture，工具执行真实 Python；
-不需要模型的课程或练习直接运行本地程序；offline_only 的练习本来就只在离线模式运行）。
+每课每个实验的每个 arm 在本课的每种运行语言下都以 mode=offline 跑一次（模型响应来自课程 fixture，
+工具执行真实 Python；不需要模型的课程或练习直接运行本地程序；offline_only 的练习本来就只在离线模式运行）。
+观察点与导览在每种运行语言下都要命中：选择器只看事件结构，不能依赖某种语言的文字。
 断言观察点选择器至少在一个 arm 的事件中命中、导览目标存在、舞台聚焦的节点在运行中出现、
 predict 引用的实验存在且规则可从真实事件计算。
 """
@@ -13,7 +14,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from run_support import run_and_read, web
-from server.catalog import CATALOG_INDEX, LESSONS, ROOT
+from server.catalog import CATALOG_INDEX, LESSONS, ROOT, lesson_presets
 from server.content import lesson_content_model
 from server.content_schema import MicroQuiz, Predict, Prose
 from server.envelope import INSTANT_PREFIXES, SPAN_EVENTS
@@ -56,12 +57,13 @@ class LessonExperimentTests(unittest.TestCase):
         cls._store.close()
         cls._directory.cleanup()
 
-    def run_arm(self, spec, arm):
-        key = (spec["id"], arm.exercise, json.dumps(arm.inputs, sort_keys=True))
+    def run_arm(self, spec, arm, locale="zh-CN"):
+        key = (spec["id"], arm.exercise, json.dumps(arm.inputs, sort_keys=True), locale)
         if key not in self.runs:
-            exercise = next(item for item in spec["exercises"] if item["id"] == arm.exercise)
+            exercises, _ = lesson_presets(spec, locale)
+            exercise = next(item for item in exercises if item["id"] == arm.exercise)
             body = {"lesson_id": spec["id"], "mode": "offline", "question": exercise["question"],
-                    "exercise_id": arm.exercise}
+                    "exercise_id": arm.exercise, "locale": locale}
             if arm.inputs is not None:
                 body["inputs"] = arm.inputs
             result = run_and_read(self.client, body)
@@ -76,19 +78,24 @@ class LessonExperimentTests(unittest.TestCase):
             for experiment in model.scenes.lab.experiments:
                 yield spec, model, experiment
 
+    def localized_experiments(self):
+        for spec, model, experiment in self.experiments():
+            for locale in spec["runtime"]["locales"]:
+                yield spec, experiment, locale
+
     def test_every_observe_selector_hits_in_some_arm(self):
-        for spec, _, experiment in self.experiments():
-            arm_events = [self.run_arm(spec, arm) for arm in experiment.arms]
+        for spec, experiment, locale in self.localized_experiments():
+            arm_events = [self.run_arm(spec, arm, locale) for arm in experiment.arms]
             for point in experiment.observe:
-                with self.subTest(lesson=spec["id"], experiment=experiment.id, observe=point.id):
+                with self.subTest(lesson=spec["id"], experiment=experiment.id, observe=point.id, locale=locale):
                     self.assertIsNotNone(point.selector, "每个观察点都要有选择器")
                     hits = [select_events(point.selector, events) for events in arm_events]
                     self.assertTrue(any(hits), "选择器在所有 arm 的确定性运行中都没有命中")
 
     def test_guides_target_real_evidence_and_stage_nodes(self):
-        for spec, _, experiment in self.experiments():
-            with self.subTest(lesson=spec["id"], experiment=experiment.id):
-                roles = set().union(*(stage_roles(self.run_arm(spec, arm)) for arm in experiment.arms))
+        for spec, experiment, locale in self.localized_experiments():
+            with self.subTest(lesson=spec["id"], experiment=experiment.id, locale=locale):
+                roles = set().union(*(stage_roles(self.run_arm(spec, arm, locale)) for arm in experiment.arms))
                 observe_ids = {point.id for point in experiment.observe}
                 self.assertTrue(experiment.guide, "每个实验都要有导览")
                 for step in experiment.guide:
@@ -147,7 +154,8 @@ class LessonExperimentTests(unittest.TestCase):
                 if rule.name:
                     self.assertIn(rule.event, ("tool_call", "tool_result"))
                 for arm in experiment.arms:
-                    self.assertIsInstance(count_events(rule, self.run_arm(spec, arm)), int)
+                    for locale in spec["runtime"]["locales"]:
+                        self.assertIsInstance(count_events(rule, self.run_arm(spec, arm, locale)), int)
 
     def test_micro_quizzes_every_two_or_three_sections(self):
         for lesson_id, (_, model) in self.models.items():

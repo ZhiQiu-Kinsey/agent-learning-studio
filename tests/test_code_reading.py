@@ -11,7 +11,8 @@ from fastapi.testclient import TestClient
 
 import server.app as web
 from server.catalog import LESSONS, LessonValidationError, lesson_code_view, load_lessons
-from server.code_reading import classify, extract_symbols, line_count, split_lines
+from server.code_reading import (classify, extract_symbols, extract_texts, line_count, localize_texts_block,
+                                 source_role, split_lines, texts_layout)
 
 SAMPLE = textwrap.dedent('''\
     """模块说明。"""
@@ -69,6 +70,96 @@ class SymbolTests(unittest.TestCase):
         self.assertEqual(classify(twice, baseline), {"run": "unchanged"})
 
 
+ZH_TEXTS = textwrap.dedent('''    """zh."""
+    from x import Texts
+
+    TEXTS = Texts(
+        system_prompt=(
+            "第一句。"
+            "第二句。"
+        ),
+        title="标题",
+    )
+    ''')
+EN_TEXTS = textwrap.dedent('''    """en."""
+    from x import Texts
+
+    # A comment moves every line down by one.
+    TEXTS = Texts(
+        system_prompt=(
+            "First sentence. "
+            "Second sentence."
+        ),
+        title="Title",
+    )
+    ''')
+
+
+class TextsTests(unittest.TestCase):
+    def test_role_and_text_symbols(self):
+        self.assertEqual(source_role("lessons/lesson_x/locales/zh_CN.py"), "texts")
+        self.assertEqual(source_role("lessons/lesson_x/locales/tools/en.py"), "texts")
+        self.assertEqual(source_role("course/locales/__init__.py"), "texts")
+        self.assertEqual(source_role("course/runner.py"), "platform")
+        symbols = {item["name"]: item for item in extract_texts(ZH_TEXTS)}
+        self.assertEqual(set(symbols), {"t.system_prompt", "t.title"})
+        self.assertEqual((symbols["t.system_prompt"]["start"], symbols["t.system_prompt"]["end"]), (5, 8))
+        self.assertEqual(symbols["t.system_prompt"]["kind"], "text")
+        # 改一个字就是变化。
+        self.assertNotEqual(extract_texts(ZH_TEXTS)[0]["hash"],
+                            extract_texts(ZH_TEXTS.replace("第二句", "第三句"))[0]["hash"])
+        self.assertEqual(texts_layout(ZH_TEXTS)["TEXTS"], (4, 4))
+
+    def test_blocks_on_source_texts_map_to_the_other_language_by_field(self):
+        block = {"id": "b", "path": "lessons/x/locales/zh_CN.py", "start": 4, "end": 10,
+                 "notes": [{"id": "n1", "line": 7, "anchor": "第二句", "text": "第二句的批注"},
+                           {"id": "n2", "line": 9, "anchor": "title", "text": "标题"}],
+                 "folds": []}
+        moved = localize_texts_block(block, ZH_TEXTS, "lessons/x/locales/en.py", EN_TEXTS)
+        self.assertEqual(moved["path"], "lessons/x/locales/en.py")
+        self.assertEqual((moved["start"], moved["end"]), (5, 11))
+        self.assertEqual([note["line"] for note in moved["notes"]], [8, 10])
+        self.assertTrue(all("anchor" not in note for note in moved["notes"]))
+        self.assertIn("Second sentence", EN_TEXTS.splitlines()[moved["notes"][0]["line"] - 1])
+
+
+class TextsBlockValidationTests(unittest.TestCase):
+    """写在运行时文本上的读码块：只写在源语言文件上，覆盖的字段各语言行数相同。"""
+
+    SOURCES = [{"path": "lessons/x/locales/zh_CN.py", "language": "python", "locale": "zh-CN"},
+               {"path": "lessons/x/locales/en.py", "language": "python", "locale": "en"}]
+
+    def check(self, block, en_text=EN_TEXTS):
+        from server.code_reading import _check_texts_block
+
+        files = {"lessons/x/locales/zh_CN.py": ZH_TEXTS, "lessons/x/locales/en.py": en_text}
+        _check_texts_block(block, self.SOURCES, files.__getitem__, "test")
+
+    def block(self, **changes):
+        from types import SimpleNamespace
+
+        values = {"path": "lessons/x/locales/zh_CN.py", "start": 4, "end": 10, "folds": [],
+                  "notes": [SimpleNamespace(id="n1", line=7)]}
+        return SimpleNamespace(**{**values, **changes})
+
+    def test_valid_block(self):
+        self.check(self.block())
+
+    def test_rejected_blocks(self):
+        cases = {
+            "源语言": self.block(path="lessons/x/locales/en.py"),
+            "start 与 end": self.block(start=None),
+            "不在 TEXTS": self.block(start=1),
+        }
+        for message, block in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(LessonValidationError, message):
+                self.check(block)
+        squeezed = EN_TEXTS.replace('"First sentence. "\n        "Second sentence."', '"First sentence. Second sentence."')
+        self.assertNotEqual(squeezed, EN_TEXTS)
+        with self.assertRaisesRegex(LessonValidationError, "行数"):
+            self.check(self.block(), squeezed)
+
+
 class RealLessonTests(unittest.TestCase):
     def view(self, lesson_id):
         return lesson_code_view(next(spec for spec in LESSONS if spec["id"] == lesson_id))
@@ -86,14 +177,30 @@ class RealLessonTests(unittest.TestCase):
         self.assertEqual(roles["course/api_client.py"], "platform")
         self.assertEqual(roles["lessons/lesson_chat_request/runtime.py"], "lesson")
         self.assertEqual(roles["lessons/lesson_chat_request/fixtures.py"], "fixture")
-        self.assertEqual([item["path"] for item in data["files"]], [s["path"] for s in LESSONS[0]["sources"]])
+        # 运行时文本只给出运行语言那一份：中文界面看 zh_CN.py，英文界面看 en.py。
+        self.assertEqual([item["path"] for item in data["files"]],
+                         [s["path"] for s in LESSONS[0]["sources"] if s.get("locale") in (None, "zh-CN")])
+        self.assertEqual(roles["lessons/lesson_chat_request/locales/zh_CN.py"], "texts")
+        english = lesson_code_view(LESSONS[0], "en")
+        self.assertEqual(english["runtime_locale"], "en")
+        self.assertIn("lessons/lesson_chat_request/locales/en.py", [item["path"] for item in english["files"]])
+        self.assertNotIn("lessons/lesson_chat_request/locales/zh_CN.py", [item["path"] for item in english["files"]])
+        # 运行时文本的字段也算本课新增，名字写成代码里读取它的样子。
+        self.assertIn("t.report_title", names)
 
     def test_tool_lessons_share_the_tool_definitions(self):
         # 执行课沿用提议课的 tools.py：工具定义显示为沿用，main.py 的系统提示词与入口才是新内容。
         data = self.view("tool-selection")
         news = data["whats_new"]
         self.assertEqual(news["compare_with"]["id"], "tool-proposals")
-        self.assertTrue({"TOOLS", "add_numbers", "get_current_time"} <= {item["name"] for item in news["unchanged"]})
+        unchanged = {item["name"] for item in news["unchanged"]}
+        self.assertTrue({"tool_definitions", "available_tools", "add_numbers", "get_current_time"} <= unchanged)
+        # 工具描述在共用的 locales/tools/ 里，提议课也登记了它：沿用；系统提示词是本课新写的。
+        self.assertIn("t.add_numbers", unchanged)
+        self.assertIn("t.system_prompt", {item["name"] for item in news["added"]})
+        # 运行时文本按源语言比较，英文界面得出同样的结论。
+        english = lesson_code_view(next(spec for spec in LESSONS if spec["id"] == "tool-selection"), "en")
+        self.assertEqual({item["name"] for item in english["whats_new"]["unchanged"]}, unchanged)
         self.assertFalse({"run_agent", "execute_tool"} & {item["name"] for item in news["added"]})
         roles = {item["path"]: item["role"] for item in data["files"]}
         self.assertEqual(roles["course/runner.py"], "platform")
@@ -103,12 +210,13 @@ class RealLessonTests(unittest.TestCase):
         data = self.view("dependent-calls")
         news = data["whats_new"]
         self.assertEqual(news["compare_with"]["id"], "tool-selection")
-        self.assertEqual({item["name"] for item in news["changed"]}, {"SYSTEM_PROMPT", "main"})
-        self.assertEqual(news["added"], [])
+        # 本课还只有中文运行时：系统提示词仍是 main.py 里的常量，对照课的提示词在运行时文本里。
+        self.assertEqual({item["name"] for item in news["changed"]}, {"setup", "main"})
+        self.assertEqual({item["name"] for item in news["added"]}, {"SYSTEM_PROMPT"})
         unchanged = {item["name"] for item in news["unchanged"]}
-        self.assertTrue({"TOOLS", "add_numbers"} <= unchanged)
+        self.assertTrue({"tool_definitions", "add_numbers", "t.add_numbers"} <= unchanged)
         self.assertNotIn("run_agent", unchanged)
-        prompt = next(item for item in news["changed"] if item["name"] == "SYSTEM_PROMPT")
+        prompt = next(item for item in news["added"] if item["name"] == "SYSTEM_PROMPT")
         source = (Path(web.ROOT) / prompt["path"]).read_text(encoding="utf-8").splitlines()
         self.assertTrue(source[prompt["start"] - 1].startswith("SYSTEM_PROMPT"))
 
@@ -261,7 +369,7 @@ class CodeApiTests(unittest.TestCase):
         # 显示课号不是 ID：插入新课会改变课号，接口只认 slug。
         self.assertEqual(self.client.get("/api/lessons/3/code").json()["code"], "lesson_not_found")
         data = by_slug.json()
-        self.assertEqual(set(data), {"lesson_id", "files", "whats_new", "annotations"})
+        self.assertEqual(set(data), {"lesson_id", "runtime_locale", "files", "whats_new", "annotations"})
         self.assertEqual(data["lesson_id"], "fail-safely")
         self.assertIn("divide_numbers", {item["name"] for item in data["whats_new"]["added"]})
         self.assertNotIn("content", data["files"][0])  # 源码正文仍由课程详情提供

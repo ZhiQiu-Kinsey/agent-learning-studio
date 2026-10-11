@@ -110,6 +110,11 @@ export type RunRequest = {
   question: string;
   exercise_id: string;
   inputs: Record<string, unknown>;
+  /**
+   * The UI language. The server runs the lesson in it when the lesson supports
+   * it, otherwise in the source language, and records the result in run_start.
+   */
+  locale: string;
 };
 
 /** 创建运行；服务端在后台执行，返回 run_id 后再订阅事件。 */

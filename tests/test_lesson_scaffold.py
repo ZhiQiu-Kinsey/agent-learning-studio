@@ -35,51 +35,69 @@ class LessonScaffoldTests(unittest.TestCase):
         self.assertFalse((self.root / "lessons").exists())
         self.assertEqual(self.catalog_path.read_bytes(), before)
 
-    def test_native_scaffold_runs_real_tool_with_its_own_fixture(self):
+    def generated(self, kind):
+        """把生成的课程写进临时目录，并让 lessons 包能导入它（与 tests/test_lesson_registry.py 同样的做法）。"""
+        import importlib
+        import sys
+        from unittest.mock import patch
+
+        import lessons
+
+        target, files = build_scaffold(self.root, "task-card", "task_contract", kind)
+        write_scaffold(target, files)
+        patcher = patch.object(lessons, "__path__", [str(self.root / "lessons"), *lessons.__path__])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(lambda: [sys.modules.pop(name) for name in list(sys.modules)
+                                 if name.startswith("lessons.lesson_task_contract")])
+        importlib.invalidate_caches()
+        return target, files, lambda name: importlib.import_module(f"lessons.lesson_task_contract.{name}")
+
+    def test_native_scaffold_runs_real_tool_with_its_own_fixture_in_both_locales(self):
         from course.runner import execute_tool, run_agent
 
-        target, files = build_scaffold(self.root, "task-card", "task_contract")
-        write_scaffold(target, files)
+        target, files, load = self.generated("native")
         manifest = json.loads((target / "lesson.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["runtime"]["kind"], "native")
+        self.assertEqual(manifest["runtime"]["locales"], ["zh-CN", "en"])
         self.assertEqual(manifest["testing"]["completion_factory"], "fixtures:create_completion")
         self.assertEqual(json.loads(self.catalog_path.read_text(encoding="utf-8")), self.catalog)
-        tools = {}
-        fixture = {}
-        exec(compile(files["tools.py"], "tools.py", "exec"), tools)
-        exec(compile(files["fixtures.py"], "fixtures.py", "exec"), fixture)
-        results = []
-        completion = fixture["create_completion"]("starter")
+        main, fixtures = load("main"), load("fixtures")
+        for locale, repeated in (("zh-CN", "课程脚手架"), ("en", "lesson scaffold")):
+            with self.subTest(locale=locale):
+                results = []
+                completion = fixtures.create_completion("starter", locale=locale)
+                agent = main.setup(locale)
 
-        def execute(tool_call, available_tools):
-            results.append(execute_tool(tool_call, available_tools))
-            return results[-1]
+                def execute(tool_call, available_tools):
+                    results.append(execute_tool(tool_call, available_tools, locale))
+                    return results[-1]
 
-        answer = run_agent("请复述：课程脚手架。", "复述", tools["TOOLS"], tools["AVAILABLE_TOOLS"], 3,
-                           complete=lambda body, number: completion(body, ""), execute=execute)
-        self.assertEqual(results[0], {"ok": True, "result": {"text": "课程脚手架"}})
-        self.assertIn("课程脚手架", answer)
+                answer = run_agent(manifest["exercises"][0]["question"][locale], agent.system_prompt, agent.tools,
+                                   agent.available_tools, 3, complete=lambda body, number: completion(body, ""),
+                                   execute=execute, locale=locale)
+                self.assertEqual(results[0], {"ok": True, "result": {"text": repeated}})
+                self.assertIn(repeated, answer)
         with self.assertRaises(ValueError):
-            fixture["create_completion"]("does-not-exist")
+            fixtures.create_completion("does-not-exist")
 
     def test_custom_scaffold_is_explicitly_local_and_validates_inputs(self):
         from types import SimpleNamespace
         from pydantic import ValidationError
 
-        _, files = build_scaffold(self.root, "task-card", "task_contract", "custom")
+        _, files, load = self.generated("custom")
         manifest = json.loads(files["lesson.json"])
         self.assertFalse(manifest["runtime"]["requires_model"])
         self.assertEqual(manifest["runtime"]["entrypoint"], "runtime:run")
-        namespace = {}
-        exec(compile(files["runtime.py"], "runtime.py", "exec"), namespace)
-        inputs = namespace["INPUT_MODEL"](label="自定义输入").model_dump()
+        runtime = load("runtime")
+        inputs = runtime.INPUT_MODEL(label="自定义输入").model_dump()
         events = []
-        context = SimpleNamespace(inputs=inputs, check_cancelled=lambda: None,
+        context = SimpleNamespace(inputs=inputs, check_cancelled=lambda: None, locale="zh-CN",
                                   emit=lambda kind, data: events.append((kind, data)))
-        self.assertEqual(namespace["run"](context), "本地脚手架已执行：自定义输入")
+        self.assertEqual(runtime.run(context), "本地脚手架已执行：自定义输入")
         self.assertEqual(events[0][0], "lesson.step")
         with self.assertRaises(ValidationError):
-            namespace["INPUT_MODEL"](label="")
+            runtime.INPUT_MODEL(label="")
 
     def test_existing_directory_and_duplicate_manifest_preserve_files(self):
         target, files = build_scaffold(self.root, "task-card", "task_contract")

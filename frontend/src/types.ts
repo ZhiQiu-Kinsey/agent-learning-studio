@@ -39,15 +39,27 @@ export type Lesson = {
     supports_inputs: boolean;
   };
   input_defaults?: Record<string, unknown>;
+  /**
+   * The language a run of this lesson uses for the UI language that fetched it:
+   * the UI language when the lesson supports it, otherwise the source language.
+   * Questions, presets, prompts and the catalog files in `sources` are in it.
+   */
+  runtime_locale?: string;
+  /** Every runtime language the lesson supports (the source language first). */
+  runtime_locales?: string[];
   /** JSON Schema of a custom runtime's INPUT_MODEL; null for standard lessons. */
   input_schema?: InputSchema | null;
 };
 export type Detail = Lesson & {
-  /** role：lesson 课程代码、platform 平台代码、fixture 只服务自动化测试的夹具。 */
+  /**
+   * role：lesson 课程代码、platform 平台代码、fixture 只服务自动化测试的夹具、
+   * texts 运行时文本（locales/ 下，只给出 runtime_locale 那一份，locale 写明语言）。
+   */
   sources: {
     path: string;
     language: string;
-    role?: "lesson" | "platform" | "fixture";
+    role?: "lesson" | "platform" | "fixture" | "texts";
+    locale?: string;
     content: string;
   }[];
   /** Names defined in the lesson's Python sources (minus glossary names). */
@@ -116,6 +128,8 @@ export type Trace = Omit<TraceV1, "schema_version"> & {
 } & Partial<Omit<TraceV2, keyof TraceV1>>;
 export type RunRecord = {
   run_id: string;
+  /** The run's language (`run_start.data.locale`); runs recorded before it existed are zh-CN. */
+  locale: string;
   lesson_id: string;
   exercise_id: string;
   mode: string;

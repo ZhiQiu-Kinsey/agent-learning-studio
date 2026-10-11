@@ -3,6 +3,7 @@
 密钥只存在于后端内存；运行存储（.runtime/runs.sqlite3）只保存脱敏后的事件。
 """
 import asyncio
+import functools
 import json
 import re
 import threading
@@ -24,8 +25,8 @@ from course.api_client import send_bailian
 from course.execution import RunContext, execute_lesson, validate_inputs
 from course.providers import SDKCompletion
 from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, curriculum_outline,
-                            lesson_code_view,
-                            lesson_detail, lesson_runtime, lesson_spec, public_lesson)
+                            lesson_code_view, lesson_detail, lesson_presets, lesson_runtime, lesson_spec,
+                            public_lesson, run_locale)
 from server.content import load_onboarding
 from server.content_overlay import LOCALE
 from server.curriculum import roadmap
@@ -33,7 +34,7 @@ from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
 from server.lesson_refs import resolve_refs
 from server.offline import completion_for
-from server.providers import ProviderRegistry
+from server.providers import ProviderRegistry, provider_label
 from server.recordings import RecordingInvalid, RecordingStale, list_recordings, read_recording
 from server.run_store import RunStore, utc_now
 
@@ -50,6 +51,11 @@ _store_lock = threading.Lock()
 RUN_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 # 确定性测试适配器不是 SDK；如实写出它的名字，版本留空。
 TEST_ADAPTER = {"name": "deterministic-test-adapter", "version": None}
+# 没有模型服务商的运行写进 run_start 的名称；按运行语言写，英文运行的事件里不出现中文。
+LOCAL_PROVIDER_LABELS = {
+    "zh-CN": {"testing": "确定性测试", "local": "本地 Python"},
+    "en": {"testing": "Deterministic test", "local": "Local Python"},
+}
 
 
 def get_run_store() -> RunStore:
@@ -267,6 +273,8 @@ class RunInput(BaseModel):
     question: str = Field(max_length=8000)
     exercise_id: str = Field(max_length=32)
     inputs: dict[str, Any] | None = None
+    # 界面语言；运行语言按本课支持的语言解析（server/catalog.py run_locale），没写时是源语言。
+    locale: str | None = Field(None, max_length=35, pattern=LOCALE.pattern)
 
 
 @dataclass
@@ -276,6 +284,7 @@ class RunPlan:
     spec: dict
     module: Any
     inputs: dict
+    locale: str
     key: str = field(repr=False)
     model: str
     provider_id: str
@@ -290,7 +299,10 @@ class RunPlan:
 
 def prepare_run(body: RunInput) -> RunPlan:
     spec = require_lesson(body.lesson_id)  # 别名请求也以 slug 记录，事件与回放只出现一种课程 ID。
-    exercise = next((e for e in spec["exercises"] if e["id"] == body.exercise_id), None)
+    # 运行语言：界面语言在本课 runtime.locales 里就用它，否则回落（同语言的地区变体，再到源语言）。
+    locale = run_locale(spec, body.locale)
+    exercises, input_defaults = lesson_presets(spec, locale)
+    exercise = next((e for e in exercises if e["id"] == body.exercise_id), None)
     if exercise is None:
         raise ApiError(400, "exercise_not_found", "练习不存在。")
     if not body.question.strip() and spec["runtime"]["kind"] == "native":
@@ -299,7 +311,7 @@ def prepare_run(body: RunInput) -> RunPlan:
         raise ApiError(400, "offline_requires_preset", "离线模式只运行预设练习；自由输入请切换真实模型模式。")
     if body.mode == "live" and exercise.get("offline_only"):
         raise ApiError(400, "fault_injection_offline_only", "该练习是离线故障注入，请切换离线模式。")
-    defaults = {**spec.get("input_defaults", {}), **exercise.get("inputs", {})}
+    defaults = {**input_defaults, **exercise.get("inputs", {})}
     # Explicit input (including {}) is authoritative; never add hidden presets
     # after a student has edited the JSON. Omitted inputs use declared defaults.
     values = defaults if body.inputs is None else body.inputs
@@ -330,15 +342,16 @@ def prepare_run(body: RunInput) -> RunPlan:
         sdk = dict(TEST_ADAPTER) if requires_model else None
     completion, completion_error = None, None
     try:
-        completion = (completion_for(spec, body.exercise_id, inputs) if body.mode == "offline" and requires_model
-                      else send_bailian if profile and profile.id == "bailian"
-                      else SDKCompletion(profile) if profile else None)
+        completion = (completion_for(spec, body.exercise_id, inputs, locale) if body.mode == "offline" and requires_model
+                      else functools.partial(send_bailian, locale=locale) if profile and profile.id == "bailian"
+                      else SDKCompletion(profile, locale) if profile else None)
     except Exception as error:  # 与原行为一致：作为运行中的 error 事件报告。
         completion_error = error
+    provider_id = profile.id if profile else "testing" if requires_model else "local"
     return RunPlan(
-        body=body, spec=spec, module=module, inputs=inputs, key=key, model=model,
-        provider_id=profile.id if profile else "testing" if requires_model else "local",
-        provider_label=profile.label if profile else "确定性测试" if requires_model else "本地 Python",
+        body=body, spec=spec, module=module, inputs=inputs, locale=locale, key=key, model=model,
+        provider_id=provider_id,
+        provider_label=provider_label(provider_id, locale) if profile else LOCAL_PROVIDER_LABELS[locale][provider_id],
         representation=representation,
         envelope_representation=representation if representation in ("http_body", "sdk_standardized") else None,
         sdk=sdk, completion=completion, completion_error=completion_error,
@@ -396,7 +409,7 @@ def start_run(plan: RunPlan) -> str:
     store.create_run(run_id=run_id, lesson_id=spec["id"], exercise_id=body.exercise_id, mode=body.mode,
                      model=scrub(plan.model, plan.secrets), provider_id=plan.provider_id,
                      representation=plan.envelope_representation, provenance="real_run",
-                     schema_version=SCHEMA_VERSION, created_at=utc_now())
+                     schema_version=SCHEMA_VERSION, created_at=utc_now(), locale=plan.locale)
     active = ActiveRun(run_id, store, builder, plan.secrets)
     with _active_lock:
         active_runs[run_id] = active
@@ -405,11 +418,15 @@ def start_run(plan: RunPlan) -> str:
     def work():
         final_status = "completed"
         try:
-            active.emit("run_start", {"lesson_id": spec["id"], "mode": body.mode, "model": plan.model,
-                                      "question": body.question, "inputs": plan.inputs,
-                                      "runtime_kind": spec["runtime"]["kind"],
-                                      "provider_id": plan.provider_id, "provider_label": plan.provider_label,
-                                      "trace_representation": plan.representation})
+            # locale 是这次运行的语言，回放按它标注；界面请求的语言不同（本课没有该语言）时一并记下。
+            start = {"lesson_id": spec["id"], "mode": body.mode, "model": plan.model,
+                     "question": body.question, "inputs": plan.inputs,
+                     "runtime_kind": spec["runtime"]["kind"],
+                     "provider_id": plan.provider_id, "provider_label": plan.provider_label,
+                     "trace_representation": plan.representation, "locale": plan.locale}
+            if body.locale and body.locale != plan.locale:
+                start["requested_locale"] = body.locale
+            active.emit("run_start", start)
             if plan.completion_error is not None:
                 raise plan.completion_error
             context = RunContext(
@@ -417,6 +434,7 @@ def start_run(plan: RunPlan) -> str:
                 mode=body.mode, model=plan.model, representation=plan.representation, inputs=plan.inputs,
                 api_key=plan.key, completion=plan.completion, emit_event=active.emit,
                 cancelled=active.cancelled.is_set, max_model_calls=spec["runtime"].get("max_rounds", 3),
+                locale=plan.locale,
             )
             execute_lesson(spec, plan.module, context)
         except RunCancelled:

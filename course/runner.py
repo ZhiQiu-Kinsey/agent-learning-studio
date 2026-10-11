@@ -1,119 +1,136 @@
-"""最小 Agent 循环与工具分发：工具调用课读的就是这里的代码。
+"""The smallest agent loop and tool dispatch: the tool-call lessons read this code.
 
-循环只做四件事：组装消息历史、发请求、判断是否结束、执行调用提议并把工具结果写回历史。
-记录事件、计时、停止检查都放在调用方传入的 complete / execute 两个函数里：
-网页运行由 course/execution.py 的 RunContext 提供，命令行由下面的 run_cli 提供。
+The loop does four things: build the message history, send a request, decide
+whether the run is over, and execute call proposals, writing each tool result back.
+Recording events, timing and stop checks live in the complete / execute functions
+the caller passes in: web runs get them from RunContext in course/execution.py,
+command-line runs from run_cli below.
 """
 
 import getpass
 import json
 import os
 import sys
+from dataclasses import dataclass
 
 from course.api_client import send_bailian
+from course.i18n import SOURCE_LOCALE
+from course.locales import texts_for
 
 
-def execute_tool(tool_call, available_tools):
-    """执行一次调用提议；出错时返回结构化错误交还给模型，而不是让程序崩溃。"""
+@dataclass(frozen=True)
+class AgentSetup:
+    """What a native lesson sends in one run: the system prompt, tool definitions and the allowlist."""
+    system_prompt: str
+    tools: list
+    available_tools: dict
+
+
+def execute_tool(tool_call, available_tools, locale=SOURCE_LOCALE):
+    """Execute one call proposal; on failure return a structured error to the model instead of crashing."""
     name = tool_call["function"]["name"]
+    texts = texts_for(locale)
     try:
-        # arguments 是模型生成的 JSON 字符串，先解析并确认是参数对象；缺省或空串按没有参数处理。
+        # arguments is a JSON string written by the model: parse it and make sure it is an object.
+        # A missing or empty string means no arguments.
         arguments = json.loads(tool_call["function"].get("arguments") or "{}")
         if not isinstance(arguments, dict):
-            raise ValueError("工具参数必须是 JSON 对象。")
-        # 白名单：只在 available_tools 里按名字查函数，模型编出来的名字不会被执行。
+            raise ValueError(texts.tool_arguments_not_object)
+        # Allowlist: look the function up by name in available_tools only; an invented name never runs.
         function = available_tools.get(name)
         if function is None:
-            raise ValueError("不认识这个工具：{}".format(name))
+            raise ValueError(texts.unknown_tool.format(name=name))
         return {"ok": True, "result": function(**arguments)}
     except (json.JSONDecodeError, TypeError, ValueError) as error:
-        # 参数缺失或多余会在 function(**arguments) 处抛 TypeError，同样整理成结果。
+        # A missing or extra argument raises TypeError at function(**arguments); it becomes a result too.
         return {"ok": False, "error_type": type(error).__name__, "error": str(error)}
 
 
-def run_agent(question, system_prompt, tools, available_tools, max_tool_rounds, *, complete, execute=execute_tool):
-    """运行工具调用循环，直到模型给出回答，或用完轮数上限。
+def run_agent(question, system_prompt, tools, available_tools, max_tool_rounds, *, complete, execute=execute_tool,
+              locale=SOURCE_LOCALE):
+    """Run the tool-call loop until the model answers or the round limit is used up.
 
-    complete(body, round_number)：把请求体发给模型，返回响应。
-    execute(tool_call, available_tools)：执行一次调用提议，返回工具结果。
+    complete(body, round_number): send the request body to the model, return the response.
+    execute(tool_call, available_tools): execute one call proposal, return the tool result.
     """
-    # 1. 消息历史从系统提示词和用户问题开始。模型不保存上一轮，每轮只看得到这份列表。
+    # 1. The message history starts with the system prompt and the user question.
+    #    The model keeps nothing between rounds; each round it sees only this list.
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": question},
     ]
     for round_number in range(1, max_tool_rounds + 1):
-        # 2. 每轮都把完整历史和工具定义一起发给模型。
+        # 2. Every round sends the whole history together with the tool definitions.
         response = complete({"messages": messages, "tools": tools, "tool_choice": "auto"}, round_number)
         message = response["choices"][0]["message"]
         tool_calls = message.get("tool_calls") or []
-        # 3. 没有调用提议，content 就是最终回答。
+        # 3. No call proposals: content is the final answer.
         if not tool_calls:
             return message.get("content") or ""
-        # 4. 先把带调用提议的 assistant 消息放回历史，再逐个执行；
-        #    每条工具结果都带上同一个调用 id，下一轮模型才能把结果和调用对上。
+        # 4. Put the assistant message with the proposals back into the history, then execute
+        #    each one. Every tool result carries the same call id, so next round the model
+        #    can match results to calls.
         messages.append(message)
         for tool_call in tool_calls:
             result = execute(tool_call, available_tools)
             messages.append({"role": "tool", "tool_call_id": tool_call["id"],
                              "content": json.dumps(result, ensure_ascii=False)})
-    # 轮数用完仍没有回答：报错停止，不返回半截结果。
-    raise RuntimeError("工具调用超过 {} 轮，为避免无限循环已停止。".format(max_tool_rounds))
+    # Out of rounds without an answer: stop with an error instead of returning half a result.
+    raise RuntimeError(
+        texts_for(locale).rounds_exceeded.format(rounds=max_tool_rounds))
 
 
 class RunCancelled(RuntimeError):
-    """停止后续步骤；已经发出的 HTTP 请求仍受网络超时约束。"""
+    """Stop the remaining steps; an HTTP request already sent is still bound by the network timeout."""
 
 
-def run_cli(title, examples, system_prompt, tools, available_tools, max_tool_rounds):
-    """命令行入口：读取问题和密钥，打印每轮请求体和工具结果，再运行同一个循环。"""
+def run_cli(setup, *, title, examples, max_tool_rounds, locale=SOURCE_LOCALE):
+    """Command-line entry: read the question and key, print each request body and tool result, run the same loop."""
     from local_config import MODEL
 
+    texts = texts_for(locale)
     print(title)
-    print("当前模型：{}".format(MODEL))
-    print("可尝试：")
+    print(texts.cli_model.format(model=MODEL))
+    print(texts.cli_examples)
     for example in examples:
         print("  - {}".format(example))
 
-    question = input("\n你：").strip()
+    question = input(texts.cli_prompt).strip()
     if not question:
-        print("没有收到问题，已退出。")
+        print(texts.cli_no_question)
         return
 
-    print("\n正在检查进程环境变量 DASHSCOPE_API_KEY……", flush=True)
+    print(texts.cli_checking_key, flush=True)
     api_key = os.environ.get("DASHSCOPE_API_KEY")
     if not api_key:
-        print(
-            "当前 Python 进程没有读到 DASHSCOPE_API_KEY。"
-            "你可以在接下来的隐藏输入中提供 API Key。",
-            flush=True,
-        )
-        api_key = getpass.getpass("请输入与本地百炼配置对应地域的 API Key（输入时不会显示）：").strip()
+        print(texts.cli_key_not_in_env, flush=True)
+        api_key = getpass.getpass(texts.cli_key_prompt).strip()
     else:
-        print("已从进程环境变量读取到 API Key（不会显示其内容）。", flush=True)
+        print(texts.cli_key_from_env, flush=True)
 
     if not api_key:
-        print("没有提供 API Key，已退出。")
+        print(texts.cli_no_key)
         return
 
-    print("Key 已就绪；请求日志不会包含认证密钥。", flush=True)
+    print(texts.cli_key_ready, flush=True)
 
     def complete(body, round_number):
         request = {"model": MODEL, **body}
-        print("\n第 {} 轮：完整 HTTP 请求体（不包含认证请求头）".format(round_number), flush=True)
+        print(texts.cli_request_body.format(round=round_number), flush=True)
         print(json.dumps(request, ensure_ascii=False, indent=2), flush=True)
-        print("正在等待响应，网络超时为 60 秒……", flush=True)
-        return send_bailian(request, api_key)
+        print(texts.cli_waiting, flush=True)
+        return send_bailian(request, api_key, locale=locale)
 
     def execute(tool_call, tools_by_name):
-        print("\n模型请求工具：{}({})".format(tool_call["function"]["name"], tool_call["function"].get("arguments")))
-        result = execute_tool(tool_call, tools_by_name)
-        print("Python 执行结果：{}".format(json.dumps(result, ensure_ascii=False)))
+        print(texts.cli_tool_request.format(name=tool_call["function"]["name"],
+                                            arguments=tool_call["function"].get("arguments")))
+        result = execute_tool(tool_call, tools_by_name, locale)
+        print(texts.cli_tool_result.format(result=json.dumps(result, ensure_ascii=False)))
         return result
 
     try:
-        answer = run_agent(question, system_prompt, tools, available_tools, max_tool_rounds,
-                           complete=complete, execute=execute)
-        print("\nAgent 回答：\n{}".format(answer))
+        answer = run_agent(question, setup.system_prompt, setup.tools, setup.available_tools, max_tool_rounds,
+                           complete=complete, execute=execute, locale=locale)
+        print(texts.cli_answer.format(answer=answer))
     except (KeyError, IndexError, TypeError, ValueError, RuntimeError) as error:
-        print("\n运行失败：{}".format(error), file=sys.stderr)
+        print(texts.cli_failed.format(error=error), file=sys.stderr)

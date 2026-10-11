@@ -1,7 +1,10 @@
-"""复用 LiteLLM 厂商适配；课程保留自己的 Agent 循环和工具执行。"""
+"""Reuse LiteLLM's provider adapters; lessons keep their own agent loop and tool execution."""
 from dataclasses import dataclass
 import os
 import threading
+
+from course.i18n import SOURCE_LOCALE
+from course.locales import texts_for
 
 _sdk = None
 _sdk_lock = threading.Lock()
@@ -24,7 +27,7 @@ class ModelProfile:
 
 
 def load_sdk():
-    """导入前使用随包模型表、禁读.env；关闭遥测和外部日志集成。"""
+    """Before importing, use the bundled model cost map and skip .env; turn off telemetry and logging callbacks."""
     global _sdk
     with _sdk_lock:
         if _sdk is None:
@@ -41,31 +44,32 @@ def load_sdk():
 
 
 def sdk_completion(**kwargs):
-    """按需加载 SDK，离线课和默认原生 HTTP 路径不需要导入 SDK。"""
+    """Load the SDK on demand; offline lessons and the default raw HTTP path never import it."""
     return load_sdk().completion(**kwargs)
 
 
 class SDKCompletion:
-    """只做模型调用和标准化；不接管工具或增加隐式 Agent 循环。"""
-    def __init__(self, profile):
+    """Only calls the model and standardizes the response; it never runs tools or adds a hidden agent loop."""
+    def __init__(self, profile, locale=SOURCE_LOCALE):
         self.profile = profile
+        self.locale = locale
 
     def __call__(self, body, api_key):
         profile = self.profile
         if not profile.config_ready or not body.get("model"):
-            raise ValueError("请先配置所选服务商的模型与服务地址。")
+            raise ValueError(texts_for(self.locale).provider_not_configured)
         if profile.requires_key and not api_key:
-            raise ValueError("请先配置所选服务商的 API Key。")
+            raise ValueError(texts_for(self.locale).provider_key_missing)
         prefixes = {
             "openai": "openai", "anthropic": "anthropic", "gemini": "gemini",
             "deepseek": "deepseek", "openrouter": "openrouter",
             "ollama": "ollama_chat", "custom": "openai",
         }
-        # model 是用户填写的厂商原始 ID；prefix 只用于 SDK 内部选择适配器。
+        # model is the provider's own id as the user typed it; the prefix only picks the SDK adapter.
         kwargs = {
             **body,
             "model": prefixes[profile.id] + "/" + body["model"],
-            # 显式传入所选 profile 的密钥，不能借用其他服务的全局环境变量。
+            # Pass the selected profile's key explicitly; never borrow another provider's environment variable.
             "api_key": api_key if profile.requires_key else (api_key or "ollama-local"),
             "timeout": 60,
             "num_retries": 0,

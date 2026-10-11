@@ -230,6 +230,49 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(detail["exercises"][0]["inputs"], {"value": "preset", "count": 2})
         self.assertEqual(spec["exercises"][0]["inputs"], {"value": "preset"})
 
+    def test_runtime_locales_and_localized_presets(self):
+        directory, manifest = self.course(custom=True)
+        module = directory.name
+        locales = directory / "locales"
+        locales.mkdir()
+        for name in ("__init__.py", "zh_CN.py", "en.py"):
+            (locales / name).write_text("", encoding="utf-8")
+        texts = [{"path": f"lessons/{module}/locales/zh_CN.py", "language": "python", "locale": "zh-CN"},
+                 {"path": f"lessons/{module}/locales/en.py", "language": "python", "locale": "en"}]
+        localized = {**manifest, "runtime": {**manifest["runtime"], "locales": ["en", "zh-CN"]},
+                     "sources": manifest["sources"] + texts,
+                     "exercises": [{**manifest["exercises"][0], "question": {"zh-CN": "执行实验", "en": "Run it"},
+                                    "inputs": {"value": {"zh-CN": "预设", "en": "preset"}, "count": 3}}],
+                     "input_defaults": {"label": {"zh-CN": "标签", "en": "label"}}}
+        self.write_json(directory / "lesson.json", localized)
+        spec = self.load()[0]
+        # 平台顺序：源语言在前。spec 的练习与默认输入是源语言那份，每种语言另存一份。
+        self.assertEqual(spec["runtime"]["locales"], ["zh-CN", "en"])
+        self.assertEqual(spec["exercises"][0]["question"], "执行实验")
+        self.assertEqual(spec["presets"]["en"]["exercises"][0]["inputs"], {"value": "preset", "count": 3})
+        self.assertEqual(spec["presets"]["en"]["input_defaults"], {"label": "label"})
+        bad = [
+            # 缺源语言、未知语言、语言重复
+            {"runtime": {**localized["runtime"], "locales": ["en"]}},
+            {"runtime": {**localized["runtime"], "locales": ["zh-CN", "fr"]}},
+            {"runtime": {**localized["runtime"], "locales": ["zh-CN", "zh-CN"]}},
+            # 按语言填写时少一种语言；多语言课里含中文的预设没有分语言
+            {"exercises": [{**localized["exercises"][0], "question": {"zh-CN": "执行实验"}}]},
+            {"exercises": [{**localized["exercises"][0], "question": "执行实验"}]},
+            {"input_defaults": {"label": "中文标签"}},
+            {"input_defaults": {"label": {"zh-CN": {"nested": 1}, "en": "x"}}},
+            # 语言文件不写 locale、写错 locale、只登记一种语言；普通文件不能写 locale
+            {"sources": manifest["sources"] + [texts[0], {**texts[1], "locale": None}]},
+            {"sources": manifest["sources"] + [texts[0], {**texts[1], "locale": "zh-CN"}]},
+            {"sources": manifest["sources"] + texts[:1]},
+            {"sources": [{**manifest["sources"][0], "locale": "en"}] + texts},
+        ]
+        for override in bad:
+            with self.subTest(override=override):
+                self.write_json(directory / "lesson.json", {**localized, **override})
+                with self.assertRaises(LessonValidationError):
+                    self.load()
+
     def test_identical_exercise_ids_resolve_their_own_course_factory(self):
         self.course("one")
         self.course("two")

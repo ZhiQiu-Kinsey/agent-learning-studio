@@ -12,6 +12,7 @@ function memoryStorage(initial: Record<string, string> = {}) {
 
 const detail = {
   id: "dependent-calls",
+  runtime_locale: "zh-CN",
   system_prompt: "先查时间，再相加。",
   tools: [{ type: "function", function: { name: "add_numbers" } }],
   sources: [
@@ -65,6 +66,8 @@ describe("run cache key", () => {
     expect(key({}, undefined, { limit: 3 })).not.toBe(base);
     expect(key({ system_prompt: "别的提示词" })).not.toBe(base);
     expect(key({ tools: [] })).not.toBe(base);
+    // The same question in another run language is another run.
+    expect(key({ runtime_locale: "en" })).not.toBe(base);
     expect(
       key({
         sources: detail.sources.map((source) =>

@@ -16,10 +16,12 @@ import tomllib
 from datetime import datetime
 from pathlib import Path
 
+from course.i18n import RUNTIME_LOCALES
 from server.envelope import SPAN_EVENTS, EnvelopeBuilder
 from server.providers import PROVIDERS
 
-RECORDING_SCHEMA_VERSION = 1
+# 2：元数据加入运行语言 locale（与 run_start 事件一致）。
+RECORDING_SCHEMA_VERSION = 2
 RECORDINGS_DIR = "recordings"
 NAME_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 NAME_MAX_LENGTH = 64
@@ -27,7 +29,7 @@ RUN_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 METADATA_FIELDS = ("schema_version", "lesson", "exercise_id", "run_id", "status", "model", "provider_id",
                    "provider_label", "representation", "sdk", "recorded_at", "platform_version",
-                   "source_hash", "integrity_hash", "event_count")
+                   "source_hash", "integrity_hash", "event_count", "locale")
 # 运行存储中的状态；“失败”的运行在存储里记为 error。
 RECORDABLE_STATUSES = ("completed", "error")
 RECORDED_REPRESENTATIONS = ("http_body", "sdk_standardized")
@@ -202,6 +204,8 @@ def _check_metadata_shape(metadata):
         _fail("只接受 completed 或 error", "metadata.status")
     if type(metadata["event_count"]) is not int or metadata["event_count"] < 2:
         _fail("必须是不小于 2 的整数", "metadata.event_count")
+    if metadata["locale"] not in RUNTIME_LOCALES:
+        _fail("必须是平台支持的运行语言：" + "、".join(RUNTIME_LOCALES), "metadata.locale")
     try:
         datetime.fromisoformat(metadata["recorded_at"])
     except ValueError:
@@ -271,7 +275,7 @@ def check_events(events, metadata):
     start = events[0]["data"]
     expected_start = {"mode": "live", "lesson_id": metadata["lesson"], "model": metadata["model"],
                       "provider_id": metadata["provider_id"], "provider_label": metadata["provider_label"],
-                      "trace_representation": metadata["representation"]}
+                      "trace_representation": metadata["representation"], "locale": metadata["locale"]}
     for key, value in expected_start.items():
         if start.get(key) != value:
             _fail("与录制元数据不一致", f"events[0].data.{key}")
@@ -307,6 +311,8 @@ def validate_document(document, spec: dict, keys=(), private_paths=None) -> dict
         raise RecordingStale("源码已变化，请重新录制", "metadata.source_hash")
     if not any(exercise["id"] == metadata["exercise_id"] for exercise in spec["exercises"]):
         _fail("练习不存在于当前课程", "metadata.exercise_id")
+    if metadata["locale"] not in spec["runtime"]["locales"]:
+        _fail("本课不支持这种运行语言", "metadata.locale")
     return metadata
 
 
@@ -464,6 +470,7 @@ def build_recording(run: dict, events: list[dict], spec: dict, root: Path) -> di
         "source_hash": source_hash(spec),
         "integrity_hash": integrity_hash(recorded),
         "event_count": len(recorded),
+        "locale": run.get("locale") or "zh-CN",
     }
     return {"metadata": metadata, "events": recorded}
 

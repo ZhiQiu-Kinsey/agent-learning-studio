@@ -5,7 +5,8 @@ lessons/*/lesson.en.json），``{"schema_version": 1, "locale": "en", "texts": {
 这三类文件不是 Pydantic 模型，可译路径在这里逐类列出；路径一律以 id 为键（课程 slug、大类/模块/
 选修/参考资料 id、术语 id、练习 id），只有没有 id 的字符串数组和实验用下标。
 id、slug、状态、先修、课时、难度、URL、提交号、练习问题与预设输入都是事实，不在可译路径里：
-练习问题和预设输入会原样发给模型，属于运行事实，界面切到英文时也保持源语言。
+练习问题和预设输入会原样发给模型，属于运行事实，按运行语言写在 lesson.json 里（{"zh-CN": …, "en": …}），
+不经过译文层。
 """
 from __future__ import annotations
 
@@ -81,7 +82,7 @@ def glossary_slots(terms: list[dict[str, Any]]) -> dict[str, Slot]:
 def manifest_slots(manifest: dict[str, Any]) -> dict[str, Slot]:
     """lesson.json 中界面显示的文本：subtitle、exercises.<id>.title、ui.question_label、ui.question_help。
 
-    课程标题、简介与学习目标来自 catalog.json；练习的 question 与 inputs 原样发给模型，不可译。
+    课程标题、简介与学习目标来自 catalog.json；练习的 question 与 inputs 原样发给模型，按运行语言写在清单里，不可译。
     """
     out: dict[str, Slot] = {}
     _texts(out, "", manifest, ("subtitle",))

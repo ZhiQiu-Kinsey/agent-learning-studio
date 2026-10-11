@@ -48,7 +48,7 @@ class RunCliTests(unittest.TestCase):
         ])
         sent = []
 
-        def fake_send(request, api_key, timeout_seconds=60):
+        def fake_send(request, api_key, timeout_seconds=60, *, locale="zh-CN"):
             sent.append((json.loads(json.dumps(request)), api_key))
             return next(responses)
 
@@ -59,7 +59,7 @@ class RunCliTests(unittest.TestCase):
                 patch("builtins.input", return_value="19 加 23"), \
                 patch.dict("os.environ", {"DASHSCOPE_API_KEY": "sk-secret-value"}), \
                 redirect_stdout(out), redirect_stderr(err):
-            runner.run_cli("标题", [], "系统提示", [], TOOLS, 3)
+            runner.run_cli(runner.AgentSetup("系统提示", [], TOOLS), title="标题", examples=[], max_tool_rounds=3)
         printed = out.getvalue() + err.getvalue()
         self.assertEqual(len(sent), 2)
         self.assertTrue(all(request["model"] == "test-model" for request, _ in sent))

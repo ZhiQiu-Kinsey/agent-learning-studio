@@ -1,11 +1,12 @@
 import type { Trace } from "../../types";
 
 /** Response of GET /api/lessons/{id}/code (see server/code_reading.py). */
-export type SymbolKind = "function" | "class" | "constant";
+/** text：运行时文本（locales/ 里 TEXTS 的一个字段），名字写成代码里读取它的样子 t.<字段>。 */
+export type SymbolKind = "function" | "class" | "constant" | "text";
 /** context：平台代码或测试夹具里的符号，不参与“本课新增”的比较。 */
 export type SymbolStatus = "added" | "changed" | "unchanged" | "context";
-/** 源码在读码页里的角色：课程代码、平台代码、只服务自动化测试的夹具。 */
-export type SourceRole = "lesson" | "platform" | "fixture";
+/** 源码在读码页里的角色：课程代码、平台代码、只服务自动化测试的夹具、运行时文本。 */
+export type SourceRole = "lesson" | "platform" | "fixture" | "texts";
 export type CodeSymbol = {
   name: string;
   kind: SymbolKind;
@@ -39,10 +40,14 @@ export type Annotation = {
 };
 export type LessonCode = {
   lesson_id: string;
+  /** The run language whose catalog files are listed (see Detail.runtime_locale). */
+  runtime_locale?: string;
   files: {
     path: string;
     language: string;
     role?: SourceRole;
+    /** Set on runtime text files: the language of this catalog. */
+    locale?: string;
     lines: number;
     symbols: CodeSymbol[];
   }[];

@@ -5,6 +5,7 @@ import type { StudioState } from "../../../hooks/useStudio";
 import { useFallbackLang } from "../../../hooks/useContentLanguage";
 import PromptBar from "../../react-bits/PromptBar";
 import { Button } from "../../ui/button";
+import { RuntimeLanguageNote } from "./RunLanguage";
 
 /**
  * Question bar (run / stop) and how this run is executed. The experiment card's
@@ -97,6 +98,11 @@ export function Composer({
             {help}
           </p>
         )}
+        <RuntimeLanguageNote
+          locale={s.detail?.runtime_locale}
+          kind="runtime"
+          testId="lab-runtime-locale"
+        />
         {s.restored && (
           <p
             className="composer-restored"

@@ -17,6 +17,14 @@ PROVIDERS = {
     "ollama": ("Ollama（本地）", "OLLAMA_API_KEY", "OLLAMA_MODEL", "OLLAMA_BASE_URL"),
     "custom": ("OpenAI compatible", "CUSTOM_API_KEY", "CUSTOM_MODEL", "CUSTOM_API_BASE"),
 }
+# 写进英文运行事件（run_start.provider_label）的名称；没列出的服务商名称本来就是英文。
+ENGLISH_LABELS = {"bailian": "Bailian (raw HTTP)", "ollama": "Ollama (local)"}
+
+
+def provider_label(provider_id, locale):
+    """运行事件里的服务商名称，按运行语言写。界面显示另由前端按 provider_id 翻译。"""
+    label = PROVIDERS[provider_id][0]
+    return ENGLISH_LABELS.get(provider_id, label) if locale == "en" else label
 
 
 def normalize_api_base(value):

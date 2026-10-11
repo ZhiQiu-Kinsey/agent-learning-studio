@@ -16,7 +16,8 @@ import {
   type ReplayOptions,
 } from "../stage/replay";
 import type { Detail, Lesson, Roadmap, Status, Trace } from "../types";
-import { runCache, runKey } from "./runCache";
+import { runCache, runKey, stable } from "./runCache";
+import { runLocaleOf } from "../components/workspace/lab/RunLanguage";
 
 /** A finished run read back from the run store instead of calling the model again. */
 export type RestoredRun = { runId: string; at: string; model: string };
@@ -75,6 +76,9 @@ export function useStudio() {
   const language = useContentLanguage();
   const listLanguage = useRef(language);
   const detailLanguage = useRef(language);
+  // What the language-switch refetch compares against: presets of the old run language.
+  const latest = useRef({ detail, exerciseId, question, inputs });
+  latest.current = { detail, exerciseId, question, inputs };
 
   const refreshStatus = useCallback(async () => {
     const request = ++statusRequest.current;
@@ -189,8 +193,10 @@ export function useStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
 
-  // Same lesson, new language: only the text changes. Questions, presets and
-  // sources are facts of the lesson and identical in every language.
+  // Same lesson, new language: the text changes, and so may the run language
+  // (runtime_locale). Questions and presets are facts of a run language: when it
+  // changes, the exercise's presets follow unless the learner edited them. The
+  // run on screen stays; it is labelled with the language it was recorded in.
   useEffect(() => {
     if (!lessonId || detailLanguage.current === language) return;
     detailLanguage.current = language;
@@ -201,8 +207,26 @@ export function useStudio() {
       language,
     )
       .then((value) => {
-        if (!abort.signal.aborted)
-          setDetail((current) => (current?.id === value.id ? value : current));
+        if (abort.signal.aborted) return;
+        const before = latest.current;
+        if (before.detail?.id !== value.id) return;
+        setDetail(value);
+        if (before.detail.runtime_locale === value.runtime_locale) return;
+        // "Nothing changed since that run" no longer holds for the new run language.
+        setRestored(null);
+        const old = before.detail.exercises.find(
+          (item) => item.id === before.exerciseId,
+        );
+        const next = value.exercises.find(
+          (item) => item.id === before.exerciseId,
+        );
+        if (!old || !next) return;
+        if (before.question === old.question) setQuestion(next.question);
+        if (
+          stable(before.inputs) ===
+          stable({ ...before.detail.input_defaults, ...old.inputs })
+        )
+          setInputs({ ...value.input_defaults, ...next.inputs });
       })
       .catch(() => {
         /* The lesson stays readable in the previous language. */
@@ -401,6 +425,7 @@ export function useStudio() {
         question,
         exercise_id: exerciseId,
         inputs: runInputs,
+        locale: language,
       });
       if (abort.signal.aborted) {
         void cancelRun(id).catch(() => undefined);
@@ -477,6 +502,8 @@ export function useStudio() {
               lesson_id: lessonId,
               mode: "live",
               run_id: runId || null,
+              // The run's language as recorded in run_start (read-only, never translated).
+              locale: runLocaleOf(events),
               events,
             },
             null,
@@ -493,6 +520,8 @@ export function useStudio() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const visible = events.slice(0, cursor);
+  // The language the run on screen was recorded in; replay never translates it.
+  const runLocale = runLocaleOf(events);
   const active = selected >= 0 && selected < cursor ? events[selected] : null;
   const answer = visible.findLast((event) => event.type === "answer");
   // An exercise may run without a model even in a lesson that otherwise needs one.
@@ -534,6 +563,7 @@ export function useStudio() {
     runId,
     runExerciseId,
     restored,
+    runLocale,
     events,
     visible,
     active,

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import Field, ValidationError
 
 from course.execution import LessonInputs, RunContext, execute_lesson, validate_inputs
-from course.runner import RunCancelled
+from course.runner import AgentSetup, RunCancelled
 from run_support import run_and_read, use_temporary_run_store
 
 
@@ -94,7 +94,7 @@ class ContextTests(unittest.TestCase):
 
     def test_composed_native_stage_preserves_the_outer_final_summary(self):
         events = []
-        native = SimpleNamespace(SYSTEM_PROMPT="system", TOOLS=[], AVAILABLE_TOOLS={})
+        native = SimpleNamespace(setup=lambda locale: AgentSetup("system", [], {}))
         context = make_context(events, completion=lambda body, key: {"choices": [{"message": {"content": "child result"}}]})
         def run(context):
             result = context.run_native(native)
@@ -106,7 +106,7 @@ class ContextTests(unittest.TestCase):
 
     def test_native_budget_gate_does_not_publish_a_request_that_will_not_run(self):
         events, calls = [], []
-        native = SimpleNamespace(SYSTEM_PROMPT="system", TOOLS=[], AVAILABLE_TOOLS={"echo": lambda: "result"})
+        native = SimpleNamespace(setup=lambda locale: AgentSetup("system", [], {"echo": lambda: "result"}))
         def provider(body, key):
             calls.append(body)
             return {"choices": [{"message": {"tool_calls": [{"id": "call-1", "type": "function",

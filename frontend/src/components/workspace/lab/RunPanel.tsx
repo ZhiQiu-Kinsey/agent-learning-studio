@@ -6,6 +6,7 @@ import LatticeLoader from "../../react-bits/LatticeLoader";
 import { Answer } from "../../Answer";
 import { Button } from "../../ui/button";
 import { Composer } from "./Composer";
+import { RuntimeLanguageNote } from "./RunLanguage";
 
 /** The final answer of the run at the replay cursor, or what it is waiting for. */
 function AnswerPane({ studio: s }: { studio: StudioState }) {
@@ -19,8 +20,16 @@ function AnswerPane({ studio: s }: { studio: StudioState }) {
         </span>
         {s.answer && <Check size={15} />}
       </div>
+      <RuntimeLanguageNote
+        locale={s.runLocale}
+        kind="run"
+        testId="lab-run-locale"
+      />
       {s.answer ? (
-        <Answer content={String(s.answer.data.content || t("noText"))} />
+        <Answer
+          content={String(s.answer.data.content || t("noText"))}
+          lang={s.runLocale ?? undefined}
+        />
       ) : (
         <div className="answer-placeholder">
           {s.running ? (

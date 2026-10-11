@@ -24,6 +24,8 @@ CODE_TOKEN = re.compile(
     re.ASCII,
 )
 _BACKTICK = re.compile(r"`[^`\n]*`")
+# 服务商没有报告的数（用量、缓存命中）写“未报告”；“未知”留给确实无法知道的值（见 terminology.md 统一用词表）。
+UNREPORTED = re.compile(r"(?:用量|Token|命中数?|缓存命中)[^。；，、\n]{0,4}未知|未知的?(?:用量|Token 数|命中数)")
 _LATIN = re.compile(r"[A-Za-z0-9]")
 # 小写开头的英文词（可带连字符），例如 evidence、tokenizer、s-1042。
 BARE_WORD = re.compile(r"(?<![A-Za-z0-9_.$-])[a-z][A-Za-z0-9_-]*(?![A-Za-z0-9_])")
@@ -181,6 +183,11 @@ def lesson_problems(lesson_id, model, terms, numbers, code_names, available):
                     problems.append(("多余的中英并列", f"{pair} 只在引入课写一次，本课写成“{term['zh']}”即可"))
     for word, context in bare_words(everything, code_names, matcher):
         problems.append(("裸英文词", f"{word}：既不是术语也不是本课源码里的名字：…{context}…"))
+    notes = "\n".join(item.note for item in model.code_notes)
+    for text in (everything, notes):
+        for match in UNREPORTED.finditer(text):
+            problems.append(("未报告写成未知", "服务商没有报告的数写“未报告”："
+                             f"…{text[max(0, match.start() - 12):match.end() + 12]}…"))
     for item in model.code_notes:
         if item.name not in code_names and not CODE_TOKEN.fullmatch(item.name):
             problems.append(("代码说明无出处", f"code_notes.{item.name} 不在本课登记的源码里"))

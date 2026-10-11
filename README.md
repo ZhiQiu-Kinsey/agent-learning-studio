@@ -12,7 +12,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 [![Node.js 22.12+](https://img.shields.io/badge/node-22.12%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Lessons](https://img.shields.io/badge/lessons-24%20available%20%2F%2053%20planned-8A5CF6)](docs/course-plan.md)
+[![Lessons](https://img.shields.io/badge/lessons-24%20available%20%2F%2053%20planned-8A5CF6)](docs/course-plan.en.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -98,7 +98,7 @@ The course starts with a 7-chapter onboarding (no model calls needed), then runs
 | G | Protocols & tool services | MCP fundamentals, connection lifecycle, A2A delegation | 🚧 0 / 3 |
 | H | Capstone & delivery | Multi-agent trade-offs, long-running tasks, local delivery, capstone project | 🚧 0 / 7 |
 
-The full syllabus — difficulty, estimated time, whether a lesson calls a model, sections, terms, objectives, experiments and acceptance criteria — is in [docs/course-plan.md](docs/course-plan.md) (Chinese). Planned lessons are greyed out in the UI and only open once they are implemented, tested and reviewed.
+The full syllabus — difficulty, estimated time, whether a lesson calls a model, sections, terms, objectives, experiments and acceptance criteria — is in [docs/course-plan.en.md](docs/course-plan.en.md) ([Chinese version](docs/course-plan.md)). Planned lessons are greyed out in the UI and only open once they are implemented, tested and reviewed.
 
 ## Quick start
 
@@ -189,14 +189,15 @@ Run records are stored redacted in `.runtime/runs.sqlite3`; learning progress li
 uv run python -m unittest discover -s tests       # all Python tests (incl. every lesson's test_lesson.py)
 uv run python scripts/validate_lessons.py         # manifests, content, glossary, wording, recordings, translations
 uv run python scripts/translation_kit.py status --locale en   # translation coverage per lesson / onboarding / catalog / glossary
+uv run python scripts/cjk_baseline.py --check     # hardcoded Chinese in lesson and platform code only goes down
 npm --prefix frontend run build                   # type-check and build
-npm --prefix frontend exec vitest run             # frontend unit tests
+npm --prefix frontend run test                    # frontend unit tests (vitest)
 npm --prefix frontend run i18n:check              # translation keys are consistent
 ```
 
 Browser tests (Playwright, system Chrome): build the frontend, start the backend, then run `npx playwright test` in `frontend/`. Set `AGENT_LAB_URL` to test against another port.
 
-Automated tests swap the model for deterministic fixtures at the network boundary, **but still execute the real Python tools**. Fixtures exist only for tests — the web UI has no simulated mode.
+Automated tests swap the model for deterministic fixtures at the network boundary, **but still execute the real Python tools**. Fixtures exist only for tests — the web UI has no simulated mode. Every exercise runs offline in every language its lesson supports, and English runs are checked to contain no Chinese.
 
 ## Contributing
 

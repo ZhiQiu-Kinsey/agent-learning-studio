@@ -9,7 +9,7 @@ from server.catalog import CATALOG_INDEX, LESSONS, ROOT, lesson_code_names
 from server.code_names import code_names, names_in_source
 from server.content import lesson_content_model
 from server.glossary import load_glossary
-from server.vocabulary import TermMatcher, bare_words, lesson_problems, marked_texts, name_used
+from server.vocabulary import UNREPORTED, TermMatcher, bare_words, lesson_problems, marked_texts, name_used
 
 
 class CodeNameTests(unittest.TestCase):
@@ -32,6 +32,17 @@ class CodeNameTests(unittest.TestCase):
         spec = next(spec for spec in LESSONS if spec["id"] == "task-contract")
         names = lesson_code_names(spec)
         self.assertTrue({"evidence", "failure", "evidence_ref"} <= set(names))
+
+
+class UnreportedWordingTests(unittest.TestCase):
+    def test_usage_the_provider_did_not_report_is_not_called_unknown(self):
+        # 统一用词：服务商没有报告的数写“未报告”；“未知”只留给确实无法知道的值。
+        for text in ("命中数未知，不是 0", "用量未知", "提示 Token 未知", "未知的用量"):
+            with self.subTest(text=text):
+                self.assertTrue(UNREPORTED.search(text))
+        for text in ("命中数未报告，不是 0", "路由遇到未知标签直接报错", "未知的消息角色"):
+            with self.subTest(text=text):
+                self.assertIsNone(UNREPORTED.search(text))
 
 
 class MatcherTests(unittest.TestCase):
