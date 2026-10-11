@@ -325,7 +325,13 @@ def lesson_code_view(spec, locale=None):
     """读码场景数据：只读本课 sources 白名单，批注取自已合并译文层的内容。"""
     content_path = _safe_file(spec["root"] / "lessons" / spec["module"], spec["content"], "lesson content")
     learning, _ = load_lesson_content(content_path, spec, locale, _refs_in(locale))
-    return lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers))
+    view = lesson_code(spec, LESSONS, resolve_refs(learning, CATALOG_INDEX.numbers))
+    # “本课新增”对照的那一课标题来自实现清单（源语言），这里按目录译文换成界面语言。
+    compare = view["whats_new"]["compare_with"]
+    entry = localized_entries(locale).get(compare["id"]) if compare and locale else None
+    if entry is not None:
+        compare["title"] = entry["title"]
+    return view
 
 
 def lesson_detail(spec, locale=None):

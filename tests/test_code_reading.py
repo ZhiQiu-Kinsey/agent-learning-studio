@@ -112,6 +112,18 @@ class RealLessonTests(unittest.TestCase):
         source = (Path(web.ROOT) / prompt["path"]).read_text(encoding="utf-8").splitlines()
         self.assertTrue(source[prompt["start"] - 1].startswith("SYSTEM_PROMPT"))
 
+    def test_compared_lesson_title_follows_the_requested_language(self):
+        # 对照课标题来自实现清单的源语言；英文界面要换成目录译文里的标题，没有译文时保持源文本。
+        from server.catalog import localized_entries
+
+        spec = next(spec for spec in LESSONS if spec["id"] == "dependent-calls")
+        source = lesson_code_view(spec)["whats_new"]["compare_with"]["title"]
+        english = lesson_code_view(spec, "en")["whats_new"]["compare_with"]
+        self.assertEqual(english["title"], localized_entries("en")[english["id"]]["title"])
+        if (Path(web.ROOT) / "curriculum" / "catalog.en.json").is_file():
+            self.assertNotEqual(english["title"], source)
+        self.assertEqual(lesson_code_view(spec, "fr")["whats_new"]["compare_with"]["title"], source)
+
     def test_declared_compare_with_overrides_previous_lesson(self):
         spec = next(spec for spec in LESSONS if spec["id"] == "context-budget")
         self.assertEqual(spec["code_compare"], "messages-context")
