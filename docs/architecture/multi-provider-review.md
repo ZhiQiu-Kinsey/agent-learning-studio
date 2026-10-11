@@ -9,7 +9,7 @@
 - `course/api_client.py`：百炼原生 HTTP 传输。
 - `course/execution.py`：课程共享调用预算、取消与事件快照。
 
-百炼原生入口读取 `local_config.py` 与 `DASHSCOPE_API_KEY`；其他服务使用各自的环境变量或网页提交的后端临时配置。变量列表和操作步骤见 [README](../../README.md#模型连接)。密钥不回显、不写入浏览器存储；切换服务商不会自动借用另一家的凭据。
+百炼原生入口读取 `local_config.py` 与 `DASHSCOPE_API_KEY`；其他服务使用各自的环境变量或网页提交的后端临时配置。变量列表和操作步骤见 [README](../../README.zh-CN.md#连接模型)。密钥不回显、不写入浏览器存储；切换服务商不会自动借用另一家的凭据。
 
 ## 证据表示
 

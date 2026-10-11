@@ -1,151 +1,244 @@
+<div align="center">
+
 # Agent Learning Studio
 
-一个在本机运行的 Agent 可视化教学平台。它面向有编程基础、想弄懂 Agent 原理并亲手做出来的学习者。
+**See what an AI agent does at every step — then build it yourself.**
 
-- 先用几十行原生 Python 写出 Agent 循环，再一步步加上上下文管理、记忆、规划、工作流和多 Agent。
-- 每一步都能在网页里看到证据：发给模型的完整请求、模型的响应、Python 工具的执行结果，以及可以逐步回放的事件轨迹。
+A local, visual course for programmers who want to understand how LLM agents really work:
+hand-write the agent loop in plain Python, then watch every model request, response and tool call it makes.
 
-## 特点
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Node.js 22.12+](https://img.shields.io/badge/node-22.12%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Lessons](https://img.shields.io/badge/lessons-24%20available%20%2F%2053%20planned-8A5CF6)](docs/course-plan.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-- **证据优先。**
-  - 界面上的消息流、工具卡片、时间线都来自真实运行事件。
-  - 教学示意单独画成虚线，并标注“非运行记录”。
-  - 回放只读取已记录的事件，不会重新调用模型或工具。
-- **每课一个完整闭环。** 每课按 **概念 → 最小实现 → 运行证据 → 实验 → 自检** 编排，课程页分五个场景：
-  - 理解：概念卡、正文、微型自测、分步示意；
-  - 读码：真实源码与行号批注，“本课新增”从 AST 计算；
-  - 实验：对照组、观察点、导览回放、实验报告；
-  - 自检：选择题、在自己的运行里找证据；
-  - 回顾。
-- **术语有解释，代码名有出处。**
-  - 正文里的课程术语可以悬停查看释义，并区分本课新术语、前面课学过的术语和背景知识。
-  - 正文提到的源码名字显示为代码样式，并可附本课说明。
-- **多服务商。**
-  - 百炼走手写的原生 HTTP 路径，展示完整请求体。
-  - OpenAI、Anthropic、Gemini、DeepSeek、OpenRouter、Ollama 和 OpenAI 兼容服务经 LiteLLM 接入，界面如实标为“标准化请求/响应”。
-- **课程即数据。**
-  - 课程目录、术语表和每课的教学内容都是带 schema 校验的 JSON。
-  - 后端自动发现新课程，新增一课不需要改平台代码。
+**English** · [简体中文](README.zh-CN.md)
 
-## 学什么
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/home-dark.png">
+  <img alt="Agent Learning Studio home page" src="docs/assets/screenshots/home.png" width="900">
+</picture>
 
-课程分十个方向，从原生循环一路到工程交付：
+</div>
 
-- 原生基础：一次模型请求、多轮对话、采样与不确定性，再到工具调用提议、执行回传、依赖调用与错误边界
-- 任务与接口：任务验收、结构化输出、提示词与工具描述
-- 上下文与状态：上下文组成与消息协议、应用状态、上下文预算与截取、上下文压缩、持久记忆与记忆生命周期、提示缓存、Skills 与渐进式披露
-- 推理与控制模式：文本动作、待办清单、先规划后执行、反思与修订、工作流、编排者与评估者
-- 知识与检索：资料处理、关键词与向量检索、混合检索、引用、Agentic RAG
-- 框架与运行编排：LangChain、LangGraph、人工介入与恢复
-- 编码 Agent 与执行环境
-- 质量与工程可靠性：评估、可观测性、可靠工具与信任边界
-- 协议与工具服务：MCP
-- 综合实践与交付：多 Agent、长时任务、毕业项目
+> [!NOTE]
+> The course content and the web UI are currently in **Simplified Chinese**. The i18n architecture is in place — adding a language means adding locale files and translation layers, and contributions are welcome.
 
-完整课程表见 [课程大纲](docs/course-plan.md)：每课列出难度、预计时长、是否调用模型、小节、本课术语、目标、实验与验收。规划中的课程在网页里灰显，实现并验收后才开放。首次打开会先进入一段前置导学。
+<details>
+<summary><b>Table of contents</b></summary>
 
-## 快速开始
+- [Why this project](#why-this-project)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Curriculum](#curriculum)
+- [Quick start](#quick-start)
+- [Connecting a model](#connecting-a-model)
+- [How to learn with it](#how-to-learn-with-it)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [Acknowledgements](#acknowledgements)
+- [License](#license)
 
-需要 Python 3.12+、[uv](https://docs.astral.sh/uv/)、Node.js 22.12+ 和 npm。
+</details>
 
-Windows（PowerShell）：
+## Why this project
 
-```powershell
-uv sync --dev
-npm.cmd --prefix frontend ci
-npm.cmd --prefix frontend run build
-.\.venv\Scripts\python.exe run_web.py
-```
+Most agent tutorials either hide the loop behind a framework or show static code you have to trust. Agent Learning Studio does the opposite:
 
-macOS / Linux：
+- **Start from scratch.** Write an agent loop in a few dozen lines of plain Python, then add context management, memory, planning, workflows and multiple agents one step at a time.
+- **Show the evidence.** For every step you see the full request sent to the model, the model's response, the result of the Python tool that actually ran, and an event trace you can replay step by step.
+- **Learn frameworks last.** Once the mechanics are clear, LangChain and LangGraph are introduced as wrappers around things you have already built by hand.
+
+## Features
+
+| | |
+| --- | --- |
+| 🔍 **Evidence first** | Message flows, tool cards, the stage and the timeline are all derived from real run events. Teaching illustrations are drawn with dashed lines and labelled "illustration, not a run record". Replay only reads recorded events — it never calls the model or tools again. |
+| 🧭 **One complete loop per lesson** | Every lesson follows **concept → minimal implementation → run evidence → experiment → self-check**, split into five scenes: *Understand*, *Read the code*, *Experiment*, *Self-check* and *Review*. |
+| 🧑‍💻 **Real source, real line numbers** | The code scene shows the lesson's actual source with anchored notes. "New in this lesson" is computed from the Python AST, not written by hand. |
+| 🧪 **Experiments, not demos** | Each experiment states a hypothesis, control arms, observation points and what the result can and cannot prove. Observation points are checked against your own runs. |
+| 📖 **Terms explained in place** | Course terms show a hover card and are marked as new, previously learned or background. Source names in the prose are rendered as code with short notes. |
+| 🔌 **Provider-agnostic** | Alibaba Bailian (DashScope) goes through a hand-written raw HTTP path that shows the full request body. OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Ollama and any OpenAI-compatible service go through LiteLLM, and the UI honestly labels them as *SDK-standardized* requests and responses. |
+| 🗂️ **Curriculum as data** | The catalog, glossary and every lesson's content are JSON validated against schemas. The backend discovers lessons automatically — adding a lesson needs no platform code changes. |
+| 🔒 **Local and private** | The server binds to `127.0.0.1` only. API keys stay in the backend and are never written to run records, logs or browser storage. |
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/lesson-understand.png" alt="Understand scene"><p align="center"><b>Understand</b> — concept cards, prose, micro-quizzes</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/lesson-code.png" alt="Read-the-code scene"><p align="center"><b>Read the code</b> — real source with anchored notes</p></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/lesson-lab.png" alt="Experiment scene"><p align="center"><b>Experiment</b> — hypothesis, observation points, run console</p></td>
+    <td width="50%"><img src="docs/assets/screenshots/curriculum.png" alt="Curriculum map"><p align="center"><b>Curriculum map</b> — 10 domains, prerequisite routes</p></td>
+  </tr>
+</table>
+
+## Curriculum
+
+The course starts with a 7-chapter onboarding (no model calls needed), then runs through ten domains — from a single model request to shipping a local assistant.
+
+| # | Domain | What you learn | Status |
+| --- | --- | --- | --- |
+| A | Native foundations | One model request, multi-turn history, sampling; tool definitions, executing tools, dependent calls, error boundaries | ✅ 7 / 7 |
+| B | Tasks & interfaces | Acceptance criteria, structured output with business validation, prompts & tool descriptions | ✅ 3 / 3 |
+| C | Context & state | Message protocol, app state, context budgets & compaction, persistent memory, prompt caching, Skills & progressive disclosure | ✅ 8 / 8 |
+| R | Reasoning & control | Text actions vs. native tool calls, TODO planning, plan-and-replan, bounded reflection, workflow patterns, orchestrator–worker & evaluator–optimizer | ✅ 6 / 6 |
+| D | Knowledge & retrieval | Chunking, BM25, embeddings, hybrid search & reranking, RAG with citations, agentic RAG | 🚧 0 / 6 |
+| E | Frameworks & orchestration | LangChain vs. native, LangGraph state & branches, streaming & cancellation, approvals, human-in-the-loop & recovery | 🚧 0 / 7 |
+| K | Coding agents & sandboxes | A single-bash-tool coding agent, file tools and change evidence | 🚧 0 / 2 |
+| F | Quality & reliability | Eval sets & verifiers, observability & cost, reliable tools, prompt injection & permissions | 🚧 0 / 4 |
+| G | Protocols & tool services | MCP fundamentals, connection lifecycle, A2A delegation | 🚧 0 / 3 |
+| H | Capstone & delivery | Multi-agent trade-offs, long-running tasks, local delivery, capstone project | 🚧 0 / 7 |
+
+The full syllabus — difficulty, estimated time, whether a lesson calls a model, sections, terms, objectives, experiments and acceptance criteria — is in [docs/course-plan.md](docs/course-plan.md) (Chinese). Planned lessons are greyed out in the UI and only open once they are implemented, tested and reviewed.
+
+## Quick start
+
+**Prerequisites:** Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ and npm.
 
 ```bash
-uv sync --dev
-npm --prefix frontend ci
-npm --prefix frontend run build
-.venv/bin/python run_web.py
+git clone https://github.com/<your-org>/agent-learning-studio.git
+cd agent-learning-studio
+
+uv sync --dev                     # Python dependencies
+npm --prefix frontend ci          # frontend dependencies
+npm --prefix frontend run build   # type-check and build the UI
+.venv/bin/python run_web.py       # start the server
 ```
 
-打开 http://127.0.0.1:8765。之后只需执行最后一行；Windows 也可以运行 `start-web.ps1`。
+On Windows (PowerShell), use `npm.cmd` instead of `npm` and `.\.venv\Scripts\python.exe run_web.py` to start, or simply run `start-web.ps1`.
 
-## 连接模型
+Open **http://127.0.0.1:8765**. Next time you only need the last command.
 
-在网页右上角的“模型连接设置”里选择服务商，填写模型 ID，按需填写 API Base URL 和 API Key。
+## Connecting a model
 
-- 网页填写的配置只保存在后端内存，重启后回到环境变量和本地文件中的配置。
-- 已有的密钥和地址不会回显到浏览器。
+Pick a provider in **Model connection settings** (top-right of the page), enter a model ID and, if needed, an API base URL and key.
 
-也可以用环境变量预先配置：
+- Settings entered in the browser live only in backend memory; after a restart the server falls back to environment variables and local files.
+- Existing keys and URLs are never echoed back to the browser.
 
-| 入口 | 密钥 | 模型 / 地址 |
+You can also configure providers ahead of time with environment variables:
+
+| Provider | Key | Model / base URL |
 | --- | --- | --- |
-| 百炼（原生 HTTP） | `DASHSCOPE_API_KEY` | `local_config.py` 中的 `MODEL` / `API_URL` |
+| Alibaba Bailian (raw HTTP) | `DASHSCOPE_API_KEY` | `MODEL` / `API_URL` in `local_config.py` |
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` / `OPENAI_BASE_URL` |
 | Anthropic | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` |
 | Google Gemini | `GEMINI_API_KEY` | `GEMINI_MODEL` / `GEMINI_API_BASE` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` / `DEEPSEEK_BASE_URL` |
 | OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` / `OPENROUTER_BASE_URL` |
-| Ollama | 可选 `OLLAMA_API_KEY` | `OLLAMA_MODEL` / `OLLAMA_BASE_URL`（默认本机 11434） |
-| OpenAI 兼容服务 | `CUSTOM_API_KEY` | `CUSTOM_MODEL` / `CUSTOM_API_BASE` |
+| Ollama | optional `OLLAMA_API_KEY` | `OLLAMA_MODEL` / `OLLAMA_BASE_URL` (defaults to local port 11434) |
+| OpenAI-compatible | `CUSTOM_API_KEY` | `CUSTOM_MODEL` / `CUSTOM_API_BASE` |
 
-- **百炼**：复制 `local_config.example.py` 为 `local_config.py`，填写接入地址和支持工具调用的模型 ID。这个文件已被 `.gitignore` 排除。
-- **凭据互不借用**：每家服务商的凭据独立，切换服务商不会借用别家的密钥。
-- **Ollama**：需要你自己准备本地服务和支持工具调用的模型，平台不会自动下载。
+- **Bailian:** copy `local_config.example.py` to `local_config.py` and fill in the endpoint and a model that supports tool calling. The file is git-ignored.
+- **Credentials are isolated:** switching providers never borrows another provider's key.
+- **Ollama:** bring your own local server and a tool-calling model; nothing is downloaded automatically.
 
-网页运行使用真实模型，会产生服务用量。没有可用配置时，网页会引导你完成接入，不会生成模拟回答。实现细节与限制见 [模型接入说明](docs/architecture/multi-provider-review.md)。
+> [!IMPORTANT]
+> Runs in the web UI call a real model and consume your provider quota. Without a working configuration the UI guides you through setup — it never fabricates an answer. Details and limitations: [docs/architecture/multi-provider-review.md](docs/architecture/multi-provider-review.md).
 
-## 怎么用
+## How to learn with it
 
-1. 先读网页侧栏“开始之前”的导学。导学和自检都不调用模型。
-2. 在“模型连接设置”里配好模型。有的课程只运行本地 Python，不需要模型。
-3. 打开一课，按“理解 → 读码 → 实验 → 自检”往下走。实验里可以用预设，也可以换成自己的问题或换一个模型。
-4. 在实验台选一条运行记录，单步或播放回放，对照观察点核对请求、响应和工具结果。
+1. Read the **Before you start** onboarding in the sidebar. Onboarding and self-checks never call a model.
+2. Configure a model in **Model connection settings**. Some lessons run local Python only and need no model.
+3. Open a lesson and work through **Understand → Read the code → Experiment → Self-check**. Use the presets, or ask your own question and swap models.
+4. Pick a run record in the lab, step through or play the replay, and compare requests, responses and tool results against the observation points.
 
-## 项目结构
+## Architecture
+
+```mermaid
+flowchart LR
+  UI["React UI<br/>stage · film · timeline"] -- "POST /api/runs" --> API["FastAPI"]
+  API -- "SSE events (by seq)" --> UI
+  API --> Registry["Lesson registry<br/>auto-discovered lessons/*"]
+  API --> Runner["Lesson runner<br/>native loop / custom RunContext"]
+  Runner --> Provider["Raw HTTP adapter<br/>or LiteLLM"]
+  Runner --> Tools["Registered Python tools"]
+  Runner --> Store[("SQLite run store<br/>redacted events")]
+  Store --> API
+```
+
+- **Event envelope v2.** Every run is a sequence of events (`run_start`, `request`, `response`, `tool_call`, `tool_result`, `answer`, `error`, `done`, plus lesson-specific `lesson.*`) carrying `run_id`, `seq` and spans. Events are redacted, stored in SQLite and streamed over SSE with resume by `seq`.
+- **Two runner kinds.** `native` lessons reuse the hand-written tool loop; `custom` lessons orchestrate their own flow, but only through `RunContext` (call the model, call tools, emit events, check cancellation).
+- **Content v2.** Each lesson's `content.json` is defined by a single schema with stable block IDs, so translation layers can override text without touching facts.
 
 ```text
-course/        模型请求、服务商适配、原生 Agent 循环与课程执行接口
-server/        FastAPI 接口、课程发现与校验、内容 schema、事件信封、运行存储、术语检查
-lessons/       每课一个目录：lesson.json、content.json、Python 实现、测试夹具与测试
-curriculum/    课程目录 catalog.json、术语表 glossary.json、前置导学、导出的 JSON Schema
-frontend/      React + TypeScript + Vite 前端
-scripts/       校验、生成、新课脚手架、录制导出、用词报告
-tests/         Python 测试（frontend/e2e/ 下是浏览器测试）
-docs/          课程大纲与架构文档
+course/        model requests, provider adapters, the native agent loop, RunContext
+server/        FastAPI routes, lesson discovery & validation, content schema, event envelope, run store
+lessons/       one folder per lesson: lesson.json, content.json, Python code, fixtures, tests
+curriculum/    catalog.json (single source of truth), glossary.json, onboarding, JSON Schemas
+frontend/      React + TypeScript + Vite + Tailwind CSS 4
+scripts/       validation, code generation, lesson scaffolding, recordings, terminology reports
+tests/         Python tests (browser tests live in frontend/e2e/)
+docs/          syllabus and architecture docs
 ```
 
-运行记录脱敏后保存在 `.runtime/runs.sqlite3`，学习进度保存在浏览器本机，都只记录真实发生的动作。服务只监听 `127.0.0.1`，面向单人本地学习。
+Run records are stored redacted in `.runtime/runs.sqlite3`; learning progress lives in your browser's local storage.
 
-## 参与贡献
+## Development
 
-欢迎补课程、改正文、修问题。开始前请先读：
-
-- [AGENTS.md](AGENTS.md)：项目约束、常用命令、各部分规范（人和编码代理都适用）。
-- [新增课程与独立定制](docs/architecture/adding-lessons.md)：从登记课程到开放的完整流程。
-- [术语与代码名](docs/architecture/terminology.md)：术语收录标准、统一用词表、作者自查流程。
-- [开发验证](docs/architecture/validation.md)：测试与校验命令。
-- [平台架构](docs/architecture/platform.md)、[前端结构](docs/architecture/frontend-workspace.md)、[事件信封 v2](docs/architecture/event-envelope-v2.md)。
-
-提交前至少运行：
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests
-.\.venv\Scripts\python.exe scripts/validate_lessons.py
-npm.cmd --prefix frontend run build
-npm.cmd --prefix frontend exec vitest run
+```bash
+uv run python -m unittest discover -s tests       # all Python tests (incl. every lesson's test_lesson.py)
+uv run python scripts/validate_lessons.py         # manifests, content, glossary, wording, recordings
+npm --prefix frontend run build                   # type-check and build
+npm --prefix frontend exec vitest run             # frontend unit tests
+npm --prefix frontend run i18n:check              # translation keys are consistent
 ```
 
-PR 里请写明行为变化和验证结果。哪些只做了离线测试、哪些用真实模型验证过，要分开写。
+Browser tests (Playwright, system Chrome): build the frontend, start the backend, then run `npx playwright test` in `frontend/`. Set `AGENT_LAB_URL` to test against another port.
 
-## 致谢与许可
+Automated tests swap the model for deterministic fixtures at the network boundary, **but still execute the real Python tools**. Fixtures exist only for tests — the web UI has no simulated mode.
 
-课程设计参考了以下教程，具体阅读范围、固定版本和许可证见 [课程来源](docs/architecture/reference-study.md)：
+## Contributing
+
+Contributions of all kinds are welcome — new lessons, clearer prose, bug fixes and translations. Please read these first:
+
+- [AGENTS.md](AGENTS.md) — project rules, commands and conventions (for humans and coding agents alike)
+- [Adding lessons](docs/architecture/adding-lessons.md) — from registering a lesson to opening it
+- [Terminology](docs/architecture/terminology.md) — glossary rules and the unified wording table
+- [Validation](docs/architecture/validation.md) — test and check commands
+- [Platform](docs/architecture/platform.md) · [Frontend](docs/architecture/frontend-workspace.md) · [Event envelope v2](docs/architecture/event-envelope-v2.md)
+
+A few non-negotiables, each guarded by tests or validators:
+
+1. Run data comes only from real events — never fabricated for effect.
+2. Replay is read-only.
+3. SDK-standardized payloads are never presented as raw HTTP.
+4. Secrets stay in the backend.
+5. In a PR, report offline-test results and real-model verification separately (model, samples, call count).
+
+## Roadmap
+
+- [x] Native foundations, tasks & interfaces, context & state, reasoning & control (24 lessons)
+- [x] 7-chapter onboarding, curriculum map, guided replay, experiment reports
+- [ ] Knowledge & retrieval (RAG)
+- [ ] LangChain / LangGraph, human-in-the-loop and recovery
+- [ ] Coding agents with sandboxing
+- [ ] Evaluation, observability and reliable tools
+- [ ] MCP and A2A
+- [ ] Multi-agent systems, long-running tasks and the capstone
+- [ ] English and other UI / course translations
+
+## Acknowledgements
+
+The curriculum design draws on the following tutorials. Reading scope, pinned versions and licenses are recorded in [docs/architecture/reference-study.md](docs/architecture/reference-study.md); none of them is a runtime dependency.
 
 - [Microsoft AI Agents for Beginners](https://github.com/microsoft/ai-agents-for-beginners)
 - [Hugging Face Agents Course](https://github.com/huggingface/agents-course)
-- [《深入理解 AI Agent》](https://github.com/bojieli/ai-agent-book)
-- [claude-cookbooks](https://github.com/anthropics/claude-cookbooks)
+- [*Understanding AI Agents in Depth* (深入理解 AI Agent)](https://github.com/bojieli/ai-agent-book)
+- [Anthropic claude-cookbooks](https://github.com/anthropics/claude-cookbooks)
 
-这些项目不参与平台运行。
+UI components are built with [React Bits](https://reactbits.dev), [shadcn/ui](https://ui.shadcn.com) and [Tailwind CSS](https://tailwindcss.com).
 
-复制或改编的第三方代码见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。其中 React Bits 组件使用 MIT + Commons Clause 许可，限制商业转售，再分发时请注意。
+## License
+
+Released under the [MIT License](LICENSE).
+
+Third-party code keeps its own license — notably the React Bits components in `frontend/src/components/react-bits/` (MIT + Commons Clause). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
