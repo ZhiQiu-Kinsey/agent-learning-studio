@@ -101,6 +101,75 @@ def validate_vocabulary(root, specs):
     return problems
 
 
+def english_texts(root, specs):
+    """[(文件, 文本路径, 文字, 是否检查 not reported)]：要做英文检查的全部文字，文件是相对 root 的 posix 路径。
+
+    译文层逐条取 texts（数组逐项取）；运行时文本（locales/**/en.py、en.md）整份取；界面文案取 JSON 叶子。
+    课程目录只对可运行课程的条目（lesson.<slug>.*）查 not reported，规划中的课与来源说明是计划文字，
+    和中文用词检查只看可运行课程一致。
+    """
+    root = Path(root).resolve()
+    available = {spec["id"] for spec in specs if spec.get("status") == "available"}
+    out = []
+
+    def relative(path):
+        return path.relative_to(root).as_posix()
+
+    def overlay(path, checked=lambda key: True):
+        for key, entry in json.loads(path.read_text(encoding="utf-8")).get("texts", {}).items():
+            values = entry.get("text") if isinstance(entry, dict) else None
+            for value in values if isinstance(values, list) else [values]:
+                if isinstance(value, str):
+                    out.append((relative(path), key, value, checked(key)))
+
+    for spec in specs:
+        folder = root / "lessons" / spec["module"]
+        for name in ("content.en.json", "lesson.en.json"):
+            if (folder / name).is_file():
+                overlay(folder / name)
+        locales = folder / "locales"
+        if locales.is_dir():
+            for path in sorted([*locales.rglob("en.py"), *locales.rglob("en.md")]):
+                out.append((relative(path), "*", path.read_text(encoding="utf-8"), True))
+    for path in sorted(path for path in (root / "course").rglob("en.py") if "locales" in path.parts):
+        out.append((relative(path), "*", path.read_text(encoding="utf-8"), True))
+    for path in sorted((root / "curriculum").glob("*.en.json")):
+        if path.name == "catalog.en.json":
+            overlay(path, lambda key: key.split(".")[0] == "lesson" and key.split(".")[1] in available)
+        else:
+            overlay(path)
+    ui = root / "frontend" / "src" / "i18n" / "locales" / "en"
+
+    def leaves(node, prefix):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                yield from leaves(value, f"{prefix}.{key}" if prefix else key)
+        elif isinstance(node, str):
+            yield prefix, node
+
+    for path in sorted(ui.glob("*.json")) if ui.is_dir() else []:
+        for key, value in leaves(json.loads(path.read_text(encoding="utf-8")), ""):
+            out.append((relative(path), key, value, True))
+    return out
+
+
+def validate_english(root, specs):
+    """英文文本检查（规则见 server/vocabulary.py 与 terminology.md 第 5 节）。
+
+    返回（[(文件, 文本路径, 类别, 说明)]，[(文件, 文本路径, 子串)] 用不上的白名单条目）。
+    用不上的条目只看 root 里确实存在的文件；通配文件（"*"）的条目由 tests/test_english_text.py 在本仓库检查。
+    """
+    from server.vocabulary import english_problems, unused_allowances
+
+    used = set()
+    problems = []
+    for file, path, text, unreported in english_texts(root, specs):
+        for kind, message in english_problems(file, path, text, used, unreported=unreported):
+            problems.append((file, path, kind, message))
+    root = Path(root).resolve()
+    return problems, unused_allowances(used, lambda file: file != "*" and (root / file).is_file())
+
+
 DENSITY_BASELINE = ("tests", "baselines", "code-note-density.json")
 # 一课只学一件事：术语表里 first_lesson 指向同一课的课程概念不超过这个数。
 MAX_NEW_CONCEPTS = 5
@@ -191,6 +260,17 @@ def main(argv=None):
         for path, report in reports:
             print(f"  {Path(path).relative_to(args.root.resolve()).as_posix()} [{report['locale']}] "
                   f"{report['translated']}/{report['total']}，缺失 {len(report['missing'])}，过期 {len(report['stale'])}")
+        english, unused = validate_english(args.root, specs)
+        print(f"英文文本：{len(english)} 个问题，{len(unused)} 条用不上的中文白名单。")
+        if english or unused:
+            for file, path, kind, message in english:
+                where = file if path == "*" else f"{file} {path}"
+                print(f"英文问题 {where} [{kind}] {message}", file=sys.stderr)
+            for file, path, substring in unused:
+                print(f"白名单可删除 {file} {path} {substring}（已不再出现，请从 ENGLISH_CJK_ALLOWED 删掉）",
+                      file=sys.stderr)
+            print("规则：docs/architecture/terminology.md 第 5 节", file=sys.stderr)
+            return 1
         print("未调用模型；结构校验不代替课程测试与教学验收，planned 课程不会因此解锁。")
         return 0
     except (OSError, ValueError, KeyError, TypeError, ImportError) as error:

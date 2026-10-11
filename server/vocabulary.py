@@ -194,3 +194,82 @@ def lesson_problems(lesson_id, model, terms, numbers, code_names, available):
         elif not name_used(item.name, everything):
             problems.append(("代码说明未使用", f"code_notes.{item.name} 没有出现在本课正文里"))
     return problems
+
+
+# —— 英文文本检查 ——
+# 上面的规则只看中文源文本。英文译文层（content.en.json、lesson.en.json、curriculum/*.en.json）、
+# 英文运行时文本（locales/**/en.py、en.md）和英文界面文案另有三条检查，规则见 docs/architecture/terminology.md 第 5 节。
+
+# 与 scripts/cjk_baseline.py、tests/test_runtime_locales.py 相同：中日韩标点、汉字、兼容汉字与全角字符。
+_CJK_CLASS = "[　-〿㐀-䶿一-鿿豈-﫿＀-￯]"
+CJK = re.compile(_CJK_CLASS)
+
+# 英文文本里允许出现的中文：(文件, 文本路径, 精确子串, 理由)。文件是相对项目根目录的路径，"*" 表示任意文件；
+# 文本路径是译文层 texts 的键，"*" 表示整份文件。子串先从文本里去掉，剩下的部分不能再有中文；
+# 条目必须真的用得上，用不上的会报出来，名单只放确有必要的中文。
+ENGLISH_CJK_ALLOWED = (
+    ("*", "*", "(深入理解 AI Agent)",
+     "参考书的中文原书名，括在英文书名后面，读者凭它才能找到这本只有中文版的书"),
+    ("curriculum/onboarding.en.json", "how-llm-works.tokens.paragraphs.1", '"函数式编程"',
+     "分词示例：讲一个中文词怎样切成几个 Token，必须展示中文原文"),
+    ("curriculum/onboarding.en.json", "how-llm-works.tokens.paragraphs.1", '"函数,"', "同一个分词示例的切分结果"),
+    ("curriculum/onboarding.en.json", "how-llm-works.tokens.paragraphs.1", '"式,"', "同一个分词示例的切分结果"),
+    ("curriculum/onboarding.en.json", "how-llm-works.tokens.paragraphs.1", '"编程,"', "同一个分词示例的切分结果"),
+    ("lessons/lesson_reflection_revision/content.en.json", "section-4.paragraphs.2", "`s-1０４２`",
+     "全角数字示例：Python 正则的数字类默认也匹配全角数字，正文用它说明测试用例漏掉的情况"),
+)
+
+# 服务商没有报告的数在英文里写 not reported，不写 unknown（与上面的 UNREPORTED 对应）。
+# 前一种写法“usage … unknown”只允许中间隔几个系动词或介词，避免误中“usage of an unknown tool”；
+# 不收单独的 tokens，避免误中分词器里的“unknown tokens”。
+_USAGE_NOUN = (r"(?:usage|token counts?|cache hits?|cache hit counts?|hit counts?"
+               r"|(?:prompt|completion|reasoning|cached|input|output) tokens)")
+EN_UNREPORTED = re.compile(
+    r"\b" + _USAGE_NOUN + r"(?:\s+(?:is|are|was|were|stays?|remains?|left|kept|shown|written|recorded|reported"
+    r"|marked|counted|treated|as|still))*\s*[:(]?\s*[\"“]?unknown\b"
+    r"|\bunknown\s+" + _USAGE_NOUN + r"\b",
+    re.IGNORECASE,
+)
+
+# 运行时改成双语以前，英文译文只能引用中文原文再加英文注释，写成 "中文" ("gloss")。
+# 现在英文运行发的就是英文，英文文本应直接引用英文运行时文本。
+GLOSSED_LITERAL = re.compile(r"[\"“][^\"”\n]*" + _CJK_CLASS + r"[^\"”\n]*[\"”]\s*[(（]\s*[\"“]")
+
+
+def _context(text, start, end, width=24):
+    return text[max(0, start - width):end + width].replace("\n", " ")
+
+
+def english_problems(file, path, text, used=None, unreported=True):
+    """一段英文文本的问题：[(类别, 说明)]。file 是相对项目根目录的 posix 路径，path 是文本路径（整份文件写 "*"）。
+
+    used：可选集合，记下命中过的白名单条目下标，供调用方找出用不上的条目。
+    unreported=False 跳过 not reported 检查（课程目录里规划中课程的条目，与中文只查可运行课程一致）。
+    """
+    problems = []
+    for match in GLOSSED_LITERAL.finditer(text):
+        problems.append(("中文原文加英文注释", "英文文本直接引用英文运行时文本，不写 \"中文\" (\"gloss\")："
+                         f"…{_context(text, match.start(), match.end())}…"))
+    rest = text
+    for index, (allowed_file, allowed_path, substring, _) in enumerate(ENGLISH_CJK_ALLOWED):
+        if allowed_file in ("*", file) and allowed_path in ("*", path) and substring in rest:
+            rest = rest.replace(substring, " " * len(substring))
+            if used is not None:
+                used.add(index)
+    if not problems:
+        for match in re.finditer(_CJK_CLASS + "+", rest):
+            problems.append(("英文文本含中文", f"{match.group(0)}：…{_context(text, match.start(), match.end())}…"
+                             "（确需保留的，加进 server/vocabulary.py 的 ENGLISH_CJK_ALLOWED 并写明理由）"))
+    for match in EN_UNREPORTED.finditer(text) if unreported else ():
+        problems.append(("not reported 写成 unknown", "服务商没有报告的数写 not reported："
+                         f"…{_context(text, match.start(), match.end())}…"))
+    return problems
+
+
+def unused_allowances(used, exists=None):
+    """[(文件, 文本路径, 子串)]：一次也没用上的白名单条目。
+
+    exists(file)：可选，只看文件确实存在的条目，供 validate_lessons --root 校验只含部分课程的项目时使用。
+    """
+    return [entry[:3] for index, entry in enumerate(ENGLISH_CJK_ALLOWED)
+            if index not in used and (exists is None or exists(entry[0]))]
