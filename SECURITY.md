@@ -11,7 +11,7 @@ Agent Learning Studio has no versioned releases yet. Security fixes land on the 
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through GitHub's private vulnerability reporting: open this repository's **Security** tab and choose **Report a vulnerability** ([direct link](https://github.com/KinseyQiu/agent-learning-studio/security/advisories/new)). Don't open a public issue, pull request or discussion for a security problem.
+Please report vulnerabilities privately through GitHub's private vulnerability reporting: open this repository's **Security** tab and choose **Report a vulnerability** ([direct link](https://github.com/ZhiQiu-Kinsey/agent-learning-studio/security/advisories/new)). Don't open a public issue, pull request or discussion for a security problem.
 
 Include what you can:
 
