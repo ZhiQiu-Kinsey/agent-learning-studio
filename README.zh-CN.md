@@ -13,7 +13,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![课程](https://img.shields.io/badge/%E8%AF%BE%E7%A8%8B-24%20%E5%8F%AF%E5%AD%A6%20%2F%2053%20%E8%A7%84%E5%88%92-8A5CF6)](docs/course-plan.md)
-[![CI](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml)
+[![CI](https://github.com/KinseyQiu/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/KinseyQiu/agent-learning-studio/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#参与贡献)
 
 [English](README.md) · **简体中文**
@@ -106,7 +106,7 @@
 需要 Python 3.12+、[uv](https://docs.astral.sh/uv/)、Node.js 22.12+ 和 npm。
 
 ```bash
-git clone https://github.com/<your-org>/agent-learning-studio.git
+git clone https://github.com/KinseyQiu/agent-learning-studio.git
 cd agent-learning-studio
 
 uv sync --dev                     # Python 依赖

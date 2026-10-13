@@ -13,7 +13,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Lessons](https://img.shields.io/badge/lessons-24%20available%20%2F%2053%20planned-8A5CF6)](docs/course-plan.en.md)
-[![CI](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/agent-learning-studio/actions/workflows/ci.yml)
+[![CI](https://github.com/KinseyQiu/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/KinseyQiu/agent-learning-studio/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -106,7 +106,7 @@ The full syllabus — difficulty, estimated time, whether a lesson calls a model
 **Prerequisites:** Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ and npm.
 
 ```bash
-git clone https://github.com/<your-org>/agent-learning-studio.git
+git clone https://github.com/KinseyQiu/agent-learning-studio.git
 cd agent-learning-studio
 
 uv sync --dev                     # Python dependencies
