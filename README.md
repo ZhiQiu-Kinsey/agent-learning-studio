@@ -18,10 +18,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 
 **English** · [简体中文](README.zh-CN.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/en/home-dark.png">
-  <img alt="Agent Learning Studio home page" src="docs/assets/screenshots/en/home.png" width="900">
-</picture>
+<img alt="Agent Learning Studio home page" src="docs/assets/screenshots/en/home.png" width="900">
 
 </div>
 

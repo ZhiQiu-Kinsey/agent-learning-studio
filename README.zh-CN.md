@@ -18,10 +18,7 @@
 
 [English](README.md) · **简体中文**
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/zh-CN/home-dark.png">
-  <img alt="Agent Learning Studio 首页" src="docs/assets/screenshots/zh-CN/home.png" width="900">
-</picture>
+<img alt="Agent Learning Studio 首页" src="docs/assets/screenshots/zh-CN/home.png" width="900">
 
 </div>
 
