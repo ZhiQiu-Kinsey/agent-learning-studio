@@ -1,0 +1,1207 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "observability-cost",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "OBSERVABILITY / COST",
+          "headline": "运行慢了、贵了，",
+          "highlight": "先从轨迹里找出是哪一步。",
+          "takeaway": "一次运行是一条轨迹，每次模型请求和工具调用是其中一个跨度。按跨度记下耗时和服务商报告的用量，排个序、按指纹分个组，慢步骤和重复调用就露出来了；优化之后，再用同一题集确认没有变差。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-trace",
+              "label": "01 / TRACE",
+              "title": "轨迹由跨度组成",
+              "description": "一次运行是一条轨迹；每次模型请求、每次工具调用是一个有起止时间的跨度（Span），挂在所属的步骤下。",
+              "token": "run → step → llm / tool"
+            },
+            {
+              "id": "02-correlate",
+              "label": "02 / CORRELATE",
+              "title": "关联 ID 找回原始事件",
+              "description": "账本每行带步骤号和调用 id，凭它们回到平台记录的 request、tool_call 事件核对。",
+              "token": "round · call_id"
+            },
+            {
+              "id": "03-measure",
+              "label": "03 / MEASURE",
+              "title": "实测、估算与未报告",
+              "description": "耗时由运行器计时；Token 数原样抄自响应的 usage，没给就写未报告；费用只是带来源和日期的估算。",
+              "token": "usage"
+            },
+            {
+              "id": "04-regress",
+              "label": "04 / REGRESS",
+              "title": "只改一处，再跑同一题集",
+              "description": "优化后用同一组报销和同一份人工标注对照，先看质量有没有退化，再看省下了什么。",
+              "token": "before → after"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "一次运行的全貌",
+          "paragraphs": [
+            "把请求、工具、状态和耗时串成一条轨迹，按跨度分层，才看得清一次运行到底做了什么。{{lesson:orchestrator-evaluator}}的调用账本只给出模型调用数和 total_tokens 合计。这对比较两种模式够用，对排查问题不够。假如用户抱怨“核对 4 条报销等了 6 秒”，合计数说不出这 6 秒花在哪一步，也说不出哪次调用是多余的。回答错了的时候也一样，合计数说不出是模型分错了类，还是工具返回了错误。本课要练的能力叫可观测性（Observability）：不改程序、不重跑，只凭运行时记下的数据，事后回答慢在哪、贵在哪、错在哪。",
+            "先手算一次基线。本课的任务是固定的：4 条报销，每条先请模型归类（交通、住宿或餐饮），再调用两个工具，lookup_rate 查汇率，category_limit 查这一类的报销限额，最后由程序算出可报销金额，和人工标注对照。基线每条请求一次模型、调用两次工具，一共 4 次模型请求加 8 次工具调用。把它们画成一棵树：根是这次运行，下面 4 个步骤各对应一条报销，每个步骤下挂 1 次模型请求和 2 次工具调用。账本里的 12 行，就是这棵树上的 12 个叶子。树上每个节点都有开始和结束，这样一个有起止、可计时的单元叫跨度（Span）。",
+            "平台从{{lesson:dependent-calls}}起记录的轨迹就是按这棵树组织的。每个事件带 `run_id` 和递增的 `seq`；request 与 response 打开、关闭一个模型跨度，tool_call 与 tool_result 打开、关闭一个工具跨度；同一轮次的事件归入同一个步骤。这些信封字段由后端填写，课程代码改不了，所以轨迹的结构可以信任。run_pass 让每条报销用一个轮次，于是第 3 条报销的模型请求和两次工具调用都挂在第 3 步下，展开第 3 步就能看到它的全部经过。response 事件还带 duration_ms，是平台在调用服务商前后计的时；工具跨度没有耗时字段，要用 tool_call 和 tool_result 两条事件的 `timestamp` 相减，它精确到微秒。",
+            "平台事件是原始记录：按发生顺序排开，不汇总，也不下判断。它不会告诉你哪两次调用一模一样、哪一步最慢。所以本课在运行器里另记一本账：Tracer 在每次调用前后计时，每个跨度记一行，并带上能找回原始事件的关联 ID（Correlation ID）。模型请求行凭步骤号对上同一轮次的 request 事件，工具行的 call_id 就是 tool_call 事件的 id。账本是从同一次运行派生出来的数据，两者有出入时以事件为准；它不重复存请求体，只存指纹、耗时和原样抄下的 usage。实验台上，实验报告显示账本汇总的表格，时间线显示原始事件，两边可以对照着看。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "找慢步骤和重复调用",
+          "paragraphs": [
+            "从真实数据里定位最慢的一步和重复的请求，用两条简单规则就够：按耗时排序，按指纹分组。慢步骤回答“时间去哪了”，重复调用回答“哪些钱和时间本来不必花”，两个问题都要落到具体的某一行上。基线账本有 12 行，逐行读很难一眼看出问题；同样的 12 行，从慢到快排一遍，排在最前面的就是瓶颈候选，再把内容完全相同的调用归成一组，组里第二次以后的都是重复。难点不在算法，而在先要有可靠的逐行数据，这正是上一节那本账的作用。",
+            "手算一下基线里的重复。r1、r2、r4 三条报销都是美元，lookup_rate 在第 1、2、4 步被问了三次同一个问题，参数都是 USD。本课的汇率表是固定的，一次运行里汇率不会变，后两次纯属重复；如果每次要等 200 毫秒，就白等了 400 毫秒。category_limit 查交通限额也查了两次。还有一处更贵：r4 的说明和 r1 一字不差，第 4 步发出的模型请求体和第 1 步完全相同，又花了一次模型调用。第一次出现的那次不算重复，它是必要的原件；所以基线一共有 4 次重复执行，报告里多花的耗时和 Token 各有单独一项。",
+            "fingerprint 把调用类型和参数（模型请求则是整个请求体）按键排序后序列化成 JSON，取 sha256 的前 12 位；指纹相同，就是重复，不必逐字比较两份很长的请求体。Tracer 记下每个指纹第一次出现的行，后来的行在 repeat_of 里指回去。repeated_groups 把重复执行的行分组，累加多花的耗时和服务商报告的 Token；slowest 按耗时从高到低排出实际执行的跨度。报告还并列两个总数：端到端延迟（End-to-End Latency）是整趟运行从开始到结束的墙钟时间，各步耗时之和只算跨度本身，两者的差是跨度之间的程序开销，比如解析回复、记录事件。",
+            "指纹只认一字不差。r4 的说明要是多一个句号，指纹就不同，语义上却仍是重复；反过来，指纹相同也不一定该省，查余额、查库存这类结果会变的调用，第二次查可能正是对的。慢步骤排名也只说明这一次哪里慢。离线测试模式下夹具瞬间给出回复，最慢的会是 lookup_rate，它按 rate_latency_ms 等待，模拟远端汇率服务；真实运行里一次模型请求往往要几百毫秒到几秒，排名多半会变。排在前面的跨度还要问一句是否本该就慢：长篇输出的模型请求慢是正常的，同一个汇率查三遍才是问题。以你自己运行的报告为准。"
+          ]
+        },
+        {
+          "id": "deep-dive-otel",
+          "type": "deep-dive",
+          "title": "观测平台怎样记跨度",
+          "summary": "跨度树来自分布式系统的追踪；标准协议让同一份数据能接不同的分析平台。",
+          "paragraphs": [
+            "跨度树不是 Agent 领域的发明，它来自分布式系统的追踪：一次用户请求穿过十几个服务，每个服务记一段带起止时间的跨度，用同一个轨迹编号串起来，父子关系画成一棵树。《深入理解 AI Agent》第七章把这套模型直接搬到 Agent：一次任务是一条轨迹，每次模型调用、工具调用、检索都是一个跨度，记录输入输出、起止时间、Token 用量和错误信息；主循环是父跨度，下面挂着若干模型调用和工具调用。有了这棵树，排查时可以从慢的父跨度一路展开到具体哪一次调用。",
+            "OpenTelemetry 是通用的追踪标准，OpenInference 等规范在它之上约定了 LLM 应用怎样记提示词、模型参数和 Token 用量。用标准协议的好处是采集与分析分开：同一份数据可以送进 Langfuse、Arize Phoenix 或 LangSmith 这类平台，换平台不用改插桩代码。Hugging Face Agents Course 的观测单元就是这样做的：给 Agent 框架装上 OpenInference 的插桩库，把每次运行发到 Langfuse，界面上是一棵可展开的跨度树，每个节点显示耗时和 Token。Microsoft AI Agents for Beginners 的生产化一课也用同一组概念，并建议在自动插桩之外手动加跨度，挂上用户、会话、模型版本这类业务属性。",
+            "书里提到，LangSmith 这类平台异步批量采集追踪数据，避免追踪本身拖慢 Agent。本平台的事件信封是同一思路的精简版：`run_id`、`seq`、`span_id`、`parent_span_id` 由后端填写，存进本机 SQLite，不导出到外部平台。request 与 response 还标明表示层级：百炼原生 HTTP 记为 `http_body`，经 LiteLLM 的记为 `sdk_standardized`，后者的 usage 已经过 SDK 标准化，不能当成服务商的原始报文。书里还提醒，生产轨迹最有价值的去向，是脱敏后回流成评估集里的新用例：今天线上暴露的失败，明天就是守住底线的回归用例。本课的账本和报告也可以这样用：把出过问题的那条报销加进题集，下次优化时一起对照。"
+          ]
+        },
+        {
+          "id": "misconception-sum",
+          "type": "misconception",
+          "claim": "端到端耗时就是各步耗时相加。",
+          "correction": "串行运行时两者接近，差值是跨度之间的程序开销，比如解析回复、记录事件；并行发出的请求会互相重叠，端到端反而可能比各步之和短。本课的报告把两个数并列，差得多时，先查跨度之外的时间花在哪。"
+        },
+        {
+          "id": "predict-tool-calls",
+          "type": "predict",
+          "prompt": "运行“只开工具缓存”之前先猜：这次运行会出现几个 tool_call 事件？",
+          "experiment": "find-waste",
+          "arm": "tool-cache",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
+        },
+        {
+          "id": "mq-fingerprint",
+          "type": "micro-quiz",
+          "question": {
+            "id": "repeat-count",
+            "prompt": "基线里 lookup_rate 被调用了 4 次，参数依次是 USD、USD、CNY、USD。按本课的指纹规则，其中几次是重复执行？",
+            "options": [
+              {
+                "id": "a",
+                "text": "2 次：第二次和第四次 USD",
+                "feedback": "对。第一次 USD 不算重复，后面两次指纹相同。"
+              },
+              {
+                "id": "b",
+                "text": "3 次：所有 USD 都算",
+                "feedback": "不对。第一次出现的那次是原件，只有后来的才是重复。"
+              },
+              {
+                "id": "c",
+                "text": "1 次：只有连续两次相同才算",
+                "feedback": "不对。指纹相同就是重复，中间隔着别的调用也一样。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "repeat_of 指向同一指纹第一次出现的行；第一次本身不算重复。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "用量与成本",
+          "paragraphs": [
+            "区分服务商报告的用量、本地估算和未报告，成本只按写明来源和日期的价格表折算。用量在{{lesson:chat-request}}就见过：响应里的 usage 由服务商填写，是这次调用计量的依据。麻烦在于它不总是在：有的服务商流式输出时不给，有的兼容接口只给一部分字段。这时程序很容易顺手写成 0，合计照样能算出一个数，但这个数是错的。所以先分清手里的数字是哪一种：服务商报告的是实测，你拿价格表乘出来的是估算，响应里没有的就是未报告，三者在报告里要分开写。",
+            "举个编的例子。某次请求报告 prompt_tokens 120、completion_tokens 8；你查到的价格是每百万输入 Token 2 元、每百万输出 Token 8 元，这次就是 `120 × 2 / 1e6 + 8 × 8 / 1e6 = 0.000304` 元。4 次请求里如果有 1 次响应没带 usage，合计只能写成“已报告的 3 次之和，另有 1 次未报告”，估算也只覆盖 3/4 次。写 0 不行：0 表示服务商说“这次没花”，而实际情况是“它没告诉我们”。估算还要写明按哪个模型的价格算：同一份用量换一个模型的价格，结果可能差好几倍。所以报告里有三个数要分开看：已报告的 Token 合计、没有报告用量的调用次数、估算覆盖了几次调用。",
+            "read_usage 先读 OpenAI 兼容的字段名 prompt_tokens、completion_tokens（百炼和 LiteLLM 都用它们），再读 Anthropic 风格的 input_tokens、output_tokens；值必须是非负整数，布尔值不当作 1。没有 total_tokens、而输入和输出都报告了，才把两者相加，两个报告值的和仍是报告数据。工具行没有 Token 用量，表里写“—”，意思是不适用，和“未报告”不是一回事。estimate_cost 只在 price_source 与 price_date 都填写时折算，结果写明模型名、价格来源、日期和覆盖了几次调用，并注明“估算，不是账单”。账本里还留着原样的 usage 字典：你的服务商要是用了别的字段名，读出的三项会是 None，而原始字典里能看到它实际给了什么。",
+            "价格会变。Claude Cookbooks 的成本优化笔记特意说明，它的价格表只是写作时的快照；《深入理解 AI Agent》配套的成本实验也把价格单独放在配置里，换价格只是重算同一条轨迹，不代表换个模型会有同样的用量。所以估算必须带价格来源和日期，过期就重查。估算还有三处不准：没有区分缓存命中的价格（见{{lesson:prompt-caching}}），不含工具和基础设施的费用，也不含折扣与免费额度。要核对真实花费，看服务商控制台或用量接口给出的账单数据；Claude Cookbooks 也提醒，那类接口用于事后分析，不用于实时监控。"
+          ]
+        },
+        {
+          "id": "deep-dive-compound",
+          "type": "deep-dive",
+          "title": "手算：多轮任务的成本为什么不是线性增长",
+          "summary": "每轮都重发历史，工具结果会被反复计费；几项优化合用要整体实测。",
+          "paragraphs": [
+            "Agent 每一轮请求都要把之前的消息历史和工具结果一起发出去，模型才知道前面发生了什么。书里举的例子是：第 1 轮发 1000 个 Token，第 2 轮 2000，第 3 轮 3000，三轮输入合计 6000，而不是 `3 × 1000`。一次网页搜索返回 2000 到 5000 个 Token，这些内容在之后每一轮都会作为输入再计一次费。轮次越多，早期的工具结果被重复计费的次数越多，总量大致随轮数的平方增长，而不是随轮数线性增长。",
+            "书的配套实验跑一个固定的八轮客服退款任务，四种开关组合各跑一次，用 `gpt-4o-mini` 的公开价格折算。基线每轮的输入从 1113 个 Token 涨到 3668 个，工具结果累计占了 9544 个输入 Token；同时打开稳定前缀和压缩历史后，这一项降到 5248，总费用降了 30%。单开稳定前缀省 28.3%，单开压缩历史省 17.5%，两者同开只省 30%，并不是两项相加。这些是书里那次实验的测量值，不是本平台的数据。",
+            "对本课的启发有两点。第一，按步骤记账才看得到这种累积：只看合计，看不出第 7 轮的输入已经涨到第 1 轮的三倍。第二，优化要能单独开关，各自测一遍，再合起来测一遍；压缩历史会缩短能命中缓存的前缀，两项合用的效果小于两者之和。本课的两种优化也各自只改一处，对照报告里也就能把省下的数字归到那一处。"
+          ]
+        },
+        {
+          "id": "mq-unreported",
+          "type": "micro-quiz",
+          "question": {
+            "id": "partial-total",
+            "prompt": "4 次模型调用里，第 2 次的响应没有 usage，其余三次的 total_tokens 合计 300。报告里“已报告的 Token 合计”应该怎么写？",
+            "options": [
+              {
+                "id": "a",
+                "text": "300，并注明另有 1 次未报告",
+                "feedback": "对。只加已报告的值，缺的次数写出来。"
+              },
+              {
+                "id": "b",
+                "text": "300",
+                "feedback": "不对。读者会以为 4 次都算进去了。"
+              },
+              {
+                "id": "c",
+                "text": "400，按另外三次的平均值补上",
+                "feedback": "不对。这是本地估算，不能冒充服务商报告的用量。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "合计只加报告过的数，并说明有几次没报告；估算要单独标明。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "缓存与优化回归",
+          "paragraphs": [
+            "优化后再跑同一题集，确认省了钱也没变差；一次只改一处，才说得清省下的是哪一处的功劳。账本指出了两类浪费，本课各给一个只改一处的方案：工具缓存只管工具调用，合并请求只管模型请求，其余代码一行不动，题集、提示词和工具也都不变。这和{{lesson:sampling-variance}}的对照实验是同一个道理：两次运行之间只差一个变量，差异才归得到它头上。要是同时开了缓存又合并了请求，Token 少了，你说不清是哪一处省的；质量变差了，也说不清该退回哪一处。",
+            "先手算预期。工具缓存在一次运行内记住每个指纹的结果，再遇到同样的调用就直接取用：基线的 8 次工具调用里有 3 次是重复，开缓存后只执行 5 次，另记 3 次缓存命中；模型请求仍是 4 次，第 4 步那次重复的请求还在。合并请求把 4 条说明放进一个 JSON 数组，一次请求换回 4 个类别：模型调用从 4 次降到 1 次，系统提示词也只发一次。代价是模型一次要看 4 条，输出格式更复杂，某一条分错、整段解析失败的风险都在变大；一旦整段解析失败，4 条会一起判为无法解析。",
+            "“合并请求，并与基线对照”在同一次运行里先跑基线（第 1 到 4 步），再跑合并请求（第 5 到 9 步），两遍用同一组报销和同一份人工标注。regressions 逐条比较，这就是{{lesson:evaluation-sets}}讲的配对分析：基线通过、优化后失败的算回归，反过来的算修好。对照报告先给“质量没有退化”和“失败条数没有增加”两项检查，再列模型调用数、工具调用数、端到端耗时和已报告的 Token，每个数都能回到各自的账本行。质量这一行过关，后面省下的数字才有意义。",
+            "这个对照只有 4 条报销、各跑一遍，能看清机制，不能得出“合并请求总是更好”的结论。模型输出有随机性，下结论之前要多跑几次看分布；题集也要像{{lesson:evaluation-sets}}那样覆盖足够多的情况。几项优化一起开时，省下的比例不能直接相加。判断能不能采用一个优化，顺序是先过质量护栏，再看 Token 和耗时，最后看这些节省放到你真实的任务量上值不值得改代码。缓存也有边界：结果会变的工具不能缓存，缓存要有明确的范围，本课的缓存只在一次运行内有效。下一课{{lesson:reliable-tools}}接着讲工具失败之后的重试与幂等。"
+          ]
+        },
+        {
+          "id": "deep-dive-metrics",
+          "type": "deep-dive",
+          "title": "从报告到改进：机制指标、目标指标和护栏",
+          "summary": "你改的那个数和你真正关心的那个数常常不是同一个；质量底线先于省钱。",
+          "paragraphs": [
+            "书里分析 AndroidWorld 调优时，三轮实验每轮只改一处：补充导航提示，成功率没变；把界面信息换成 UIAutomator 元素树，四项任务的成功率从 25% 升到 100%，Token 却涨到原来的 2.5 倍；再删掉元素树里不可见、没有文字、不能操作的节点，成功率不变，Token 减半。每一轮的结论只用来决定下一轮测什么，四个任务上的 100% 不代表整体水平。",
+            "书里还区分了机制指标和目标指标。缩短计划文件是你直接改动的机制，真正的目标可能是整个会话的成本；计划太短，Agent 反而多出几轮编辑和检查，总输出变多。另设护栏指标作为不能变差的底线，比如错误率和用户满意度。本课的对照报告里，“质量没有退化”就是护栏，Token 和耗时才是目标。",
+            "Claude Cookbooks 的成本优化笔记给出的顺序也一样：先让 Agent 在能力强的模型上跑通，建一个小评估集，量出通过率和每个任务的成本作为基线，再逐项尝试缓存、精简输入、控制输出，最后才考虑换便宜的模型。它比较的是每个任务的成本，而不是每个 Token 的单价：单价高的模型如果更少轮次就完成任务，反而更便宜。",
+            "Microsoft AI Agents for Beginners 的生产化一课列了三种控制成本的办法：简单任务交给小模型，按请求的复杂度路由到不同的模型，对常见请求直接缓存回答。三种办法都会改变质量，所以它同样建议先建评估体系，用同一批任务比较大小模型的表现，再决定用哪一种。本课的合并请求与工具缓存属于同一类取舍，省下多少要看账本，值不值得要看题集。"
+          ]
+        },
+        {
+          "id": "misconception-zero",
+          "type": "misconception",
+          "claim": "服务商没返回用量时记成 0，合计照样能算。",
+          "correction": "0 表示服务商报告了“这次没花”，没返回表示“它没告诉我们”。把未报告记成 0，合计和估算的费用都会偏低，而且看不出偏低。本课的合计只加已报告的值，并写明有几次未报告；工具行没有 Token 用量，写“—”表示不适用。"
+        },
+        {
+          "id": "mq-regression",
+          "type": "micro-quiz",
+          "question": {
+            "id": "regression-first",
+            "prompt": "合并请求后，模型调用从 4 次降到 1 次，Token 也少了，但 r2 从通过变成了失败。这个优化该怎么判断？",
+            "options": [
+              {
+                "id": "a",
+                "text": "质量退化了，先不采用；查清 r2 为什么错再决定",
+                "feedback": "对。护栏没过，省下的数字不算数。"
+              },
+              {
+                "id": "b",
+                "text": "省了四分之三的调用，值得采用",
+                "feedback": "不对。省钱不能以答错为代价。"
+              },
+              {
+                "id": "c",
+                "text": "看端到端耗时，更快就采用",
+                "feedback": "不对。耗时和质量是两件事，质量先过关。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "先看质量有没有退化，再看省下了什么。"
+          }
+        },
+        {
+          "id": "compare-strategies",
+          "type": "compare",
+          "title": "三种策略",
+          "paragraphs": [
+            "调用数按模型把 4 条全部分对来算；分错时 category_limit 的参数会变，缓存命中的次数也会跟着变，真实运行以报告为准。三种策略用同一组报销、同一份人工标注和同样的工具，只有一列不同。"
+          ],
+          "columns": [
+            "策略",
+            "和基线比改了什么",
+            "模型调用",
+            "工具调用",
+            "主要风险"
+          ],
+          "rows": [
+            [
+              "基线：逐条请求、不缓存",
+              "无",
+              "4 次",
+              "8 次",
+              "重复的调用照单全付"
+            ],
+            [
+              "只开工具缓存",
+              "同样的工具调用在本次运行内只执行一次",
+              "4 次",
+              "5 次，另有 3 次缓存命中",
+              "结果会变的工具不能缓存"
+            ],
+            [
+              "只合并请求",
+              "4 条报销放进一次模型请求",
+              "1 次",
+              "8 次",
+              "输出格式更复杂，可能某条分错"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一行账本是怎么记下来的",
+          "description": "按步骤说明 Tracer 为一次模型请求记一行账的过程，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "指纹",
+              "actor": "运行器",
+              "title": "先算请求体的指纹",
+              "body": "调用之前，把请求体按键排序序列化，取 sha256 前 12 位。",
+              "code": "key = fingerprint(\"llm\", body)",
+              "language": "python",
+              "evidence": "账本行的 fingerprint"
+            },
+            {
+              "id": "step-2",
+              "label": "请求",
+              "actor": "平台",
+              "title": "发出请求并记录事件",
+              "body": "context.complete 记下 request 和 response，轮次就是步骤号。",
+              "code": "response = self.context.complete(body, step)",
+              "language": "python",
+              "evidence": "request / response，response 带 duration_ms"
+            },
+            {
+              "id": "step-3",
+              "label": "用量",
+              "actor": "运行器",
+              "title": "原样抄下用量",
+              "body": "从响应的 usage 读出 Token 数，没有的字段记 None。",
+              "code": "read_usage(response.get(\"usage\"))",
+              "language": "python",
+              "evidence": "账本行的 input_tokens、output_tokens"
+            },
+            {
+              "id": "step-4",
+              "label": "记账",
+              "actor": "运行器",
+              "title": "记一行，查是否重复",
+              "body": "计时结束；这个指纹以前出现过，就在 repeat_of 里指回第一次那行。",
+              "code": "self._row(\"llm\", self.context.model, step, receipt, key, started, ...)",
+              "language": "python",
+              "evidence": "lesson.ledger 的 rows"
+            },
+            {
+              "id": "step-5",
+              "label": "汇总",
+              "actor": "运行器",
+              "title": "排序、分组、对照",
+              "body": "一遍跑完，按耗时排序、按指纹分组，再和人工标注对照。",
+              "code": "slowest(rows)\nrepeated_groups(rows)",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-observability",
+              "title": "什么是 Agent 的可观测性与评估：轨迹、跨度与关键指标（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/bonus-unit2/what-is-agent-observability-and-evaluation.mdx"
+            },
+            {
+              "id": "hf-notebook",
+              "title": "监控与评估 Agent：插桩、成本与延迟（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/bonus-unit2/monitoring-and-evaluating-agents-notebook.mdx"
+            },
+            {
+              "id": "book-observability",
+              "title": "Agent 的可观测性、成本分析与从报告到改进（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter7.md"
+            },
+            {
+              "id": "book-tracer",
+              "title": "自建轻量追踪：按步骤拆解用量与成本（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter7/agent-cost-analysis/tracer.py"
+            },
+            {
+              "id": "ms-production",
+              "title": "生产环境中的 Agent：可观测性与评估（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/10-ai-agents-production/README.md"
+            },
+            {
+              "id": "cookbook-cost",
+              "title": "成本优化：先建基线，再逐项优化（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/cost_optimization/cost_optimization.ipynb"
+            },
+            {
+              "id": "cookbook-usage-api",
+              "title": "用量与费用接口：核对真实花费（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/observability/usage_cost_api.ipynb"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "orchestrator-evaluator"
+        },
+        {
+          "id": "code-tracer",
+          "type": "annotated-source",
+          "path": "lessons/lesson_observability_cost/runtime.py",
+          "start": 75,
+          "end": 116,
+          "notes": [
+            {
+              "id": "n75",
+              "line": 75,
+              "anchor": "def fingerprint(kind: str, payload) -> str:",
+              "text": "“重复”在本课的定义：调用类型加参数，或者整个请求体，序列化后一字不差。"
+            },
+            {
+              "id": "n77",
+              "line": 77,
+              "anchor": "sort_keys=True",
+              "text": "按键排序再序列化，参数顺序不同也算同一个调用；取 sha256 前 12 位做指纹。"
+            },
+            {
+              "id": "n81",
+              "line": 81,
+              "anchor": "class Tracer:",
+              "text": "本课的账本。平台照常记录事件，Tracer 在每次调用的边界多记一行汇总。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "anchor": "self.first_seen: dict[str, int] = {}",
+              "text": "每个指纹第一次出现在哪一行，用来判断后来的调用是不是重复。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "anchor": "def _row(self, kind: str, name: str, step: int",
+              "text": "每行的公共字段：哪一遍、第几步、类型、名字、收据、指纹和耗时。"
+            },
+            {
+              "id": "n91",
+              "line": 91,
+              "anchor": "\"ms\": round((time.perf_counter() - started) * 1000, 1)",
+              "text": "耗时从调用前计到记账时，包含平台记录事件的开销，所以比 duration_ms 略大。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "\"repeat_of\": self.first_seen.get(key), **extra}",
+              "text": "repeat_of 指回同一指纹第一次出现的行；第一次出现时为 None。"
+            },
+            {
+              "id": "n97",
+              "line": 97,
+              "anchor": "def llm(self, body: dict, step: int, receipt: str) -> dict:",
+              "text": "模型请求的一行：步骤号同时是事件的轮次，凭它找回 request 和 response。"
+            },
+            {
+              "id": "n99",
+              "line": 99,
+              "anchor": "response = self.context.complete(body, step)",
+              "text": "请求和响应仍由平台原样记成事件，账本不另存请求体。"
+            },
+            {
+              "id": "n102",
+              "line": 102,
+              "anchor": "usage=usage if isinstance(usage, dict) else None, **read_usage(usage))",
+              "text": "usage 原样抄进账本，再由 read_usage 读出三种 Token 数；没有就是 None。"
+            },
+            {
+              "id": "n105",
+              "line": 105,
+              "anchor": "def tool(self, name: str, arguments: dict, step: int",
+              "text": "工具调用的一行；cache 不为 None 时先查本次运行的缓存。"
+            },
+            {
+              "id": "n107",
+              "line": 107,
+              "anchor": "if cache is not None and key in cache:",
+              "text": "缓存命中：不发工具事件，账本记一行“缓存命中”，耗时接近 0。"
+            },
+            {
+              "id": "n111",
+              "line": 111,
+              "anchor": "call_id = f\"obs_{self.strategy}_{len(self.rows) + 1}\"",
+              "text": "关联 ID 由运行器指定，传给平台后就是 tool_call 事件的 id。"
+            },
+            {
+              "id": "n112",
+              "line": 112,
+              "anchor": "result = self.context.call_tool(name, arguments, tools, step, call_id=call_id)",
+              "text": "运行器发起的调用，平台记下 tool_call 与 tool_result，按同一个 id 配对。"
+            },
+            {
+              "id": "n114",
+              "line": 114,
+              "anchor": "if cache is not None and result[\"ok\"]:",
+              "text": "只缓存成功的结果；失败的调用下次仍会真的执行。"
+            }
+          ]
+        },
+        {
+          "id": "code-pass",
+          "type": "annotated-source",
+          "path": "lessons/lesson_observability_cost/runtime.py",
+          "start": 146,
+          "end": 172,
+          "notes": [
+            {
+              "id": "n146",
+              "line": 146,
+              "anchor": "def run_pass(context: RunContext, t: Texts, values: Inputs, strategy: str",
+              "text": "用一种策略把 4 条报销跑一遍；对照练习会连续调用两次。"
+            },
+            {
+              "id": "n149",
+              "line": 149,
+              "anchor": "tools = {\"lookup_rate\": partial(lookup_rate, t, values.rate_latency_ms)",
+              "text": "rate_latency_ms 绑进汇率工具：它等这么久再回答，模拟远端服务。"
+            },
+            {
+              "id": "n150",
+              "line": 150,
+              "anchor": "cache = {} if strategy == \"tool_cache\" else None",
+              "text": "工具缓存这一策略唯一的改动：给 Tracer 一个字典。"
+            },
+            {
+              "id": "n153",
+              "line": 153,
+              "anchor": "if strategy == \"batched\":",
+              "text": "合并请求这一策略唯一的改动：4 条说明放进一次请求，单独占一个步骤。"
+            },
+            {
+              "id": "n156",
+              "line": 156,
+              "anchor": "categories, step = parse_batch(reply), step + 1",
+              "text": "回复按 id 读出类别；缺了哪条，那条就记为无法解析。"
+            },
+            {
+              "id": "n158",
+              "line": 158,
+              "anchor": "for receipt in RECEIPTS:",
+              "text": "每条报销一个步骤，步骤号就是事件的轮次，于是一条报销的跨度都挂在同一个步骤下。"
+            },
+            {
+              "id": "n161",
+              "line": 161,
+              "anchor": "if strategy != \"batched\":",
+              "text": "另外两种策略每条请求一次；r4 和 r1 的说明相同，请求体一字不差。"
+            },
+            {
+              "id": "n166",
+              "line": 166,
+              "anchor": "rate = tracer.tool(\"lookup_rate\", {\"currency\": receipt[\"currency\"]}",
+              "text": "不开缓存时，同一个币种每遇到一次就问一次。"
+            },
+            {
+              "id": "n168",
+              "line": 168,
+              "anchor": "if category is not None else None)",
+              "text": "模型回复解析不出类别时不查限额，这条直接判为无法解析。"
+            },
+            {
+              "id": "n169",
+              "line": 169,
+              "anchor": "cases.append(grade(receipt, category, rate, limit))",
+              "text": "grade 对照人工标注，并给出失败归因：解析失败、工具报错、类别错或金额错。"
+            },
+            {
+              "id": "n172",
+              "line": 172,
+              "anchor": "\"end_to_end_ms\": round((time.perf_counter() - started) * 1000, 1)}",
+              "text": "端到端耗时包括各跨度之间的程序开销，和各步之和并列进报告。"
+            }
+          ]
+        },
+        {
+          "id": "code-analysis",
+          "type": "annotated-source",
+          "path": "lessons/lesson_observability_cost/runtime.py",
+          "start": 196,
+          "end": 235,
+          "notes": [
+            {
+              "id": "n196",
+              "line": 196,
+              "anchor": "def read_usage(usage) -> dict:",
+              "text": "用量只读服务商报告的数，读不到就是 None，从不补 0。"
+            },
+            {
+              "id": "n198",
+              "line": 198,
+              "anchor": "if not isinstance(usage, dict):",
+              "text": "响应根本没有 usage：三项都是未报告。"
+            },
+            {
+              "id": "n201",
+              "line": 201,
+              "anchor": "first = _count(usage.get(\"prompt_tokens\"))",
+              "text": "先读 OpenAI 兼容的字段名，读不到再试 Anthropic 风格的名字。"
+            },
+            {
+              "id": "n205",
+              "line": 205,
+              "anchor": "total = _count(usage.get(\"total_tokens\"))",
+              "text": "_count 只接受非负整数；布尔值、字符串和负数都不猜成数字。"
+            },
+            {
+              "id": "n206",
+              "line": 206,
+              "anchor": "if total is None and inputs is not None and outputs is not None:",
+              "text": "两个报告值相加仍是报告数据；缺任何一个就不算合计。"
+            },
+            {
+              "id": "n211",
+              "line": 211,
+              "anchor": "def repeated_groups(rows: list[dict]) -> list[dict]:",
+              "text": "把指纹执行过不止一次的跨度分组。"
+            },
+            {
+              "id": "n215",
+              "line": 215,
+              "anchor": "if row[\"kind\"] == \"cache\" or row[\"repeat_of\"] is None:",
+              "text": "缓存命中是避免掉的重复，不算重复执行；第一次出现的行也不算。"
+            },
+            {
+              "id": "n218",
+              "line": 218,
+              "anchor": "group = groups.setdefault(row[\"fingerprint\"]",
+              "text": "按指纹分组，步骤列表从第一次出现的那步开始。"
+            },
+            {
+              "id": "n222",
+              "line": 222,
+              "anchor": "group[\"extra_ms\"] = round(group[\"extra_ms\"] + row[\"ms\"], 1)",
+              "text": "多花的耗时只算重复的那几次。"
+            },
+            {
+              "id": "n225",
+              "line": 225,
+              "anchor": "if row[\"total_tokens\"] is None:",
+              "text": "重复请求的 Token 也只加报告过的，没报告的单独计数。"
+            },
+            {
+              "id": "n232",
+              "line": 232,
+              "anchor": "def slowest(rows: list[dict], limit: int = 5) -> list[dict]:",
+              "text": "慢步骤排名：按耗时从高到低取前 5 个。"
+            },
+            {
+              "id": "n234",
+              "line": 234,
+              "anchor": "executed = [row for row in rows if row[\"kind\"] != \"cache\"]",
+              "text": "只排实际执行的跨度；缓存命中几乎不花时间，也没有对应的事件。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "为什么在运行器的调用边界自己记账",
+          "chosen": "每次调用都经过 Tracer：调用前算指纹、开始计时，调用后原样抄下 usage，记一行带关联 ID 的账。平台事件仍是原始记录，账本只做派生汇总，随时能凭步骤号和 call_id 回到事件核对。",
+          "alternatives": [
+            {
+              "id": "events-only",
+              "title": "只读平台事件，不另记账",
+              "why_not": "事件按顺序排开、不汇总，也没有指纹和用量归一化；每看一次报告都要自己重算一遍。账本把这些算好，同时保留关联 ID。"
+            },
+            {
+              "id": "otel-platform",
+              "title": "接入 Langfuse 这类观测平台",
+              "why_not": "需要额外的服务、密钥和网络。本课先用几十行代码看清跨度、指纹和用量从哪来；生产环境用成熟组件更合适。"
+            },
+            {
+              "id": "zero-usage",
+              "title": "usage 缺失时记成 0",
+              "why_not": "书中配套的 tracer.py 在 usage 为空时把 Token 和成本都记成 0。合计照样能算，却把“没报告”变成了“没花”；本课记 None，报告写未报告。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "find-waste",
+          "title": "找出重复调用和慢步骤",
+          "hypothesis": "基线会重复执行 4 次调用：lookup_rate 两次、category_limit 一次、模型请求一次；只开工具缓存后，工具调用从 8 次降到 5 次，模型请求不变。",
+          "predict": "predict-tool-calls",
+          "arms": [
+            {
+              "id": "baseline",
+              "exercise": "baseline",
+              "label": "基线：逐条请求、不缓存"
+            },
+            {
+              "id": "tool-cache",
+              "exercise": "tool-cache",
+              "label": "只开工具缓存"
+            }
+          ],
+          "observe": [
+            {
+              "id": "usage",
+              "text": "第 1 步响应里服务商报告的 usage，账本原样抄下它。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.usage"
+              }
+            },
+            {
+              "id": "ledger-row",
+              "text": "账本第一行：步骤、类型、指纹、耗时和 Token 数。",
+              "selector": {
+                "event": "lesson.ledger",
+                "path": "data.rows[0]"
+              }
+            },
+            {
+              "id": "same-request",
+              "text": "第 4 步的模型请求体，和第 1 步一字不差。",
+              "selector": {
+                "event": "request",
+                "round": 4,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "repeats",
+              "text": "重复执行的调用：按指纹分组的结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=repeated_calls]"
+              }
+            },
+            {
+              "id": "slowest",
+              "text": "最慢的一步和它占端到端耗时的比例。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=slowest_step]"
+              }
+            },
+            {
+              "id": "cache-hits",
+              "text": "缓存命中次数：基线是 0。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=cache_hits]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组核对同样的 4 条报销，只差一处：工具缓存开没开。先看一次模型请求留下了什么。"
+            },
+            {
+              "text": "服务商在响应里报告的 usage。没有这一段时，账本会写未报告，而不是 0。",
+              "observe": "usage",
+              "stage": "model"
+            },
+            {
+              "text": "账本的一行对应一个跨度。step 就是事件的轮次，凭它能找回上面那条响应。",
+              "observe": "ledger-row",
+              "stage": "runtime"
+            },
+            {
+              "text": "r4 和 r1 的说明相同，这次请求体和第 1 步完全一样，是一次可以省掉的模型调用。",
+              "observe": "same-request",
+              "stage": "model"
+            },
+            {
+              "text": "按指纹分组后的重复：基线里汇率、限额和模型请求都有。开了工具缓存，只剩模型请求那组。",
+              "observe": "repeats"
+            },
+            {
+              "text": "最慢的一步。离线测试模式下是汇率工具；真实运行里常常是模型请求。",
+              "observe": "slowest",
+              "stage": "tool"
+            },
+            {
+              "text": "开缓存后，重复的工具调用变成缓存命中，不再产生工具事件。",
+              "observe": "cache-hits",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每个跨度的耗时、服务商报告的用量、哪些调用重复执行，以及开缓存后少执行了几次工具调用。"
+            ],
+            "does_not_prove": [
+              "指纹只认一字不差，语义相同而文字不同的重复它看不出来。",
+              "一次运行的慢步骤排名会随网络和模型变化，不能代表平均水平。",
+              "离线测试模式下的回复与用量由夹具给出，汇率工具的等待来自 rate_latency_ms 的设定。"
+            ]
+          }
+        },
+        {
+          "id": "batch-regression",
+          "title": "合并请求：省了什么，变没变差",
+          "hypothesis": "合并请求把 4 次模型调用降到 1 次，已报告的 Token 也会减少；同一题集上质量可能不变，也可能退化，要看对照报告。",
+          "arms": [
+            {
+              "id": "batched-compare",
+              "exercise": "batched-compare",
+              "label": "合并请求，并与基线对照"
+            }
+          ],
+          "observe": [
+            {
+              "id": "batch-request",
+              "text": "第 5 步的合并请求：4 条说明放在一个 JSON 数组里。",
+              "selector": {
+                "event": "request",
+                "round": 5,
+                "path": "data.body.messages[1].content"
+              }
+            },
+            {
+              "id": "no-regression",
+              "text": "护栏检查：同一题集里有没有从通过变成失败的条目。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_regression]"
+              }
+            },
+            {
+              "id": "regressions",
+              "text": "从通过变成失败的收据。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=regressions]"
+              }
+            },
+            {
+              "id": "token-change",
+              "text": "已报告的 Token 变化；任何一边有未报告时写未报告。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=token_change]"
+              }
+            },
+            {
+              "id": "latency-change",
+              "text": "端到端耗时的变化。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=latency_change]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这次运行先跑一遍基线（第 1 到 4 步），再跑一遍合并请求（第 5 到 9 步），用同一组报销和同一份人工标注。"
+            },
+            {
+              "text": "合并请求只发一次，4 条说明在同一条用户消息里。",
+              "observe": "batch-request",
+              "stage": "model"
+            },
+            {
+              "text": "先看护栏：质量有没有退化。没过就不必往下看省了多少。",
+              "observe": "no-regression",
+              "stage": "runtime"
+            },
+            {
+              "text": "退化的具体条目。为“无”时说明两遍结果一致或变好。",
+              "observe": "regressions"
+            },
+            {
+              "text": "再看省下的 Token：只比较两边都报告了的数。",
+              "observe": "token-change"
+            },
+            {
+              "text": "耗时的变化要结合慢步骤看：离线时模型回复是瞬间的，省下的主要是真实运行里的模型等待。",
+              "observe": "latency-change"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "在这 4 条报销上，合并请求前后的模型调用数、已报告的 Token、端到端耗时，以及有没有条目从通过变成失败。"
+            ],
+            "does_not_prove": [
+              "4 条样本各跑一遍，不能说明合并请求在别的任务或别的模型上同样不退化。",
+              "Token 变化只反映服务商报告的用量，不等于账单金额。",
+              "离线测试模式下夹具按人工标注作答，质量不会变，退化只能在真实运行里观察。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "strategy",
+          "label": "策略",
+          "options": [
+            {
+              "value": "baseline",
+              "label": "基线"
+            },
+            {
+              "value": "tool_cache",
+              "label": "工具缓存"
+            },
+            {
+              "value": "batched",
+              "label": "合并请求"
+            }
+          ]
+        },
+        {
+          "name": "compare_with_baseline",
+          "label": "先跑一遍基线做对照",
+          "help": "打开后先按基线跑一遍，再按所选策略跑一遍，最后给出对照报告。策略选基线时不能打开。"
+        },
+        {
+          "name": "rate_latency_ms",
+          "label": "汇率工具的等待（ms）",
+          "help": "lookup_rate 每次执行前等待的毫秒数，模拟远端服务；缓存命中不等待。"
+        },
+        {
+          "name": "price_input_per_m",
+          "label": "输入价格（每百万 Token）",
+          "help": "只在填写价格来源和日期时使用。"
+        },
+        {
+          "name": "price_output_per_m",
+          "label": "输出价格（每百万 Token）",
+          "help": "只在填写价格来源和日期时使用。"
+        },
+        {
+          "name": "price_currency",
+          "label": "币种",
+          "options": [
+            {
+              "value": "CNY",
+              "label": "人民币"
+            },
+            {
+              "value": "USD",
+              "label": "美元"
+            }
+          ]
+        },
+        {
+          "name": "price_source",
+          "label": "价格来源",
+          "help": "例如服务商价格页的名称或网址；和日期一起填写才会折算费用。"
+        },
+        {
+          "name": "price_date",
+          "label": "价格查询日期",
+          "help": "格式 YYYY-MM-DD。价格会变，估算要带日期。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "一次运行和一个跨度是什么关系？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "运行是一条轨迹，每次模型请求、每次工具调用是其中一个跨度",
+                  "feedback": "对。跨度按步骤分层，组成这条轨迹。"
+                },
+                {
+                  "id": "b",
+                  "text": "一次运行就是一个跨度",
+                  "feedback": "不对。运行是根，下面有步骤和更细的跨度。"
+                },
+                {
+                  "id": "c",
+                  "text": "跨度只记模型请求，工具调用不算",
+                  "feedback": "不对。工具调用也是有起止时间的跨度。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "轨迹由跨度组成：运行 → 步骤 → 模型请求或工具调用。"
+            },
+            {
+              "id": "q2",
+              "prompt": "账本里一行工具调用的 call_id 是 obs_baseline_5。怎样找到它对应的原始事件？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "找 id 为 obs_baseline_5 的 tool_call 事件，它的 tool_result 按同一个 id 配对",
+                  "feedback": "对。这就是关联 ID 的用处。"
+                },
+                {
+                  "id": "b",
+                  "text": "按账本的行号去数事件",
+                  "feedback": "不对。事件里还有请求、响应和报告，行号对不上。"
+                },
+                {
+                  "id": "c",
+                  "text": "找不到，账本和事件是两套数据",
+                  "feedback": "不对。账本是从同一次运行派生的，每行都带关联 ID。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "工具行凭 call_id、模型请求行凭步骤号（轮次）回到事件。"
+            },
+            {
+              "id": "q3",
+              "prompt": "某次响应只有 prompt_tokens 30，没有 completion_tokens 和 total_tokens。read_usage 会返回什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "输入 30，输出和合计都是 None",
+                  "feedback": "对。缺一个就不能相加，缺的写未报告。"
+                },
+                {
+                  "id": "b",
+                  "text": "输入 30，输出 0，合计 30",
+                  "feedback": "不对。没报告不等于 0。"
+                },
+                {
+                  "id": "c",
+                  "text": "三项都是 None，因为不完整",
+                  "feedback": "不对。报告了的那一项照样记下。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "只记报告过的数，缺的保持 None。"
+            },
+            {
+              "id": "q4",
+              "prompt": "只开工具缓存后，为什么第 4 步的模型请求仍然出现在重复调用里？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "工具缓存只管工具调用；那次模型请求的请求体和第 1 步相同，照样执行了",
+                  "feedback": "对。一次只改一处，另一类浪费还在。"
+                },
+                {
+                  "id": "b",
+                  "text": "缓存没有生效",
+                  "feedback": "不对。工具调用确实从 8 次降到了 5 次。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型请求不可能重复",
+                  "feedback": "不对。请求体一字不差就是重复。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "要省掉那次模型请求，得改模型请求这一侧，比如合并请求或缓存模型回复。"
+            },
+            {
+              "id": "q5",
+              "prompt": "报告里端到端耗时 900 ms，各步耗时之和 860 ms。差的 40 ms 最可能是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "跨度之间的程序开销，比如解析回复、记录事件",
+                  "feedback": "对。串行运行时差值就是跨度之外的时间。"
+                },
+                {
+                  "id": "b",
+                  "text": "计时出错，两者应该相等",
+                  "feedback": "不对。各步之和只算跨度本身。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务商多收的费用",
+                  "feedback": "不对。这是时间，不是用量。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "两个数并列，才看得出跨度之外花了多少时间。"
+            },
+            {
+              "id": "q6",
+              "prompt": "你按价格页算出这次运行约 0.0012 元。报告里该怎么写？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "写明是估算，附上模型、价格来源、日期和覆盖了几次调用",
+                  "feedback": "对。估算不能冒充账单。"
+                },
+                {
+                  "id": "b",
+                  "text": "直接写“费用 0.0012 元”",
+                  "feedback": "不对。读者会以为这是账单金额。"
+                },
+                {
+                  "id": "c",
+                  "text": "不写，费用只能看账单",
+                  "feedback": "不对。估算有用，只要说清来源和局限。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "估算要带来源和日期，价格变了就重算。"
+            },
+            {
+              "id": "q7",
+              "prompt": "账本表格里，工具行的输入 Token 写“—”，模型请求行有时写“未报告”。两者有什么不同？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "“—”是不适用，工具调用本来就没有 Token 用量；“未报告”是这个数可能存在，但服务商这次没给",
+                  "feedback": "对。两种空白含义不同，不能混用。"
+                },
+                {
+                  "id": "b",
+                  "text": "没有区别，都表示 0",
+                  "feedback": "不对。两者都不是 0，写成 0 会让合计看起来完整。"
+                },
+                {
+                  "id": "c",
+                  "text": "“—”表示工具调用失败了",
+                  "feedback": "不对。失败看状态列，和 Token 无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "报告里每种空白都要说清是哪一种：不适用、未报告，还是确实为 0。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“基线：逐条请求、不缓存”，找出和第 1 步一字不差、又发了一次的那个模型请求。",
+          "target": {
+            "event": "request",
+            "round": 4,
+            "path": "data.body"
+          },
+          "explanation": "第 4 步核对的是 r4，它的说明和 r1 完全相同，所以请求体和第 1 步一模一样，指纹也相同。账本里这一行的 repeat_of 指回第 1 步那行，瓶颈报告把它列进重复执行的调用。合并请求或缓存模型回复都能省掉它；只开工具缓存省不掉。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在基线的瓶颈报告里找到了最慢的一步，并能说出它为什么慢。"
+            },
+            {
+              "id": "item-2",
+              "text": "我把账本里一行工具调用的关联 ID 和对应的 tool_call 事件对上了。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在对照报告里先看了质量有没有退化，再看省下的调用和 Token。"
+            },
+            {
+              "id": "item-4",
+              "text": "我知道自己用的服务商有没有报告用量，以及没报告时报告里写的是什么。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "Tracer",
+      "note": "本课的账本：每个跨度记一行，含步骤、指纹、耗时、关联 ID 和原样抄下的 usage。"
+    },
+    {
+      "name": "fingerprint",
+      "note": "调用类型加参数（或整个请求体）按键排序后取 sha256 前 12 位，相同即重复。"
+    },
+    {
+      "name": "repeat_of",
+      "note": "账本字段：同一指纹第一次出现的行；为 None 表示这是第一次。"
+    },
+    {
+      "name": "read_usage",
+      "note": "按服务商字段名读 Token 数；缺失的记 None，即未报告，不补 0。"
+    },
+    {
+      "name": "lookup_rate",
+      "note": "查汇率的工具；每次先等 rate_latency_ms 毫秒，模拟远端服务。"
+    },
+    {
+      "name": "rate_latency_ms",
+      "note": "输入参数：汇率工具每次执行前等待的毫秒数，0 到 1000。"
+    },
+    {
+      "name": "category_limit",
+      "note": "查某一类报销的单条限额；类别不对时返回结构化错误。"
+    },
+    {
+      "name": "repeated_groups",
+      "note": "把重复执行的跨度按指纹分组，累加多花的耗时和已报告的 Token。"
+    },
+    {
+      "name": "slowest",
+      "note": "按耗时从高到低排出实际执行的跨度，缓存命中不算。"
+    },
+    {
+      "name": "estimate_cost",
+      "note": "用学习者填的价格折算已报告的用量；没填来源和日期就不折算。"
+    },
+    {
+      "name": "regressions",
+      "note": "同一题集两遍结果逐条比较，列出从通过变失败、从失败变通过的收据。"
+    },
+    {
+      "name": "run_pass",
+      "note": "用一种策略把 4 条报销跑一遍，返回账本行、判定结果和端到端耗时。"
+    },
+    {
+      "name": "call_id",
+      "note": "工具行的关联 ID，等于这次 tool_call 事件的 id。"
+    },
+    {
+      "name": "duration_ms",
+      "note": "平台记在 response 事件里的耗时，只算调用服务商的那一段。"
+    },
+    {
+      "name": "lesson.ledger",
+      "note": "本课事件：一遍运行的账本行、端到端耗时和每条收据的判定。"
+    }
+  ]
+}
