@@ -138,6 +138,8 @@
 
 确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None, locale="zh-CN")` 工厂，返回 `completion(body, api_key)`；支持多种运行语言的课按 `locale` 给出该语言的确定性回答。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`（网页不能真实运行它）。要让学习者在网页上亲手检验失败路径，优先改成本地练习：在 custom 运行器里让运行器构造有问题的调用（`context.submit_call`），并给这个练习声明 `requires_model: false`，例如 `fail-safely` 的两组故障注入。
 
+用到 Embedding 请求的课再声明 `"testing": {"embedding_factory": "fixtures:create_embedding"}`：`create_embedding(exercise_id, inputs=None, locale="zh-CN")` 返回 `embedding(body, api_key)`，按 OpenAI 格式返回 `{"data": [{"index": i, "embedding": [...]}], "model": ..., "usage": ...}`，向量条数与 `body["input"]` 相同。确定性测试向量（例如按人工概念词表构造的小维度向量）只服务测试，在夹具注释里写明怎么构造。只发 Embedding 请求、不调聊天模型的课可以只声明 `embedding_factory`。声明了它的课，调用模型的练习默认都要 Embedding：真实模式下所选服务商没有 Embedding 模型时，平台在开始前拒绝运行（错误码 `embedding_model_missing`，前端翻译并引导去模型设置），不悄悄换模型；不发 Embedding 请求的练习写 `requires_embedding: false`，不调用模型的练习（`requires_model: false`）不需要写。
+
 ## 教学内容（content v2）
 
 `content.json` 声明“怎么教”，结构由 `server/content_schema.py` 中的 Pydantic 模型唯一定义。文件开头的 `$schema` 指向 `curriculum/schema/content.v2.schema.json`，编辑器可以据此补全。基本骨架：
@@ -299,6 +301,7 @@ def run(context: RunContext):
 | `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。服务商漏发或发空调用 id 时，平台补一个本次运行内确定的 `synthesized_call_<轮次>_<序号>`，写回调用本身（课程放回历史的助手消息与工具消息因此用同一个 id，下一轮请求格式正确），`tool_call` 事件标 `id_synthesized: true`；记录的 `response` 保持服务商原样。不拒绝这类调用，是因为模型确实提出了它，拒绝会藏起真实的提议。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
 | `context.call_tool(name, arguments, available_tools, round_number=1)` | 由运行器（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
 | `context.submit_call(name, raw_arguments, available_tools, round_number=1)` | 运行器原样提交一条调用（名字可以未登记，参数是原样的 JSON 字符串、可以是坏的），走与模型提议相同的检查；用于演示拒绝路径，事件标为运行器发起（`origin: course_program`，界面显示“运行器调用工具”） |
+| `context.embed(texts, round_number=1, *, branch=None, dimensions=None)` | 发一次 Embedding 请求，返回 OpenAI 格式的响应。`request` / `response` 事件带 `endpoint: "embeddings"`，请求体与响应体如实记录（含完整向量），计入 `max_rounds` 预算。一次最多 `context.embedding_batch_limit` 条非空文本（百炼 10），课程自己分批，让每一批都是学习者看得到的请求；`context.embedding_model` 是这次运行的 Embedding 模型。格式见 [事件信封 v2](event-envelope-v2.md) 的“Embedding 请求” |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |
 | `context.check_cancelled()` | 在阶段与副作用操作前响应平台停止请求 |
@@ -306,7 +309,7 @@ def run(context: RunContext):
 
 运行器可以是同步或异步函数。返回字符串时平台自动记录最终回答；也可以自行发布 `answer` 后返回 `None`。开始、结束和执行锁由平台管理，课程不能自行伪造生命周期事件。共享服务统一保留模型连接、事件快照、脱敏与回放；不要从课程另建 SSE、绕过连接管理直读密钥，或从回放触发执行。
 
-停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。`lessons/lesson_10_persistent_memory/store.py` 提供教学用 SQLite 持久记忆实现（`persistent-memory` 讲保存、重开与召回，`memory-lifecycle` 讲版本冲突、过期与范围），可参考；共享扩展接口本身不提供通用记忆服务。
+停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。`lessons/lesson_10_persistent_memory/store.py` 提供教学用 SQLite 持久记忆实现（`persistent-memory` 讲保存、重开与召回，`memory-lifecycle` 讲版本冲突、过期与范围），可参考；共享扩展接口本身不提供通用记忆服务。框架课（LangChain、LangGraph）用 `course/frameworks.py` 的 `RunContextChatModel`、`execute_tool_calls` 和 `stream_graph`，模型调用、工具调用和图的每一步都经 `RunContext` 记录，框架输入单独记为 `lesson.framework_input`，协议课（MCP、A2A）用 `course/protocols.py` 启动本地服务进程并在停止时回收；两者都见 [架构说明](platform.md) 的“框架适配层与‘框架输入’标注”。
 
 ## 独立页面与可视化
 

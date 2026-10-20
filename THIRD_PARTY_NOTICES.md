@@ -50,3 +50,13 @@ Licenses ship with each package; only the ones worth noting are listed. / 许可
 - three, @react-three/fiber, @react-three/drei, meshline, @react-three/rapier (MIT) and @dimforge/rapier3d-compat (Apache-2.0): the 3D learning badge (Lanyard) in the Review scene, lazy-loaded / 回顾页 3D 学习徽章（Lanyard），懒加载。
 - @xyflow/react (MIT), cmdk (MIT), i18next / react-i18next (MIT), motion (MIT), @axe-core/playwright (MPL-2.0, tests only / 仅测试使用).
 - react-joyride (MIT): mask and positioning for the guided tour, lazy-loaded with it / 实验导览的遮罩与定位，随导览懒加载。
+
+## Python dependencies installed via uv (no source copied) / 通过 uv 引入的 Python 依赖（未复制源码）
+
+Locked in `uv.lock`; licenses ship with each package. Framework and protocol packages for the framework lessons (checked 2026-10-20 on PyPI; all require Python >= 3.10): / 版本锁定在 `uv.lock`，许可证随各包分发。框架课与协议课使用的依赖（2026-10-20 在 PyPI 核对，均要求 Python >= 3.10）：
+
+- langchain-core (MIT), `>=1.6.10,<2`, locked 1.6.12: chat model and tool interfaces used by `course/frameworks.py`. It pulls in langsmith (MIT); course runs keep LangSmith tracing off (`local_tracing_only()`), so no framework data is uploaded. / `course/frameworks.py` 用到的聊天模型与工具接口；随带的 langsmith 在课程运行中保持关闭追踪，不上传框架数据。
+- langgraph (MIT), `>=1.2.14,<1.3`, locked 1.2.16, with langgraph-checkpoint, langgraph-prebuilt, langgraph-sdk (MIT): state graphs for the LangGraph lesson. / LangGraph 课的状态图。
+- mcp (MIT, Model Context Protocol Python SDK, modelcontextprotocol/python-sdk), `>=2.3.0,<3`, locked 2.3.0, with mcp-types (MIT) and httpx2 (BSD-3-Clause): MCP servers and clients over stdio for the MCP lessons. / MCP 课的 stdio 服务端与客户端。
+- a2a-sdk[http-server] (Apache-2.0, a2aproject/a2a-python), `>=1.2.2,<2`, locked 1.2.3, with protobuf, google-api-core, googleapis-common-protos (Apache-2.0 / BSD-3-Clause), json-rpc (MIT), culsans (ISC, Python < 3.13 only) and sse-starlette (BSD-3-Clause): two local A2A agent processes on 127.0.0.1 for the A2A lesson. / A2A 课在 127.0.0.1 上的两个本地 Agent 进程。
+- Worth noting among their transitive dependencies: orjson (`MPL-2.0 AND (Apache-2.0 OR MIT)`, pulled in by langsmith and langgraph-sdk; used unmodified as a library). / 传递依赖中需要注意：orjson（langsmith 与 langgraph-sdk 引入，作为库原样使用）。

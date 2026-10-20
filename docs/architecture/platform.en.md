@@ -57,13 +57,15 @@ Each SSE `data:` is a standalone JSON object: `type`, `round`, `timestamp`, `dat
 | Type | Teaching meaning | Main fields of `data` |
 | --- | --- | --- |
 | `run_start` | Execution source, lesson and mode | Run metadata |
-| `request` | The full request body that was actually about to be sent | `body` |
-| `response` | The raw response returned by the model | `body`, `duration_ms` |
+| `request` | The full request body that was actually about to be sent | `body`; embedding requests also carry `endpoint: "embeddings"` |
+| `response` | The raw response returned by the model | `body`, `duration_ms`; embedding responses also carry `endpoint` |
 | `tool_call` | A function call proposed by the model | `id`, `function` |
 | `tool_result` | The result of local Python execution | `tool_call_id`, `name`, `result` |
 | `answer` | The final answer | `content` |
 | `error` | An execution error | `message` |
 | `done` | The end state | `status`, `duration_ms` |
+
+Embedding requests come from `RunContext.embed` (Bailian over raw HTTP to `/embeddings`, other providers through `litellm.embedding`). They share the call budget and the representation of chat requests; vectors are recorded in full and only truncated for display. When the selected provider has no embedding model, the platform refuses with the error code `embedding_model_missing` instead of switching to another model. See "Embedding requests" in [Event envelope v2](event-envelope-v2.en.md) for the format.
 
 A `request` event stores a snapshot of the messages at that moment; it must not change when the next round appends messages. "Full JSON" means the request body and the response body. Authentication keys are not part of the teaching record, and the backend redacts any real key found in events.
 
@@ -86,6 +88,19 @@ Lessons follow **concept → minimal implementation → run evidence → experim
 LangChain and LangGraph are added as dependencies when later lessons really need them. A lesson's runner can be swapped, and the frontend keeps consuming the unified events: framework model callbacks map to `request`/`response`, tool callbacks map to `tool_call`/`tool_result`, and the final result maps to `answer`. If a framework cannot provide the raw request, the UI must label what it shows as framework input, not pass it off as an HTTP request body.
 
 Nodes, state and checkpoints in graph execution may extend the event fields, with explicit version migration. Do not hide graph branching, concurrency or recovery semantics just to fit the basic lessons' loop. When adding a framework, first build a standalone adapter with protocol tests, then plug it into the lesson registry.
+
+### The framework adapter and the "framework input" label
+
+Framework dependencies are main dependencies in `pyproject.toml` (`langchain-core`, `langgraph`, `mcp`, `a2a-sdk[http-server]`; version bounds and licenses are in `THIRD_PARTY_NOTICES.md`). The full `langchain` package and provider integration packages are not installed. The adapter lives in `course/frameworks.py`, its protocol tests in `tests/test_frameworks.py`:
+
+- `RunContextChatModel(context=context)` is a LangChain `BaseChatModel`. Every model call the framework makes goes through `RunContext.complete`, so it is recorded as `request`/`response`, counts against `max_model_calls` and stops on cancellation. `bind_tools` and `with_structured_output` convert framework tools to OpenAI-compatible tool definitions. Each call takes the run's next round number; pass `round_number` or `branch` to the call to choose the round or a parallel branch. LangGraph nodes use the same model.
+- Each call adds one lesson event before and one after, keeping two layers apart. `lesson.framework_input` (`layer: "framework_input"`) records the messages, tool names and options the framework holds: framework input before conversion, not a request body. `lesson.framework_output` (`layer: "framework_output"`) records the AIMessage the framework builds from the response. The `request` between them is the body the adapter converted; its `representation` still comes from the run path (`http_body` for Bailian, `sdk_standardized` for LiteLLM) and is not relabelled because a framework produced it.
+- When the provider sends a call without an id, the adapter assigns `framework_call_<call>_<n>` and lists it in `synthesized_call_ids`. Calls whose arguments are not a JSON object go to `invalid_tool_calls` instead of being dropped. When the provider reports no usage, `usage_reported` is `false`; no 0 is filled in.
+- Run tools with `execute_tool_calls(context, ai_message, tools)`: it calls `RunContext.execute_proposal` for each call, producing `tool_call`/`tool_result`, and submits invalid calls with their raw arguments so they get a structured error. Do not use LangGraph's prebuilt `ToolNode` in course runs: it calls tools directly and bypasses the event record. `tools_as_callables` turns LangChain tools into the allowlist, and a `ToolException` becomes an `ok=false` result.
+- `stream_graph(context, graph, inputs, config=...)` runs a compiled graph step by step, records each node's state update as `lesson.graph_update` (`step`, `node`, `update`) and checks cancellation between steps; bound the graph's own loops with `recursion_limit`. The optional `RunContextCallbackHandler` records framework callbacks as `lesson.framework_callback` with names and nesting only; run ids become `fw-1`, `fw-2`... in order of appearance.
+- LangSmith tracing would upload framework inputs to an external service. Course runs record locally only: put framework code inside `local_tracing_only()` (`stream_graph` already does), and the model adapter refuses to send a request while tracing is on.
+- Protocol lessons (MCP, A2A) use `course/protocols.py` (its tests in `tests/test_protocols.py` start real local processes). `run_until_cancelled(context, session)` turns a stopped run into async cancellation, so the SDK closes the connection and reaps the child process before `RunCancelled` is raised. `python_module_server` and `spawn_local_service` start servers only from modules under the `lessons.` package; child processes inherit only the SDK's list of safe environment variables, never the keys in the parent's environment; an A2A service binds a free port on 127.0.0.1 itself. `recording_stdio` records every MCP JSON-RPC message as `lesson.mcp_message`; `captured: "sdk_session_message"` says it is the SDK message object dumped with protocol field names, not the raw byte stream. Protocol messages never go into `request`/`response`, which are for model calls only.
+- All of this is lesson events and data fields; no envelope constant changed, and replays and recordings treat them as ordinary `lesson.*` events.
 
 ## Suggested course path
 
