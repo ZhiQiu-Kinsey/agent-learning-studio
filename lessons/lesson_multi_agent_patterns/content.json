@@ -1,0 +1,1248 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "multi-agent-patterns",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "orchestration",
+    "context",
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "MULTI-AGENT / TRADE-OFFS",
+          "headline": "多派几个 Agent 之前，",
+          "highlight": "先用同一份验收集量一量。",
+          "takeaway": "同一个出题任务，用单 Agent、固定流程、角色切换和独立多 Agent 各做一遍，最后都交给同一个程序验证器。拆分换来的是新信息，还是只多了调用，账本和验证结果会告诉你。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-one-context",
+              "label": "01 / ONE CONTEXT",
+              "title": "一个上下文做完",
+              "description": "单 Agent 把任务、规则和四份资料放进一次请求。它是基线：拆分要比它好，才算有收益。",
+              "token": "1 call"
+            },
+            {
+              "id": "02-shared",
+              "label": "02 / SHARED",
+              "title": "换提示词，不换历史",
+              "description": "同一个运行标识依次换上研究员、出题人、审核人的系统提示词，前面的消息全都还在。",
+              "token": "role_prompts"
+            },
+            {
+              "id": "03-isolated",
+              "label": "03 / ISOLATED",
+              "title": "各有各的上下文",
+              "description": "每个研究员只拿到分给它的资料，请求带自己的 branch 并行发出；出题人和审核人也从空白的消息列表开始。",
+              "token": "branch"
+            },
+            {
+              "id": "04-same-check",
+              "label": "04 / SAME CHECK",
+              "title": "同一个验证器",
+              "description": "四种做法的最终题目都交给 verify_quiz：证据要逐字查得到、不能出自旧版草稿、正确选项要写出资料里的原值。",
+              "token": "verify_quiz"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "先问要不要拆",
+          "paragraphs": [
+            "多 Agent（Multi-Agent）增加调用和协调成本，要有证据证明拆分有收益。{{lesson:workflow-patterns}}和{{lesson:orchestrator-evaluator}}已经把一个任务拆给几次模型调用：提示链、路由、编排者-工人、评估者-优化者。那些调用都在同一个运行器的掌控里，谁先谁后、各看什么，都写在程序里。本课再往前一步，问几个各有身份、各有上下文的 Agent 一起做事，到底值不值。",
+            "先算一笔账。本课的任务用单 Agent 做是 1 次请求；拆成三个研究员、一个出题人和一个审核人，是 5 次请求。每个请求都要重复带一遍任务说明和格式要求，输入加起来比单次多出好几倍。并行能让三个研究员的等待重叠，墙钟时间可能更短，但模型调用数和用量一次不少。多出来的这些调用，要换来单 Agent 拿不到的东西才划算。",
+            "《深入理解 AI Agent》给的判据只有一条：协作有没有带来单个 Agent 生成时拿不到的新信息。审核人拿着测试结果、渲染截图或工具查到的事实去审，带来了新信息，效果通常明显；同一个模型换个身份重读自己的输出，没有新信息，往往白花钱。另外两类理由也站得住：资料多到一个上下文装不下，或者几块工作互不依赖，并行能省下等待时间。",
+            "所以 Agent 的个数本身不是能力指标。本课不预设哪种做法赢：四种做法做同一个任务，交给同一个程序验证器，报告并排给出通过与否、模型调用数、服务商报告的用量和墙钟时间。多 Agent 没有带来更好的结果，或者超出了调用预算，保持单 Agent 就是合理的选择。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "几种组织方式",
+          "paragraphs": [
+            "管理者、对等和层次三种组织方式，各适合不同的任务。管理者模式由一个中心角色读任务、拆子任务、派出去、收回来再整合，{{lesson:orchestrator-evaluator}}的编排者就是它的简化版。本课独立多 Agent 那一组的管理者干脆是程序：怎么分资料、何时并行派出研究员、怎样合并事实，都由代码决定，不花一次模型调用。",
+            "对等模式是两三个身份平等的 Agent 互相给意见，比如一个起草、一个批注，轮流几轮。它实现起来最简单，难点在停止条件和多样性：同一个模型、相似的上下文，几个同事常常想到一处去，互相印证并不等于独立验证。层次模式是管理者下面再挂管理者，适合子任务本身还要再拆的大任务，比如翻译一本书时先按章节分给几个组长，组长再分给译者；层级越多，传话的环节越多。",
+            "还有一种做法常被当成多 Agent：固定流程。{{lesson:workflow-patterns}}的提示链里，每一步是一次新请求，输入由程序挑好，顺序写死在代码里。本课的固定流程也有研究、出题、审核三步，但没有哪一步自己决定下一步做什么，它是一个工作流。本课把它当作第二条基线：固定流程已经能通过验收集时，就没必要再让模型来协调。",
+            "怎么选，先看任务的形状。步骤固定、每一步的输入都清楚，用工作流；子任务要读了输入才知道怎么分，用管理者模式；同一份产出要反复打磨，又有说得清的评判条目，用对等的写评循环；子任务还要再拆、规模大到一个管理者顾不过来，才考虑层次模式。每往后走一步，协调成本和出错的地方都会多一些，所以从最简单的一种开始，拿到证据再往上加。"
+          ]
+        },
+        {
+          "id": "deep-dive-taxonomy",
+          "type": "deep-dive",
+          "title": "两个维度：上下文共不共享，控制权怎么走",
+          "summary": "《深入理解 AI Agent》按这两个维度给多 Agent 协作分类，本课四种做法都能放进去。",
+          "paragraphs": [
+            "第一个维度是上下文是否共享。共享上下文的做法里，后一个阶段继承前面全部的消息历史，只换系统提示词和工具，就像接班的同事能翻到前任所有的工作记录；本课的角色切换属于这一类。不共享上下文的做法里，每个 Agent 有自己的消息历史，看不到对方的推理过程，只能通过工具参数、共享文件或消息总线传东西；本课的独立多 Agent 属于这一类，传的是程序整理过的 JSON。",
+            "第二个维度是协作拓扑：对等、管理者、去中心化。去中心化没有中心角色，Agent 自己决定把活交给谁，微服务领域把它叫作编舞，和管理者模式的编排相对。书里还把多 Agent 系统和操作系统对照：系统提示词加工具定义像程序，轨迹像进程的内存，派出子 Agent 像创建子进程，子 Agent 交回的摘要像退出码。这个类比提醒我们，进程隔离的好处（互不污染、可以并行）和代价（要显式通信、调试时要拼起几份日志）会一起出现。",
+            "管理者模式里谁最关键？书中引用的 Plan-and-Act 研究发现，规划者的质量是整个系统的瓶颈：拆错了，后面每个执行者都在错误的前提上干活。所以资源不该平均分，最强的模型和最仔细的提示词要给负责拆分和整合的那一个。本课的管理者是程序，拆法固定：好处是拆分本身不会出错，坏处是拆法再笨也不会自己改，下面的实验里就能看到一个例子。"
+          ]
+        },
+        {
+          "id": "misconception-more-agents",
+          "type": "misconception",
+          "claim": "Agent 越多、角色分得越细，系统就越强。",
+          "correction": "角色数量不是能力指标。每多一个 Agent，就多一次请求、一份重复的提示词和一次信息交接；同一个模型换个身份互相审，没有新信息时常常只是多花钱。拆分有没有收益，要在同一个任务、同一个验证器下和单 Agent 比，同时报告多花的调用。"
+        },
+        {
+          "id": "predict-calls",
+          "type": "predict",
+          "prompt": "运行“独立多 Agent”之前先猜：这次运行会出现几个 request 事件？",
+          "experiment": "four-modes",
+          "arm": "multi",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-parallel-cost",
+          "type": "micro-quiz",
+          "question": {
+            "id": "parallel-cost",
+            "prompt": "本课的单 Agent 做法是 1 次请求，独立多 Agent 做法是 5 次请求，其中三个研究员并行。下面哪句话对？",
+            "options": [
+              {
+                "id": "a",
+                "text": "并行可能让墙钟时间变短，但模型调用数和用量照样按 5 次算",
+                "feedback": "对。并行省的是等待，不省调用。"
+              },
+              {
+                "id": "b",
+                "text": "并行的三次请求只算一次用量",
+                "feedback": "不对。每个请求都单独计量。"
+              },
+              {
+                "id": "c",
+                "text": "5 次请求一定比 1 次请求出题更准",
+                "feedback": "不对。多出来的调用要带来新信息才可能有用，还得用验证器核对。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "时间和成本是两件事，要分开报告。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "角色切换：换提示词，不换上下文",
+          "paragraphs": [
+            "角色切换（Role Switching）是同一个 Agent 换上另一套系统提示词，消息历史照旧共享，它不是第二个 Agent。看本课角色切换那一组的三次请求：第一次的系统提示词说“你是研究员”，第二次换成出题人，第三次换成审核人；除了第一条系统消息，后面的消息一条没少，上一阶段的回复原样留在里面。三次请求的 lesson.agent 事件里，运行标识都是 assistant，变的只有角色。",
+            "这像一个人轮流戴三顶帽子。戴上审核人的帽子，他仍然记得当研究员时读过什么、当出题人时为什么这样出。好处是信息不丢：审核阶段翻得到研究阶段找的原文。代价也在这里：上下文一轮比一轮长，第三次请求的输入装着前两个阶段的全部回复；审核人和出题人共享同一套思路，自己审自己，不容易发现同一个盲点。",
+            "所以判断一个系统里有没有真的多个 Agent，要看三样东西，而不是数提示词里写了几个角色名：上下文是不是分开的，各自能用的工具是不是不同，运行标识是不是不同。本课的账本逐次记下运行标识、角色、消息数、输入字符和看到了哪几份资料。书里还对比了另一种换角色的办法：系统提示词不动，按需加载一份技能说明；这样能保住稳定前缀、用上提示缓存，但越界的工具仍然可见，硬权限要靠运行层另外拦。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "上下文隔离",
+          "paragraphs": [
+            "子 Agent（Subagent）只看到自己需要的上下文，减少干扰，也会丢信息。上下文隔离（Context Isolation）指每个 Agent 从空白的消息列表开始，只装进交给它的东西。在独立多 Agent 那一组里，管理者（程序）派出三个子 Agent 当研究员：researcher-1 只看 d1，researcher-2 只看 d2，researcher-3 看 d3 和 d4。三个请求同时发出，各带自己的 branch，时间线按它配对请求和响应。",
+            "隔离的好处可以手算。单 Agent 要在一个上下文里读四份资料、记住格式要求再出题；拆开以后，每个研究员的输入只有一两份资料，出题人连资料都不看，只看合并后的事实列表。资料一多，这个差别就很可观：{{lesson:context-budget}}讲过，信息在窗口里不等于会被用上，输入越短，模型越容易盯住要紧的那几句。Learn Claude Code 教程的子 Agent 示例也是这个思路：子 Agent 可能读了几十个文件，交回父 Agent 的只有一段结论。",
+            "代价是没交过去的信息，子 Agent 就不知道。本课的任务说明里有一条规则：d4 是旧版草稿，和其他资料冲突时不能当证据。单 Agent、固定流程和角色切换的上下文里都有这条规则；独立多 Agent 用最小交接时，研究员只拿到任务和分到的资料，规则没有交过去。researcher-3 的 lesson.agent 事件里，outdated_docs 写着 d4，sees_rule 却是假：它手里有旧草稿，却不知道它旧。",
+            "这里的隔离只是消息隔离：三个研究员在同一个进程里运行，共用同一个模型连接和同一份调用预算，并行请求由平台加锁计数。它们没有各自的工作目录，也没有不同的工具。真实系统里，隔离往往还包括文件、权限和每个子 Agent 自己的预算，{{lesson:delegation-budget}}会接着讲。"
+          ]
+        },
+        {
+          "id": "deep-dive-real-systems",
+          "type": "deep-dive",
+          "title": "真实系统里的子 Agent 和团队",
+          "summary": "从一次性的子 Agent 到长期存在的队友，要隔离和要约定的东西越来越多。",
+          "paragraphs": [
+            "Learn Claude Code 教程把这件事分成两步讲。第一步是子 Agent：父 Agent 有一个派任务的工具，被派出的子 Agent 从空的消息列表开始跑自己的工具循环，最多 30 轮，结束后只把最后一段文字交回，中间过程整个丢掉；子 Agent 自己不能再派子 Agent，防止无限递归。教程特意说明这只是消息隔离：父子共用同一个工作目录，写文件、跑命令仍会互相影响。",
+            "第二步是团队。队友是长期存在的，有名字和状态，在工作和空闲之间切换，靠每人一个收件箱文件互相发消息。领导先提出分工、等用户确认，才真正派出队友，因为多派一个队友就多一份花费、多一个能改工作区的角色；可能并行改同一批文件时，再给任务分配独立的工作副本。这一步比本课多出来的，正是身份、生命周期和通信协议。",
+            "Claude Cookbooks 的团队示例还补了一个容易漏的东西：团队共用一个计时，每次调用前把已经过去的秒数写进最新那条消息的末尾，晚派出的队友看到的也是团队的时间，而不是从零开始；预算写在同一个计时上，整个团队按它控制节奏。",
+            "Claude Code 的做法与此相近：主对话里的模型可以把子任务派给在独立上下文里工作的 Agent，它们有自己的系统提示词和可用工具，做完只把总结交回；互不依赖的调查可以同时派出几个，每个都单独消耗用量，具体机制以官方文档为准。Anthropic 的一份多 Agent 研究还报告过一组对比：在开放的漏洞搜索里，互相通信协调的 45 个 Agent 用了约 2700 万 Token 找到 266 个漏洞，各自独立并行的方案用约 650 万 Token 找到 21 个。收益是真的，花费也是数倍；数字以原文为准，换个任务不一定成立。"
+          ]
+        },
+        {
+          "id": "mq-role-identity",
+          "type": "micro-quiz",
+          "question": {
+            "id": "role-identity",
+            "prompt": "角色切换那一组跑了 3 次请求，账本里的运行标识只有 assistant 一个。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "三个阶段是同一个 Agent 换系统提示词，消息历史共享，不是三个独立的 Agent",
+                "feedback": "对。角色变了，上下文和运行标识没有分开。"
+              },
+              {
+                "id": "b",
+                "text": "平台把三个 Agent 的标识合并显示了",
+                "feedback": "不对。运行标识是运行器按实际调用记下的。"
+              },
+              {
+                "id": "c",
+                "text": "三个阶段的上下文互相隔离",
+                "feedback": "不对。第二、三次请求里都带着前面阶段的回复。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "判断是不是多个 Agent，看上下文、工具和运行标识，不看提示词里的角色名。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "交接包和三种失败",
+          "paragraphs": [
+            "独立的 Agent 之间只靠交接包（Handoff Package）传信息，交接包漏掉的东西，会变成上下文丢失、重复劳动和互相矛盾。《深入理解 AI Agent》总结的交接包通常有三部分：接收方要做什么、验收标准是什么；已经确认的事实与约束；产物的引用。本课的最小交接只有第一部分和资料；交接包带规则时再加上“d4 已过时”这条约束，切换由参数 handoff 控制。",
+            "看最小交接时会发生什么。researcher-2 从 d2 查到子任务上限是 4；researcher-3 不知道 d4 已过时，从 d4 查到 6。两个研究员查了同一个考点，这是重复劳动；查出两个不同的值，这是互相矛盾。合并时，merge_facts 把这两件事都记进 lesson.merge：duplicates 里有 worker_cap，conflicts 里列出两条来源。程序只记录、不裁决，因为它要是替研究员挑一个值，就等于把规则悄悄藏进了合并代码。",
+            "接着是错误的级联。出题人只拿到合并后的事实，也没拿到规则，离线测试模式的脚本让它取了后一条，用 d4 出了题；真实模型可能选对，也可能选错，要看你自己的运行。审核人是独立的，只看草稿和草稿引用的资料，引用确实逐字出自 d4，它看不出问题。最后程序验证器按完整规则判这道题不通过：证据来自旧版草稿，正确选项也不是原值 4。换成交接包带规则再跑，researcher-3 不再报 d4 的值，冲突和重复都消失，代价是每个子 Agent 的输入多了一段规则。",
+            "这三种失败都能从事件里查到，不用猜：上下文丢失看 lesson.agent 的 sees_rule，重复劳动和互相矛盾看 lesson.merge，最终后果看验证器的检查。它们也不是多 Agent 独有的毛病，固定流程同样可能在交接时漏信息；区别在于子 Agent 越多，交接越多，漏的机会越多，而且每转述一次都是一次有损的重新表述。"
+          ]
+        },
+        {
+          "id": "misconception-reviewer",
+          "type": "misconception",
+          "claim": "加一个独立的审核 Agent，就能拦住前面 Agent 的错误。",
+          "correction": "审核人只能核对它看得到的东西。本课的审核人没拿到“d4 已过时”这条规则，引用又确实逐字出自 d4，它就会放行。独立视角要配上真正的新信息，比如规则、测试结果、工具查到的事实，才有用；最后的验收仍交给知道完整规则的程序验证器。"
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "同一题集对照",
+          "paragraphs": [
+            "单 Agent、固定流程与多 Agent 在同一题集上比较质量与成本。本课的题集很小：四份资料、三个考点，验收集写成程序 verify_quiz，对每个考点查四件事：有且只有一道题；格式正确；quote 逐字出现在它标的资料里，而且不是 d4；正确选项写出了资料里的原值，别的选项没写。四种做法的最终题目都由运行器用同样的方式调用它，事件里标着运行器发起的调用。",
+            "报告里并排看几个数。任务验收：三个考点过了几个。模型调用数：四组依次是 1、3、3、5。累计 total_tokens：只加服务商报告的数，一次都没报告就写未报告，部分没报告就写出缺了几次。墙钟时间：后端从开始到最后一次响应的测量值，独立多 Agent 的三个研究员并行，这一段会重叠。再看输入字符合计：角色切换的上下文逐轮变长，这一项通常比固定流程大。",
+            "读结果时守住三条。第一，只比同一个任务、同一个验证器下的结果，换了题目或验收标准，数字就不能放在一起。第二，一次运行只是一个样本，{{lesson:sampling-variance}}讲过同样的请求每次可能不同；要下结论，每种做法多跑几次，像{{lesson:evaluation-sets}}那样把失败记录留下来。第三，通过了的多 Agent 也要问一句：比单 Agent 多花的调用，换来了什么新信息？说不出来，就保持单 Agent。",
+            "{{lesson:delegation-budget}}会接着讲委派本身：主 Agent 怎么写交接包、子 Agent 交回的结果怎么合并进主上下文、每个子 Agent 的预算怎么定。本课先把判断方法立住：拆分是一个要用数据证明的设计选择，不是默认更高级的写法。动手之前，先写下你的预测：哪一组最贵、哪一组最可能出错、错在哪一步，跑完再拿报告对照。"
+          ]
+        },
+        {
+          "id": "deep-dive-failures",
+          "type": "deep-dive",
+          "title": "多 Agent 为什么会失败：几项研究的发现",
+          "summary": "失败多出在设计、对齐和验收上，不只是某个模型不够聪明。",
+          "paragraphs": [
+            "2025 年的论文《多 Agent 大语言模型系统为什么会失败》收集了 7 个主流框架的执行轨迹，人工逐条分析约 150 条，归纳出 14 种失败模式，分成三类：系统设计缺陷，比如接口定义不清、角色职责重叠；Agent 之间对齐失败，比如对目标理解不一致、传过去的信息被误解、操作互相矛盾；任务验证缺失，Agent 说完成了，结果其实不合格。简单的修补效果有限，研究者认为问题出在架构设计本身。",
+            "分布式系统把故障分成两类：部件直接停止工作的崩溃故障，和部件继续工作却给出错误信息的拜占庭故障。Agent 的故障多半是后一种：它很少停下来，而是继续给出看似可信的错误结论，错误也不会自己声明是错误。本课的 researcher-3 就是这样，它没有报错，认真交回了一个出自 d4 的值。对付这类故障，靠的是独立视角加原始证据交叉核对，而不是让更多 Agent 沿着同一条思路再想一遍。",
+            "还有一种失败来自同质。书中引用的实验里，30 个同时上线的 Agent 有 18 个建了同名的分支：同一个模型、相似的上下文，会在同一处做出同样的选择，犯同样的错。所以几份来自同一模型的审核意见，不能当成几份独立证据；要真正的多样性，得主动错开模型、上下文、工具或可见的证据，让每个 Agent 先独立判断再汇总。另一头是停不下来的循环：失控的 Agent 可能派出成百上千个子 Agent，这正是本课把派工写死在程序里、并给全程设调用上限的原因。"
+          ]
+        },
+        {
+          "id": "mq-cascade",
+          "type": "micro-quiz",
+          "question": {
+            "id": "cascade",
+            "prompt": "最小交接时，独立的审核人放过了引用 d4 的那道题。根本原因是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "审核人的交接包里没有“d4 已过时”这条规则，而引用确实逐字出自 d4",
+                "feedback": "对。它只能核对自己看得到的东西。"
+              },
+              {
+                "id": "b",
+                "text": "审核人和出题人用的是同一个运行标识",
+                "feedback": "不对。审核人是独立的运行标识和上下文。"
+              },
+              {
+                "id": "c",
+                "text": "验证器不检查资料来源",
+                "feedback": "不对。验证器知道完整规则，正是它判了不通过。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "交接包漏掉的约束，下游每个 Agent 都拿不到；最后要靠知道完整规则的验收来拦。"
+          }
+        },
+        {
+          "id": "compare-modes",
+          "type": "compare",
+          "title": "四种做法",
+          "columns": [
+            "做法",
+            "模型调用",
+            "上下文",
+            "运行标识",
+            "主要风险"
+          ],
+          "rows": [
+            [
+              "单 Agent",
+              "1 次",
+              "一个上下文装下任务、规则和全部资料",
+              "1 个（solo）",
+              "资料多了装不下，要紧的信息被淹没"
+            ],
+            [
+              "固定流程",
+              "3 次",
+              "每步一次新请求，输入由程序挑选",
+              "每步 1 个",
+              "程序没挑进去的信息，后面的步骤拿不到"
+            ],
+            [
+              "角色切换",
+              "3 次",
+              "共享一份消息历史，只换系统提示词",
+              "1 个（assistant）",
+              "上下文逐轮变长；自己审自己，盲点相同"
+            ],
+            [
+              "独立多 Agent",
+              "5 次",
+              "各有各的上下文，靠交接包和合并传信息",
+              "5 个",
+              "上下文丢失、重复劳动、互相矛盾"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "独立多 Agent 的一次运行",
+          "description": "按步骤说明最小交接时的一次运行，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "派工",
+              "actor": "程序",
+              "title": "按分片并行派出三个研究员",
+              "body": "每个请求带自己的 branch，上下文里只有分到的资料。",
+              "code": "reports = dict(pool.map(research, SHARDS))",
+              "language": "python",
+              "evidence": "request.data.branch"
+            },
+            {
+              "id": "step-2",
+              "label": "合并",
+              "actor": "程序",
+              "title": "合并事实，记下重复与冲突",
+              "body": "worker_cap 被两个研究员报了不同的值，程序记录下来，不替谁裁决。",
+              "code": "merged = merge_facts(reports)",
+              "language": "python",
+              "evidence": "lesson.merge"
+            },
+            {
+              "id": "step-3",
+              "label": "出题与审核",
+              "actor": "出题人、审核人",
+              "title": "在新的上下文里出题，再独立审核",
+              "body": "出题人只看合并后的事实，审核人只看草稿和它引用的资料。",
+              "code": "draft = questions_of(ledger.call(\"writer\", \"writer\", messages, 2))",
+              "language": "python",
+              "evidence": "lesson.agent"
+            },
+            {
+              "id": "step-4",
+              "label": "验收",
+              "actor": "程序",
+              "title": "交给同一个验证器",
+              "body": "按完整规则逐个考点检查，结果写进实验报告。",
+              "code": "context.call_tool(\"verify_quiz\", {\"questions\": final}, tools, round_number=4)",
+              "language": "python",
+              "evidence": "tool_result"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch10",
+              "title": "多 Agent 协作：分类框架、何时优于单 Agent 与失败模式（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter10.md"
+            },
+            {
+              "id": "book-role-transfer",
+              "title": "多角色转换：替换系统提示词与加载技能的对照实验（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter10/multi-role-transfer/README.md"
+            },
+            {
+              "id": "book-parallel-research",
+              "title": "并行检索与管理者的结算（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter10/parallel-web-research/README.md"
+            },
+            {
+              "id": "ms-multi-agent",
+              "title": "多 Agent 设计模式：适用场景与可见性（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/08-multi-agent/README.md"
+            },
+            {
+              "id": "hf-multi-agent",
+              "title": "多 Agent 系统：管理者与被管理的 Agent（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/smolagents/multi_agent_systems.mdx"
+            },
+            {
+              "id": "lcc-subagent",
+              "title": "子 Agent：给子任务独立的上下文（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s06_subagent/README.zh.md"
+            },
+            {
+              "id": "lcc-teams",
+              "title": "Agent 团队：队友、收件箱与协作协议（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s13_agent_teams/README.zh.md"
+            },
+            {
+              "id": "cookbook-async",
+              "title": "异步多 Agent 编排：固定团队与动态派出（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/patterns/agents/async_multi_agent_orchestration.ipynb"
+            },
+            {
+              "id": "cookbook-latency",
+              "title": "延迟压力下的多 Agent 团队：共享计时与预算（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/patterns/agents/latency_multi_agent.ipynb"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "orchestrator-evaluator"
+        },
+        {
+          "id": "code-modes",
+          "type": "annotated-source",
+          "path": "lessons/lesson_multi_agent_patterns/runtime.py",
+          "start": 120,
+          "end": 154,
+          "notes": [
+            {
+              "id": "n-single",
+              "line": 120,
+              "anchor": "def run_single(ledger: Ledger, t: Texts):",
+              "text": "单 Agent：一个上下文装下任务、规则和全部资料，只有 1 次请求。"
+            },
+            {
+              "id": "n-single-brief",
+              "line": 122,
+              "anchor": "content = brief(t, True, t.single_instruction",
+              "text": "brief 的第二个参数是“带不带规则”。前三种做法一律传 True。"
+            },
+            {
+              "id": "n-workflow",
+              "line": 126,
+              "anchor": "def run_workflow(ledger: Ledger, t: Texts):",
+              "text": "固定流程：顺序写死在程序里，每一步是一次新请求。"
+            },
+            {
+              "id": "n-workflow-research",
+              "line": 131,
+              "anchor": "facts = facts_of(ledger.call(\"step-research\"",
+              "text": "研究这一步只交回事实列表，研究时的思路不会传给下一步。"
+            },
+            {
+              "id": "n-workflow-write",
+              "line": 133,
+              "anchor": "write = brief(t, True, t.write_instruction, t.facts_header",
+              "text": "出题这一步的输入由程序挑选：任务、规则和事实，没有资料。"
+            },
+            {
+              "id": "n-workflow-review",
+              "line": 136,
+              "anchor": "review = brief(t, True, t.review_instruction",
+              "text": "审核这一步重新拿到全部资料和草稿。"
+            },
+            {
+              "id": "n-workflow-final",
+              "line": 138,
+              "anchor": "return reviewed(draft, ledger.call(\"step-review\"",
+              "text": "审核人的列表是最终版；它没交回列表时，草稿原样交给验证器。"
+            },
+            {
+              "id": "n-roles",
+              "line": 141,
+              "anchor": "def run_roles(ledger: Ledger, t: Texts):",
+              "text": "角色切换：一个运行标识，一份消息历史。"
+            },
+            {
+              "id": "n-roles-stages",
+              "line": 143,
+              "anchor": "stages = ((\"researcher\", brief(t, True",
+              "text": "只有第一条用户消息带资料和规则，后面两个阶段靠共享历史看到它们。"
+            },
+            {
+              "id": "n-roles-loop",
+              "line": 146,
+              "anchor": "for number, (role, instruction) in enumerate(stages, 1):",
+              "text": "每轮循环是一个阶段，阶段序号就是请求的轮次。"
+            },
+            {
+              "id": "n-roles-swap",
+              "line": 150,
+              "anchor": "reply = ledger.call(\"assistant\", role, [system(t.role_prompts[role]), *history], number)",
+              "text": "只换第一条系统消息；运行标识一直是 assistant，账本里只有角色在变。"
+            },
+            {
+              "id": "n-roles-history",
+              "line": 152,
+              "anchor": "history.append({\"role\": \"assistant\", \"content\": reply})",
+              "text": "回复放回同一份历史，下一个角色读得到全文，上下文也因此一轮比一轮长。"
+            },
+            {
+              "id": "n-roles-final",
+              "line": 154,
+              "anchor": "return reviewed(questions_of(replies[\"writer\"]), replies[\"reviewer\"])",
+              "text": "和固定流程用同一条收尾规则，两组只差上下文怎么传。"
+            }
+          ]
+        },
+        {
+          "id": "code-multi",
+          "type": "annotated-source",
+          "path": "lessons/lesson_multi_agent_patterns/runtime.py",
+          "start": 157,
+          "end": 198,
+          "notes": [
+            {
+              "id": "n-merge",
+              "line": 157,
+              "anchor": "def merge_facts(reports: dict[str, list]) -> dict:",
+              "text": "合并由程序完成，不花模型调用。"
+            },
+            {
+              "id": "n-merge-filter",
+              "line": 162,
+              "anchor": "if isinstance(item, dict) and item.get(\"topic\") in TOPICS:",
+              "text": "只收三个考点的事实，格式不对的条目直接略过。"
+            },
+            {
+              "id": "n-merge-agent",
+              "line": 163,
+              "anchor": "fact = {**item, \"agent\": agent}",
+              "text": "每条事实带上来源的运行标识，出了冲突查得到是谁报的。"
+            },
+            {
+              "id": "n-merge-dup",
+              "line": 166,
+              "anchor": "duplicates = [topic for topic, items in by_topic.items()",
+              "text": "同一个考点被不止一个研究员报过：重复劳动。"
+            },
+            {
+              "id": "n-merge-conflict",
+              "line": 167,
+              "anchor": "conflicts = [{\"topic\": topic, \"values\"",
+              "text": "同一个考点的值不一样：互相矛盾，逐条列出来源。"
+            },
+            {
+              "id": "n-merge-return",
+              "line": 169,
+              "anchor": "return {\"facts\": facts, \"duplicates\": duplicates",
+              "text": "只记录不裁决：事实全部原样往下传。"
+            },
+            {
+              "id": "n-multi",
+              "line": 173,
+              "anchor": "def run_multi(ledger: Ledger, t: Texts, rules: bool):",
+              "text": "rules 来自参数 handoff：交接包里带不带“d4 已过时”这条规则。"
+            },
+            {
+              "id": "n-multi-research",
+              "line": 177,
+              "anchor": "def research(agent: str):",
+              "text": "一个研究员就是一次独立请求：新的消息列表，只有自己的分片。"
+            },
+            {
+              "id": "n-multi-branch",
+              "line": 179,
+              "anchor": "return agent, facts_of(ledger.call(agent, \"researcher\"",
+              "text": "运行标识和 branch 都用研究员的名字，比如 researcher-3。"
+            },
+            {
+              "id": "n-multi-pool",
+              "line": 183,
+              "anchor": "with ThreadPoolExecutor(max_workers=len(SHARDS)) as pool:",
+              "text": "三个研究员并行发出，共用同一份调用预算。"
+            },
+            {
+              "id": "n-multi-merge",
+              "line": 186,
+              "anchor": "merged = merge_facts(reports)",
+              "text": "全部研究员交回后才合并，合并结果记成 lesson.merge。"
+            },
+            {
+              "id": "n-multi-writer",
+              "line": 190,
+              "anchor": "write = brief(t, rules, t.write_instruction, t.facts_header",
+              "text": "出题人的上下文：交接包加合并后的事实，看不到资料，也看不到研究过程。"
+            },
+            {
+              "id": "n-multi-cited",
+              "line": 193,
+              "anchor": "cited = [doc for doc in DOC_IDS if isinstance(draft, list) and any(",
+              "text": "审核人只拿到草稿引用的那几份资料。"
+            },
+            {
+              "id": "n-multi-review",
+              "line": 196,
+              "anchor": "review = brief(t, rules, t.review_instruction",
+              "text": "审核人也从新上下文开始，看不到出题人的思路，这就是独立视角。"
+            },
+            {
+              "id": "n-multi-return",
+              "line": 198,
+              "anchor": "return reviewed(draft, ledger.call(\"reviewer\", \"reviewer\"",
+              "text": "最终列表和合并记录交回运行器，由它调用验证器。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-merge-event",
+              "start": 187,
+              "end": 188,
+              "label": "平台：发布合并事件 lesson.merge"
+            }
+          ]
+        },
+        {
+          "id": "code-verifier",
+          "type": "annotated-source",
+          "path": "lessons/lesson_multi_agent_patterns/verifier.py",
+          "start": 31,
+          "end": 69,
+          "notes": [
+            {
+              "id": "n-check",
+              "line": 31,
+              "anchor": "def check_question(t, topic: str, item: dict) -> list[str]:",
+              "text": "检查一道题，返回问题代号；空列表就是通过。"
+            },
+            {
+              "id": "n-check-format",
+              "line": 33,
+              "anchor": "if not well_formed(item):",
+              "text": "格式不对就不往下查，免得在坏数据上报出一串连带错误。"
+            },
+            {
+              "id": "n-check-evidence",
+              "line": 37,
+              "anchor": "doc, quote = evidence.get(\"doc\"), evidence.get(\"quote\")",
+              "text": "证据是资料编号加原文，验证器自己回到资料里核对。"
+            },
+            {
+              "id": "n-check-quote",
+              "line": 39,
+              "anchor": "if doc not in DOC_IDS or not isinstance(quote, str)",
+              "text": "quote 必须逐字出现在它标的那份资料里。"
+            },
+            {
+              "id": "n-check-outdated",
+              "line": 42,
+              "anchor": "if doc in OUTDATED:",
+              "text": "逐字出自 d4 也不行：任务规则说它已过时。这条规则验证器一直知道。"
+            },
+            {
+              "id": "n-check-gold",
+              "line": 45,
+              "anchor": "correct, gold = item[\"answer\"], GOLD[topic]",
+              "text": "原值写在 GOLD 里，各种运行语言都一样。"
+            },
+            {
+              "id": "n-check-answer",
+              "line": 47,
+              "anchor": "if not has_value(item[\"options\"][correct], gold)",
+              "text": "正确选项要写出原值，别的选项不能也写原值。"
+            },
+            {
+              "id": "n-verify",
+              "line": 52,
+              "anchor": "def verify_quiz(t, /, questions):",
+              "text": "运行器把它当工具调用，四种做法用的是同一个。"
+            },
+            {
+              "id": "n-verify-list",
+              "line": 54,
+              "anchor": "if not isinstance(questions, list):",
+              "text": "拿不到题目列表就抛 ValueError，平台把它变成结构化错误，运行不会崩溃。"
+            },
+            {
+              "id": "n-verify-group",
+              "line": 57,
+              "anchor": "for item in questions:",
+              "text": "按考点分组，认不出考点的题记进 unmatched。"
+            },
+            {
+              "id": "n-verify-topics",
+              "line": 61,
+              "anchor": "for topic in TOPICS:",
+              "text": "逐个考点判定，实验报告里每个考点一条检查。"
+            },
+            {
+              "id": "n-verify-missing",
+              "line": 64,
+              "anchor": "problems = [\"missing\"] if not items else [\"duplicate\"]",
+              "text": "没出这个考点的题，或出了不止一道，整个考点不通过。"
+            },
+            {
+              "id": "n-verify-return",
+              "line": 68,
+              "anchor": "return {\"passed\": passed == len(TOPICS)",
+              "text": "三个考点全部通过，任务验收才算通过。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "程序当管理者，交接包可选带规则，同一个验证器收尾",
+          "chosen": "四种做法共用一个任务、一份资料和一个程序验证器；独立多 Agent 的拆分与合并由程序固定完成，交接包带不带规则做成参数，合并只记录重复与冲突、不裁决；每次调用都记下运行标识和上下文里实际有什么。",
+          "alternatives": [
+            {
+              "id": "model-manager",
+              "title": "让模型当管理者，自己决定派几个研究员",
+              "why_not": "动态拆分在{{lesson:orchestrator-evaluator}}讲过；本课要比的是上下文怎么分，拆法固定，差别才能归到上下文上。"
+            },
+            {
+              "id": "merge-resolves",
+              "title": "合并时由程序按规则丢掉 d4 的事实",
+              "why_not": "那样规则就藏进了合并代码，看不出交接包漏了信息；本课只记录冲突，让后果在验证器里显出来。"
+            },
+            {
+              "id": "reviewer-accepts",
+              "title": "用审核人的结论当验收结果",
+              "why_not": "审核人看到的信息可能不全；验收交给知道完整规则的程序，四种做法才可比。"
+            },
+            {
+              "id": "graph-framework",
+              "title": "用图框架写四种做法",
+              "why_not": "{{lesson:langgraph-state}}讲过图框架；这里用原生 Python，把每次请求的上下文摆在明处。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "four-modes",
+          "title": "研究、出题与审核的模式比较",
+          "hypothesis": "四种做法都能完成同一个出题任务；拆得越细，模型调用数和输入字符越多，并行的研究员能让等待重叠，但通过验证器的考点不会因为角色更多而自动增加。",
+          "predict": "predict-calls",
+          "arms": [
+            {
+              "id": "single",
+              "exercise": "single",
+              "label": "单 Agent（基线）"
+            },
+            {
+              "id": "workflow",
+              "exercise": "workflow",
+              "label": "固定流程"
+            },
+            {
+              "id": "roles",
+              "exercise": "roles",
+              "label": "角色切换"
+            },
+            {
+              "id": "multi",
+              "exercise": "multi",
+              "label": "独立多 Agent"
+            }
+          ],
+          "observe": [
+            {
+              "id": "context",
+              "text": "第一次模型调用的上下文里实际有什么：消息数、输入字符、看到的资料、有没有旧版规则。",
+              "selector": {
+                "event": "lesson.agent",
+                "path": "data.context"
+              }
+            },
+            {
+              "id": "identities",
+              "text": "这次运行有几个运行标识、几种角色。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=identities]"
+              }
+            },
+            {
+              "id": "verifier-call",
+              "text": "验证器由运行器发起调用，四组用的是同一个工具。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.origin"
+              }
+            },
+            {
+              "id": "task",
+              "text": "任务验收：三个考点通过了几个。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=task]"
+              }
+            },
+            {
+              "id": "calls",
+              "text": "模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_calls]"
+              }
+            },
+            {
+              "id": "tokens",
+              "text": "累计 total_tokens，只取服务商报告的数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=total_tokens]"
+              }
+            },
+            {
+              "id": "wall",
+              "text": "后端测量的墙钟时间。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=wall_ms]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "四组做同一个任务：四份资料、三个考点、同一个验证器。先看每次调用的上下文里装了什么。"
+            },
+            {
+              "text": "单 Agent 的第一次调用看得到全部资料和规则；独立多 Agent 的研究员只看到自己的分片。",
+              "observe": "context",
+              "stage": "model"
+            },
+            {
+              "text": "角色切换是 1 个运行标识、3 种角色；独立多 Agent 有 5 个运行标识。",
+              "observe": "identities"
+            },
+            {
+              "text": "最终题目交给同一个验证器，这次调用由运行器发起，不是模型提出的。",
+              "observe": "verifier-call",
+              "stage": "tool"
+            },
+            {
+              "text": "任务验收：只比同一个验证器给出的结果。",
+              "observe": "task",
+              "stage": "runtime"
+            },
+            {
+              "text": "四组的模型调用数依次是 1、3、3、5，并行也不会让它变少。",
+              "observe": "calls"
+            },
+            {
+              "text": "用量只累加服务商报告的 total_tokens，没报告的不估算。",
+              "observe": "tokens"
+            },
+            {
+              "text": "独立多 Agent 的研究员并行，墙钟时间里这一段会重叠。",
+              "observe": "wall"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "四种做法在同一个任务、同一个验证器下的这次结果：几个考点通过、模型调用数、已报告的用量和墙钟时间，以及每次调用的上下文里实际有什么。"
+            ],
+            "does_not_prove": [
+              "一次运行不能说明哪种做法更好，要每种多跑几次再比。",
+              "验证器只查证据和原值，题目出得好不好还要人读。",
+              "离线测试模式下的回答、用量和耗时由固定脚本给出，不代表任何真实模型。"
+            ]
+          }
+        },
+        {
+          "id": "handoff-loss",
+          "title": "交接包漏掉一条规则",
+          "hypothesis": "最小交接时，分到旧版草稿的研究员不知道它已过时，合并时会出现重复劳动和互相矛盾，错误可能一路传到验证器；交接包带上规则后冲突消失，每个请求的输入变长。",
+          "arms": [
+            {
+              "id": "minimal",
+              "exercise": "multi",
+              "label": "最小交接",
+              "inputs": {
+                "mode": "multi",
+                "handoff": "minimal"
+              }
+            },
+            {
+              "id": "with-rules",
+              "exercise": "multi",
+              "label": "交接包带规则",
+              "inputs": {
+                "mode": "multi",
+                "handoff": "with_rules"
+              }
+            }
+          ],
+          "observe": [
+            {
+              "id": "branch",
+              "text": "三个研究员的请求各带自己的 branch。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.branch"
+              }
+            },
+            {
+              "id": "old-draft",
+              "text": "上下文里有旧版草稿 d4 的那个研究员。",
+              "selector": {
+                "event": "lesson.agent",
+                "round": 1,
+                "path": "data.outdated_docs"
+              }
+            },
+            {
+              "id": "rule",
+              "text": "研究员的上下文里有没有“d4 已过时”这条规则。",
+              "selector": {
+                "event": "lesson.agent",
+                "round": 1,
+                "path": "data.context.sees_rule"
+              }
+            },
+            {
+              "id": "merge",
+              "text": "合并时记下的互相矛盾：同一个考点、不同的值和各自的来源。",
+              "selector": {
+                "event": "lesson.merge",
+                "path": "data.conflicts"
+              }
+            },
+            {
+              "id": "worker-check",
+              "text": "验证器对子任务上限那道题的判定。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=worker_cap]"
+              }
+            },
+            {
+              "id": "input",
+              "text": "全部请求的输入字符合计。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=input_chars]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组都是独立多 Agent，只差交接包里有没有“d4 已过时”这条规则。"
+            },
+            {
+              "text": "三个研究员的请求同时发出，时间线按 branch 配对请求和响应。",
+              "observe": "branch",
+              "stage": "model"
+            },
+            {
+              "text": "researcher-3 分到了 d3 和 d4，它的上下文里有旧版草稿。",
+              "observe": "old-draft"
+            },
+            {
+              "text": "再看规则：最小交接这组是假，带规则那组是真。",
+              "observe": "rule"
+            },
+            {
+              "text": "合并时，最小交接这组的 conflicts 列出 worker_cap 的两个值；带规则那组是空列表。",
+              "observe": "merge",
+              "stage": "runtime"
+            },
+            {
+              "text": "验证器对这道题的判定，说明错误有没有一路传到最后。",
+              "observe": "worker-check"
+            },
+            {
+              "text": "代价：带规则时每个请求多一段文字，输入字符合计更大。",
+              "observe": "input"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "交接包里有没有那条规则，决定了研究员的上下文里有没有它；合并时的重复与冲突、验证器的判定都有事件可查。"
+            ],
+            "does_not_prove": [
+              "离线脚本在没有规则时固定取后一条事实，真实模型可能选对，也可能选错。",
+              "交接包带规则消除了这一处冲突，不代表别的交接遗漏也消除了。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "mode",
+          "label": "做法",
+          "options": [
+            {
+              "value": "single",
+              "label": "单 Agent"
+            },
+            {
+              "value": "workflow",
+              "label": "固定流程"
+            },
+            {
+              "value": "roles",
+              "label": "角色切换"
+            },
+            {
+              "value": "multi",
+              "label": "独立多 Agent"
+            }
+          ]
+        },
+        {
+          "name": "handoff",
+          "label": "交接包",
+          "help": "只在独立多 Agent 下生效：最小交接只给任务和分到的资料；带规则时再加上“d4 已过时”这条规则。",
+          "options": [
+            {
+              "value": "minimal",
+              "label": "最小交接"
+            },
+            {
+              "value": "with_rules",
+              "label": "带规则"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "怎样判断一个系统里真的有几个独立的 Agent，而不是一个 Agent 换了几次角色？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "看上下文是否分开、可用的工具是否不同、运行标识是否不同",
+                  "feedback": "对。这三样分开了，才是独立的 Agent。"
+                },
+                {
+                  "id": "b",
+                  "text": "看系统提示词里写了几个角色名",
+                  "feedback": "不对。角色切换也会写好几个角色名。"
+                },
+                {
+                  "id": "c",
+                  "text": "看模型调用了几次",
+                  "feedback": "不对。固定流程和角色切换都调用 3 次。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "角色切换只换系统提示词，上下文和运行标识都没有分开。"
+            },
+            {
+              "id": "q2",
+              "prompt": "最小交接时，researcher-3 报出了 d4 里的值。为什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它的上下文里有 d4，却没有“d4 已过时”这条规则",
+                  "feedback": "对。规则只写在任务说明里，最小交接没有交给它。"
+                },
+                {
+                  "id": "b",
+                  "text": "它看到了其他研究员的结果，跟着改了",
+                  "feedback": "不对。研究员之间互相看不到。"
+                },
+                {
+                  "id": "c",
+                  "text": "验证器把规则藏起来了",
+                  "feedback": "不对。验证器一直按完整规则检查。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "上下文隔离会丢掉没交过去的信息。"
+            },
+            {
+              "id": "q3",
+              "prompt": "merge_facts 发现 worker_cap 有两个不同的值。程序怎么处理？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "记进 lesson.merge 的 conflicts，不替研究员裁决，事实全部交给出题人",
+                  "feedback": "对。程序只记录，后果在验证器里显出来。"
+                },
+                {
+                  "id": "b",
+                  "text": "自动丢掉来自 d4 的那一条",
+                  "feedback": "不对。那样等于把规则藏进合并代码。"
+                },
+                {
+                  "id": "c",
+                  "text": "重新派一个研究员去查",
+                  "feedback": "不对。本课的合并不会追加调用。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "合并只记录重复与冲突，不做裁决。"
+            },
+            {
+              "id": "q4",
+              "prompt": "三个研究员并行，每个请求各用 2 秒，前后没有排队。研究这一段大约要等多久，模型调用数是几？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "约 2 秒，3 次调用",
+                  "feedback": "对。等待重叠了，调用一次不少。"
+                },
+                {
+                  "id": "b",
+                  "text": "约 6 秒，1 次调用",
+                  "feedback": "不对。并行时三个请求同时等待，而且每个请求都算一次调用。"
+                },
+                {
+                  "id": "c",
+                  "text": "约 2 秒，1 次调用",
+                  "feedback": "不对。并行不会把三次请求合成一次。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "并行省时间，不省调用和用量。"
+            },
+            {
+              "id": "q5",
+              "prompt": "独立多 Agent 和单 Agent 都通过了验证器，多 Agent 多花了 4 次调用。该怎么下结论？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这次没有证据显示拆分有收益，可以保持单 Agent；要更有把握就每种多跑几次",
+                  "feedback": "对。收益要用同一个任务、同一个验证器证明。"
+                },
+                {
+                  "id": "b",
+                  "text": "多 Agent 更可靠，因为多了一个审核人",
+                  "feedback": "不对。审核人没带来新信息时，只是多花调用。"
+                },
+                {
+                  "id": "c",
+                  "text": "两种一样好，以后都用多 Agent",
+                  "feedback": "不对。一样好时，便宜的那个更合适。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "角色数量不是能力指标，多花的调用要有收益来抵。"
+            },
+            {
+              "id": "q6",
+              "prompt": "下面哪种协作最可能带来单 Agent 拿不到的新信息？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "审核人拿着测试执行结果去审代码",
+                  "feedback": "对。执行结果是写代码时还没有的信息。"
+                },
+                {
+                  "id": "b",
+                  "text": "同一个模型换个身份重读自己的输出",
+                  "feedback": "不对。它看到的还是同样的东西。"
+                },
+                {
+                  "id": "c",
+                  "text": "两个 Agent 对着同一段文字辩论",
+                  "feedback": "不对。没有外部反馈时，辩论通常不比单 Agent 好。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "协作值不值，看它有没有引入新信息。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“独立多 Agent”，找出合并时记下互相矛盾的那条证据。",
+          "target": {
+            "event": "lesson.merge",
+            "path": "data.conflicts"
+          },
+          "explanation": "lesson.merge 是三个研究员都交回之后、出题人开始之前，程序合并事实时记下的。最小交接时，conflicts 里有 worker_cap：researcher-2 从 d2 报了 4，researcher-3 从 d4 报了 6；duplicates 里也有 worker_cap，说明两人查了同一个考点。换成交接包带规则再跑，这两个列表都是空的。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我把四种做法都跑了一遍，比较了验证结果、模型调用数、累计用量和墙钟时间。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在角色切换那一组找到了共享的消息历史，在独立多 Agent 那一组找到了各自的 branch。"
+            },
+            {
+              "id": "item-3",
+              "text": "我用两种交接包各跑了一次独立多 Agent，能说出 researcher-3 的上下文差在哪里。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "lesson.agent",
+      "note": "每次模型调用后的记录：运行标识、角色、branch，以及上下文里实际有几条消息、哪些资料、有没有规则。"
+    },
+    {
+      "name": "lesson.merge",
+      "note": "独立多 Agent 合并事实时的记录：全部事实、重复研究的考点、值互相矛盾的考点。"
+    },
+    {
+      "name": "outdated_docs",
+      "note": "lesson.agent 字段：上下文里有旧版草稿时才出现，列出是哪几份。"
+    },
+    {
+      "name": "sees_rule",
+      "note": "上下文里有没有“d4 已过时”这条规则，从实际发出的消息里查出来。"
+    },
+    {
+      "name": "handoff",
+      "note": "参数：minimal 只交任务和分到的资料，with_rules 再加规则；只影响独立多 Agent。"
+    },
+    {
+      "name": "merge_facts",
+      "note": "按研究员顺序收集事实，记下重复研究和值不同的考点，不替谁裁决。"
+    },
+    {
+      "name": "verify_quiz",
+      "note": "四种做法共用的程序验证器，由运行器作为工具调用，逐个考点判定。"
+    },
+    {
+      "name": "branch",
+      "note": "并行请求的配对标签；本课取研究员的运行标识，如 researcher-3。"
+    },
+    {
+      "name": "worker_cap",
+      "note": "考点：编排者的子任务上限。d2 写 4，旧版草稿 d4 写 6。"
+    },
+    {
+      "name": "d4",
+      "note": "补充笔记，标题看不出旧；只有任务说明里的规则说它已过时。"
+    },
+    {
+      "name": "assistant",
+      "note": "角色切换那一组唯一的运行标识，三个阶段都用它。"
+    },
+    {
+      "name": "quote",
+      "note": "题目证据里的资料原文，必须逐字出现在 doc 标的那份资料里。"
+    },
+    {
+      "name": "GOLD",
+      "note": "每个考点在现行资料里的原值：other、4、3，各运行语言相同。"
+    }
+  ]
+}
