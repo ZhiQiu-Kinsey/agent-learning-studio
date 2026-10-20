@@ -99,6 +99,12 @@
 | 实验报告（实验台的报告面板） | 证据板 |
 | 编码 Agent（Claude Code、Cursor 这类工具；背景词，不加英文括注） | 编程助手、编码助手 |
 | 学习者备注 | 问题栏 |
+| 回归（改动后原来通过的题不再通过；`evaluation-sets` 引入） | 指这件事时的“退化” |
+| 配对分析（同一批题逐题比较两个版本；`evaluation-sets` 引入） | 指这件事时的“配对比较” |
+| 开发集、留出集（`evaluation-sets` 引入） | 调参集、测试集（指留出的题时） |
+| 不可评估（验证器缺少判定所需的信息，如开放式回答、缺少来源结果） | 无法评估、未评估 |
+| 角色切换（`multi-agent-patterns` 引入：同一个 Agent 换系统提示词，消息历史共享） | 角色转换、多角色转换 |
+| 交接包（`multi-agent-patterns` 引入：交给另一个 Agent 的全部输入） | 移交包、交接内容 |
 
 “评审”和“评估者”的分界：
 
@@ -120,7 +126,8 @@
 - `context-budget`：截取窗口；`context-compaction`：规则压缩、清理旧工具结果、摘要压缩、探针问题；
 - `persistent-memory`：召回（命名空间已是课程概念，`persistent-memory` 引入，字段名写 `namespace`）；`memory-lifecycle`：范围（`scope`）、乐观并发控制、过时写入；
 - `todo-planning`：运行层**插入**的消息；
-- `plan-and-replan`：失败后重新规划（策略）、修订计划（动作）。
+- `plan-and-replan`：失败后重新规划（策略）、修订计划（动作）；
+- `observability-cost`：账本（`Tracer` 每个跨度记一行）、指纹（`fingerprint`）、重复执行（指纹相同的第二次及以后的执行，缓存命中不算）、工具缓存（只在一次运行内）、端到端耗时（报告标签；术语是端到端延迟）、不适用（工具行没有 Token 用量，写“—”，不同于未报告）。
 
 ## 4. 作者流程（新课和改课都适用）
 

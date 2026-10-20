@@ -62,4 +62,4 @@
 
 本课仍是 `planned`，开放后在网页实验台运行，或用 `scripts/run_live.py reliable-tools <练习>`（本课不调用模型，不产生模型用量）。
 
-参考：《深入理解 AI Agent》第 4 章“执行工具”的幂等性与取消语义、第 5 章“故障与错误恢复”；Microsoft AI Agents for Beginners 第 4、6 课；Learn Claude Code `s15_integrated_harness` 的退避重试；Claude Cookbooks 的 SRE 事故响应 Agent（读工具与写工具分开约束）。代码与实验为本项目编写。
+参考：《深入理解 AI Agent》第 4 章“执行工具”的幂等性与取消语义、第 5 章“故障与错误恢复”；Microsoft AI Agents for Beginners 的 `04-tool-use` 与 `06-building-trustworthy-agents`；Learn Claude Code `s15_integrated_harness` 的退避重试；Claude Cookbooks 的 SRE 事故响应 Agent（读工具与写工具分开约束）。代码与实验为本项目编写。

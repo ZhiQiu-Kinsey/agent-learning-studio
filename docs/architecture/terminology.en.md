@@ -107,6 +107,12 @@ The table is a Chinese wording table: it lists the Chinese wording to use and th
 | 实验报告 (the report panel on the lab bench) | 证据板 | lab report |
 | 编码 Agent (tools like Claude Code and Cursor; a background word, no English in parentheses) | 编程助手, 编码助手 | coding agent |
 | 学习者备注 | 问题栏 | learner notes |
+| 回归 (a case that passed no longer passes after a change; introduced by `evaluation-sets`) | 退化, when it means this | regression |
+| 配对分析 (comparing two versions case by case on the same cases; introduced by `evaluation-sets`) | 配对比较, when it means this | paired analysis |
+| 开发集, 留出集 (introduced by `evaluation-sets`) | 调参集, 测试集 (for the held-out cases) | development set, holdout set |
+| 不可评估 (the verifier lacks what it needs to decide, such as an open-ended answer or a missing source result) | 无法评估, 未评估 | unassessable |
+| 角色切换 (introduced in `multi-agent-patterns`: one agent swaps its system prompt while the message history stays shared) | 角色转换, 多角色转换 | role switching |
+| 交接包 (introduced in `multi-agent-patterns`: everything handed to another agent) | 移交包, 交接内容 | handoff package |
 
 The boundary between 评审 (review) and 评估者 (evaluator):
 
@@ -129,6 +135,7 @@ Names within a single lesson must also stay fixed. For example:
 - `persistent-memory`: 召回 (recall); 命名空间 (namespace) is already a course concept, introduced by `persistent-memory`, and the field name is written `namespace`. `memory-lifecycle`: 范围 (scope, field `scope`), 乐观并发控制 (optimistic concurrency control), 过时写入 (stale writes).
 - `todo-planning`: messages the run layer **inserts**.
 - `plan-and-replan`: 失败后重新规划 (re-planning after a failure, the strategy) and 修订计划 (revising the plan, the action).
+- `observability-cost`: 账本 (the ledger, one row per span written by `Tracer`), 指纹 (fingerprint, `fingerprint`), 重复执行 (repeated execution: the second and later executions with the same fingerprint; cache hits do not count), 工具缓存 (tool cache, within one run only), 端到端耗时 (end-to-end time, the report label; the term is 端到端延迟, end-to-end latency), 不适用 (not applicable: tool rows have no token usage and show "—", which differs from not reported).
 
 ## 4. Author workflow (for new and revised lessons)
 

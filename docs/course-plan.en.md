@@ -2411,7 +2411,7 @@ Build a fixed question set and held-out cases, and tell apart finished, correct,
 
 Build independent validators, a fixed question set, and held-out cases on tasks that already work, compare versions, and keep every failure record.
 
-**Terms in this lesson:** Evaluation
+**Terms in this lesson:** Evaluation, Development Set, Holdout Set, Paired Analysis, Regression
 
 **Sections**
 
@@ -2426,12 +2426,12 @@ Build independent validators, a fixed question set, and held-out cases on tasks 
 
 - Design a task set that covers normal and edge cases
 - Verify correctness, evidence, and violations separately
-- Find improvements and regressions by comparing versions
+- Find improvements and regressions with paired analysis
 
 **Topics**
 
 - Task-specific rubric
-- Fixed set, held-out set, and case versions
+- Development set, holdout set, and case versions
 - Run completed vs. task succeeded
 - Checking results, traces, and evidence
 - LLM-as-a-judge and human calibration
@@ -2443,7 +2443,7 @@ Independent regression evaluation of the first three lessons:
 
 1. Pick tool tasks that already run, and write cases covering normal, dependent, failing, no-tool-needed, and missing-evidence situations.
 2. Have a validator outside the agent check the actual calls, argument sources, errors, and answers, and mark unevaluable items.
-3. Change only one prompt or piece of code, run the fixed set and the held-out cases, and keep both the improvements and the regressions.
+3. Change one prompt or piece of code, run the development and holdout sets, and keep both improvements and regressions.
 
 Deliverable: A versioned question set, independent validators, and a complete version comparison report.
 
@@ -2473,7 +2473,7 @@ Connect run events, latency, failure attribution, and the usage the provider act
 
 Correlate the requests, tools, state, latency, and usage of one real run, and use the raw data to find repeated calls and slow steps.
 
-**Terms in this lesson:** Observability, Span
+**Terms in this lesson:** Observability, Span, Correlation ID, End-to-end latency
 
 **Sections**
 
@@ -2493,7 +2493,7 @@ Correlate the requests, tools, state, latency, and usage of one real run, and us
 - Trace, span, and correlation IDs
 - Model, tool, and state events
 - Raw HTTP vs. adapter-layer data
-- End-to-end and per-step latency
+- End-to-end latency and per-step latency
 - Measured, estimated, and not-reported usage
 - Price versions, caching, and optimization regressions
 
@@ -2532,6 +2532,8 @@ Control the effects of retries, idempotency, permissions, and untrusted text.
 **Prerequisites:** Lesson 7 Error handling and safety boundaries, Lesson 9 Structured output and business validation, Lesson 40 Independent evaluation sets and validators
 
 Handle read and write tools separately, and verify timeouts, bounded retries, idempotency, and failure receipts on real local tools.
+
+**Terms in this lesson:** Transient Failure, Backoff, Idempotency Key, Compensation
 
 **Sections**
 
@@ -2825,7 +2827,7 @@ Design delegation, context isolation, result merging, and the overall budget.
 
 Compare a single agent, a fixed workflow, role switching, and independent multi-agent setups on the same task, and judge the benefit of splitting from evidence.
 
-**Terms in this lesson:** Multi-agent
+**Terms in this lesson:** Multi-agent, Subagent, Role switching, Context isolation, Handoff package
 
 **Sections**
 
@@ -2846,7 +2848,7 @@ Compare a single agent, a fixed workflow, role switching, and independent multi-
 - Role switching and context isolation
 - Manager, peer, and hierarchical patterns
 - Planning and execution roles
-- Collaboration overhead and failure types
+- Handoff packages, coordination overhead, and failure types
 - A shared question set and baseline comparison
 
 **Experiments**
