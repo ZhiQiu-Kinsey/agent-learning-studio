@@ -113,13 +113,77 @@ class RunContext:
             raise RuntimeError(texts_for(self.locale).model_budget_exceeded.format(limit=self.max_model_calls))
 
     def _invoke_completion(self, body, api_key):
-        self.check_cancelled()
         if self.completion is None:
             raise ValueError("this lesson has no model connection configured")
+        return self._invoke(self.completion, body, api_key)
+
+    def _invoke(self, function, body, api_key):
+        """Every model call, chat or embeddings, passes here: cancellation first, then one shared budget."""
+        self.check_cancelled()
         with self._budget_lock:  # parallel branches share one call budget
             self._check_model_budget()
             self._model_count += 1
-        return self.completion(body, api_key)
+        return function(body, api_key)
+
+    # Embedding connection of this run, next to the method that uses it: embedding(body, api_key)
+    # returns an OpenAI-shaped embeddings response. It is None when the live provider has no
+    # embedding model, or offline when the lesson declares no testing.embedding_factory.
+    embedding: Callable | None = field(default=None, repr=False)
+    embedding_model: str | None = None
+    # How many texts one embeddings request may carry (Bailian's compatible endpoint takes 10).
+    embedding_batch_limit: int = 10
+
+    def embed(self, texts: list[str], round_number: int = 1, *, branch: str | None = None,
+              dimensions: int | None = None) -> dict:
+        """Send one embeddings request; request and response are recorded with endpoint "embeddings", unchanged.
+
+        It shares the max_model_calls budget with complete(). One request carries at most
+        embedding_batch_limit texts: lesson code splits larger sets itself, so every batch
+        is a request the learner can see. The result is the provider's response in the
+        OpenAI shape: {"data": [{"index": i, "embedding": [...]}], "model": ..., "usage": ...}.
+        """
+        self.check_cancelled()
+        if not isinstance(texts, list) or not texts:
+            raise ValueError("embed() needs a non-empty list of strings")
+        if not all(isinstance(text, str) and text.strip() for text in texts):
+            raise ValueError("every text passed to embed() must be a non-empty string")
+        if type(self.embedding_batch_limit) is not int or self.embedding_batch_limit < 1:
+            raise ValueError("embedding_batch_limit must be a positive integer")
+        if len(texts) > self.embedding_batch_limit:
+            raise ValueError(f"embed() got {len(texts)} texts but one request takes at most "
+                             f"{self.embedding_batch_limit}; split them into batches")
+        if dimensions is not None and (type(dimensions) is not int or not 1 <= dimensions <= 100_000):
+            raise ValueError("dimensions must be a positive integer")
+        if branch is not None and not isinstance(branch, str):
+            raise ValueError("branch must be a string")
+        if self.embedding is None or not self.embedding_model:
+            # Live: the provider has no embedding model; say so instead of using another model.
+            if self.mode == "live":
+                raise EmbeddingNotConfigured(texts_for(self.locale).embedding_not_configured)
+            raise ValueError("this lesson has no embedding connection configured "
+                             "(declare testing.embedding_factory in lesson.json)")
+        self._check_model_budget()
+        request = {"model": self.embedding_model, "input": list(texts)}
+        if dimensions is not None:
+            request["dimensions"] = dimensions
+        self._round = round_number
+        tag = {} if branch is None else {"branch": branch}
+        self.emit("request", {"endpoint": "embeddings", "body": request,
+                              "representation": self.representation, **tag}, round_number)
+        started = time.perf_counter()
+        response = self._invoke(self.embedding, copy.deepcopy(request), self.api_key)
+        self.emit("response", {
+            "endpoint": "embeddings", "body": response, "representation": self.representation,
+            "duration_ms": round((time.perf_counter() - started) * 1000), **tag,
+        }, round_number)
+        self.check_cancelled()
+        # The response is already on record; a count mismatch would pair texts with the wrong vectors.
+        vectors = response.get("data") if isinstance(response, dict) else None
+        count = len(vectors) if isinstance(vectors, list) else 0
+        if count != len(texts):
+            raise RuntimeError(texts_for(self.locale).embedding_response_invalid.format(
+                expected=len(texts), actual=count))
+        return response
 
     def execute_proposal(self, tool_call: dict, available_tools: dict) -> dict:
         """Execute one call the model proposed: record the proposal, then the tool result, paired by the call id.
@@ -194,6 +258,14 @@ class RunContext:
             self.emit("lesson.stage_result", {"content": answer, "title": texts_for(self.locale).stage_result_title,
                                                "summary": answer[:160]}, self._round)
         return answer
+
+
+class EmbeddingNotConfigured(ValueError):
+    """The live provider has no embedding model: the run stops instead of quietly using another model.
+
+    ``code`` is stable, so the web page can translate the message and point to the model settings.
+    """
+    code = "embedding_model_missing"
 
 
 def validate_inputs(module, values: dict) -> dict:

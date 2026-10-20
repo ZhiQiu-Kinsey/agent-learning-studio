@@ -49,7 +49,7 @@ class ProviderTests(unittest.TestCase):
         for profile in data["providers"]:
             self.assertEqual(set(profile), {"id", "label", "model", "api_key_configured",
                                            "config_ready", "base_url_configured", "supports_custom_base_url",
-                                           "requires_api_key"})
+                                           "requires_api_key", "embedding_model"})
             self.assertIsInstance(profile["requires_api_key"], bool)
         self.assertNotIn("bailian-env-secret", response.text)
         self.assertNotIn("native.example.invalid", response.text)

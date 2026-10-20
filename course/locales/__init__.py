@@ -25,6 +25,10 @@ class Texts:
     bailian_unreachable: str  # {reason}
     provider_not_configured: str
     provider_key_missing: str
+    # Embedding requests (RunContext.embed): no embedding model for the provider, or a response
+    # whose vectors do not match the inputs.
+    embedding_not_configured: str
+    embedding_response_invalid: str  # {expected}, {actual}
     # Command-line runs (course/runner.py run_cli).
     cli_model: str  # {model}
     cli_examples: str

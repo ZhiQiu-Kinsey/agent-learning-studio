@@ -52,8 +52,30 @@
 | --- | --- | --- |
 | 百炼原生 HTTP（`course/api_client.send_bailian`，请求体即 urllib 发送的 JSON） | `http_body` | `null` |
 | LiteLLM 多服务商（`course/providers.SDKCompletion`，输入是 SDK 参数，输出是 `model_dump()`） | `sdk_standardized` | `{"name": "litellm", "version": 已安装版本}` |
+| 百炼 Embedding（`course/api_client.send_bailian_embeddings`，同一 Workspace 的 `/embeddings`） | `http_body` | `null` |
+| LiteLLM Embedding（`course/providers.SDKEmbedding`，`litellm.embedding` 的 `model_dump()`） | `sdk_standardized` | `{"name": "litellm", "version": 已安装版本}` |
 | 确定性测试适配器（仅自动化测试） | `sdk_standardized` | `{"name": "deterministic-test-adapter", "version": null}` |
 | 不调用模型的本地课程 | `null` | `null` |
+
+Embedding 请求与聊天请求走同一次运行的同一条连接，所以表示层级相同，不单独标注。
+
+### Embedding 请求
+
+课程用 `context.embed(texts, round_number=1, *, branch=None, dimensions=None)` 发 Embedding 请求。它仍是一对 `request` / `response` 事件，打开和关闭一个 `llm` span，`data` 多一个 `endpoint: "embeddings"`；没有 `endpoint` 的请求是聊天补全：
+
+```json
+{"type": "request", "data": {"endpoint": "embeddings", "representation": "http_body",
+  "body": {"model": "text-embedding-v4", "input": ["片段一", "片段二"], "dimensions": 256}}}
+{"type": "response", "data": {"endpoint": "embeddings", "representation": "http_body", "duration_ms": 412,
+  "body": {"data": [{"index": 0, "embedding": [0.012, "…"]}, {"index": 1, "embedding": ["…"]}],
+           "model": "text-embedding-v4", "usage": {"prompt_tokens": 9, "total_tokens": 9}}}}
+```
+
+- `body` 如实记录：请求体是发出的 JSON（没传 `dimensions` 就没有这个字段，不替服务商填默认值），响应体是服务商返回的完整 JSON 或 SDK 的 `model_dump()`。向量完整写进运行存储与录制，不截断；界面只在显示时截断并注明。
+- 带 `branch` 时与并行聊天请求一样按 `branch` 配对。
+- Embedding 请求计入 `max_model_calls`（课程 `runtime.max_rounds`），与聊天请求共用一份预算。
+- 每次请求最多 `context.embedding_batch_limit` 条输入（百炼兼容接口 10），课程代码自己分批；超过上限、空列表或空字符串都是编程错误（`ValueError`），不发事件。响应的向量条数与输入不一致时，先记下响应再停止。
+- 本练习要用 Embedding 时（`lesson.json` 声明了 `testing.embedding_factory`，或练习写了 `requires_embedding: true`），`run_start.data.embedding_model` 记录这次运行的 Embedding 模型。
 
 红线：SDK 标准化数据绝不标成 `http_body` 或 `wire`；`EnvelopeBuilder` 拒绝没有 SDK 信息的 `sdk_standardized`，也拒绝给非 SDK 数据附 SDK 信息。目前没有任何路径产生 `wire` 或 `parsed`。`data.representation`（v1 字段）照旧保留。
 
@@ -91,6 +113,8 @@
 ## 5. 兼容策略
 
 - 事件类型 `run_start/request/response/tool_call/tool_result/answer/error/done` 与 `lesson.*` 名称、`data` 内容均不变。
+- `request` / `response` 可以带 `data.endpoint: "embeddings"`（见第 2 节“Embedding 请求”）；没有这个字段的旧记录都是聊天请求。`run_start.data.embedding_model` 只在练习使用 Embedding 时出现。
+- `error.data` 可以带稳定的 `code`（和可选的 `params`），前端按 code 翻译并给出配置指引；目前只有 `embedding_model_missing`（所选服务商没有 Embedding 模型，`params.setting` 写该改哪个设置）。`message` 仍按运行语言记录原文。
 - `run_start.data.locale` 记录运行语言（`zh-CN`、`en`）；界面请求的语言本课不支持、回落到源语言时，另记 `requested_locale`。没有 `locale` 的旧运行都是中文运行。运行语言决定事件里所有文字的语言，回放按记录原样显示，界面语言不同时只加标注，不翻译。
 - 前端 `Trace` 类型同时接受 v1 与 v2，v2 字段按可选读取；`isTraceV2()` 判断是否可以推导 span。v1 记录只能按数组顺序读取。
 - 下载的运行记录增加 `run_id`，事件为 v2；目前没有导入功能，将来导入时 v1 记录按上述规则读取。

@@ -137,6 +137,7 @@ You can also configure providers ahead of time with environment variables:
 | OpenAI-compatible | `CUSTOM_API_KEY` | `CUSTOM_MODEL` / `CUSTOM_API_BASE` |
 
 - **Bailian:** copy `local_config.example.py` to `local_config.py` and fill in the endpoint and a model that supports tool calling. The file is git-ignored.
+- **Embedding model** (used by the retrieval lessons): Bailian defaults to `text-embedding-v4` with the URL derived from `API_URL`, or set `EMBEDDING_MODEL` / `EMBEDDING_API_URL` in `local_config.py`; OpenAI defaults to `text-embedding-3-small`; other providers need `<PROVIDER>_EMBEDDING_MODEL` (for example `GEMINI_EMBEDDING_MODEL`, `OLLAMA_EMBEDDING_MODEL`) or the **Embedding model** field in the web settings. Without one, exercises that need embeddings ask you to configure it first; they never switch to another model.
 - **Credentials are isolated:** switching providers never borrows another provider's key.
 - **Ollama:** bring your own local server and a tool-calling model; nothing is downloaded automatically.
 

@@ -309,11 +309,14 @@ export function deriveStage(
                 : "idle";
   }
 
-  // Context film: what each request actually sent, with new items marked.
+  // Context film: what each chat request actually sent, with new items marked.
+  // Embedding requests (data.endpoint "embeddings") send texts, not messages,
+  // so they are not context rounds.
   const film: FilmRound[] = [];
   let previous: string[] = [];
   visible.forEach((event, index) => {
-    if (event.type !== "request") return;
+    if (event.type !== "request" || event.data.endpoint === "embeddings")
+      return;
     const messages = requestMessages(event);
     const serialized = messages.map((message) => JSON.stringify(message));
     let shared = 0;

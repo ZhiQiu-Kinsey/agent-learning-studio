@@ -15,6 +15,11 @@ TEXTS = Texts(
     bailian_unreachable="连接百炼失败；请求没有自动重发。确认网络和服务状态后再手动重试。\n{reason}",
     provider_not_configured="请先配置所选服务商的模型与服务地址。",
     provider_key_missing="请先配置所选服务商的 API Key。",
+    embedding_not_configured=(
+        "所选服务商还没有可用的 Embedding 模型配置。本课需要 Embedding 请求，平台不会改用别的模型；"
+        "请在模型设置里填写 Embedding 模型，或按文档设置对应的环境变量后再运行。"
+    ),
+    embedding_response_invalid="Embedding 响应里的向量数量（{actual}）与输入条数（{expected}）不一致，已停止。",
     cli_model="当前模型：{model}",
     cli_examples="可尝试：",
     cli_prompt="\n你：",

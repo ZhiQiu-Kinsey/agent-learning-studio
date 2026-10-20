@@ -89,6 +89,8 @@ export type ProviderProfile = {
   requires_api_key?: boolean;
   base_url_configured: boolean;
   supports_custom_base_url: boolean;
+  /** Embedding model the server resolved for this provider; "" when none is configured. */
+  embedding_model?: string;
 };
 export type ProviderCatalog = {
   active_provider: string;

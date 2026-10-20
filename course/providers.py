@@ -20,6 +20,10 @@ class ModelProfile:
     config_ready: bool
     requires_key: bool = True
     supports_custom_base_url: bool = True
+    # Embedding model of this provider ("" when none is configured) and how many inputs one
+    # embeddings request may carry. Lessons split their texts into batches of this size.
+    embedding_model: str = ""
+    embedding_batch_limit: int = 10
 
     @property
     def representation(self):
@@ -48,6 +52,36 @@ def sdk_completion(**kwargs):
     return load_sdk().completion(**kwargs)
 
 
+def sdk_embedding(**kwargs):
+    """Load the SDK on demand, like sdk_completion."""
+    return load_sdk().embedding(**kwargs)
+
+
+# The prefix only picks LiteLLM's adapter; the model id is the provider's own, as configured.
+_CHAT_PREFIXES = {
+    "openai": "openai", "anthropic": "anthropic", "gemini": "gemini",
+    "deepseek": "deepseek", "openrouter": "openrouter",
+    "ollama": "ollama_chat", "custom": "openai",
+}
+# LiteLLM serves Ollama embeddings through the "ollama" adapter, not the chat-only "ollama_chat".
+_EMBEDDING_PREFIXES = {**_CHAT_PREFIXES, "ollama": "ollama"}
+
+
+def _sdk_call_options(profile, api_key):
+    """Options shared by chat and embedding calls: explicit key, no hidden retries, no dropped parameters."""
+    options = {
+        # Pass the selected profile's key explicitly; never borrow another provider's environment variable.
+        "api_key": api_key if profile.requires_key else (api_key or "ollama-local"),
+        "timeout": 60,
+        "num_retries": 0,
+        "max_retries": 0,
+        "drop_params": False,
+    }
+    if profile.api_base:
+        options["api_base"] = profile.api_base
+    return options
+
+
 class SDKCompletion:
     """Only calls the model and standardizes the response; it never runs tools or adds a hidden agent loop."""
     def __init__(self, profile, locale=SOURCE_LOCALE):
@@ -60,23 +94,30 @@ class SDKCompletion:
             raise ValueError(texts_for(self.locale).provider_not_configured)
         if profile.requires_key and not api_key:
             raise ValueError(texts_for(self.locale).provider_key_missing)
-        prefixes = {
-            "openai": "openai", "anthropic": "anthropic", "gemini": "gemini",
-            "deepseek": "deepseek", "openrouter": "openrouter",
-            "ollama": "ollama_chat", "custom": "openai",
-        }
         # model is the provider's own id as the user typed it; the prefix only picks the SDK adapter.
-        kwargs = {
-            **body,
-            "model": prefixes[profile.id] + "/" + body["model"],
-            # Pass the selected profile's key explicitly; never borrow another provider's environment variable.
-            "api_key": api_key if profile.requires_key else (api_key or "ollama-local"),
-            "timeout": 60,
-            "num_retries": 0,
-            "max_retries": 0,
-            "drop_params": False,
-        }
-        if profile.api_base:
-            kwargs["api_base"] = profile.api_base
+        kwargs = {**body, "model": _CHAT_PREFIXES[profile.id] + "/" + body["model"],
+                  **_sdk_call_options(profile, api_key)}
         response = sdk_completion(**kwargs)
+        return response if isinstance(response, dict) else response.model_dump(exclude_none=True)
+
+
+class SDKEmbedding:
+    """Only sends one embeddings request and standardizes the response; it never splits or retries."""
+    def __init__(self, profile, locale=SOURCE_LOCALE):
+        self.profile = profile
+        self.locale = locale
+
+    def __call__(self, body, api_key):
+        profile = self.profile
+        if not profile.embedding_model or body.get("model") != profile.embedding_model:
+            raise ValueError(texts_for(self.locale).embedding_not_configured)
+        if profile.requires_key and not api_key:
+            raise ValueError(texts_for(self.locale).provider_key_missing)
+        kwargs = {**body, "model": _EMBEDDING_PREFIXES[profile.id] + "/" + body["model"],
+                  **_sdk_call_options(profile, api_key)}
+        if "dimensions" in body:
+            # LiteLLM only forwards dimensions for model names it knows (text-embedding-3*) and
+            # refuses others; the recorded body asks for it, so send it rather than drop it.
+            kwargs["allowed_openai_params"] = ["dimensions"]
+        response = sdk_embedding(**kwargs)
         return response if isinstance(response, dict) else response.model_dump(exclude_none=True)

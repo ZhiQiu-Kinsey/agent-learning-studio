@@ -40,6 +40,8 @@ export function ModelSettings({
   const [modelId, setModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiBase, setApiBase] = useState("");
+  // Blank keeps the provider's current embedding model (like the key and base URL).
+  const [embeddingModel, setEmbeddingModel] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
@@ -51,6 +53,7 @@ export function ModelSettings({
     if (!open) {
       setApiKey("");
       setApiBase("");
+      setEmbeddingModel("");
       return;
     }
     const abort = new AbortController();
@@ -95,6 +98,7 @@ export function ModelSettings({
     setModelId(providers.find((item) => item.id === id)?.model || "");
     setApiKey("");
     setApiBase("");
+    setEmbeddingModel("");
     setError("");
   }
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -115,11 +119,15 @@ export function ModelSettings({
           model: modelId.trim(),
           ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
           ...(apiBase.trim() ? { api_base: apiBase.trim() } : {}),
+          ...(embeddingModel.trim()
+            ? { embedding_model: embeddingModel.trim() }
+            : {}),
         }),
       });
       if (abort.signal.aborted) return;
       setApiKey("");
       setApiBase("");
+      setEmbeddingModel("");
       onSaved();
       onOpenChange(false);
       notify({
@@ -294,6 +302,26 @@ export function ModelSettings({
               }
             />
           </div>
+          <div className="form-field">
+            <label className="form-field-label" htmlFor="connection-embedding">
+              {t("embeddingModel")}
+            </label>
+            <Input
+              id="connection-embedding"
+              value={embeddingModel}
+              onChange={(event) => setEmbeddingModel(event.target.value)}
+              disabled={disabled}
+              autoComplete="off"
+              placeholder={
+                provider?.embedding_model
+                  ? t("embeddingModelCurrent", {
+                      model: provider.embedding_model,
+                    })
+                  : t("embeddingModelMissing")
+              }
+            />
+          </div>
+          <p className="connection-note">{t("embeddingNote")}</p>
           <p className="connection-note">{t("storageNote")}</p>
           {!modelId.trim() && !loading && (
             <p className="connection-error">{t("modelRequired")}</p>

@@ -21,20 +21,20 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from course.runner import RunCancelled
-from course.api_client import send_bailian
-from course.execution import RunContext, execute_lesson, validate_inputs
-from course.providers import SDKCompletion
+from course.api_client import BAILIAN_EMBEDDING_BATCH_LIMIT, send_bailian, send_bailian_embeddings
+from course.execution import EmbeddingNotConfigured, RunContext, execute_lesson, validate_inputs
+from course.providers import SDKCompletion, SDKEmbedding
 from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, curriculum_outline,
-                            lesson_code_view, lesson_detail, lesson_presets, lesson_runtime, lesson_spec,
-                            public_lesson, run_locale)
+                            exercise_requires_embedding, lesson_code_view, lesson_detail, lesson_presets,
+                            lesson_runtime, lesson_spec, public_lesson, run_locale)
 from server.content import load_onboarding
 from server.content_overlay import LOCALE
 from server.curriculum import roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
 from server.lesson_refs import resolve_refs
-from server.offline import completion_for
-from server.providers import ProviderRegistry, provider_label
+from server.offline import completion_for, embedding_for
+from server.providers import ProviderRegistry, embedding_setting, provider_label
 from server.recordings import RecordingInvalid, RecordingStale, list_recordings, read_recording
 from server.run_store import RunStore, utc_now
 
@@ -51,6 +51,8 @@ _store_lock = threading.Lock()
 RUN_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 # 确定性测试适配器不是 SDK；如实写出它的名字，版本留空。
 TEST_ADAPTER = {"name": "deterministic-test-adapter", "version": None}
+# 离线 Embedding 夹具在请求体里的模型名；分批上限与百炼一致，确定性运行的请求次数与默认真实路径相同。
+OFFLINE_EMBEDDING_MODEL = "offline-embedding"
 # 没有模型服务商的运行写进 run_start 的名称；按运行语言写，英文运行的事件里不出现中文。
 LOCAL_PROVIDER_LABELS = {
     "zh-CN": {"testing": "确定性测试", "local": "本地 Python"},
@@ -295,6 +297,13 @@ class RunPlan:
     completion: Callable | None = field(repr=False)
     completion_error: Exception | None
     secrets: list = field(repr=False)
+    # Embedding 连接：没有配置时为 None，课程调用 context.embed 会得到带 code 的错误。
+    embedding: Callable | None = field(default=None, repr=False)
+    embedding_model: str | None = None
+    embedding_batch_limit: int = BAILIAN_EMBEDDING_BATCH_LIMIT
+    # 本练习是否声明要用 Embedding（写进 run_start）；缺配置时提示去改哪个设置。
+    uses_embedding: bool = False
+    embedding_setting: str | None = None
 
 
 def prepare_run(body: RunInput) -> RunPlan:
@@ -326,14 +335,23 @@ def prepare_run(body: RunInput) -> RunPlan:
         raise ApiError(503, "runtime_unavailable", "课程运行组件暂时不可用，请检查课程配置。") from None
     # 练习可以单独声明不调用模型（catalog 只允许 custom 运行器这样做），其余沿用课程的声明。
     requires_model = exercise.get("requires_model", spec["runtime"].get("requires_model", True))
-    if body.mode == "offline" and requires_model and not spec.get("testing", {}).get("completion_factory"):
+    testing = spec.get("testing", {})
+    if body.mode == "offline" and requires_model and not (testing.get("completion_factory")
+                                                          or testing.get("embedding_factory")):
         raise ApiError(400, "no_offline_fixture", "本课未提供确定性模型测试场景。")
+    uses_embedding = exercise_requires_embedding(spec, exercise)
     profile = provider_registry.resolve(bailian_key=session_key) if body.mode == "live" and requires_model else None
     key = profile.api_key if profile else ""
     model = profile.model if profile else "offline-script" if requires_model else "local-python"
     representation = profile.representation if profile else "sdk_standardized" if requires_model else "local"
     if profile and (not profile.config_ready or profile.requires_key and not key):
         raise ApiError(400, "live_not_configured", "真实模式需要已配置的模型、服务地址和所选服务商 API Key；本地 Ollama 无需 Key。")
+    # 本练习要用 Embedding 而服务商没有 Embedding 模型：开始前就拒绝，不悄悄换模型或跳过检索。
+    if profile and uses_embedding and not profile.embedding_model:
+        raise ApiError(400, "embedding_model_missing",
+                       f"所选服务商还没有可用的 Embedding 模型配置。请在模型设置里填写 Embedding 模型，"
+                       f"或设置 {embedding_setting(profile.id)}。",
+                       {"setting": embedding_setting(profile.id)})
     # 信封如实标注表示层级：百炼原生 HTTP 是 http_body；LiteLLM 是 sdk_standardized 并附 SDK 版本；
     # 离线测试适配器返回标准化形状的字典，标注为测试适配器而不是 SDK；本地课程没有模型数据。
     if profile:
@@ -342,11 +360,28 @@ def prepare_run(body: RunInput) -> RunPlan:
         sdk = dict(TEST_ADAPTER) if requires_model else None
     completion, completion_error = None, None
     try:
-        completion = (completion_for(spec, body.exercise_id, inputs, locale) if body.mode == "offline" and requires_model
-                      else functools.partial(send_bailian, locale=locale) if profile and profile.id == "bailian"
-                      else SDKCompletion(profile, locale) if profile else None)
+        if body.mode == "offline" and requires_model:
+            # 只做 Embedding 的课没有 completion_factory，离线时 completion 为 None。
+            completion = (completion_for(spec, body.exercise_id, inputs, locale)
+                          if testing.get("completion_factory") else None)
+        elif profile:
+            completion = (functools.partial(send_bailian, locale=locale) if profile.id == "bailian"
+                          else SDKCompletion(profile, locale))
     except Exception as error:  # 与原行为一致：作为运行中的 error 事件报告。
         completion_error = error
+    # Embedding 连接：离线用课程夹具；真实模式按当前服务商构造（没有模型时为 None）。
+    embedding, embedding_model = None, None
+    embedding_batch_limit = profile.embedding_batch_limit if profile else BAILIAN_EMBEDDING_BATCH_LIMIT
+    if body.mode == "offline" and requires_model and testing.get("embedding_factory"):
+        embedding_model = OFFLINE_EMBEDDING_MODEL
+        try:
+            embedding = embedding_for(spec, body.exercise_id, inputs, locale)
+        except Exception as error:
+            completion_error = completion_error or error
+    elif profile and profile.embedding_model:
+        embedding_model = profile.embedding_model
+        embedding = (functools.partial(send_bailian_embeddings, locale=locale) if profile.id == "bailian"
+                     else SDKEmbedding(profile, locale))
     provider_id = profile.id if profile else "testing" if requires_model else "local"
     return RunPlan(
         body=body, spec=spec, module=module, inputs=inputs, locale=locale, key=key, model=model,
@@ -356,6 +391,8 @@ def prepare_run(body: RunInput) -> RunPlan:
         envelope_representation=representation if representation in ("http_body", "sdk_standardized") else None,
         sdk=sdk, completion=completion, completion_error=completion_error,
         secrets=provider_registry.secrets(session_key),
+        embedding=embedding, embedding_model=embedding_model, embedding_batch_limit=embedding_batch_limit,
+        uses_embedding=uses_embedding, embedding_setting=embedding_setting(profile.id) if profile else None,
     )
 
 
@@ -426,6 +463,8 @@ def start_run(plan: RunPlan) -> str:
                      "trace_representation": plan.representation, "locale": plan.locale}
             if body.locale and body.locale != plan.locale:
                 start["requested_locale"] = body.locale
+            if plan.uses_embedding:
+                start["embedding_model"] = plan.embedding_model
             active.emit("run_start", start)
             if plan.completion_error is not None:
                 raise plan.completion_error
@@ -434,11 +473,18 @@ def start_run(plan: RunPlan) -> str:
                 mode=body.mode, model=plan.model, representation=plan.representation, inputs=plan.inputs,
                 api_key=plan.key, completion=plan.completion, emit_event=active.emit,
                 cancelled=active.cancelled.is_set, max_model_calls=spec["runtime"].get("max_rounds", 3),
-                locale=plan.locale,
+                locale=plan.locale, embedding=plan.embedding, embedding_model=plan.embedding_model,
+                embedding_batch_limit=plan.embedding_batch_limit,
             )
             execute_lesson(spec, plan.module, context)
         except RunCancelled:
             final_status = "cancelled"
+        except EmbeddingNotConfigured as error:
+            # 带稳定错误码，前端翻译并引导去模型设置；setting 说明该改哪个配置。
+            final_status = "error"
+            active.emit("error", {"message": str(error), "error_type": type(error).__name__,
+                                  "code": "embedding_model_missing",
+                                  "params": {"setting": plan.embedding_setting or ""}})
         except Exception as error:
             final_status = "error"
             active.emit("error", {"message": str(error), "error_type": type(error).__name__})

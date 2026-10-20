@@ -137,6 +137,7 @@ Windows（PowerShell）把 `npm` 换成 `npm.cmd`，用 `.\.venv\Scripts\python.
 | OpenAI 兼容服务 | `CUSTOM_API_KEY` | `CUSTOM_MODEL` / `CUSTOM_API_BASE` |
 
 - **百炼**：复制 `local_config.example.py` 为 `local_config.py`，填写接入地址和支持工具调用的模型 ID。这个文件已被 `.gitignore` 排除。
+- **Embedding 模型**（检索课使用）：百炼默认 `text-embedding-v4`，地址由 `API_URL` 推导，也可在 `local_config.py` 写 `EMBEDDING_MODEL` / `EMBEDDING_API_URL`；OpenAI 默认 `text-embedding-3-small`；其他服务商设置 `<服务商>_EMBEDDING_MODEL`（如 `GEMINI_EMBEDDING_MODEL`、`OLLAMA_EMBEDDING_MODEL`）或在网页的“Embedding 模型”里填写。没有配置时，需要 Embedding 的练习会提示先配置，不会改用别的模型。
 - **凭据互不借用**：每家服务商的凭据独立，切换服务商不会借用别家的密钥。
 - **Ollama**：需要自己准备本地服务和支持工具调用的模型，平台不会自动下载。
 

@@ -12,3 +12,10 @@ API_URL = "REPLACE_WITH_YOUR_BAILIAN_CHAT_COMPLETIONS_URL"
 # A model ID that works on Bailian and supports tool calling.
 # 已在百炼验证可用并支持工具调用的模型 ID。
 MODEL = "REPLACE_WITH_YOUR_TOOL_CAPABLE_MODEL"
+
+# Optional: embedding requests (retrieval lessons). Without these lines the platform uses
+# text-embedding-v4 and derives the URL from API_URL (/chat/completions -> /embeddings).
+# 可选：Embedding 请求（检索课使用）。不写时默认 text-embedding-v4，地址由 API_URL 推导
+# （把 /chat/completions 换成 /embeddings）。
+# EMBEDDING_MODEL = "text-embedding-v4"
+# EMBEDDING_API_URL = "REPLACE_WITH_YOUR_BAILIAN_EMBEDDINGS_URL"

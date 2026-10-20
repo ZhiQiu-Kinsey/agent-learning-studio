@@ -18,6 +18,14 @@ TEXTS = Texts(
     ),
     provider_not_configured="Configure the model and service address of the selected provider first.",
     provider_key_missing="Configure the API key of the selected provider first.",
+    embedding_not_configured=(
+        "The selected provider has no embedding model configured. This lesson sends embedding requests and "
+        "the platform will not switch to another model; set an embedding model in the model settings, or set "
+        "the environment variable the documentation names, then run again."
+    ),
+    embedding_response_invalid=(
+        "The embedding response has {actual} vectors for {expected} inputs; stopped."
+    ),
     cli_model="Model: {model}",
     cli_examples="Try:",
     cli_prompt="\nYou: ",

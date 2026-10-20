@@ -54,8 +54,30 @@ The server fills in every envelope field. Lesson code can emit only `type/round/
 | --- | --- | --- |
 | Bailian raw HTTP (`course/api_client.send_bailian`; the request body is the JSON that urllib sends) | `http_body` | `null` |
 | LiteLLM multi-provider (`course/providers.SDKCompletion`; the input is SDK parameters and the output is `model_dump()`) | `sdk_standardized` | `{"name": "litellm", "version": installed version}` |
+| Bailian embeddings (`course/api_client.send_bailian_embeddings`; `/embeddings` of the same workspace) | `http_body` | `null` |
+| LiteLLM embeddings (`course/providers.SDKEmbedding`; `model_dump()` of `litellm.embedding`) | `sdk_standardized` | `{"name": "litellm", "version": installed version}` |
 | Deterministic test adapter (automated tests only) | `sdk_standardized` | `{"name": "deterministic-test-adapter", "version": null}` |
 | Local lessons that don't call a model | `null` | `null` |
+
+Embedding requests use the same connection as the run's chat requests, so they carry the same representation; nothing is labeled separately.
+
+### Embedding requests
+
+A lesson sends an embedding request with `context.embed(texts, round_number=1, *, branch=None, dimensions=None)`. It is still a `request` / `response` pair that opens and closes an `llm` span, with one more field in `data`: `endpoint: "embeddings"`. A request without `endpoint` is a chat completion:
+
+```json
+{"type": "request", "data": {"endpoint": "embeddings", "representation": "http_body",
+  "body": {"model": "text-embedding-v4", "input": ["chunk one", "chunk two"], "dimensions": 256}}}
+{"type": "response", "data": {"endpoint": "embeddings", "representation": "http_body", "duration_ms": 412,
+  "body": {"data": [{"index": 0, "embedding": [0.012, "..."]}, {"index": 1, "embedding": ["..."]}],
+           "model": "text-embedding-v4", "usage": {"prompt_tokens": 9, "total_tokens": 9}}}}
+```
+
+- `body` is recorded as it is: the request body is the JSON that was sent (without `dimensions` when the lesson passed none; the platform never fills in the provider's default), and the response body is the provider's full JSON or the SDK's `model_dump()`. Vectors are stored in full in the run store and in recordings. Only the UI truncates them for display, and says so.
+- With a `branch`, the pair is matched by `branch`, like parallel chat requests.
+- Embedding requests count toward `max_model_calls` (the lesson's `runtime.max_rounds`); chat and embedding requests share one budget.
+- One request carries at most `context.embedding_batch_limit` inputs (10 on Bailian's compatible endpoint); lesson code splits larger sets itself. Going over the limit, an empty list or an empty string is a programming error (`ValueError`) and sends no event. When the response has a different number of vectors than inputs, the response is recorded first and then the run stops.
+- When the exercise uses embeddings (`lesson.json` declares `testing.embedding_factory`, or the exercise says `requires_embedding: true`), `run_start.data.embedding_model` records the run's embedding model.
 
 Red line: SDK-standardized data is never labeled `http_body` or `wire`. `EnvelopeBuilder` rejects `sdk_standardized` without SDK information, and it also rejects SDK information attached to non-SDK data. No path currently produces `wire` or `parsed`. The v1 field `data.representation` stays as before.
 
@@ -93,6 +115,8 @@ The constant table is declared once, as `SPAN_EVENTS` in `server/envelope.py`. `
 ## 5. Compatibility
 
 - The event types `run_start/request/response/tool_call/tool_result/answer/error/done` and the `lesson.*` names, as well as the content of `data`, are unchanged.
+- `request` / `response` may carry `data.endpoint: "embeddings"` (see "Embedding requests" in section 2); older records without the field are chat requests. `run_start.data.embedding_model` appears only when the exercise uses embeddings.
+- `error.data` may carry a stable `code` (and optional `params`); the UI translates the code and says what to configure. The only one so far is `embedding_model_missing` (the selected provider has no embedding model; `params.setting` names the setting to change). `message` is still recorded in the run language.
 - `run_start.data.locale` records the run language (`zh-CN`, `en`). When the language requested by the UI isn't supported by the lesson and the run falls back to the source language, `requested_locale` is recorded as well. An older run without `locale` is a Chinese run. The run language decides the language of all text in the events. Replay shows the record as it was; when the UI language differs, it only adds a label and doesn't translate.
 - The frontend `Trace` type accepts both v1 and v2 and reads v2 fields as optional. `isTraceV2()` decides whether spans can be derived. A v1 record can only be read in array order.
 - A downloaded run record gains `run_id`, and its events are v2. There is no import feature yet; when one is added, v1 records will be read by the rules above.

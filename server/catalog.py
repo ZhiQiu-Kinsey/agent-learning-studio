@@ -189,7 +189,7 @@ def _manifest(root, path, catalog_lesson):
     exercise_ids = set()
     for exercise in exercises:
         _object(exercise, str(path) + ": exercises",
-                {"id", "title", "question", "offline_only", "requires_model", "inputs"})
+                {"id", "title", "question", "offline_only", "requires_model", "requires_embedding", "inputs"})
         for key in ("id", "title"):
             _text(exercise.get(key), str(path) + ": exercises." + key)
         _require(exercise["id"] not in exercise_ids, path, "同一课程的 exercise.id 不能重复")
@@ -198,6 +198,8 @@ def _manifest(root, path, catalog_lesson):
         _preset(exercise.get("question"), locales, where + ".question", text=True)
         _require(type(exercise.get("offline_only", False)) is bool, path, "offline_only 必须为布尔值")
         _require(type(exercise.get("requires_model", True)) is bool, path, "exercise.requires_model 必须为布尔值")
+        _require(type(exercise.get("requires_embedding", False)) is bool, path,
+                 "exercise.requires_embedding 必须为布尔值")
         for name, value in _object(exercise.get("inputs", {}), where + ".inputs").items():
             _preset(value, locales, f"{where}.inputs.{name}")
     kind = runtime.get("kind")
@@ -211,11 +213,21 @@ def _manifest(root, path, catalog_lesson):
     # 单个练习可以不调用模型（如运行器构造的故障注入），只在独立运行器里由课程代码分流。
     _require(kind == "custom" or all(exercise.get("requires_model", True) for exercise in exercises),
              path, "只有 custom 运行器的练习可以声明 requires_model=false")
-    testing = _object(data.get("testing", {}), str(path) + ": testing", {"completion_factory"})
-    _require(not runtime["requires_model"] or "completion_factory" in testing,
-             path, "模型课程必须声明 testing.completion_factory")
-    if "completion_factory" in testing:
-        _reference(root, module, testing["completion_factory"], str(path) + ": testing.completion_factory", callable_required=True)
+    testing = _object(data.get("testing", {}), str(path) + ": testing", {"completion_factory", "embedding_factory"})
+    # Embedding 请求也是模型调用：只做 Embedding 的课可以只声明 embedding_factory。
+    _require(not runtime["requires_model"] or "completion_factory" in testing or "embedding_factory" in testing,
+             path, "模型课程必须声明 testing.completion_factory（只用 Embedding 的课声明 testing.embedding_factory）")
+    for factory in ("completion_factory", "embedding_factory"):
+        if factory in testing:
+            _reference(root, module, testing[factory], f"{path}: testing.{factory}", callable_required=True)
+    # 要不要 Embedding（server/app.py 据此在真实模式先检查配置）：练习可以显式声明 requires_embedding，
+    # 没写时，调用模型的练习跟随课程是否声明 embedding_factory。不调用模型的练习不能要求 Embedding。
+    for exercise in exercises:
+        calls_model = exercise.get("requires_model", runtime["requires_model"])
+        if exercise.get("requires_embedding"):
+            _require("embedding_factory" in testing, path,
+                     f"exercises[{exercise['id']}] 要求 Embedding，课程必须声明 testing.embedding_factory")
+            _require(calls_model, path, f"exercises[{exercise['id']}] 不调用模型，不能要求 Embedding")
     ui = _object(data.get("ui", {}), str(path) + ": ui", {"guide", "lab", "inspector", "question_label", "question_help"})
     for key, value in ui.items():
         if key in {"question_label", "question_help"}:
@@ -426,6 +438,13 @@ def _refs_in(locale):
 def lesson_runtime(spec):
     reference = spec["runtime"]["entrypoint"]
     return import_module(spec["package"] + "." + reference.split(":", 1)[0])
+
+
+def exercise_requires_embedding(spec, exercise):
+    """这个练习是否发 Embedding 请求：显式声明优先，否则调用模型的练习跟随课程的 embedding_factory。"""
+    calls_model = exercise.get("requires_model", spec["runtime"].get("requires_model", True))
+    default = calls_model and "embedding_factory" in spec.get("testing", {})
+    return bool(exercise.get("requires_embedding", default))
 
 
 def lesson_callable(spec, reference):

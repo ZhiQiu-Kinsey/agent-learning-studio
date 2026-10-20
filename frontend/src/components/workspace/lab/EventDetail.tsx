@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Check, Code2, Copy } from "lucide-react";
 import { useReducedMotion } from "../../../motion";
@@ -7,6 +7,11 @@ import type { Trace } from "../../../types";
 import TextType from "../../react-bits/TextType";
 import { Code } from "../../Code";
 import { Button } from "../../ui/button";
+import {
+  SHOWN_VECTOR_NUMBERS,
+  isEmbeddingEvent,
+  truncateVectors,
+} from "./embeddings";
 import { useEvidenceFocus } from "./evidenceFocus";
 import { printJson, shownPath, shownValue } from "./jsonLines";
 import { useEventText } from "./useEventText";
@@ -77,7 +82,22 @@ export function EventDetail({
   const event = s.active;
   const body = event ? shownValue(event) : null;
   const activeIndex = event ? s.visible.indexOf(event) : -1;
-  const printed = useMemo(() => printJson(body), [body]);
+  // Embedding vectors run to thousands of numbers: the view keeps the first few of each
+  // and says so; the record, the copy button and "show full JSON" keep every number.
+  const [fullIndex, setFullIndex] = useState<number | null>(null);
+  const embedding = event ? isEmbeddingEvent(event) : false;
+  const shortened = useMemo(
+    () =>
+      embedding
+        ? truncateVectors(body, (hidden) =>
+            t("embeddingHidden", { count: hidden }),
+          )
+        : { value: body, truncated: false },
+    [body, embedding, t],
+  );
+  const showFull = fullIndex === activeIndex;
+  const shown = shortened.truncated && !showFull ? shortened.value : body;
+  const printed = useMemo(() => printJson(shown), [shown]);
   const field =
     event && focus?.index === activeIndex && focus.path !== null
       ? shownPath(event, focus.path)
@@ -123,10 +143,32 @@ export function EventDetail({
           <p className="event-explanation">
             {event.data.representation === "sdk_standardized"
               ? t("sdk")
-              : isExchange(event)
-                ? t("http")
-                : t("generic")}
+              : embedding
+                ? t("embeddingHttp")
+                : isExchange(event)
+                  ? t("http")
+                  : t("generic")}
           </p>
+          {shortened.truncated && (
+            <p
+              className="event-explanation"
+              data-testid="lab-embedding-truncated"
+            >
+              {!showFull && (
+                <span>
+                  {t("embeddingTruncated", { count: SHOWN_VECTOR_NUMBERS })}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-pressed={showFull}
+                onClick={() => setFullIndex(showFull ? null : activeIndex)}
+              >
+                {showFull ? t("embeddingShowShort") : t("embeddingShowFull")}
+              </Button>
+            </p>
+          )}
           <Code content={printed.text} mark={mark} markRef={markRef} />
         </div>
       ) : (
