@@ -1,0 +1,1374 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "FRAMEWORK / TOOLS",
+      "source": "c6c6bc801ae1"
+    },
+    "hero.headline": {
+      "text": "The framework parses;",
+      "source": "84d8dfbb7ab3"
+    },
+    "hero.highlight": {
+      "text": "the program still decides.",
+      "source": "5fca3f9f7757"
+    },
+    "hero.takeaway": {
+      "text": "Plug the task card contract from earlier lessons into LangChain's tool decorator and structured output, then check item by item: is a tool failure still a failure, does a parsing failure get swallowed, and which capabilities does the provider actually support?",
+      "source": "254d4ff517e2"
+    },
+    "concepts.01-decorator.label": {
+      "text": "01 / DECORATOR",
+      "source": "688356049ab1"
+    },
+    "concepts.01-decorator.title": {
+      "text": "Tool decorator",
+      "source": "a71df4130091"
+    },
+    "concepts.01-decorator.description": {
+      "text": "Builds the tool definition from the function name, type hints and description; at call time it also validates arguments against the same schema.",
+      "source": "a2abaf8d30fa"
+    },
+    "concepts.02-parser.label": {
+      "text": "02 / PARSER",
+      "source": "0cafa8e0021e"
+    },
+    "concepts.02-parser.title": {
+      "text": "Output parser",
+      "source": "8e84323e04ec"
+    },
+    "concepts.02-parser.description": {
+      "text": "with_structured_output forces the model to call TaskCard, then validates the arguments with a parser; the result has three parts: raw, parsed and parsing_error.",
+      "source": "28cb0cd05607"
+    },
+    "concepts.03-business.label": {
+      "text": "03 / BUSINESS",
+      "source": "5e5430074081"
+    },
+    "concepts.03-business.title": {
+      "text": "The business check stays with the program",
+      "source": "0311eb68cdc1"
+    },
+    "concepts.03-business.description": {
+      "text": "A successful parse only means the shape is right. business_checks then compares the card with the trusted facts field by field.",
+      "source": "25d7cd10117b"
+    },
+    "concepts.04-matrix.label": {
+      "text": "04 / MATRIX",
+      "source": "d67a81855753"
+    },
+    "concepts.04-matrix.title": {
+      "text": "Capability matrix",
+      "source": "6c84c4dc33e5"
+    },
+    "concepts.04-matrix.description": {
+      "text": "Each capability gets the evidence from this run and a status: observed in this run, adapter fallback, or unverified.",
+      "source": "c901c66feb24"
+    },
+    "section-1.title": {
+      "text": "What the framework takes over, what the program keeps",
+      "source": "0ab530e47860"
+    },
+    "section-1.paragraphs.0": {
+      "text": "This lesson hands the business contract written in earlier lessons to LangChain's model, tool and parsing components unchanged, then checks whether errors and evidence still mean the same thing. In {{lesson:structured-output}}, the lesson card had to pass three checks: it parses as JSON, it fits the TaskCard schema, and its facts match the trusted data. Parsing and validation were plain Python written by hand. The framework offers ready-made components; the question is whether the old failures are still reported honestly once you switch to them.",
+      "source": "7d9cd9f3441e"
+    },
+    "section-1.paragraphs.1": {
+      "text": "The task is to produce the lesson card for the lesson task-contract, and the runner does it in two steps. First the model calls lookup_lesson to get the lesson facts; this tool reads that lesson's trusted_facts. Then with_structured_output asks the model to write the card as a TaskCard. TaskCard and the trusted facts are imported straight from {{lesson:structured-output}}, with not a single field changed. So the business rules exist once: this lesson judges right and wrong exactly the way that lesson does, and only the parsing layer in between changes.",
+      "source": "c3185fc63574"
+    },
+    "section-1.paragraphs.2": {
+      "text": "What the framework takes over is format conversion: turning a function signature into a tool definition, and the call arguments the model returns into an object. What the program keeps is judgment: whether to go on after a tool failure, how many times to retry a failed parse, and whether the parsed object is right. These judgments live in the runner, not in framework defaults.",
+      "source": "66bb44b0209b"
+    },
+    "section-1.paragraphs.3": {
+      "text": "{{lesson:langchain-vs-native}} showed how model calls are recorded through the adapter. Every call in this lesson also goes through RunContextChatModel, request and response events are recorded as usual, and within one run you can put the provider's raw response next to the framework object. The four exercises cover four cases: everything normal, a card with a missing field, a wrong fact, and a tool error. The last three are injected through the prompt, and a real model may not follow them, so trust your own run.",
+      "source": "5eee602430b9"
+    },
+    "section-2.title": {
+      "text": "Tool decorators and parameter schemas",
+      "source": "319398da4939"
+    },
+    "section-2.paragraphs.0": {
+      "text": "A tool decorator builds the tool definition from the function's type hints, which saves you writing the JSON Schema by hand and removes the chance of two definitions drifting apart. A handwritten definition and the function are two separate things: add a parameter to the function and forget the definition, and the model never sees that parameter; list a parameter in required that the function does not have, and the first call is a TypeError. The references contain a ready example: a structured extraction sample lists `counterpoint` in required but never defines it in properties.",
+      "source": "ab9db49ef4ec"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Work it out for this lesson's lookup_lesson. The parameter is written as `lesson_id: Annotated[str, Field(min_length=1, max_length=48)]`, and the decorator reads three things from it: the parameter name lesson_id, the type string, and a length from 1 to 48. So the generated parameters contain `\"type\": \"string\"`, `\"minLength\": 1` and `\"maxLength\": 48`, and lesson_id goes into required because it has no default; give it a default and it drops out of required. The tool name is the function name, and the tool description is the decorator's description argument, or the docstring when that is not passed. To write the same definition by hand you copy each of these from the function, and every item you miss is a mismatch.",
+      "source": "4c89cf627262"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The decorator returns a StructuredTool object that carries two things: the parameter schema the model reads, and the Pydantic validation that really runs at call time. bind_tools turns the former into the tool definition in the request; the first lab report of this lesson compares it field by field with the handwritten definition from handwritten_definition, and it is what the tools of the round 1 request carry. The latter acts at call time: if the model passes an empty string, validation fails before the function runs, and the platform records a structured error whose error_type is ValidationError.",
+      "source": "a603b69977cf"
+    },
+    "section-2.paragraphs.3": {
+      "text": "A generated definition only expresses types and constraints; it cannot say when to use the tool. The tool description still has to be written by a person, and it should state the boundaries: this lesson's description says it accepts only a `slug`, not a title, a lesson number or a directory name, a sentence the model needs for its decision. Reusing a business model has another trap: TaskCard has no docstring, so the framework would send an empty tool description. card_schema adds the description with a subclass that adds no field, and not one validation rule changes; the lab report item \"Tool description the business model brings\" shows that the original one is empty.",
+      "source": "5402898d3930"
+    },
+    "deep-dive-three-frameworks.title": {
+      "text": "One function, three frameworks, three ways to register it",
+      "source": "14d06971e426"
+    },
+    "deep-dive-three-frameworks.summary": {
+      "text": "Every framework does the same job, turning a function into a name, a description and a parameter schema; they differ in where that information comes from.",
+      "source": "448ef3dd2e8a"
+    },
+    "deep-dive-three-frameworks.paragraphs.0": {
+      "text": "The Hugging Face Agents Course shows one guest-lookup function in three frameworks. `smolagents` asks for a tool class whose name, description and input dictionary you fill in by hand; LlamaIndex's FunctionTool infers them from the docstring and type hints; the LangChain version uses the old-style Tool, which takes a single string and has no typed parameter schema. The three give the model different amounts of information: filling it in by hand is the most flexible and the easiest to get wrong, and inference is only as good as your annotations. For an agent the difference lands directly in the request: without a typed schema, the model has to pack everything into one string, and the tool has to take it apart again.",
+      "source": "f1688d8e6f7d"
+    },
+    "deep-dive-three-frameworks.paragraphs.1": {
+      "text": "Chapter 4 of *Understanding AI Agents in Depth* (深入理解 AI Agent) stresses three things about tool descriptions: say when to use the tool, not only what it can do; list the boundaries, what it cannot do and what input it rejects; and give concrete examples for parameters, since `task-contract` helps more than \"lowercase with hyphens\". The decorator can only automate the type part of the third point; the first two always need a person. The tool description and parameter description of lookup_lesson follow these three points, and the runtime text on the code page shows the exact wording. Once written, go back to the run record to see how the model used it: a description can only be judged by runs.",
+      "source": "31356a399f73"
+    },
+    "deep-dive-three-frameworks.paragraphs.2": {
+      "text": "Generating and handwriting are not either-or. Handwriting gives you word-for-word control over the definition the model sees, at the cost of keeping it in sync with the function; generating gives you one source of truth, at the cost of the definition changing with the annotations, so changing a default changes the request. This lesson keeps both and compares them field by field, which works as an upgrade check on the generated result: the day a framework upgrade changes the generation rules, the item \"The generated lookup_lesson definition matches the handwritten one\" turns into a failure, with the differing paths in its detail.",
+      "source": "c54f208fc3c9"
+    },
+    "predict-requests.prompt": {
+      "text": "Before you run \"Missing field on purpose\" in the lab, guess: how many request events will this run have? Hint: one lookup, the first card misses a field, and the repair limit is 1.",
+      "source": "62c4dad4aa24"
+    },
+    "mq-schema-source.schema-source.prompt": {
+      "text": "Where does `\"maxLength\": 48` in the lookup_lesson tool definition come from?",
+      "source": "651bc938a97a"
+    },
+    "mq-schema-source.schema-source.a.text": {
+      "text": "The parameter's type hint: Field sets the length limit, and the decorator translates it into the schema",
+      "source": "c209dd06aa29"
+    },
+    "mq-schema-source.schema-source.a.feedback": {
+      "text": "Right. The parameter schema comes from the type hints, and calls are validated against it.",
+      "source": "0502fd612d53"
+    },
+    "mq-schema-source.schema-source.b.text": {
+      "text": "A sentence in the tool description",
+      "source": "92ec7e16324b"
+    },
+    "mq-schema-source.schema-source.b.feedback": {
+      "text": "No. The tool description is text for the model; the decorator does not extract constraints from it.",
+      "source": "454aa35ab8a3"
+    },
+    "mq-schema-source.schema-source.c.text": {
+      "text": "The model adds it when it calls the tool",
+      "source": "28e364de01f1"
+    },
+    "mq-schema-source.schema-source.c.feedback": {
+      "text": "No. The tool definition is generated before the request is sent; the model reads it and never changes it.",
+      "source": "f56d965c682b"
+    },
+    "mq-schema-source.schema-source.explanation": {
+      "text": "Type hints are the only source of the parameter schema; the tool description and parameter descriptions are still written by people.",
+      "source": "123a6e61ecdc"
+    },
+    "section-3.title": {
+      "text": "Structured results and parsers",
+      "source": "c476c12549e2"
+    },
+    "section-3.paragraphs.0": {
+      "text": "with_structured_output lets the framework parse the model's output for you, but it reports failure in more than one way, and two of the failures raise no exception at all. In {{lesson:structured-output}}, a JSON parsing failure and a schema mismatch both raised errors, and the program caught them. With the framework you get back a result dictionary and have to look at what is inside; writing a single exception handler amounts to assuming the other two failures never happen.",
+      "source": "a7f3e1667d78"
+    },
+    "section-3.paragraphs.1": {
+      "text": "An output parser is the component that turns the model's raw output into a program object. with_structured_output is made of two halves: first bind_tools registers TaskCard as the only tool and forces the model to call it; then a parser takes the arguments from the first tool call in the AIMessage and validates them with TaskCard. The adapter turns the framework's forcing option into `\"tool_choice\": \"required\"` in the request, which you can see in the round 2 request event. With include_raw=True the result has three keys: raw is the original AIMessage, parsed is a TaskCard or None, and parsing_error is the exception raised while parsing.",
+      "source": "ebfe0e47b376"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Work out three failures. The model leaves out prerequisite: the arguments are valid JSON, Pydantic raises a missing-field error, and parsing_error reads `prerequisite: missing`. The model writes `{broken`: this is an invalid tool call, the adapter puts it into invalid_tool_calls, the parser finds nothing among the valid calls, and parsed and parsing_error are both None. The model calls no tool and only writes text: the result is again two Nones. Without include_raw, the first raises an exception and the other two quietly return None. classify gives each of these cases a name, and the program checks whether parsed is None instead of only waiting for an exception.",
+      "source": "6c2f3208f232"
+    },
+    "section-3.paragraphs.3": {
+      "text": "A successful parse also only means the shape is right. In the group \"Valid schema, wrong fact\", the model writes prerequisite as dependent-calls; type and length both pass, and the framework hands back a TaskCard object all the same. business_checks compares it with the trusted facts field by field, finds the mismatch and fails it. The framework replaces the first two of the three checks in {{lesson:structured-output}}; the third, the business check, is still done by the program, and only after an object is in hand. Without one, the item says \"not run\": neither a failure nor a pass.",
+      "source": "94ded0280821"
+    },
+    "deep-dive-inside-structured-output.title": {
+      "text": "What is inside with_structured_output",
+      "source": "432b7068fe41"
+    },
+    "deep-dive-inside-structured-output.summary": {
+      "text": "In the langchain-core 1.6.12 source it is just a tool binding plus a parser, and it quietly drops two arguments.",
+      "source": "dd0cb80ad88b"
+    },
+    "deep-dive-inside-structured-output.paragraphs.0": {
+      "text": "The RunContextChatModel this lesson uses subclasses BaseChatModel and does not implement with_structured_output itself, so it gets the base class's default. In the langchain-core 1.6.12 source, that default takes a few steps: call bind_tools with `tool_choice=\"any\"`, registering the schema as the only tool; when the schema is a Pydantic class, attach PydanticToolsParser, which takes only the first tool call; when include_raw is true, wrap it in a combination with a fallback that puts the parsing exception into parsing_error and sets parsed to None. The whole thing is under thirty lines, with no retry and no provider-specific branch.",
+      "source": "90a99c49153b"
+    },
+    "deep-dive-inside-structured-output.paragraphs.1": {
+      "text": "One spot is easy to trip on: the base implementation takes the `method` and `strict` keyword arguments out at the start and throws them away. Writing `with_structured_output(TaskCard, method=\"json_schema\")` raises no error, and the request carries no provider-native JSON Schema output option; what goes out is still a forced tool call. Provider-specific integration packages override this method and really support these arguments; the generic implementation knows only the tool-calling route. Conversely, do not assume that because an integration package supports native output, it still works after you switch back to the generic implementation.",
+      "source": "c5539ae88230"
+    },
+    "deep-dive-inside-structured-output.paragraphs.2": {
+      "text": "This is the argument-fidelity problem from chapter 4 of *Understanding AI Agents in Depth* (深入理解 AI Agent): the caller believes an argument took effect, but a layer in between quietly changed or dropped it. The only remedy is to look at the request that actually went out. This lesson's capability matrix marks both \"Provider-native JSON Schema output\" and \"strict schema\" as unverified, simply because the request carries neither option; if you later switch to an integration package that supports them, first confirm in the request event that the options really appear, then change the status of these two rows.",
+      "source": "6a8d523aed69"
+    },
+    "misconception-no-exception.claim": {
+      "text": "If with_structured_output goes wrong it always raises; no exception means a valid lesson card came back.",
+      "source": "851a9d3f0b4e"
+    },
+    "misconception-no-exception.correction": {
+      "text": "When the arguments are not a JSON object, or the model calls no tool at all, the include_raw result has parsed and parsing_error both None, and without include_raw you simply get None back. Neither raises. Even a TaskCard object only means the shape is right; whether the facts are right is up to the business check.",
+      "source": "2e0b1bd790fc"
+    },
+    "mq-silent-none.silent-none.prompt": {
+      "text": "The model wrote the TaskCard arguments as `{broken`. With include_raw=True, what comes back?",
+      "source": "85b1aaf99d59"
+    },
+    "mq-silent-none.silent-none.a.text": {
+      "text": "parsed is None, parsing_error is None too, and the raw string stays in the invalid_tool_calls of raw",
+      "source": "d30b5358f1bd"
+    },
+    "mq-silent-none.silent-none.a.feedback": {
+      "text": "Right. This failure raises nothing, so the program has to check parsed itself.",
+      "source": "0808b77505c7"
+    },
+    "mq-silent-none.silent-none.b.text": {
+      "text": "parsing_error holds a JSON parsing error",
+      "source": "60d0f6ce5d3c"
+    },
+    "mq-silent-none.silent-none.b.feedback": {
+      "text": "No. This invalid tool call already went into invalid_tool_calls in the adapter; the parser only looks at valid calls, finds nothing, and so has no exception.",
+      "source": "becf8598394c"
+    },
+    "mq-silent-none.silent-none.c.text": {
+      "text": "invoke raises and the run stops",
+      "source": "bd7d92f33847"
+    },
+    "mq-silent-none.silent-none.c.feedback": {
+      "text": "No. With include_raw true even Pydantic's validation error goes into parsing_error, let alone a missing call.",
+      "source": "f0bd229e200c"
+    },
+    "mq-silent-none.silent-none.explanation": {
+      "text": "classify names this case invalid_arguments and reports it separately from the schema_error of a missing field.",
+      "source": "f7f570c2d6b7"
+    },
+    "section-4.title": {
+      "text": "Unified interface, different providers",
+      "source": "f1f8c300ee95"
+    },
+    "section-4.paragraphs.0": {
+      "text": "The unified interface turns every provider's response into the same kind of AIMessage, but what each provider actually supports has to be checked item by item in every run. Behind the same line `model.invoke(history)` there may be Bailian's native HTTP, or another provider connected through LiteLLM. The same code does not mean the same behavior: some providers do not support forced tool calls, some do not report usage, some send no call ids.",
+      "source": "b83671e80dc1"
+    },
+    "section-4.paragraphs.1": {
+      "text": "First look at the two layers of one call. The round 2 response event is the provider's raw response: the tool call's arguments is a JSON string, and usage sits in usage, or is simply absent. The lesson.framework_output right after it is the framework object: args in tool_calls is already parsed into a dictionary, usage goes into usage_metadata, which is None when the provider reported nothing, and the event also says `usage_reported: false`. A call id the provider did not send is filled in by the adapter with an id starting with `framework_call_` and listed in synthesized_call_ids.",
+      "source": "72ddfc907ed4"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The two layers do not map one to one. Turning a string into a dictionary loses key order and whitespace; the call arguments put back into the message history are re-serialized by the adapter and are no longer the model's original text; an invalid tool call goes into invalid_tool_calls and keeps its original string. So when you debug, the response event is the authority on the raw string, and the framework object only shows how the framework understood it.",
+      "source": "4017d035b366"
+    },
+    "section-4.paragraphs.3": {
+      "text": "A capability matrix writes these differences down as a table: one capability per row, with the evidence and status from this run. There are only three statuses: observed in this run, meaning it really showed up in this run's responses; adapter fallback, meaning the provider did not supply it and the adapter or runner filled it in; unverified, meaning this lesson never sent the related option. In offline test mode the responses come from the fixture, so the status always says \"offline fixture\" and never poses as a provider observation. The table describes only this run; change the model or provider and run it again.",
+      "source": "dd7442c0863b"
+    },
+    "section-fallback.title": {
+      "text": "Unsupported capabilities need an explicit fallback",
+      "source": "28da9f215bf7"
+    },
+    "section-fallback.paragraphs.0": {
+      "text": "When a provider does not support a capability, the fallback belongs in the code and in the report; the framework must not quietly take another route. Take forced tool calls: some providers honor `\"tool_choice\": \"required\"`, others ignore it and the model writes text back anyway. Then with_structured_output returns two Nones, the lesson card is simply lost, and no exception tells you so.",
+      "source": "220f278f6c7f"
+    },
+    "section-fallback.paragraphs.1": {
+      "text": "This lesson has exactly one fallback, with a narrow condition: when the model called no tool but wrote some text, the runner looks for JSON in the text and validates it with the same TaskCard. If it passes, the result is recorded as text_fallback and the forced tool call row of the capability matrix says \"Adapter fallback\"; if it fails, it is recorded as text_fallback_failed and goes on to the repair as usual. A missing field or an invalid tool call does not take this route: the model did call the tool and only got it wrong, which calls for a repair, not a change of format.",
+      "source": "4f9ad7d75152"
+    },
+    "section-fallback.paragraphs.2": {
+      "text": "The fallback has limits that must be stated too. It shows that this time the provider did not follow the forcing option, not that the provider cannot support it: maybe the model ignored the instruction this time and will follow it next time. So the matrix describes only this run; to draw a conclusion, run the same model several times and compare the statuses. The offline fixture always complies, so this fallback has only been exercised in this lesson's tests with constructed responses, and there is no observed provider record yet.",
+      "source": "4f36532e2b4f"
+    },
+    "compare-layers.title": {
+      "text": "Two layers of one call",
+      "source": "6363f5778e0a"
+    },
+    "compare-layers.columns.0": {
+      "text": "Item",
+      "source": "79f326be4409"
+    },
+    "compare-layers.columns.1": {
+      "text": "Provider's raw response (response)",
+      "source": "3db4b16b9e13"
+    },
+    "compare-layers.columns.2": {
+      "text": "Framework object (lesson.framework_output)",
+      "source": "9d39de4adead"
+    },
+    "compare-layers.rows.0.0": {
+      "text": "Tool call arguments",
+      "source": "dc3d3207cbbd"
+    },
+    "compare-layers.rows.0.1": {
+      "text": "arguments: a JSON string",
+      "source": "5ccb27f8d8d3"
+    },
+    "compare-layers.rows.0.2": {
+      "text": "args in tool_calls: a parsed dictionary",
+      "source": "1d358a3065fa"
+    },
+    "compare-layers.rows.1.0": {
+      "text": "Arguments of an invalid tool call",
+      "source": "9cd4e406ecbb"
+    },
+    "compare-layers.rows.1.1": {
+      "text": "The string as it was",
+      "source": "1547f6021e15"
+    },
+    "compare-layers.rows.1.2": {
+      "text": "invalid_tool_calls: keeps the original string and the error",
+      "source": "9e1f94fbf766"
+    },
+    "compare-layers.rows.2.0": {
+      "text": "Call id",
+      "source": "3fd47dfe38a6"
+    },
+    "compare-layers.rows.2.1": {
+      "text": "Whatever the provider sent, possibly nothing",
+      "source": "35bdff9c5054"
+    },
+    "compare-layers.rows.2.2": {
+      "text": "Filled in with an id starting with framework_call_ when missing, and listed in synthesized_call_ids",
+      "source": "d6f40e589ec5"
+    },
+    "compare-layers.rows.3.0": {
+      "text": "Usage",
+      "source": "42723e8b498c"
+    },
+    "compare-layers.rows.3.1": {
+      "text": "usage, possibly absent",
+      "source": "ddc6640c8816"
+    },
+    "compare-layers.rows.3.2": {
+      "text": "usage_metadata: None when not reported, and usage_reported is false",
+      "source": "a988ee4b89a9"
+    },
+    "compare-layers.rows.4.0": {
+      "text": "Finish reason",
+      "source": "cdf04d177367"
+    },
+    "compare-layers.rows.4.1": {
+      "text": "finish_reason",
+      "source": "4e8b2c7e6258"
+    },
+    "compare-layers.rows.4.2": {
+      "text": "finish_reason in response_metadata",
+      "source": "8c6adae580bb"
+    },
+    "mq-usage.usage-row.prompt": {
+      "text": "After a real run, the evidence in the \"Usage reporting\" row of the capability matrix says \"not reported\". What does that mean?",
+      "source": "e33c317e52c9"
+    },
+    "mq-usage.usage-row.a.text": {
+      "text": "In this run, the provider's responses did not include usage",
+      "source": "d0d6e2c3beb0"
+    },
+    "mq-usage.usage-row.a.feedback": {
+      "text": "Right. The evidence covers only this run; look again after changing the model or provider.",
+      "source": "5b2187dd6248"
+    },
+    "mq-usage.usage-row.b.text": {
+      "text": "This run used 0 tokens",
+      "source": "b85a9c96662a"
+    },
+    "mq-usage.usage-row.b.feedback": {
+      "text": "No. Not reported is not 0, and the framework never fills in 0.",
+      "source": "152daea1e4af"
+    },
+    "mq-usage.usage-row.c.text": {
+      "text": "This provider never reports usage",
+      "source": "7eaaf05f9157"
+    },
+    "mq-usage.usage-row.c.feedback": {
+      "text": "No. One run speaks only for itself; other models or requests may report usage.",
+      "source": "45408378d26a"
+    },
+    "mq-usage.usage-row.explanation": {
+      "text": "When usage_metadata is None, usage_reported is false, and the capability matrix says \"not reported\" as it is, without estimating.",
+      "source": "e0e42cc1b215"
+    },
+    "section-5.title": {
+      "text": "Error conversion and bounded repair",
+      "source": "808ec1d26953"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A failed parse gets at most one repair, and the raw output stays in the response event; a tool exception becomes a structured error for the model, never a string that looks like success. Both are error conversions at the boundary between framework and program, and a wrong conversion hides the failure: the report is all passes, and neither the model nor the learner knows anything went wrong on the way.",
+      "source": "5ea4a84a8131"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Take the tool exception first. When lookup_lesson finds nothing it raises ToolException, a business failure the tool reports on purpose. tools_as_callables turns it into ValueError; the platform's executor catches it and returns a structured error with ok false and error_type ValueError, records it as a tool_result event, and sends it back to the model as a ToolMessage. In the group \"Tool error\", the model first looks up the directory name `task_contract`, reads the available names listed in the error, and corrects itself. The \"Tool failures\" count in the final report is still 1: the failure counts even though it was fixed.",
+      "source": "8f51c4dcfe36"
+    },
+    "section-5.paragraphs.2": {
+      "text": "LangChain has its own switch for such exceptions: set handle_tool_error on the tool to true, and the exception text comes back as the tool's normal output. Tried on langchain-core 1.6.12: looking up a name that does not exist returns just a sentence of error text, with no field saying it failed. The model may understand it, but the program cannot tell \"found something\" from \"the lookup failed\". This lesson leaves it off, and every failure goes through the structured error.",
+      "source": "01caf6618a7d"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Now the failed parse. The model's previous message contains a TaskCard call, and the next request must answer it first with the same call id, or the message history is invalid. feedback_messages writes a tool message in the error state for it, holding a structured error of the same shape, with a next field saying how to fix it. The runner writes this message; it is not a tool result, so there are no tool_call or tool_result events for it. The repair limit is REPAIR_LIMIT, which is 1: if the second attempt fails too, the run stops and writes the stop reason into the final report; the lookup has its own limit, LOOKUP_LIMIT, which is 2.",
+      "source": "97d827a692d5"
+    },
+    "deep-dive-hidden-failures.title": {
+      "text": "Do not let a tool hide failure in its return value",
+      "source": "d85d9dcdbc6c"
+    },
+    "deep-dive-hidden-failures.summary": {
+      "text": "The \"graceful handling\" common in tutorials can turn a failure into a result that looks normal.",
+      "source": "439c5b00e961"
+    },
+    "deep-dive-hidden-failures.paragraphs.0": {
+      "text": "In the document analysis example of the Hugging Face Agents Course, the text extraction tool catches every exception, prints a log line and returns an empty string. In Microsoft AI Agents for Beginners, the time tool returns JSON with the time field set to `\"unknown\"` when it cannot find the city. Neither crashes the program, but the model sees \"no text\" or \"time not known\" and cannot tell an empty result from an error, let alone correct its input. For the program it is worse: the report counts the call as a success, and the measured success rate comes out higher than the real one.",
+      "source": "e51cc69844fb"
+    },
+    "deep-dive-hidden-failures.paragraphs.1": {
+      "text": "This lesson handles three layers. Finding nothing is an expected business failure: raise ToolException, turn it into a structured error carrying the available names, and the model can correct itself. Arguments that do not fit the schema: the tool's own Pydantic validation stops them, again as a structured error. A real program error, such as a KeyError from a coding mistake: the platform's executor does not catch it, the run stops, and a developer fixes it; it is not dressed up as a business failure. tools_as_callables converts only ToolException precisely to hold that line.",
+      "source": "73caffa29476"
+    },
+    "deep-dive-hidden-failures.paragraphs.2": {
+      "text": "Repairing a failed parse involves the same trade-off. LangChain's agent components, by default, send a structured output validation error back to the model as a tool message and let it rewrite; the official docs do not say how many retries happen at most. This lesson fixes the number in REPAIR_LIMIT for the same reason as {{lesson:structured-output}}: every repair is a billed model call, and an unbounded repair turns a format problem into a cost problem. Besides the limit, the stop reason goes into the report too, so anyone can see whether the run stopped because it passed or because it ran out of attempts.",
+      "source": "59492d0e6edb"
+    },
+    "walkthrough-missing-field.title": {
+      "text": "One run of \"Missing field on purpose\"",
+      "source": "c70e61d0161a"
+    },
+    "walkthrough-missing-field.description": {
+      "text": "Step by step through this group; the code is a simplified illustration, not a run record. Your own run's evidence is in the lab.",
+      "source": "a9bcd66b7580"
+    },
+    "walkthrough-missing-field.step-1.label": {
+      "text": "Lookup",
+      "source": "aa0b63126c13"
+    },
+    "walkthrough-missing-field.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough-missing-field.step-1.title": {
+      "text": "Round 1: the model calls lookup_lesson",
+      "source": "18f1ee309af8"
+    },
+    "walkthrough-missing-field.step-1.body": {
+      "text": "bind_tools sends a request with the tool definition and tool_choice auto, and the model proposes one call.",
+      "source": "f8752984d409"
+    },
+    "walkthrough-missing-field.step-1.evidence": {
+      "text": "Round 1 request / response",
+      "source": "691f2134f4fe"
+    },
+    "walkthrough-missing-field.step-2.label": {
+      "text": "Execute",
+      "source": "32c8d373afe0"
+    },
+    "walkthrough-missing-field.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough-missing-field.step-2.title": {
+      "text": "The tool really runs through RunContext",
+      "source": "c7de92bc4742"
+    },
+    "walkthrough-missing-field.step-2.body": {
+      "text": "execute_tool_calls records the call and the tool result, and the ToolMessage goes back into the message history.",
+      "source": "cb627d0dbe3f"
+    },
+    "walkthrough-missing-field.step-2.evidence": {
+      "text": "tool_call / tool_result",
+      "source": "8e890aed9bfe"
+    },
+    "walkthrough-missing-field.step-3.label": {
+      "text": "Parse",
+      "source": "fbff7b5046d9"
+    },
+    "walkthrough-missing-field.step-3.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough-missing-field.step-3.title": {
+      "text": "Round 2: the card is missing prerequisite",
+      "source": "a015d836d000"
+    },
+    "walkthrough-missing-field.step-3.body": {
+      "text": "with_structured_output forces a TaskCard call; Pydantic reports the missing field, parsing_error is not empty, and the business check does not run.",
+      "source": "afb6bde2fa0c"
+    },
+    "walkthrough-missing-field.step-3.evidence": {
+      "text": "The lab report of card attempt 1",
+      "source": "734eb31cd6ae"
+    },
+    "walkthrough-missing-field.step-4.label": {
+      "text": "Feedback",
+      "source": "8b2106ca1371"
+    },
+    "walkthrough-missing-field.step-4.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough-missing-field.step-4.title": {
+      "text": "Answer the failed call id",
+      "source": "c66c0d56b914"
+    },
+    "walkthrough-missing-field.step-4.body": {
+      "text": "The runner writes a tool message in the error state saying what is missing and how to fix it.",
+      "source": "ee518f64c478"
+    },
+    "walkthrough-missing-field.step-4.evidence": {
+      "text": "The last message of the round 3 request",
+      "source": "96ed6d464b57"
+    },
+    "walkthrough-missing-field.step-5.label": {
+      "text": "Repair",
+      "source": "37a693925054"
+    },
+    "walkthrough-missing-field.step-5.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough-missing-field.step-5.title": {
+      "text": "Round 3: parsing and the business check pass",
+      "source": "38f4066f7cc7"
+    },
+    "walkthrough-missing-field.step-5.body": {
+      "text": "The repair uses up its single chance, and the run stops once both checks pass.",
+      "source": "f98501871a54"
+    },
+    "walkthrough-missing-field.step-5.evidence": {
+      "text": "Card attempts in the final verdict",
+      "source": "6a8f51bd38f4"
+    },
+    "mq-failure-count.failure-count.prompt": {
+      "text": "The group \"Tool error\" passes in the end. What is the \"Tool failures\" count in the final report?",
+      "source": "7f8b9012d8c0"
+    },
+    "mq-failure-count.failure-count.a.text": {
+      "text": "1: the failed first lookup still counts",
+      "source": "c65a217acf2e"
+    },
+    "mq-failure-count.failure-count.a.feedback": {
+      "text": "Right. Fixing it does not erase the failure; the first tool_result is still ok false.",
+      "source": "b9f2034123ad"
+    },
+    "mq-failure-count.failure-count.b.text": {
+      "text": "0: it succeeded in the end, so there was no failure",
+      "source": "c827f0f8da71"
+    },
+    "mq-failure-count.failure-count.b.feedback": {
+      "text": "No. The final verdict and the process record are two different things; failures are counted as they happened.",
+      "source": "357785776aea"
+    },
+    "mq-failure-count.failure-count.c.text": {
+      "text": "2: one for the failure and one for the repair",
+      "source": "619dba4de26d"
+    },
+    "mq-failure-count.failure-count.c.feedback": {
+      "text": "No. The second lookup succeeded; only the first result is ok false.",
+      "source": "c8aa8bcb126b"
+    },
+    "mq-failure-count.failure-count.explanation": {
+      "text": "Tool failures counts the tool results with ok false, whatever the final verdict.",
+      "source": "8f15f9405ed4"
+    },
+    "section-6.title": {
+      "text": "Component reuse and dependency management",
+      "source": "c5f1cf61a670"
+    },
+    "section-6.paragraphs.0": {
+      "text": "The right way to reuse a business contract is to import it, not copy it; the framework version has to be pinned too, and recorded in every run. This lesson's TaskCard, trusted_facts and the exercise text in the fixture all come from the structured-output lesson. When that lesson changes its trusted facts, this lesson's business table and business check follow automatically; with a copy, the two sets of facts would drift apart sooner or later, and the business check would judge against stale data.",
+      "source": "6b8a20f174cd"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Reuse has limits too. A business model is written for the program's validation and does not always suit the framework as it is: TaskCard has no docstring, so the generated tool description is empty. card_schema adds a subclass on the adapter side that only adds the description, with no new field and no new validator. That keeps one business contract and makes every adapter change visible: this lesson's tests check that the subclass's parameter schema is identical to TaskCard's and that extra fields are still rejected.",
+      "source": "5332ad033d0c"
+    },
+    "section-6.paragraphs.2": {
+      "text": "As for dependencies, this lesson uses only langchain-core, not the full package and no provider integration package; every model call goes out through the platform's adapter. The version is pinned within the 1.6 series, and every lesson.framework_input event records the framework name and version at the time. The behaviors described earlier, such as the base class dropping `method` and invalid tool calls landing quietly in invalid_tool_calls, were checked on 1.6.12; after a version change, rerun this lesson's tests and experiments before trusting these statements.",
+      "source": "978f4ba5924e"
+    },
+    "section-6.paragraphs.3": {
+      "text": "One more dependency is easy to overlook: the LangSmith tracing that comes with langchain-core. Once the related environment variables are on, the framework uploads messages to an external service. This lesson's framework code runs inside local_tracing_only, and even if someone forgets it, the adapter refuses to send requests while tracing is on. The lesson's run records stay on this machine, the same rule as the platform's \"keys and data stay in the backend\".",
+      "source": "e7434227b0b9"
+    },
+    "mq-reuse.reuse-import.prompt": {
+      "text": "Why does this lesson import TaskCard and the trusted facts from the structured-output lesson instead of copying them?",
+      "source": "e6d2b262fe94"
+    },
+    "mq-reuse.reuse-import.a.text": {
+      "text": "There is one business contract: when that lesson changes a fact or a field, this lesson's business check follows automatically",
+      "source": "1af4a4b81fd9"
+    },
+    "mq-reuse.reuse-import.a.feedback": {
+      "text": "Right. Two copies drift apart sooner or later, and the check would judge against stale data.",
+      "source": "5f6039db034b"
+    },
+    "mq-reuse.reuse-import.b.text": {
+      "text": "LangChain only accepts models imported from another module",
+      "source": "ac7d72fc7d41"
+    },
+    "mq-reuse.reuse-import.b.feedback": {
+      "text": "No. The framework does not care where the model is defined; this is a maintenance choice.",
+      "source": "7f83ea0203ab"
+    },
+    "mq-reuse.reuse-import.c.text": {
+      "text": "Importing makes model calls faster",
+      "source": "6fd4cafedd2e"
+    },
+    "mq-reuse.reuse-import.c.feedback": {
+      "text": "No. Importing does not affect the request; it decides how many copies of the business rules exist.",
+      "source": "37fb06f1ee80"
+    },
+    "mq-reuse.reuse-import.explanation": {
+      "text": "Only adapter-side things (such as the tool description) need adding, with a subclass like card_schema on the adapter side.",
+      "source": "89c8cc93c7bd"
+    },
+    "references.ms-tool-use.title": {
+      "text": "Tool use design pattern: function schemas, execution logic and error handling (Microsoft AI Agents for Beginners)",
+      "source": "80b25cb14ef0"
+    },
+    "references.hf-invitees.title": {
+      "text": "A retrieval tool for guest information: how three frameworks register it (Hugging Face Agents Course)",
+      "source": "e54bfbb0c964"
+    },
+    "references.hf-llamaindex-tools.title": {
+      "text": "Tools in LlamaIndex: FunctionTool infers the definition from the function (Hugging Face Agents Course)",
+      "source": "abd89c1a4170"
+    },
+    "references.hf-langgraph-document-agent.title": {
+      "text": "LangGraph document analysis example: tools and error handling (Hugging Face Agents Course)",
+      "source": "c1a65b26abc3"
+    },
+    "references.ai-agent-book-ch4.title": {
+      "text": "Tools: general principles of tool design, tool descriptions and argument fidelity — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "8b3282d2b52e"
+    },
+    "references.cookbook-structured-json.title": {
+      "text": "Extracting structured JSON with tool use (Claude Cookbooks)",
+      "source": "118159f66e52"
+    },
+    "references.cookbook-pydantic.title": {
+      "text": "Validating tool call arguments with Pydantic (Claude Cookbooks)",
+      "source": "e0275f3f1662"
+    },
+    "references.langchain-models.title": {
+      "text": "Models: tool calling and structured output (LangChain docs)",
+      "source": "16fa4cf8e18e"
+    },
+    "references.langchain-tools-doc.title": {
+      "text": "Tools: decorator, parameter schema and error handling (LangChain docs)",
+      "source": "11d73a1df4bf"
+    },
+    "code-lookup-tool.n-lookup-factory.text": {
+      "text": "Each run builds the tool for its run language: the tool name and parameter name are code and the same in every language; the descriptions come from the runtime text.",
+      "source": "642d6eeb68b9"
+    },
+    "code-lookup-tool.n-lookup-facts.text": {
+      "text": "The business table: the target lesson's facts come straight from the structured-output lesson's trusted_facts, not from a second copy.",
+      "source": "e1abf852ecfa"
+    },
+    "code-lookup-tool.n-lookup-decorator.text": {
+      "text": "The tool decorator: the name is the function name, the tool description is this argument, or the docstring when it is not passed.",
+      "source": "b453927a25e8"
+    },
+    "code-lookup-tool.n-lookup-annotation.text": {
+      "text": "The whole parameter schema comes from this line: type, description, minimum and maximum length. Calls are validated against it too, so an empty string never reaches the function body.",
+      "source": "9c51a73f60e3"
+    },
+    "code-lookup-tool.n-lookup-raise.text": {
+      "text": "Finding nothing is an expected failure: raise ToolException, list the available names in the error, and the model can correct itself.",
+      "source": "ccc9f3946f89"
+    },
+    "code-lookup-tool.n-lookup-return.text": {
+      "text": "What comes back is a StructuredTool object, not a function: bind_tools builds the tool definition from it, and tools_as_callables runs it.",
+      "source": "32b1842d98fb"
+    },
+    "code-lookup-loop.n-loop-bind.text": {
+      "text": "bind_tools turns the tool into the tool definition in the request; with tool_choice auto, the model decides whether to call it.",
+      "source": "90c88cc4badc"
+    },
+    "code-lookup-loop.n-loop-allowed.text": {
+      "text": "The allowlist: the adapter turns ToolException into ValueError, so the platform's executor returns a structured error.",
+      "source": "ebc0a73c621f"
+    },
+    "code-lookup-loop.n-loop-limit.text": {
+      "text": "At most two model calls for the lookup: the second is for the model to correct itself after reading the error.",
+      "source": "4ee9c2a9c69c"
+    },
+    "code-lookup-loop.n-loop-invoke.text": {
+      "text": "One framework call: a framework event before and after, with the request and response recorded by RunContext in between.",
+      "source": "a08fbd608615"
+    },
+    "code-lookup-loop.n-loop-no-call.text": {
+      "text": "Invalid tool calls must run too: they sit in invalid_tool_calls, and without this check they would count as no call at all.",
+      "source": "81433e18a317"
+    },
+    "code-lookup-loop.n-loop-execute.text": {
+      "text": "No prebuilt framework tool node: every call runs through RunContext, with tool_call and tool_result recorded as a pair.",
+      "source": "39ed5625311f"
+    },
+    "code-lookup-loop.n-loop-facts.text": {
+      "text": "Only a successful result for the target lesson counts as facts; failed results stay in the history for the model to read.",
+      "source": "873a21612f44"
+    },
+    "code-lookup-loop.n-loop-none.text": {
+      "text": "If both lookups fail it returns None, and the runner stops there instead of letting the model write a card from memory.",
+      "source": "5f6296b3e3aa"
+    },
+    "code-structured.n-card-structured.text": {
+      "text": "include_raw=True: the result has three parts, raw, parsed and parsing_error, and even a validation failure raises nothing, so the program judges for itself.",
+      "source": "8adad1039673"
+    },
+    "code-structured.n-card-limit.text": {
+      "text": "The repair limit lives in the code: the first attempt plus at most one repair; with repair turned off in the input, only one attempt.",
+      "source": "ee1ee625eb09"
+    },
+    "code-structured.n-card-invoke.text": {
+      "text": "This request carries tool_choice required and registers only one tool, TaskCard.",
+      "source": "3a4cd3c88708"
+    },
+    "code-structured.n-card-classify.text": {
+      "text": "Name the result first, then decide the next step: a missing field, an invalid tool call and no tool call are three different failures.",
+      "source": "af7749e4df2c"
+    },
+    "code-structured.n-card-fallback.text": {
+      "text": "Explicit fallback: when the provider ignored the forced call and wrote text, validate the JSON in the text with the same schema, and mark it as adapter fallback in the capability matrix.",
+      "source": "7b4bdb7fd1f1"
+    },
+    "code-structured.n-card-checks.text": {
+      "text": "After the parsing check comes the business check: a card with a valid schema must still match the trusted facts.",
+      "source": "70c96a4ea9a3"
+    },
+    "code-structured.n-card-stop.text": {
+      "text": "Stop condition: stop on a pass, and stop when the limit is used up; a failed card returns None instead of being handed on.",
+      "source": "386f6b855f4f"
+    },
+    "code-structured.n-card-feedback.text": {
+      "text": "Put the failed message and the runner's feedback back into the history together; the feedback answers every call id in the failed message.",
+      "source": "3a3a2abf15a0"
+    },
+    "code-structured.n-classify-error.text": {
+      "text": "Only this failure carries an exception: Pydantic's validation error ends up in parsing_error.",
+      "source": "cd3a853fea1a"
+    },
+    "code-structured.n-classify-silent.text": {
+      "text": "In the two failures below, parsed and parsing_error are both None; only the raw message tells them apart.",
+      "source": "0fad761c8679"
+    },
+    "code-decision.title": {
+      "text": "The framework parses; the program judges and sets the limits",
+      "source": "f19b3bc10d2a"
+    },
+    "code-decision.chosen": {
+      "text": "Register the business tool with the tool decorator and parse the lesson card with with_structured_output plus include_raw; every tool runs through RunContext, and ToolException becomes a structured error; a failed parse or business check gets at most 1 repair; the capability matrix marks as observed only what showed up in this run.",
+      "source": "203a5743c7e2"
+    },
+    "code-decision.prebuilt-tool-node.title": {
+      "text": "Let a prebuilt framework tool node or agent run the tools",
+      "source": "b394cf875513"
+    },
+    "code-decision.prebuilt-tool-node.why_not": {
+      "text": "Prebuilt components call tools directly, outside RunContext, so tool_call and tool_result events go missing and the replay shows no tool execution.",
+      "source": "6221865cdf16"
+    },
+    "code-decision.handle-tool-error.title": {
+      "text": "Turn on handle_tool_error and send the exception text straight to the model",
+      "source": "acebc22719ed"
+    },
+    "code-decision.handle-tool-error.why_not": {
+      "text": "The exception becomes ordinary output with no field marking the failure, and neither the program nor the report can tell success from failure.",
+      "source": "78c933be497f"
+    },
+    "code-decision.json-schema-method.title": {
+      "text": "Use the provider's native JSON Schema output instead",
+      "source": "543def27601d"
+    },
+    "code-decision.json-schema-method.why_not": {
+      "text": "The generic BaseChatModel implementation quietly drops the `method` argument; until the request shows that the option really went out, it can only be marked unverified.",
+      "source": "d026220337a1"
+    },
+    "code-decision.retry-until-valid.title": {
+      "text": "Retry a failed parse until it passes",
+      "source": "72a3b294df21"
+    },
+    "code-decision.retry-until-valid.why_not": {
+      "text": "Every retry is a billed model call, and the cause may not be fixable at all; a limit plus a stop reason is what lets the run end honestly.",
+      "source": "2e2758e1b382"
+    },
+    "structured-adapter.title": {
+      "text": "Structured study-task tool adapter",
+      "source": "6e053c0e4e21"
+    },
+    "structured-adapter.hypothesis": {
+      "text": "Once the same TaskCard contract is handed to the framework: in the normal case the framework parses a card that passes the business check; with a missing field the framework reports the validation error in parsing_error, the business check does not run, and one repair makes it pass; with a wrong fact the framework still parses successfully, and only the business check stops it.",
+      "source": "9b25e74efab8"
+    },
+    "structured-adapter.normal.label": {
+      "text": "Normal",
+      "source": "296de0e31f8c"
+    },
+    "structured-adapter.missing-field.label": {
+      "text": "Missing field on purpose",
+      "source": "7ced1c55c1cd"
+    },
+    "structured-adapter.wrong-fact.label": {
+      "text": "Valid schema, wrong fact",
+      "source": "e35006796928"
+    },
+    "structured-adapter.definitions.text": {
+      "text": "The first lab report: the field-by-field comparison of the decorator's tool definition with the handwritten one.",
+      "source": "9fbb5b7d7960"
+    },
+    "structured-adapter.lookup-parameters.text": {
+      "text": "The parameter schema sent in the round 1 request, generated from the type hints.",
+      "source": "d491e0f33fcf"
+    },
+    "structured-adapter.forced-choice.text": {
+      "text": "tool_choice in the round 2 request: with_structured_output requires a tool call.",
+      "source": "3c48eed66c7e"
+    },
+    "structured-adapter.raw-arguments.text": {
+      "text": "The TaskCard arguments in the provider's raw response in round 2: a JSON string.",
+      "source": "4298a43c98c0"
+    },
+    "structured-adapter.framework-args.text": {
+      "text": "The arguments in the framework object of the same round: already parsed into a dictionary.",
+      "source": "721d1c15514b"
+    },
+    "structured-adapter.first-outcome.text": {
+      "text": "The framework result of card attempt 1: parsed or schema_error.",
+      "source": "1149c0e1f149"
+    },
+    "structured-adapter.first-business.text": {
+      "text": "The business check of card attempt 1: passed, failed, or not run.",
+      "source": "53251e9b633e"
+    },
+    "structured-adapter.feedback.text": {
+      "text": "The last message of the round 3 request: the repair feedback the runner wrote for the model.",
+      "source": "245fe16c1a0e"
+    },
+    "structured-adapter.attempts.text": {
+      "text": "Card attempts in the final verdict.",
+      "source": "21283345d44c"
+    },
+    "structured-adapter.guide.0.text": {
+      "text": "All three groups produce a card for the same lesson; they differ only in what is injected the first time.",
+      "source": "19133e70eaad"
+    },
+    "structured-adapter.guide.1.text": {
+      "text": "Start with the tool definition: what the decorator generated from the type hints matches the handwritten one exactly.",
+      "source": "e28d86f1b827"
+    },
+    "structured-adapter.guide.2.text": {
+      "text": "This is the parameter schema sent to the model; the length limits come from Field.",
+      "source": "00c960c93af8"
+    },
+    "structured-adapter.guide.3.text": {
+      "text": "In the card round, the framework translated the forcing option into required.",
+      "source": "3109bfd821a3"
+    },
+    "structured-adapter.guide.4.text": {
+      "text": "The provider hands back a string. In the missing-field group, look for prerequisite: it is not there.",
+      "source": "c774b5722ae4"
+    },
+    "structured-adapter.guide.5.text": {
+      "text": "The framework parsed the same string into a dictionary, with keys and values unchanged.",
+      "source": "b125115a6aff"
+    },
+    "structured-adapter.guide.6.text": {
+      "text": "Compare the framework results of the three groups: schema_error for the missing field, but parsed for the wrong fact.",
+      "source": "652eb953fd3e"
+    },
+    "structured-adapter.guide.7.text": {
+      "text": "The business check runs only once a card is in hand. The wrong-fact group is stopped here; for the missing-field group it was not run.",
+      "source": "ad41f8885bf4"
+    },
+    "structured-adapter.guide.8.text": {
+      "text": "The two failing groups have one more round of requests. This last tool message is written by the runner and answers the failed TaskCard call.",
+      "source": "0b0fb1d96762"
+    },
+    "structured-adapter.guide.9.text": {
+      "text": "Finally, count: the normal group produced the card once, the other two used their single repair.",
+      "source": "cbbce705bfc9"
+    },
+    "structured-adapter.conclusion.proves.0": {
+      "text": "In this run the tool definition was generated from the type hints and matched the handwritten definition field by field.",
+      "source": "bf60cc627bd2"
+    },
+    "structured-adapter.conclusion.proves.1": {
+      "text": "The framework's parsing result and the program's business check are two independent checks: a card with a valid schema can still be stopped by the business check.",
+      "source": "c3dca2da21d3"
+    },
+    "structured-adapter.conclusion.proves.2": {
+      "text": "After a failed parse or business check the runner repaired only once, and the feedback message and the raw response are both in the events.",
+      "source": "5960dc523166"
+    },
+    "structured-adapter.conclusion.does_not_prove.0": {
+      "text": "A real model may not follow the injection: if the provider constrains generation to the schema, the missing-field injection may have no effect at all.",
+      "source": "1fd997437f0a"
+    },
+    "structured-adapter.conclusion.does_not_prove.1": {
+      "text": "Whether one repair succeeds depends on the model; one run says nothing about the success rate.",
+      "source": "f39adb28f4a3"
+    },
+    "structured-adapter.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the responses come from the fixture, not from a provider.",
+      "source": "65bcd9081cbf"
+    },
+    "tool-error-semantics.title": {
+      "text": "Tool errors keep their failure meaning",
+      "source": "462b7869f893"
+    },
+    "tool-error-semantics.hypothesis": {
+      "text": "The ToolException raised by lookup_lesson becomes, through the adapter, a structured error with ok false that reaches the model as a tool message; after the model corrects itself the lookup succeeds, and the final report still counts this failure as 1.",
+      "source": "b8f4ae89088a"
+    },
+    "tool-error-semantics.normal.label": {
+      "text": "Normal",
+      "source": "296de0e31f8c"
+    },
+    "tool-error-semantics.tool-error.label": {
+      "text": "Tool error",
+      "source": "8c167c41492a"
+    },
+    "tool-error-semantics.failed-result.text": {
+      "text": "The tool result of the first lookup: error_type is ValueError, and the error lists the available names.",
+      "source": "715466b97d6f"
+    },
+    "tool-error-semantics.tool-message.text": {
+      "text": "The tool message sent back to the model in the round 2 request: its content is that structured error.",
+      "source": "eb66ebd06236"
+    },
+    "tool-error-semantics.second-lookup.text": {
+      "text": "The model's corrected second lookup.",
+      "source": "554537b951e4"
+    },
+    "tool-error-semantics.failure-count.text": {
+      "text": "Tool failures in the final verdict.",
+      "source": "9f2021d4d25a"
+    },
+    "tool-error-semantics.guide.0.text": {
+      "text": "The two groups differ only in the name used in the first lookup.",
+      "source": "936df816430b"
+    },
+    "tool-error-semantics.guide.1.text": {
+      "text": "The tool really runs and raises ToolException when it finds nothing; the platform records a structured error, not a plain sentence.",
+      "source": "22ad3929b263"
+    },
+    "tool-error-semantics.guide.2.text": {
+      "text": "The next request carries this error as it is. In the normal group, the same position holds the successful facts.",
+      "source": "a60526bcfbc0"
+    },
+    "tool-error-semantics.guide.3.text": {
+      "text": "The model read the available names in the error and got the second lookup right.",
+      "source": "df5a1514a375"
+    },
+    "tool-error-semantics.guide.4.text": {
+      "text": "It passed in the end, and the failure count is still 1: the outcome did not overwrite the process record.",
+      "source": "b197c74b1bb0"
+    },
+    "tool-error-semantics.conclusion.proves.0": {
+      "text": "ToolException became a tool result with ok false and came back as a tool message in the next request.",
+      "source": "b94223a9ed6d"
+    },
+    "tool-error-semantics.conclusion.proves.1": {
+      "text": "The lookup is bounded, and the final report counts the failure as it happened.",
+      "source": "460c6240eb29"
+    },
+    "tool-error-semantics.conclusion.does_not_prove.0": {
+      "text": "A real model may not correct itself after reading the error; when both lookups fail the runner stops without producing a card.",
+      "source": "de8f60506a30"
+    },
+    "tool-error-semantics.conclusion.does_not_prove.1": {
+      "text": "This group does not show a program error (such as KeyError): that kind of exception is not converted, and the run stops right away.",
+      "source": "148d57d25a03"
+    },
+    "capability-matrix.title": {
+      "text": "Capability matrix: observed, fallback and unverified",
+      "source": "8b67519dc1fd"
+    },
+    "capability-matrix.hypothesis": {
+      "text": "The capability matrix marks as observed only what showed up in this run; in offline test mode it says offline fixture; options this lesson never sends are unverified.",
+      "source": "e8bf6d10f9d2"
+    },
+    "capability-matrix.normal.label": {
+      "text": "Normal",
+      "source": "296de0e31f8c"
+    },
+    "capability-matrix.usage-flag.text": {
+      "text": "Whether the framework object records usage as reported.",
+      "source": "dd2448940654"
+    },
+    "capability-matrix.matrix-source.text": {
+      "text": "The data source of the capability matrix: offline fixture or provider response.",
+      "source": "8106ea3c6837"
+    },
+    "capability-matrix.forced-status.text": {
+      "text": "The status of the forced tool call row.",
+      "source": "41bf21550dae"
+    },
+    "capability-matrix.json-schema-status.text": {
+      "text": "The provider-native JSON Schema output row: this lesson never sends it, so it is unverified.",
+      "source": "7ab21cb29077"
+    },
+    "capability-matrix.guide.0.text": {
+      "text": "This table answers one question only: what did the provider actually give in this run?",
+      "source": "5c1d14ff1b8e"
+    },
+    "capability-matrix.guide.1.text": {
+      "text": "First the framework object's usage flag. When it is false, the usage row of the matrix says not reported.",
+      "source": "0825d14dbce0"
+    },
+    "capability-matrix.guide.2.text": {
+      "text": "The data source decides how statuses are written: an offline run says offline fixture, never observed in this run.",
+      "source": "50fc9719322b"
+    },
+    "capability-matrix.guide.3.text": {
+      "text": "The forced tool call status comes from whether the response in the card round contained a tool call.",
+      "source": "d8044665a98f"
+    },
+    "capability-matrix.guide.4.text": {
+      "text": "Options never sent are not guessed at; they are always unverified.",
+      "source": "99d0a8074bab"
+    },
+    "capability-matrix.conclusion.proves.0": {
+      "text": "Every status in the matrix can be traced back to events in this run.",
+      "source": "b24d6ceb919b"
+    },
+    "capability-matrix.conclusion.proves.1": {
+      "text": "Options never sent were not written up as supported or unsupported.",
+      "source": "b70d35672243"
+    },
+    "capability-matrix.conclusion.does_not_prove.0": {
+      "text": "One run's matrix does not cover everything a provider can do; changing the model or parameters means testing again.",
+      "source": "a21322cd66d8"
+    },
+    "capability-matrix.conclusion.does_not_prove.1": {
+      "text": "An offline run's matrix only describes the fixture, not a provider observation.",
+      "source": "1ed9f724b383"
+    },
+    "inputs.scenario.label": {
+      "text": "Case",
+      "source": "d80929bfc5b1"
+    },
+    "inputs.scenario.help": {
+      "text": "Which problem to inject in the first lookup or the first card. A real model may not follow the injection.",
+      "source": "536d2b4d8acb"
+    },
+    "inputs.scenario.options.normal.label": {
+      "text": "Normal",
+      "source": "296de0e31f8c"
+    },
+    "inputs.scenario.options.missing_field.label": {
+      "text": "Missing field on purpose",
+      "source": "7ced1c55c1cd"
+    },
+    "inputs.scenario.options.wrong_fact.label": {
+      "text": "Valid schema, wrong fact",
+      "source": "e35006796928"
+    },
+    "inputs.scenario.options.tool_error.label": {
+      "text": "Tool error",
+      "source": "8c167c41492a"
+    },
+    "inputs.repair.label": {
+      "text": "Allow 1 repair",
+      "source": "6ed1fdff6385"
+    },
+    "inputs.repair.help": {
+      "text": "When off, the run stops if the first card does not pass.",
+      "source": "1a7636ebfd00"
+    },
+    "quiz.definition-drift.prompt": {
+      "text": "After a framework upgrade, \"The generated lookup_lesson definition matches the handwritten one\" fails. What do you do first?",
+      "source": "18bb3cf6fcca"
+    },
+    "quiz.definition-drift.a.text": {
+      "text": "Read the differing paths in the detail and check what changed in the tool definition of the request, and whether you want that change",
+      "source": "33b0d95c9e6d"
+    },
+    "quiz.definition-drift.a.feedback": {
+      "text": "Right. The point of this check is to tell you that the definition sent to the model changed.",
+      "source": "3f6eac72ba1a"
+    },
+    "quiz.definition-drift.b.text": {
+      "text": "Delete the handwritten definition and use only the generated one from now on",
+      "source": "d9ed8ba77d06"
+    },
+    "quiz.definition-drift.b.feedback": {
+      "text": "No. Then nobody would notice when the generation rules change.",
+      "source": "1f8c31112fc8"
+    },
+    "quiz.definition-drift.c.text": {
+      "text": "Ignore it; the tool still runs",
+      "source": "8a7e41414242"
+    },
+    "quiz.definition-drift.c.feedback": {
+      "text": "No. The model writes arguments from the definition; when the definition changes, call behavior may change with it.",
+      "source": "70920230189b"
+    },
+    "quiz.definition-drift.explanation": {
+      "text": "With generated and handwritten definitions side by side, a difference is a reminder that the definition sent to the model changed.",
+      "source": "7bb7ce6fd9e4"
+    },
+    "quiz.method-dropped.prompt": {
+      "text": "What happens if you write `with_structured_output(TaskCard, method=\"json_schema\")` on RunContextChatModel?",
+      "source": "d3a44bc033c3"
+    },
+    "quiz.method-dropped.a.text": {
+      "text": "No error: the base implementation drops `method`, and the request is still a forced tool call",
+      "source": "19cc5e01bc08"
+    },
+    "quiz.method-dropped.a.feedback": {
+      "text": "Right. That is why you look at the request event instead of trusting the arguments you passed.",
+      "source": "c56ba2b1eb3a"
+    },
+    "quiz.method-dropped.b.text": {
+      "text": "It raises an exception saying the argument is not supported",
+      "source": "cc5c93222f8c"
+    },
+    "quiz.method-dropped.b.feedback": {
+      "text": "No. The base implementation in langchain-core 1.6.12 takes `method` out and discards it without an error.",
+      "source": "421a47e529fc"
+    },
+    "quiz.method-dropped.c.text": {
+      "text": "It switches to the provider's native JSON Schema output",
+      "source": "543def27601d"
+    },
+    "quiz.method-dropped.c.feedback": {
+      "text": "No. The generic implementation only uses tool calling; native output needs a provider-specific integration package.",
+      "source": "c422e7522df4"
+    },
+    "quiz.method-dropped.explanation": {
+      "text": "Behind a unified interface an argument may be silently ignored; the actual request is the measure of a capability.",
+      "source": "25b9d6f1637e"
+    },
+    "quiz.tool-error-text.prompt": {
+      "text": "Set handle_tool_error on lookup_lesson to true and look up a name that does not exist. What happens?",
+      "source": "1fdd2e642524"
+    },
+    "quiz.tool-error-text.a.text": {
+      "text": "The exception text comes back as the tool's normal output, with no field marking the failure",
+      "source": "3e46f69dc312"
+    },
+    "quiz.tool-error-text.a.feedback": {
+      "text": "Right. From then on the program and the report cannot tell a found result from a failed lookup.",
+      "source": "d93162c4dc88"
+    },
+    "quiz.tool-error-text.b.text": {
+      "text": "The run stops and reports a tool crash",
+      "source": "399e16c979b5"
+    },
+    "quiz.tool-error-text.b.feedback": {
+      "text": "No. The whole point of this switch is to swallow the exception and use its text as output.",
+      "source": "f990e40fcc96"
+    },
+    "quiz.tool-error-text.c.text": {
+      "text": "The tool result automatically carries ok false",
+      "source": "f1e19802debc"
+    },
+    "quiz.tool-error-text.c.feedback": {
+      "text": "No. The ok field is added by this platform's executor; the framework switch returns only a sentence of text.",
+      "source": "328c97533288"
+    },
+    "quiz.tool-error-text.explanation": {
+      "text": "This lesson routes ToolException through tools_as_callables, so the failure keeps an explicit structure.",
+      "source": "2be2dafe39e7"
+    },
+    "quiz.feedback-role.prompt": {
+      "text": "After a failed parse, why does the runner write its feedback as a tool message rather than a user message?",
+      "source": "9d2ca62ae27c"
+    },
+    "quiz.feedback-role.a.text": {
+      "text": "The failed assistant message contains a TaskCard call, and the next request must answer it first with the same call id",
+      "source": "4766aef23b51"
+    },
+    "quiz.feedback-role.a.feedback": {
+      "text": "Right. An unanswered call makes the message history invalid.",
+      "source": "2c7f44b7bf9a"
+    },
+    "quiz.feedback-role.b.text": {
+      "text": "Tool messages are recorded as tool_result events, which makes counting easier",
+      "source": "88112e61bd00"
+    },
+    "quiz.feedback-role.b.feedback": {
+      "text": "No. The runner writes this message; no tool runs and there is no tool_result event.",
+      "source": "3dfff69cd5a6"
+    },
+    "quiz.feedback-role.c.text": {
+      "text": "The model reads only tool messages, not user messages",
+      "source": "36138dc8810d"
+    },
+    "quiz.feedback-role.c.feedback": {
+      "text": "No. The model reads both; the tool message is what the protocol requires.",
+      "source": "4fc84d934000"
+    },
+    "quiz.feedback-role.explanation": {
+      "text": "Only when the model called no tool does the runner send a user message instead, because then there is no call id to answer.",
+      "source": "6d812f07117a"
+    },
+    "quiz.fixture-status.prompt": {
+      "text": "In offline test mode the capability matrix writes the forced tool call as \"offline fixture\". Why not \"observed in this run\"?",
+      "source": "c4038a3163e6"
+    },
+    "quiz.fixture-status.a.text": {
+      "text": "The responses come from the lesson's test fixture, not from a provider",
+      "source": "74326a9221c0"
+    },
+    "quiz.fixture-status.a.feedback": {
+      "text": "Right. Observed can only mean a provider really responded that way.",
+      "source": "883fcc6be519"
+    },
+    "quiz.fixture-status.b.text": {
+      "text": "Offline runs send no requests",
+      "source": "64da6b9e66ac"
+    },
+    "quiz.fixture-status.b.feedback": {
+      "text": "No. Requests are built and recorded as usual; the fixture answers them.",
+      "source": "27d73c13af69"
+    },
+    "quiz.fixture-status.c.text": {
+      "text": "Tools do not really run in offline runs",
+      "source": "394c61fe4e66"
+    },
+    "quiz.fixture-status.c.feedback": {
+      "text": "No. Tools really run offline too; only the model responses come from the fixture.",
+      "source": "550095594540"
+    },
+    "quiz.fixture-status.explanation": {
+      "text": "With the data source in the report, a status never poses as a provider capability.",
+      "source": "324f9c66ec06"
+    },
+    "quiz.business-skipped.prompt": {
+      "text": "Framework parsing failed on card attempt 1. What does that attempt's business check show?",
+      "source": "d26dbcfc06e2"
+    },
+    "quiz.business-skipped.a.text": {
+      "text": "Not run: there is no card to check, so the item is marked neither passed nor failed",
+      "source": "4903f168e149"
+    },
+    "quiz.business-skipped.a.feedback": {
+      "text": "Right. A check that never ran cannot have a result.",
+      "source": "d63dd9906747"
+    },
+    "quiz.business-skipped.b.text": {
+      "text": "Failed, because the card is broken",
+      "source": "fba8a8d38cae"
+    },
+    "quiz.business-skipped.b.feedback": {
+      "text": "No. The business check never ran; the failure is already recorded in the parsing check.",
+      "source": "42e9bc9a47c2"
+    },
+    "quiz.business-skipped.c.text": {
+      "text": "Passed, because no wrong fact was found",
+      "source": "e921c82b70b5"
+    },
+    "quiz.business-skipped.c.feedback": {
+      "text": "No. Nothing checked means nothing found, which is not a pass.",
+      "source": "d8f7a9fc45b0"
+    },
+    "quiz.business-skipped.explanation": {
+      "text": "Only a check that really ran is marked passed or failed.",
+      "source": "f9b8cecf5d7f"
+    },
+    "check-hunt.prompt": {
+      "text": "In the run of \"Missing field on purpose\", find the repair feedback the runner wrote for the model.",
+      "source": "e29f0b044a8b"
+    },
+    "check-hunt.explanation": {
+      "text": "It is the last message of the round 3 request: its role is tool, its call id is the same as the failed TaskCard call in round 2, and its content is a structured error with ok false and error_type schema_validation. The message before it is the failed message put back into the history, and no tool_result event follows, because no tool ran.",
+      "source": "2920112c363f"
+    },
+    "check-points.title": {
+      "text": "Hands-on check",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Check against your own run and this lesson's source, and tick only what you have done.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In one round I compared the arguments string in response with the args dictionary in lesson.framework_output.",
+      "source": "c5a2e4e1e8ad"
+    },
+    "check-points.item-2.text": {
+      "text": "I can say which with_structured_output failure goes into parsing_error and which two only give None.",
+      "source": "666b9e6d4c41"
+    },
+    "check-points.item-3.text": {
+      "text": "I saw that in the group \"Valid schema, wrong fact\" the framework result is parsed while the business check fails.",
+      "source": "853dde6652fd"
+    },
+    "check-points.item-4.text": {
+      "text": "In the group \"Tool error\" I confirmed that the failed tool_result is ok false and that the final report still counts the failure.",
+      "source": "3d26b4a59c6a"
+    },
+    "check-points.item-5.text": {
+      "text": "Small extension: give lookup_lesson a parameter with a default, restart the backend, run again, and see how the definition match item reports the differing paths.",
+      "source": "75dfdf2f0ea3"
+    },
+    "code_notes.with_structured_output.note": {
+      "text": "LangChain model method: forces a call to the schema tool, then a parser turns the arguments into a Pydantic object.",
+      "source": "193e12fcfc1e"
+    },
+    "code_notes.include_raw.note": {
+      "text": "When true, the result has raw, parsed and parsing_error, and a failed parse raises nothing.",
+      "source": "145e10130c26"
+    },
+    "code_notes.parsing_error.note": {
+      "text": "The exception raised while parsing; it is None for an invalid tool call or when no tool was called.",
+      "source": "2112f7cbe928"
+    },
+    "code_notes.ToolException.note": {
+      "text": "LangChain's tool exception for a failure the tool reports on purpose; the adapter turns it into a structured error.",
+      "source": "8b49546840aa"
+    },
+    "code_notes.tools_as_callables.note": {
+      "text": "Adapter function: turns LangChain tools into an allowlist and converts only ToolException into a structured error.",
+      "source": "f4e84a2c0555"
+    },
+    "code_notes.execute_tool_calls.note": {
+      "text": "Adapter function: runs every call in an AIMessage through RunContext and returns the ToolMessages.",
+      "source": "47b4bf5dcfb5"
+    },
+    "code_notes.card_schema.note": {
+      "text": "A TaskCard subclass with no new field that only adds the tool description; validation is unchanged.",
+      "source": "49253302d401"
+    },
+    "code_notes.business_checks.note": {
+      "text": "The program's business check: compares the card with the trusted facts field by field; skipped without a card.",
+      "source": "10bfea25eea4"
+    },
+    "code_notes.classify.note": {
+      "text": "Names the with_structured_output result: missing field, invalid tool call or no tool call.",
+      "source": "d182a87632ca"
+    },
+    "code_notes.feedback_messages.note": {
+      "text": "The runner's repair feedback: one tool message in the error state for each call id of the failed message.",
+      "source": "9898c2a0c682"
+    },
+    "code_notes.REPAIR_LIMIT.note": {
+      "text": "How many more attempts after a failed parse or business check; 1 in this lesson.",
+      "source": "984bfa013915"
+    },
+    "code_notes.LOOKUP_LIMIT.note": {
+      "text": "Most model calls for the lookup; the second lets the model correct a failed query.",
+      "source": "7f7a1c11778a"
+    },
+    "code_notes.invalid_tool_calls.note": {
+      "text": "AIMessage field: calls whose arguments are not a JSON object, with the original string and the error.",
+      "source": "8d3401bee2c8"
+    },
+    "code_notes.usage_metadata.note": {
+      "text": "AIMessage usage field; None when the provider did not report usage, never 0.",
+      "source": "895b31204abd"
+    },
+    "code_notes.synthesized_call_ids.note": {
+      "text": "lesson.framework_output field: call ids the adapter filled in, not ones the provider sent.",
+      "source": "4a7fc31480e4"
+    },
+    "code_notes.trusted_facts.note": {
+      "text": "Trusted facts of the structured-output lesson: lesson_id, title and prerequisite of task-contract.",
+      "source": "67667ab7cf70"
+    },
+    "code_notes.handwritten_definition.note": {
+      "text": "The same tool's handwritten definition, compared field by field with the decorator's.",
+      "source": "1bf93fdbe043"
+    }
+  }
+}
