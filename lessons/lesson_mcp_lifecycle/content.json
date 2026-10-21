@@ -1,0 +1,1619 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "mcp-lifecycle",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "MCP / CONNECT · LOSE · RECONNECT",
+          "headline": "同时连着两个服务，",
+          "highlight": "其中一个断了，宿主要守住什么。",
+          "takeaway": "上一课只连一个服务，连接就是一个 `async with`。这一课宿主同时连着馆藏和借阅两个服务：给工具加前缀，只登记该给的工具，然后真的杀掉借阅服务的进程，看调用怎么失败、重连怎么受限、回来的服务丢了什么，最后核对退出时没有留下进程。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-lifecycle",
+              "label": "01 / LIFECYCLE",
+              "title": "连接有五个阶段，每个都会失败",
+              "description": "连接生命周期（Connection Lifecycle）：启动服务进程、`initialize` 握手、`tools/list` 发现、调用、关闭。宿主给每个服务一条连接，状态每变一次，就记一条 `lesson.service_state`。",
+              "token": "initialize"
+            },
+            {
+              "id": "02-prefix",
+              "label": "02 / PREFIX",
+              "title": "同名工具靠服务前缀分开",
+              "description": "服务前缀（Service Prefix）是宿主给工具名加的服务标识：`catalog__search` 和 `loans__search` 是两个工具。前缀由宿主登记，不由服务端自报。",
+              "token": "loans__search"
+            },
+            {
+              "id": "03-unknown",
+              "label": "03 / NO REPLY",
+              "title": "没有回复，就是结果不明",
+              "description": "请求发出去了，连接断了，没有回复。服务端可能没收到，可能收到没执行，也可能执行了但回复丢了。宿主把这笔写入记为结果不明：不算成功，也不自动重发。",
+              "token": "-32000"
+            },
+            {
+              "id": "04-probe",
+              "label": "04 / PROBE",
+              "title": "进程在，不等于工具能用",
+              "description": "可用性探测（Availability Probe）是一次真实的只读工具调用。重连之后，探测成功才把服务当成已连接。",
+              "token": "probe"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "连接的生命周期",
+          "paragraphs": [
+            "启动、初始化、调用、关闭，每一步都可能失败。{{lesson:mcp-basics}}只连一个服务：进入 `async with` 连上，离开就关掉，出了事就抛异常。这一课的宿主同时连两个服务，借阅服务还把借阅记录存在自己的进程内存里，进程不能随手换。要管这样的连接，先把一次连接拆成五个阶段，看每个阶段失败时客户端会看到什么。",
+            "第一阶段是启动：`python_module_server` 用 `python -m lessons.lesson_mcp_lifecycle.loans_server` 起一个子进程，只带 SDK 的安全环境变量。第二阶段是初始化：客户端发 `initialize`，服务端回复选定的协议版本、`serverInfo` 和自己的能力，客户端再发一条没有 `id` 的通知 `notifications/initialized`。第三阶段是 `tools/list` 发现，第四阶段是调用，第五阶段是关闭。实验台里每个服务的前三条客户端消息，正是 `initialize`、`notifications/initialized`、`tools/list`。",
+            "初始化阶段还要做能力协商（Capability Negotiation）：客户端报出自己支持的协议版本和能力，服务端回复双方都认的版本和它能提供的能力。本课宿主什么能力也没声明，两个服务端都回复 `tools` 能力 `{\"listChanged\": false}`。后一项要紧：它的意思是工具列表变了，服务端也不会通知客户端，宿主想知道变没变，只能自己再问一次 `tools/list`。第四节靠的就是这一点。",
+            "握手完成还不算接通。`_own` 在握手之后继续列出工具，再真的调用一次 `service_info`，拿到进程号和环境变量名，才宣布已连接。进程活着、握手成功、工具列表有内容，三样可以同时为真，工具却仍然答不上话。连通的证据是一次真实的调用结果，这和{{lesson:mcp-basics}}说的“进程启动了，不等于接好了”是同一条规矩。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "多个服务与命名",
+          "paragraphs": [
+            "两个服务都有叫 `search` 的工具时，用服务前缀区分。馆藏服务的 `search` 按关键词找书，参数是 `query`；借阅服务的 `search` 按读者证号查借阅，参数是 `member_id`。把两份工具清单直接并在一起交给模型，就有两个 `search`、两套参数，调用到了宿主这里，没有任何依据判断该发给谁。恶意服务端还可以故意起一个同名工具，把本该发给可信服务的调用连参数一起截走，书里把这叫工具遮蔽。",
+            "宿主给每个工具名加上服务前缀（Service Prefix）：服务标识、两个下划线、服务端原名，于是有了 `catalog__search` 和 `loans__search`。`qualified_name` 拼出名字，并检查它落在模型接口的函数名字母表里：字母、数字、下划线和连字符，最长 64 个字符。`build_routes` 为每个登记的工具建一条路线，记下它属于哪个服务、服务端原名是什么、是读还是写；两个服务拼出同一个名字时直接抛出 ValueError，不悄悄覆盖。",
+            "也有宿主不拒绝而是改名。Learn Claude Code 的 MCP 一课把不合规的字符换成下划线，拼成 `mcp__{server}__{tool}`，换完再检查一次重名，否则 `docs.one` 的 `get.version` 和 `docs_one` 的 `get_version` 会悄悄变成同一个名字。本课的服务标识由宿主自己写，登记的工具名也是宿主点了名的，不合规就拒绝，比改名更容易发现问题。没登记的工具连名字都不检查：它们永远进不了工具表。",
+            "前缀解决的是名字，不解决信任。它让模型和宿主知道一个调用该去哪个服务，却不能保证服务端在描述里写的是实话。工具描述原样进入模型上下文，这条通道的风险{{lesson:mcp-basics}}讲过；多个服务把它放大了，因为一个服务的描述会和另一个服务的工具出现在同一份列表里。所以第六节的登记与权限，比前缀本身更重要。"
+          ]
+        },
+        {
+          "id": "predict-messages",
+          "type": "predict",
+          "prompt": "运行“两个服务：握手、命名与权限”里的“只读（默认）”这一组之前先猜：这次运行会记下几条 `lesson.mcp_message`？提示：每个服务各有一次握手（3 条）、一次列工具（2 条）、一次 `service_info`（2 条）和一次探测调用（2 条）；三次越权调用有没有发给服务端，你来判断。",
+          "experiment": "lifecycle-gates",
+          "arm": "readonly",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.mcp_message"
+          }
+        },
+        {
+          "id": "mq-bare-name",
+          "type": "micro-quiz",
+          "question": {
+            "id": "bare-name",
+            "prompt": "模型提议调用不带前缀的 `search`。宿主该怎么处理？",
+            "options": [
+              {
+                "id": "a",
+                "text": "拒绝：没有这个名字的路线，调用不发出",
+                "feedback": "对。工具表里只有带前缀的名字，裸名不属于任何一个服务。"
+              },
+              {
+                "id": "b",
+                "text": "默认发给馆藏服务，因为它排在前面",
+                "feedback": "不对。按顺序猜只会把借阅的参数发给馆藏，或者反过来。"
+              },
+              {
+                "id": "c",
+                "text": "两个服务都发一遍，谁成功用谁的",
+                "feedback": "不对。同名工具含义不同，两边都发等于让不该执行的服务也收到参数。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "宿主这一层拒绝，服务端一条 `tools/call` 也收不到。实验里的三次越权调用就是这样。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "断连与重连",
+          "paragraphs": [
+            "服务进程崩溃后重新启动并重新发现工具，但重新启动只是开头。宿主发现服务没了，靠的是下一次调用失败，没有别的信号。“借阅服务崩溃：第二次重连成功”先登记一笔借阅，然后运行器用 `stop_process` 给借阅服务的进程发 `SIGKILL`：不关标准输入，不给宽限。这时宿主还不知道，`lesson.service_state` 里只有运行器记的一条 `stopped`，来源写明是故障注入。",
+            "第二笔写入照常发出：宿主把 `tools/call` 写进已经死掉的连接，等不到回复，SDK 抛出 MCPError，错误码 -32000，消息是 `Connection closed`。宿主把服务标为连接断开，把这笔写入记为结果不明，返回结构化错误 `ConnectionLost`。为什么既不算失败也不算成功？请求可能没到服务端，可能到了但没来得及执行，也可能执行完了而回复丢在路上，三种情况从客户端看一模一样。{{lesson:reliable-tools}}用幂等键应对结果不明，本课的服务端没有幂等键，宿主只能保守：记下来，不重发。",
+            "重连有三条规矩。旧客户端不复用：先 `close` 它，让 SDK 回收死掉的进程，再新建一个。次数有上限：`max_reconnects` 对每个服务在整个运行里只算一次账，用完就放弃，状态记为已放弃重连，那个服务的工具不再交给模型，运行靠剩下的服务继续。每次尝试前先退避，等 0.2、0.5、1.0 秒。每条新连接都要重新握手、发现和调用 `service_info`，之后再做一次可用性探测（Availability Probe）：用一个真实的只读调用确认工具答得上话，探测通过才算接通。",
+            "接通了，数据却没了。借阅记录只存在借阅服务的进程内存里，新进程是空的：练习里重连成功后再查读者 M-07 的借阅，`count` 是 0，而第一笔借阅的编号曾经是 `L-0001`。那次确认当时是真的，现在没有了。重连恢复的是连接，不是数据。宿主因此不自动重发任何一笔写入：重发已确认的，在会持久保存数据的服务里会重复登记，重发结果不明的同理，宿主又没法证明对方是哪一种。该不该补回，由人看着写入记录决定。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一笔写入遇到断连",
+          "description": "按步骤说明“借阅服务崩溃：第二次重连成功”里第二笔写入的经过，代码是简化的示意；本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "记账",
+              "actor": "宿主",
+              "title": "发出之前先记一笔",
+              "body": "`call` 为写操作建一条记录，状态是已发出，再把 `tools/call` 发给借阅服务。",
+              "code": "entry = {\"status\": \"sent\"}\nresult = await client.call_tool(tool, arguments)",
+              "language": "python",
+              "evidence": "tool_call"
+            },
+            {
+              "id": "step-2",
+              "label": "崩溃",
+              "actor": "运行器",
+              "title": "进程被杀",
+              "body": "运行器给借阅服务的进程发 `SIGKILL`。标准输入没关，也没有宽限，宿主此时并不知道。",
+              "code": "os.kill(pid, signal.SIGKILL)",
+              "language": "python",
+              "evidence": "lesson.service_state"
+            },
+            {
+              "id": "step-3",
+              "label": "无回复",
+              "actor": "协议",
+              "title": "客户端抛出 MCPError",
+              "body": "请求写进了死掉的连接，SDK 抛出错误码 -32000，消息是 `Connection closed`。",
+              "code": "except MCPError as error:\n    connection.state = \"lost\"",
+              "language": "python",
+              "evidence": "lesson.service_state"
+            },
+            {
+              "id": "step-4",
+              "label": "记为不明",
+              "actor": "宿主",
+              "title": "写入状态改成结果不明",
+              "body": "宿主不把它记成成功，也不记成失败，抛出结构化错误 `ConnectionLost` 交给调用方。",
+              "code": "entry[\"status\"] = \"unknown\"\nraise ConnectionLost(...)",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-5",
+              "label": "重连",
+              "actor": "宿主",
+              "title": "新进程，新握手，再探测",
+              "body": "在上限内重连：第一次的进程一启动就退出，第二次成功，探测通过后服务才算接通。",
+              "code": "await self.connect(service)\nif await self.probe(service):\n    return True",
+              "language": "python",
+              "evidence": "lesson.service_state"
+            },
+            {
+              "id": "step-6",
+              "label": "不重发",
+              "actor": "宿主",
+              "title": "同一笔写入被挡住",
+              "body": "运行恢复后再次提交这笔写入，写入记录里是结果不明，`call` 返回 `WriteNotRepeated`，没有新的 `tools/call`。",
+              "code": "if earlier is not None:\n    raise WriteNotRepeated(...)",
+              "language": "python",
+              "evidence": "tool_result"
+            }
+          ]
+        },
+        {
+          "id": "misconception-reconnect",
+          "type": "misconception",
+          "claim": "重连成功，借阅服务就恢复原样了。",
+          "correction": "重连只换来一个新进程和一条新连接。握手、发现和探测都能通过，借阅记录仍然是空的，进程号也换了。练习里第一笔借阅的编号是 `L-0001`，重连后查询得到 0 条；这时再按旧编号去续借或查询，只会得到“没有这个借阅”。"
+        },
+        {
+          "id": "deep-dive-unknown",
+          "type": "deep-dive",
+          "title": "结果不明的写入怎么办",
+          "summary": "三条路：靠幂等键重发、先查再决定、交给人。本课的服务端只允许第三条。",
+          "paragraphs": [
+            "手算一个例子。读者 M-07 想借 B-104，宿主发出 `register_loan`，连接断了，没有回复。这时有两种世界：一种服务端把借阅存进了数据库，只是回复丢了，现在查得到 `L-0002`；另一种进程在收到请求之前就没了，查不到任何记录。宿主发出请求时无法分辨，所以重发有一半的可能多登记一笔，不重发有另一半的可能漏掉一笔。结果不明的意思就是这个：两种错都可能发生，而且事前判断不了。",
+            "第一条路是幂等键：调用方在第一次发送前生成一把键，重发时原样带上，服务端见过这把键就交回第一次的结果。{{lesson:reliable-tools}}用本地存储演示过。它要求服务端支持，本课的 `register_loan` 没有这个参数，宿主就不能假装有。第二条路是先查再决定：按业务字段查，比如读者和书号，查到了就确认成功，查不到再重发。这也要服务端的数据在重启后还在；本课借阅服务重启后查什么都是空的，查询证明不了任何事。",
+            "第三条路是记下来交给人，也是本课宿主的做法：写入记录里这笔状态是结果不明，报告和模型的回答都如实写出，由馆员核对。它不省事，却不会制造重复。要在真实系统里往前走，应当让服务端支持幂等键，或者把状态放进持久存储，再让宿主按这两条自动处理；那是服务端的责任，宿主猜不出来。"
+          ]
+        },
+        {
+          "id": "mq-after-reconnect",
+          "type": "micro-quiz",
+          "question": {
+            "id": "after-reconnect",
+            "prompt": "重连成功后，`loans__search` 返回 `count: 0`。下面哪个说法站得住？",
+            "options": [
+              {
+                "id": "a",
+                "text": "新进程的内存是空的，第一笔已确认的借阅也不在里面：重连不恢复服务的数据",
+                "feedback": "对。查到 0 条只能说明新进程里没有记录，不能说明任何一笔写入当初成不成功。"
+              },
+              {
+                "id": "b",
+                "text": "两笔写入都没成功",
+                "feedback": "不对。第一笔当时拿到了确认，只是后来随进程一起丢了。"
+              },
+              {
+                "id": "c",
+                "text": "宿主可以据此放心重发第二笔写入",
+                "feedback": "不对。换了一个有持久存储的服务，同样的查询结果可能完全不同；宿主不能凭这一次查询认定对方不持久。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "重连之后要分清两件事：连接恢复了，服务里的数据是不是还在。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "工具列表变化要重新确认",
+          "paragraphs": [
+            "服务更新了工具定义，客户端要发现变化而不是沿用旧的。进程重启后回来的，不一定是原来的版本。“重连超时，回来的服务换了定义”里，第一次重启的进程活着，却从不读标准输入：宿主发出 `initialize` 后等满读超时 5 秒，错误码是 -32001，和进程消失时的 -32000 不同。第二次连上的是 v2：`register_loan` 多了必填参数 `due_days`（7 到 30 天），还多出一个 `renew_loan`。沿用旧定义的话，模型按旧参数表调用会被服务端拒绝；描述变了而参数没变，连拒绝都没有。",
+            "宿主靠定义指纹发现变化。`fingerprint` 对工具的名称、工具描述和输入 Schema 做哈希；`connect_all` 在第一次连接成功后记下每个工具的指纹作基线，重连后 `_recheck` 逐个对比，得出变化、新增、移除的工具，以及要暂停调用的 `quarantined`。例子里变化的是 `register_loan`，新增的是 `renew_loan`。因为服务端的 `listChanged` 是 false，不会通知，这次对比必须由宿主主动做，`cache=None` 又保证 `tools/list` 每次都是真实请求，不是 SDK 缓存里的旧结果。",
+            "变化的工具先暂停，再确认。在 `quarantined` 里的工具，`call` 发出之前就拒绝，返回结构化错误 `ToolChanged`，`model_tools` 也不再把它交给模型；同一服务里没变的工具照常使用。新增的 `renew_loan` 没有登记，发现了也没有路线，不会因为出现就获得权限。“确认”发生在运行之外：有人读了新定义，改了登记和基线，下一次运行才放行。本课的运行不会自己确认，恢复后再提交那两笔写入，得到的都是 `ToolChanged`。",
+            "指纹能证明的只有一件事：现在的定义和上次确认的不一样。它说明不了新定义好不好，也看不见同一份定义背后的行为变化，比如服务端换了计费规则而参数没变。描述也在指纹里，所以有人悄悄改了描述、夹带指令，同样会触发暂停，这是它防住夹带指令的一小块防线。反过来，指纹没变也不等于安全：第一次确认的定义本来就可能有问题。"
+          ]
+        },
+        {
+          "id": "compare-signals",
+          "type": "compare",
+          "title": "五种失败，各自的信号和处理",
+          "columns": [
+            "情形",
+            "客户端看到什么",
+            "宿主记成",
+            "写操作能不能重发"
+          ],
+          "rows": [
+            [
+              "服务拒绝了调用（参数不符、业务规则）",
+              "有回复，`isError: true`",
+              "工具错误，写入记为被服务拒绝，说明交给模型",
+              "改正之后可以再发"
+            ],
+            [
+              "进程消失",
+              "没有回复，MCPError -32000 `Connection closed`",
+              "连接断开；写入记为结果不明",
+              "不自动重发"
+            ],
+            [
+              "进程在，但不回应",
+              "等满读超时，MCPError -32001",
+              "重连失败，记错误码，再试或放弃",
+              "握手阶段还没发过写入，无写入可重发"
+            ],
+            [
+              "重连后定义变了",
+              "没有错误，`tools/list` 的指纹和基线不同",
+              "暂停调用，`ToolChanged`",
+              "确认新定义之前不发"
+            ],
+            [
+              "宿主自己拒绝（未登记、不允许写入、服务不可用）",
+              "什么也看不到：没有任何消息发出",
+              "结构化错误，不是连接问题",
+              "不适用，调用根本没发出"
+            ]
+          ]
+        },
+        {
+          "id": "deep-dive-handshake",
+          "type": "deep-dive",
+          "title": "握手、能力协商与 2026-07-28 版本的发现请求",
+          "summary": "本课走 2025-11-25 的握手；新版本把握手换成了 `server/discover`，连接的状态也变少了。",
+          "paragraphs": [
+            "2025-11-25 版本的规定很具体：握手必须是客户端和服务端之间的第一次交互。客户端发 `initialize`，带上它支持的协议版本、能力和 `clientInfo`；服务端若支持这个版本就原样回复，否则回复它支持的另一个版本，客户端不支持就应当断开。握手成功后客户端发 `notifications/initialized`，在服务端回复 `initialize` 之前，客户端除了 `ping` 不应发别的请求。此后双方只能使用协商成功的能力，这也是 `tools` 能力的 `listChanged` 值得看的原因。",
+            "2026-07-28 版本没有这次握手。{{lesson:mcp-basics}}实测过：第一条请求是 `server/discover`，问服务端支持哪些版本和能力；之后每个请求在 `params._meta` 里自报协议版本、客户端信息和能力，服务端不必记住“这条连接是谁”；回复里多了 `cacheScope`、`ttlMs` 这类缓存提示。对生命周期的影响是：没有握手状态可丢，重连时少一步；但服务端应用自己的数据，比如借阅记录，丢不丢和协议版本无关。",
+            "本课锁定 `legacy` 模式，是因为要看清握手这一步。SDK 的 `Client` 在新版本模式下还提供 `listen`，可以订阅 `tools_list_changed`；这条路径在本课的两个服务上没有跑过，只是 SDK 接口里有，不要当成实测结论。两种协议版本都是官方规范的一部分，讲解时说清用的是哪一个；读别人的教程和代码时，也先看它说的是哪个版本。"
+          ]
+        },
+        {
+          "id": "mq-changed-tools",
+          "type": "micro-quiz",
+          "question": {
+            "id": "changed-tools",
+            "prompt": "重连后，`register_loan` 的定义变了，`renew_loan` 是新出现的。宿主对它们各怎么处理？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`register_loan` 暂停调用，等人确认新定义；`renew_loan` 没有登记，不建路线",
+                "feedback": "对。变了的登记工具暂停，新出现的工具不因被发现而获得权限。"
+              },
+              {
+                "id": "b",
+                "text": "两个都可以用，因为服务端已经列出了它们",
+                "feedback": "不对。服务端列出什么，不等于宿主授权什么。"
+              },
+              {
+                "id": "c",
+                "text": "两个都暂停，因为整个服务都变了",
+                "feedback": "不对。暂停只针对定义变了的登记工具；`renew_loan` 根本没有路线，谈不上暂停。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "看重连后 `lesson.service_state` 里的 `recheck`：`changed`、`added` 和 `quarantined` 各是什么。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "退出与进程回收",
+          "paragraphs": [
+            "关闭要做的事，是让每个服务进程真的消失。离开 `async with Client(...)` 时，SDK 先关服务进程的标准输入，等 2 秒；它还没退出，就给进程组发 `SIGTERM`，再等 2 秒；仍不退就发 `SIGKILL`。这一段在屏蔽取消的范围里完成，所以用户点停止、运行被取消时也会执行。不收尾的代价很具体：借阅服务一直占着内存和它的数据，下一次运行又起一个，两个“借阅服务”各存各的记录。",
+            "宿主不信“已经关了”，而是去查。`close_and_count` 先按顺序关闭全部连接，再对本次运行启动过的每个进程号调用 `wait_gone`：用信号 0 检查进程还在不在，最多等 3 秒。报告里“关闭后没有遗留服务进程”来自这次检查，指标“遗留进程数”是实际数出来的。“客户端已经退出代码块”和“进程已经不在”是两件事，报告只把后者当证据。",
+            "这项检查有一个边界：进程号来自握手成功后的 `service_info`，所以握手没成功的进程不在名单里，比如注入了 `hang-on-start` 的那一次。它们由 SDK 在离开代码块时回收，课程测试在 Linux 上另外扫描 `/proc`，确认测试结束后没有本课的服务进程留下。报告里的遗留进程数因此只覆盖握手成功的进程，不是全部。",
+            "子进程的环境也要查。服务进程只继承 SDK 的安全环境变量列表，`service_info` 报告它实际看到的变量名：Linux 上是 `HOME`、`LC_CTYPE`、`PATH`、`SHELL`、`TERM`。报告检查名字里有没有带 KEY、TOKEN、SECRET、PASSWORD、CREDENTIAL 的，只看名字，不看取值，事件里没有任何变量的内容。模型的密钥留在父进程，模型调用经 `RunContext`，两个服务都没有一行代码需要密钥。"
+          ]
+        },
+        {
+          "id": "mq-reaped",
+          "type": "micro-quiz",
+          "question": {
+            "id": "reaped",
+            "prompt": "报告里“遗留进程数”是 0。这最能证明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "握手成功过的服务进程，在关闭之后都已经不在了",
+                "feedback": "对。数字来自对这些进程号的真实检查，范围也只到这里。"
+              },
+              {
+                "id": "b",
+                "text": "本次运行启动过的每一个进程，包括握手失败的",
+                "feedback": "不对。握手没成功的进程没有进程号，不在检查名单里。"
+              },
+              {
+                "id": "c",
+                "text": "服务端的数据都已经安全保存",
+                "feedback": "不对。进程消失说明不了数据去了哪里；借阅服务的数据本来就只在内存里。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "读报告时先看一项检查的范围，再看它的结论。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "登记、权限与可用性探测",
+          "paragraphs": [
+            "发现的工具、登记的工具、能调用的工具是三个集合，逐级变小。第一级是登记：`SERVICES` 里每个 `ServiceSpec` 写明宿主给这个服务的标识、启动哪个模块、期望的 `serverInfo.name`、登记哪些工具以及各自是读还是写。stdio 下身份来自宿主启动了哪个模块，服务端自报的名字只做核对。借阅服务列出四个工具，宿主只登记两个：`purge_loans` 会清空全部借阅记录，`service_info` 是宿主自己的诊断工具，它们没有路线。",
+            "第二级是本次运行是否允许写入。`register_loan` 登记为写操作，`allow_writes` 为 false 时，`available` 不把它放进白名单：模型的请求里看不见它，运行器自己提交这个名字也只得到“不认识这个工具”。第三级是服务现在能不能用：连接不是已连接，或者定义变了正在暂停，`call` 在发出之前就拒绝。工具上的 `readOnlyHint`、`destructiveHint` 是服务端的自我声明，宿主不据此放行，读和写的分类写在宿主自己的 `ServiceSpec` 里，和 Learn Claude Code 的宿主权限表是同一个思路。",
+            "可用性探测（Availability Probe）回答的问题是：这个服务现在能不能干活。它是 `ServiceSpec.probe` 里写好的一次真实只读调用：馆藏服务查关键词 MCP，借阅服务查读者 M-07 的借阅。重连后 `probe` 成功才算接通，失败就关掉重来。协议自带的 `ping` 只证明对方答得上协议，不证明工具可用；书里 `docker-compose.yml` 的健康检查是 `python3 -c \"import sys; sys.exit(0)\"`，退出码永远是 0，证明的只是容器里能跑 Python，不是 MCP 服务端在答话。",
+            "预算要给每一个等待。本课有四个：每个请求的读超时 `READ_TIMEOUT_SECONDS` 是 5 秒；重连次数 `max_reconnects` 最多 3 次，对整个运行有效；每次重连前退避 0.2、0.5、1.0 秒；Agent 练习的模型调用最多 `MAX_ROUNDS` 次，也就是 4 次。乘起来就能手算最坏要等多久：三次重连都遇到 `hang-on-start`，退避共 0.2+0.5+1.0 = 1.7 秒，读超时 3×5 = 15 秒，再加每次最多约 4 秒的关闭宽限共 12 秒，合计不到 30 秒。这是手算的上限，不是测量值。"
+          ]
+        },
+        {
+          "id": "misconception-listed",
+          "type": "misconception",
+          "claim": "服务把工具列出来了，宿主就可以让模型用。",
+          "correction": "`tools/list` 只说明服务端声明了什么。借阅服务列出了 `purge_loans`，宿主没有登记它，模型的请求里没有它，运行器提交这个名字也被拒绝，服务端一条 `tools/call` 也没收到。能用什么，由宿主的登记、本次运行的设置和服务当前的状态共同决定。"
+        },
+        {
+          "id": "deep-dive-transport",
+          "type": "deep-dive",
+          "title": "谁拥有进程：stdio、容器与远程传输",
+          "summary": "stdio 下连接就是子进程；远程传输下服务和连接各过各的。",
+          "paragraphs": [
+            "stdio 传输里，客户端把服务端作为子进程启动，用标准输入输出收发一行一条的消息，服务端只许把合法的 MCP 消息写到标准输出，日志写标准错误。所以连接和进程是同一个生命：进程没了，连接就没了；宿主关标准输入，就是在告诉服务端“该退出了”。这也解释了本课为什么要查进程：stdio 下服务的生死归宿主管。",
+            "Streamable HTTP 不一样：服务端是独立运行、可以同时服务多个客户端的进程，每条消息是一次 HTTP POST。按 2025-11-25 规范，服务端可以在初始化时用 `MCP-Session-Id` 响应头分配会话，客户端此后每个请求都要带上它；服务端随时可以结束会话，之后收到旧会话的请求要回 404，客户端必须重新发 `initialize` 开一个新会话。断线后还可以用 `Last-Event-ID` 请求续传被打断的事件流。也就是说，连接断了，服务进程和它的数据可能完好无损；客户端要重建的是会话。本课没有实测远程传输，这里只是规范的内容。",
+            "书中第 4 章配套的 `docker-compose.yml` 是第三种做法：三个 MCP 服务各占一个容器，用 `restart: unless-stopped` 让编排系统在进程退出后重启，`stdin_open: true` 让标准输入一直开着，数据放在命名卷里，重启后还在。对照本课能看出三件事：重启进程不等于重连客户端；数据放在进程外，重启才不丢数据，本课借阅服务的内存状态正好相反；三个服务都拿到了 `OPENAI_API_KEY`，容器隔开了进程，没有隔开密钥。"
+          ]
+        },
+        {
+          "id": "mq-gates",
+          "type": "micro-quiz",
+          "question": {
+            "id": "gates",
+            "prompt": "`register_loan` 带着 `destructiveHint: false` 的注解，宿主能凭它放行吗？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不能：注解是服务端的自我声明，放不放行由宿主的登记和本次运行的设置决定",
+                "feedback": "对。读写分类写在宿主的 `ServiceSpec` 里，写操作还要本次运行允许写入。"
+              },
+              {
+                "id": "b",
+                "text": "能，协议保证注解是真的",
+                "feedback": "不对。协议只负责传递注解，不验证它。"
+              },
+              {
+                "id": "c",
+                "text": "能，只要工具名里有 `loan`",
+                "feedback": "不对。名字同样是服务端写的，不能当授权依据。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "发现、登记、允许写入、服务可用，四个条件依次收窄，缺一个都不会发出调用。"
+          }
+        },
+        {
+          "id": "section-7",
+          "type": "prose",
+          "title": "模型经 RunContext 调用",
+          "paragraphs": [
+            "模型只看得到当前能用的工具，调用仍走同一道门。Agent 练习里，宿主每一轮都用 `model_tools` 生成工具列表：登记了、本次允许、服务现在连着，三个条件都满足的工具才交给模型，名字带前缀，描述和 `inputSchema` 来自各服务的 `tools/list`。模型提议的调用由 `context.execute_proposal` 对照白名单检查，经 `bridge` 回到事件循环，再由 `call` 发给对应的服务；`tool_call` 和 `tool_result` 用调用 id 配对，两条之间夹着协议层的 `tools/call`。",
+            "连接断开由程序处理，不交给模型。离线脚本让模型先检索，再登记借阅；登记确认后运行器杀掉借阅服务的进程，下一轮模型想用 `loans__search` 确认，拿到的是 `ConnectionLost`。每轮结束后，宿主检查有没有断开的服务，在上限内重连；模型看不到“重连”这件事，下一轮它看到的只是工具又回来了。系统提示词告诉模型“连接断开时那次操作结果不明，不要说成功，也不要自己再写一次”，真实模型照不照做，离线测试证明不了；`call` 的保护不靠它：同一笔写入再被提议一次，写入记录里已有“已确认”或“结果不明”，就返回 `WriteNotRepeated`。",
+            "这一节的练习需要模型连接。离线测试里模型的每一步选择来自固定脚本，回答也是脚本写的，所以它证明的是：两个服务、前缀、断连、重连和写入记录这些宿主机制在真实进程上确实工作；它不证明任何真实模型会合理处理断连，更不证明回答对。报告里的“写入记录”一项没有 passed，因为那是宿主自己记的账，要由人对照事件核对。本课尚未做真实模型运行，结论以你自己的运行为准。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch4",
+              "title": "工具生态：MCP 的传输、风险与工具太多怎么办（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-compose",
+              "title": "三个 MCP 服务的容器编排、重启策略与健康检查（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter4/docker-compose.yml"
+            },
+            {
+              "id": "book-docker",
+              "title": "MCP 服务的 Docker 部署与密钥管理建议（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter4/DOCKER_DEPLOYMENT.md"
+            },
+            {
+              "id": "ms-protocols",
+              "title": "Agent 协议：宿主、客户端与服务端的一对一连接（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/11-agentic-protocols/README.md"
+            },
+            {
+              "id": "lcc-s14",
+              "title": "MCP 工具：服务前缀、名称冲突与宿主权限表（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s14_mcp_plugin/README.zh.md"
+            },
+            {
+              "id": "hf-tools",
+              "title": "工具与 MCP：统一的工具接口（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/tools.mdx"
+            },
+            {
+              "id": "hf-smolagents",
+              "title": "从 MCP 服务端导入工具集合（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/smolagents/tools.mdx"
+            },
+            {
+              "id": "spec-lifecycle",
+              "title": "MCP 规范 2025-11-25：生命周期、能力协商、关闭与超时（Model Context Protocol）",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle"
+            },
+            {
+              "id": "spec-transports",
+              "title": "MCP 规范 2025-11-25：stdio 与 Streamable HTTP 传输（Model Context Protocol）",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/transports"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "mcp-basics"
+        },
+        {
+          "id": "code-names",
+          "type": "annotated-source",
+          "path": "lessons/lesson_mcp_lifecycle/runtime.py",
+          "start": 102,
+          "end": 128,
+          "notes": [
+            {
+              "id": "n-qualified",
+              "line": 102,
+              "anchor": "def qualified_name(",
+              "text": "宿主给每个服务的工具名拼上前缀：服务标识、两个下划线、服务端原名。"
+            },
+            {
+              "id": "n-join",
+              "line": 103,
+              "anchor": "name = f\"{service}{SEPARATOR}{tool}\"",
+              "text": "拼出 `loans__search` 这样的名字。"
+            },
+            {
+              "id": "n-alphabet",
+              "line": 104,
+              "anchor": "if not TOOL_NAME.fullmatch(name):",
+              "text": "名字要落在模型接口的函数名字母表里：字母、数字、下划线、连字符，最长 64 个字符。"
+            },
+            {
+              "id": "n-refuse",
+              "line": 105,
+              "anchor": "raise ValueError(f\"tool name",
+              "text": "不合规就拒绝，不改写：改写会让两个不同的名字悄悄变成同一个。"
+            },
+            {
+              "id": "n-routes",
+              "line": 109,
+              "anchor": "def build_routes(connections)",
+              "text": "按登记建工具表：键是带前缀的名字，值是路线。"
+            },
+            {
+              "id": "n-listed",
+              "line": 113,
+              "anchor": "for tool in connection.tools:",
+              "text": "只遍历服务真的列出来的工具：登记了但服务没列出的，也不会有路线。"
+            },
+            {
+              "id": "n-kind",
+              "line": 114,
+              "anchor": "kind = connection.spec.tools.get(tool.name)",
+              "text": "读还是写由宿主的 `ServiceSpec` 说了算，不看服务端的注解。"
+            },
+            {
+              "id": "n-hidden",
+              "line": 115,
+              "anchor": "if kind is None:",
+              "text": "发现了但没登记：不建路线。`purge_loans` 就在这里被挡住。"
+            },
+            {
+              "id": "n-collision",
+              "line": 118,
+              "anchor": "if name in table:",
+              "text": "两个服务拼出同一个名字：直接报错，不悄悄覆盖。"
+            },
+            {
+              "id": "n-route",
+              "line": 120,
+              "anchor": "table[name] = Route(",
+              "text": "路线记下带前缀的名字、服务标识、服务端原名和读写类型。"
+            },
+            {
+              "id": "n-fingerprint",
+              "line": 124,
+              "anchor": "def fingerprint(tool)",
+              "text": "定义指纹：重连后拿它和第一次确认的定义比。"
+            },
+            {
+              "id": "n-material",
+              "line": 126,
+              "anchor": "material = json.dumps(",
+              "text": "名称、描述和输入 Schema 一起参与，哪一项变了指纹都会变。"
+            },
+            {
+              "id": "n-sorted",
+              "line": 127,
+              "anchor": "sort_keys=True",
+              "text": "键排序，同一份定义每次得到同一个指纹。"
+            },
+            {
+              "id": "n-hash",
+              "line": 128,
+              "anchor": "return hashlib.sha256",
+              "text": "取哈希的前 12 位：够在报告里对比，也不占版面。"
+            }
+          ]
+        },
+        {
+          "id": "code-life",
+          "type": "annotated-source",
+          "path": "lessons/lesson_mcp_lifecycle/runtime.py",
+          "start": 215,
+          "end": 255,
+          "notes": [
+            {
+              "id": "n-own",
+              "line": 215,
+              "anchor": "async def _own(",
+              "text": "一条连接的一生都在这个任务里：同一个任务进入、使用、退出 `async with`。"
+            },
+            {
+              "id": "n-started",
+              "line": 216,
+              "anchor": "started = False",
+              "text": "握手前出错，调用方要拿到 MCPError；握手后出错，留给下一次调用去发现。"
+            },
+            {
+              "id": "n-client",
+              "line": 220,
+              "anchor": "async with Client(recording_stdio(",
+              "text": "1. 启动，2. 初始化：`legacy` 模式先发 `initialize`，再发 `notifications/initialized`。"
+            },
+            {
+              "id": "n-timeout",
+              "line": 221,
+              "anchor": "read_timeout_seconds=READ_TIMEOUT_SECONDS",
+              "text": "每个请求最多等 5 秒；`cache=None` 保证每次 `tools/list` 都是真实请求。"
+            },
+            {
+              "id": "n-list",
+              "line": 223,
+              "anchor": "listed = await client.list_tools()",
+              "text": "3. 发现：真实的 `tools/list`。"
+            },
+            {
+              "id": "n-info",
+              "line": 224,
+              "anchor": "info = await client.call_tool(\"service_info\", {})",
+              "text": "握手之后再来一次真实调用，拿到进程号和环境变量名，才算连上。"
+            },
+            {
+              "id": "n-started-call",
+              "line": 225,
+              "anchor": "task_status.started((client, listed, info, None))",
+              "text": "把客户端交给调用方；之后别的任务用它发调用。"
+            },
+            {
+              "id": "n-wait",
+              "line": 227,
+              "anchor": "await done.wait()",
+              "text": "4. 使用：这个任务停在这里，直到有人关闭连接。"
+            },
+            {
+              "id": "n-except",
+              "line": 228,
+              "anchor": "except Exception as error:",
+              "text": "握手前的失败交给调用方，当作 MCPError 处理。"
+            },
+            {
+              "id": "n-closed",
+              "line": 233,
+              "anchor": "closed.set()",
+              "text": "5. 关闭：离开代码块时 SDK 先关标准输入，必要时终止进程；走到这里进程已被回收。"
+            },
+            {
+              "id": "n-reconnect",
+              "line": 235,
+              "anchor": "async def reconnect(",
+              "text": "重连：先关旧的，再在上限内一次次新建。"
+            },
+            {
+              "id": "n-old",
+              "line": 237,
+              "anchor": "await self.close(service)  # the old client",
+              "text": "旧客户端不复用：关闭它，回收死掉的进程。"
+            },
+            {
+              "id": "n-limit",
+              "line": 238,
+              "anchor": "while connection.attempts < inputs[\"max_reconnects\"]",
+              "text": "上限对整个运行有效：`attempts` 从不清零。"
+            },
+            {
+              "id": "n-backoff",
+              "line": 241,
+              "anchor": "await anyio.sleep(BACKOFF_SECONDS",
+              "text": "退避：先等 0.2、0.5、1.0 秒再试。"
+            },
+            {
+              "id": "n-fault",
+              "line": 242,
+              "anchor": "fault = (\"--fault\"",
+              "text": "故障注入：前几次重启故意起一个有毛病的进程。"
+            },
+            {
+              "id": "n-connect",
+              "line": 245,
+              "anchor": "await self.connect(service, \"--variant\"",
+              "text": "每次都是全新的进程、握手和发现。"
+            },
+            {
+              "id": "n-failed",
+              "line": 246,
+              "anchor": "except MCPError as error:",
+              "text": "失败记一条 `failed`，带错误码，再试下一次。"
+            },
+            {
+              "id": "n-probe",
+              "line": 250,
+              "anchor": "if await self.probe(service):",
+              "text": "握手成功还不够：真实的只读调用通过，才算接通。"
+            },
+            {
+              "id": "n-gaveup",
+              "line": 253,
+              "anchor": "connection.state = \"gave_up\"",
+              "text": "次数用完：放弃，这个服务的工具不再发出。"
+            }
+          ]
+        },
+        {
+          "id": "code-call",
+          "type": "annotated-source",
+          "path": "lessons/lesson_mcp_lifecycle/runtime.py",
+          "start": 294,
+          "end": 331,
+          "notes": [
+            {
+              "id": "n-call",
+              "line": 294,
+              "anchor": "async def call(self, qualified",
+              "text": "所有调用都从这里发出：模型的、运行器的，走同一道门。"
+            },
+            {
+              "id": "n-route-get",
+              "line": 295,
+              "anchor": "route = self.routes().get(qualified)",
+              "text": "没有路线，就是没有登记。"
+            },
+            {
+              "id": "n-not-routable",
+              "line": 297,
+              "anchor": "raise NotRoutable(",
+              "text": "拒绝发生在发送之前：服务端什么也没收到。"
+            },
+            {
+              "id": "n-state",
+              "line": 300,
+              "anchor": "if connection.state != \"connected\":",
+              "text": "1. 服务不可用：已断开或已放弃，不发。"
+            },
+            {
+              "id": "n-quarantine",
+              "line": 303,
+              "anchor": "if route.tool in connection.quarantined:",
+              "text": "定义变了、还没确认：不发。"
+            },
+            {
+              "id": "n-write",
+              "line": 306,
+              "anchor": "if route.kind == \"write\":",
+              "text": "2. 写操作先查账。"
+            },
+            {
+              "id": "n-key",
+              "line": 308,
+              "anchor": "key = qualified + json.dumps(arguments",
+              "text": "一笔写入由工具名和参数确定。"
+            },
+            {
+              "id": "n-earlier",
+              "line": 309,
+              "anchor": "earlier = next(",
+              "text": "已确认或结果不明的同一笔写入，不再发。"
+            },
+            {
+              "id": "n-not-repeated",
+              "line": 311,
+              "anchor": "raise WriteNotRepeated(",
+              "text": "拒绝重发，并说明此前是什么状态。"
+            },
+            {
+              "id": "n-entry",
+              "line": 312,
+              "anchor": "entry = {\"key\": key,",
+              "text": "发出之前先记一笔，状态是已发出。"
+            },
+            {
+              "id": "n-call-tool",
+              "line": 315,
+              "anchor": "result = await connection.client.call_tool(route.tool, arguments)",
+              "text": "真正的 `tools/call`，用服务端原名。"
+            },
+            {
+              "id": "n-mcperror",
+              "line": 316,
+              "anchor": "except MCPError as error:",
+              "text": "3. 没有回复：连接断开，写入结果不明。"
+            },
+            {
+              "id": "n-lost",
+              "line": 318,
+              "anchor": "connection.state = \"lost\"",
+              "text": "标记连接断开；接下来由重连逻辑接手。"
+            },
+            {
+              "id": "n-unknown",
+              "line": 322,
+              "anchor": "entry[\"status\"] = \"unknown\"",
+              "text": "既不是成功，也不是失败。"
+            },
+            {
+              "id": "n-raise-lost",
+              "line": 323,
+              "anchor": "raise ConnectionLost(",
+              "text": "换成结构化错误交给调用方，模型看到的是文字说明，不是 MCPError。"
+            },
+            {
+              "id": "n-confirmed",
+              "line": 327,
+              "anchor": "entry[\"status\"] = \"rejected\" if result.is_error else \"confirmed\"",
+              "text": "4. 有回复：`isError` 为真是服务拒绝，只有干净的结果才确认这笔写入。"
+            },
+            {
+              "id": "n-refused",
+              "line": 330,
+              "anchor": "raise ToolRefused(",
+              "text": "工具说了不：连接是好的，说明文字交给模型改正。"
+            },
+            {
+              "id": "n-return",
+              "line": 331,
+              "anchor": "return result.structured_content if",
+              "text": "成功时优先交出结构化结果。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "为什么断连、重连和重检都由宿主程序做，而不是交给模型？",
+          "chosen": "宿主持有每个服务的连接、写入记录、重连次数和定义基线，模型只看到当前能用的工具和结构化错误。重连有上限，写入不自动重发，定义变了先暂停：这些规则写在 `Host` 里，每一步都能从 `lesson.service_state` 和 `tool_result` 核对，不靠模型听话。",
+          "alternatives": [
+            {
+              "id": "session-group",
+              "title": "用 SDK 的 `ClientSessionGroup` 合并多个服务",
+              "why_not": "它按工具名合并，重名时抛错，可以传钩子加前缀；这是读源码得知的，本课没有实跑。手写路线表更清楚：每条登记、每个读写分类都摆在 `ServiceSpec` 里，权限也能挂在同一处。"
+            },
+            {
+              "id": "model-retries",
+              "title": "断连后让模型决定要不要重试",
+              "why_not": "模型看不到进程，也记不住哪笔写入是什么状态，更不会因为“已经重试过两次”自己停下。次数、状态和上限是代码的事。"
+            },
+            {
+              "id": "auto-resend",
+              "title": "重连之后自动重发失败的写入",
+              "why_not": "结果不明的写入可能已经生效，重发会重复；已确认的写入重发也会在持久的服务里重复。没有幂等键就不重发，交给人核对。"
+            },
+            {
+              "id": "orchestrator-restart",
+              "title": "交给容器编排的重启策略",
+              "why_not": "编排系统能把进程拉起来，却不会重新握手、比对工具定义，也不知道哪笔写入的结果不明。进程重启和连接恢复是两层事，书里的 `docker-compose.yml` 只做了前一层。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "lifecycle-gates",
+          "title": "两个服务：握手、命名与权限",
+          "hypothesis": "两个服务各自完成一次握手；同名的 `search` 靠服务前缀成为两个工具；发现了的工具不会自动获得权限：裸名和未登记的工具被拒绝，写操作只在本次运行允许时执行；关闭之后没有遗留进程。",
+          "predict": "predict-messages",
+          "arms": [
+            {
+              "id": "readonly",
+              "exercise": "lifecycle",
+              "label": "只读（默认）"
+            }
+          ],
+          "observe": [
+            {
+              "id": "handshake",
+              "text": "每个服务的握手回复：协议版本、`serverInfo` 和 `tools` 能力。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.result.protocolVersion"
+              }
+            },
+            {
+              "id": "listed",
+              "text": "借阅服务的 `tools/list` 回复：四个工具，其中有 `purge_loans`。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.result.tools",
+                "nth": 2
+              }
+            },
+            {
+              "id": "prefixed",
+              "text": "报告里同名的 `search` 变成了两个名字。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=namespaced]"
+              }
+            },
+            {
+              "id": "bare",
+              "text": "第一条被宿主拒绝的调用：不带前缀的 `search`。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "write-gate",
+              "text": "写操作检查：本次不允许写入，所以写入被拒绝；把 `allow_writes` 改成开启再运行，结果会翻转。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=write_gate]"
+              }
+            },
+            {
+              "id": "no-secret",
+              "text": "服务进程看到的环境变量名里没有密钥。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_secret]"
+              }
+            },
+            {
+              "id": "reaped",
+              "text": "关闭之后检查进程号：遗留进程数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=reaped]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "运行器启动两个独立的服务进程，每条 JSON-RPC 消息都记成 `lesson.mcp_message`。先看握手。",
+              "stage": "runtime"
+            },
+            {
+              "text": "握手回复里有协商出的协议版本，`tools` 能力的 `listChanged` 是 false。",
+              "observe": "handshake"
+            },
+            {
+              "text": "借阅服务列出了四个工具，包括宿主不会登记的 `purge_loans`。",
+              "observe": "listed"
+            },
+            {
+              "text": "两个服务都有 `search`，报告表格里它们是 `catalog__search` 和 `loans__search`。",
+              "observe": "prefixed",
+              "stage": "tool"
+            },
+            {
+              "text": "三次越权调用在宿主这一层被拒绝：先看不带前缀的那条。",
+              "observe": "bare"
+            },
+            {
+              "text": "写操作那一项对照本次是否允许写入；打开 `allow_writes` 再运行一次，写入就会执行，`purge_loans` 仍然被拒绝。",
+              "observe": "write-gate"
+            },
+            {
+              "text": "服务进程只拿到安全的环境变量名，没有密钥。",
+              "observe": "no-secret"
+            },
+            {
+              "text": "最后关闭连接，对进程号做真实检查。",
+              "observe": "reaped"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，两个独立进程各完成了握手，同名工具靠前缀成为两个，被拒绝的调用没有向服务端发出任何消息；关闭后，握手成功的服务进程都不在了。",
+              "写入门的结果和 `allow_writes` 一致：这次是只读，写入被拒绝，服务端没有收到 `register_loan`。"
+            ],
+            "does_not_prove": [
+              "两个服务都是本课自己写的，信任它们不等于可以信任别人的服务端；工具描述里的指令照样会进入模型上下文。",
+              "探测只用了一个只读调用，不能证明写工具可用；进程检查也只覆盖握手成功的进程。"
+            ]
+          }
+        },
+        {
+          "id": "crash-recovery",
+          "title": "断连：写入结果不明，重连后数据没了",
+          "hypothesis": "借阅服务的进程被杀后，宿主在下一次调用才发现，把那笔写入记为结果不明；重连有上限，回来的新进程是空的，已确认和结果不明的写入都不会被自动重发；次数用完就放弃，运行继续。",
+          "arms": [
+            {
+              "id": "recover",
+              "exercise": "crash-recover",
+              "label": "第二次重连成功"
+            },
+            {
+              "id": "giveup",
+              "exercise": "crash-giveup",
+              "label": "两次重连都失败，放弃"
+            },
+            {
+              "id": "model",
+              "exercise": "agent",
+              "label": "模型经两个服务借书，中途断连"
+            }
+          ],
+          "observe": [
+            {
+              "id": "killed",
+              "text": "运行器记下的“进程被终止”，来源是故障注入。",
+              "selector": {
+                "event": "lesson.service_state",
+                "path": "data.cause"
+              }
+            },
+            {
+              "id": "lost",
+              "text": "宿主的第一个信号：错误码 -32000，`Connection closed`。",
+              "selector": {
+                "event": "lesson.service_state",
+                "path": "data.error_code"
+              }
+            },
+            {
+              "id": "unknown-write",
+              "text": "同一笔写入的结果：`ConnectionLost`，不是成功。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type",
+                "name": "loans__register_loan"
+              }
+            },
+            {
+              "id": "failed",
+              "text": "第一次重连失败：进程一启动就退出。",
+              "selector": {
+                "event": "lesson.service_state",
+                "path": "data.error_code",
+                "nth": 2
+              }
+            },
+            {
+              "id": "memory-gone",
+              "text": "重连后查询借阅：`count` 为 0，新进程的内存是空的。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.count",
+                "name": "loans__search"
+              }
+            },
+            {
+              "id": "no-replay",
+              "text": "恢复后没有重发写入：每笔都被写入记录挡住。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_replay]"
+              }
+            },
+            {
+              "id": "gave-up",
+              "text": "放弃重连：状态记为已放弃，写明上限。",
+              "selector": {
+                "event": "lesson.service_state",
+                "path": "data.max_reconnects"
+              }
+            },
+            {
+              "id": "model-view",
+              "text": "模型调用 `loans__search` 得到的断连结果。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type",
+                "name": "loans__search"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三组用同一个借阅服务：先登记一笔借阅，再由运行器杀掉它的进程。",
+              "stage": "runtime"
+            },
+            {
+              "text": "运行器记下进程被终止，宿主这时还不知道。",
+              "observe": "killed"
+            },
+            {
+              "text": "下一次调用没有回复，客户端抛出 -32000，宿主才把服务标为连接断开。",
+              "observe": "lost"
+            },
+            {
+              "text": "那笔写入被记为 `ConnectionLost`：结果不明，不当作成功。",
+              "observe": "unknown-write",
+              "stage": "tool"
+            },
+            {
+              "text": "第一次重连的进程一启动就退出，宿主记下错误码，再试第二次。",
+              "observe": "failed"
+            },
+            {
+              "text": "第二次连上了，可新进程是空的：查询借阅得到 0 条。",
+              "observe": "memory-gone"
+            },
+            {
+              "text": "恢复后再提交两笔写入，都被写入记录挡住，没有重发。",
+              "observe": "no-replay"
+            },
+            {
+              "text": "换成“两次重连都失败”那一组：用完次数，宿主放弃，运行照样结束。",
+              "observe": "gave-up"
+            },
+            {
+              "text": "第三组里是模型在调用：它拿到的是同一种断连结果，重连发生在两轮之间。",
+              "observe": "model-view",
+              "stage": "model"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，被杀进程之后的第一次写入没有得到回复，宿主把它记为结果不明；重连在上限内进行，新进程里查不到已确认的借阅；恢复后没有任何写入被重发；用完次数时宿主放弃并继续运行。"
+            ],
+            "does_not_prove": [
+              "进程是被 `SIGKILL` 杀掉的，真实的崩溃、网络中断或服务端卡死会有别的表现；重连的间隔和次数只在这个设置下核对过。",
+              "模型一组里的决策和回答来自固定脚本，不说明任何真实模型会如实报告断连。"
+            ]
+          }
+        },
+        {
+          "id": "definition-change",
+          "title": "回来的服务换了定义",
+          "hypothesis": "重启的进程可能不回应握手，宿主等满读超时后再试；第二次连上的服务如果改了登记工具的定义，宿主发现变化并暂停那个工具，新增的工具不因被发现而获得权限；服务没变时，重检的结果是空的。",
+          "arms": [
+            {
+              "id": "changed",
+              "exercise": "crash-changed",
+              "label": "第二次连上的是 v2"
+            },
+            {
+              "id": "unchanged",
+              "exercise": "crash-recover",
+              "label": "回来的仍是 v1"
+            }
+          ],
+          "observe": [
+            {
+              "id": "timeout",
+              "text": "第一次重启不回应握手：读超时，错误码 -32001。",
+              "selector": {
+                "event": "lesson.service_state",
+                "path": "data.error_code",
+                "nth": 2
+              }
+            },
+            {
+              "id": "new-schema",
+              "text": "重连后的 `tools/list`：`register_loan` 的新 Schema。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.result.tools",
+                "nth": 3
+              }
+            },
+            {
+              "id": "recheck",
+              "text": "重检的结果：变化、新增、暂停调用的工具。",
+              "selector": {
+                "event": "lesson.service_state",
+                "path": "data.recheck.quarantined"
+              }
+            },
+            {
+              "id": "held",
+              "text": "恢复后再提交写入：`ToolChanged`，没有发给服务端。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type",
+                "name": "loans__register_loan",
+                "nth": 2
+              }
+            },
+            {
+              "id": "rechecked",
+              "text": "报告里“重新确认了工具定义”的检查和暂停的工具。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=rechecked]"
+              }
+            },
+            {
+              "id": "reaped",
+              "text": "两次重启之后，关闭时的进程检查。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=reaped]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这次重启有两处不同：第一次进程不回应，第二次回来的服务换了版本。",
+              "stage": "runtime"
+            },
+            {
+              "text": "进程活着却不读标准输入，宿主等满读超时，错误码是 -32001，不是 -32000。",
+              "observe": "timeout"
+            },
+            {
+              "text": "第二次连上后重新 `tools/list`，`register_loan` 多了必填的 `due_days`。",
+              "observe": "new-schema"
+            },
+            {
+              "text": "宿主拿指纹对比：`register_loan` 变了，`renew_loan` 是新增的，前者被暂停。",
+              "observe": "recheck"
+            },
+            {
+              "text": "再提交写入时，`call` 在发出之前就拒绝，错误是 `ToolChanged`。",
+              "observe": "held",
+              "stage": "tool"
+            },
+            {
+              "text": "对照“回来的仍是 v1”那一组：同样的检查，变化和暂停都是空的。",
+              "observe": "rechecked"
+            },
+            {
+              "text": "两次重启之后，所有握手成功的进程在关闭时都被回收了。",
+              "observe": "reaped"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，等满读超时的重连被记为失败，重连后的定义与第一次确认的基线逐个对比，变化的登记工具被暂停并且没有发给服务端，新增的工具没有路线。"
+            ],
+            "does_not_prove": [
+              "指纹只说明定义和上次确认的不同，不说明新定义是好是坏，也看不见行为的变化。",
+              "v2 是本课故意写成的版本，真实服务端的变化可能出现在描述、注解或没有列在 Schema 里的行为上。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "task",
+          "label": "任务",
+          "help": "每个练习已预设好；改成 agent 需要模型连接。",
+          "options": [
+            {
+              "value": "lifecycle",
+              "label": "握手、命名与权限"
+            },
+            {
+              "value": "crash",
+              "label": "断连与重连"
+            },
+            {
+              "value": "agent",
+              "label": "模型经两个服务调用"
+            }
+          ]
+        },
+        {
+          "name": "allow_writes",
+          "label": "允许写入",
+          "help": "关闭时 `register_loan` 不进白名单，也不交给模型；开启后它仍受写入记录和重连规则约束。"
+        },
+        {
+          "name": "restart_fault",
+          "label": "重启故障",
+          "help": "前几次重启注入的故障：进程一启动就退出，或者活着却不回应握手。",
+          "options": [
+            {
+              "value": "exit-on-start",
+              "label": "一启动就退出（-32000）"
+            },
+            {
+              "value": "hang-on-start",
+              "label": "不回应握手（读超时 -32001）"
+            }
+          ]
+        },
+        {
+          "name": "failing_restarts",
+          "label": "故障的重启次数",
+          "help": "前几次重启带故障，0 到 3；大于重连上限时，宿主会放弃。"
+        },
+        {
+          "name": "max_reconnects",
+          "label": "重连上限",
+          "help": "每个服务在整个运行里最多重连几次，0 到 3；0 表示断开后立即放弃。"
+        },
+        {
+          "name": "restart_variant",
+          "label": "重启后的版本",
+          "help": "v2 的 `register_loan` 多一个必填参数，还多一个 `renew_loan`。",
+          "options": [
+            {
+              "value": "v1",
+              "label": "v1（定义不变）"
+            },
+            {
+              "value": "v2",
+              "label": "v2（定义改变）"
+            }
+          ]
+        },
+        {
+          "name": "query",
+          "label": "检索词",
+          "help": "馆藏检索用的关键词，也决定登记哪本书。"
+        },
+        {
+          "name": "member_id",
+          "label": "读者证号",
+          "help": "登记借阅和查询借阅用的读者。",
+          "options": [
+            {
+              "value": "M-07",
+              "label": "M-07"
+            },
+            {
+              "value": "M-12",
+              "label": "M-12"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "两个服务端都回复 `tools` 能力 `{\"listChanged\": false}`。这对宿主意味着什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "工具变了，服务端也不会通知；宿主要知道变没变，只能自己重新 `tools/list`",
+                  "feedback": "对。所以重连后要主动重检，而且不能读缓存。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务端的工具永远不会变",
+                  "feedback": "不对。`listChanged` 为 false 只说明不通知，不说明不变；v2 就是例子。"
+                },
+                {
+                  "id": "c",
+                  "text": "宿主可以跳过握手",
+                  "feedback": "不对。能力是握手协商出来的，跳过就没有这个信息。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "`listChanged` 是协商出来的承诺：false 的时候，变化只能靠宿主自己去问。"
+            },
+            {
+              "id": "q2",
+              "prompt": "重连过程中宿主先后看到 -32000 和 -32001。两者的区别是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "-32000：连接已经关闭，进程没了；-32001：进程没有回应，等到了读超时",
+                  "feedback": "对。前者立刻失败，后者要等满 5 秒。"
+                },
+                {
+                  "id": "b",
+                  "text": "-32000 是业务错误，-32001 是协议错误",
+                  "feedback": "不对。两个都是连接层的 MCPError，没有一个来自工具。"
+                },
+                {
+                  "id": "c",
+                  "text": "-32001 说明服务端已经执行了请求",
+                  "feedback": "不对。超时只说明没有等到回复，不说明服务端做了什么。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "看错误码和消息：`Connection closed` 与 `timed out` 对应两种不同的失败。"
+            },
+            {
+              "id": "q3",
+              "prompt": "断连时发出的 `register_loan` 没有回复。最准确的记法是？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "结果不明：既不当成功，也不自动重发",
+                  "feedback": "对。三种可能从客户端看一模一样。"
+                },
+                {
+                  "id": "b",
+                  "text": "失败：没有回复就是没执行",
+                  "feedback": "不对。服务端可能执行了，只是回复丢了。"
+                },
+                {
+                  "id": "c",
+                  "text": "成功：请求已经写出去了",
+                  "feedback": "不对。写出去不等于被执行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "工具结果里是 `ConnectionLost`，写入记录里是“结果不明”。"
+            },
+            {
+              "id": "q4",
+              "prompt": "为什么重连握手成功之后，宿主还要做一次可用性探测？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "握手成功、进程在，工具仍可能答不上话；只有真实的只读调用通过才算接通",
+                  "feedback": "对。探测证明的是工具可用，不是进程存在。"
+                },
+                {
+                  "id": "b",
+                  "text": "为了让服务端知道宿主已经回来了",
+                  "feedback": "不对。服务端不关心谁回来了，它只收到请求。"
+                },
+                {
+                  "id": "c",
+                  "text": "为了刷新工具定义的缓存",
+                  "feedback": "不对。本课的客户端 `cache=None`，没有缓存可刷新。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "书里 `docker-compose.yml` 的健康检查只证明能跑 Python，正好是反面例子。"
+            },
+            {
+              "id": "q5",
+              "prompt": "`renew_loan` 在重连后第一次出现。宿主把它交给模型了吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "没有：它没有登记，也就没有路线",
+                  "feedback": "对。新出现的工具要有人登记才会获得权限。"
+                },
+                {
+                  "id": "b",
+                  "text": "交给了：服务端列出的工具都可用",
+                  "feedback": "不对。发现不等于授权。"
+                },
+                {
+                  "id": "c",
+                  "text": "交给了，但标记为暂停",
+                  "feedback": "不对。暂停只针对已登记而定义变了的工具。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "看重检结果里的 `added` 和 `quarantined` 是否包含它。"
+            },
+            {
+              "id": "q6",
+              "prompt": "`max_reconnects` 是 2，两次重连都失败了。接下来会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "宿主放弃：借阅服务的工具不再发出，运行靠馆藏服务继续",
+                  "feedback": "对。放弃也是一种明确的状态，不是卡住。"
+                },
+                {
+                  "id": "b",
+                  "text": "继续重连，直到成功",
+                  "feedback": "不对。上限对整个运行有效，用完就停。"
+                },
+                {
+                  "id": "c",
+                  "text": "整个运行失败，不再返回结果",
+                  "feedback": "不对。运行记录这个服务已放弃，并照常结束。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "看事件里的 `gave_up`，以及放弃之后借阅工具返回的 `ServiceUnavailable`。"
+            },
+            {
+              "id": "q7",
+              "prompt": "报告里 `processes_left` 是 0，哪种进程它没有覆盖？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "握手没有成功、没有进程号的进程",
+                  "feedback": "对。它们由 SDK 回收，课程测试另外在 Linux 上扫描 `/proc`。"
+                },
+                {
+                  "id": "b",
+                  "text": "馆藏服务的进程",
+                  "feedback": "不对。握手成功的两个服务都在名单里。"
+                },
+                {
+                  "id": "c",
+                  "text": "借阅服务重连后的新进程",
+                  "feedback": "不对。每个握手成功的进程号都记进了 `pids`。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "遇到一个数字，先问它的范围。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“借阅服务崩溃：第二次重连成功”，找出宿主第一次把借阅服务记为连接断开的那条事件。",
+          "target": {
+            "event": "lesson.service_state",
+            "path": "data.error_code"
+          },
+          "explanation": "它是 `lesson.service_state`，`state` 是 `lost`，`error_code` 是 -32000，消息是 `Connection closed`。它前面是运行器记的 `stopped`，后面是 `reconnecting`。注意 `stopped` 是运行器知道的事实，`lost` 才是宿主从失败的调用里得知的。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我数过第一个实验里的 `lesson.mcp_message`，能说出每个服务各有几条，以及被拒绝的调用为什么一条也没有。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在断连实验里分别找到了 `stopped`、`lost`、`failed` 和重连成功的事件，并说得出每一条是谁记的。"
+            },
+            {
+              "id": "item-3",
+              "text": "我看到了重连后借阅查询为 0 条，也看到恢复后两笔写入都没有重发。"
+            },
+            {
+              "id": "item-4",
+              "text": "我改过 `restart_variant`，看到定义变化被暂停、新增工具没有路线。"
+            },
+            {
+              "id": "item-5",
+              "text": "我能指出遗留进程数这项检查覆盖什么、不覆盖什么。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "qualified_name",
+      "note": "拼出带服务前缀的工具名，并检查它符合模型接口的函数名字母表。"
+    },
+    {
+      "name": "build_routes",
+      "note": "按登记建工具表：每个登记工具一条路线；重名直接报错。"
+    },
+    {
+      "name": "fingerprint",
+      "note": "工具名称、描述和输入 Schema 的哈希前 12 位，用来发现定义变化。"
+    },
+    {
+      "name": "quarantined",
+      "note": "重连后定义变了的登记工具：确认之前不调用，也不交给模型。"
+    },
+    {
+      "name": "_recheck",
+      "note": "重连后逐个对比指纹，得出变化、新增、移除和暂停调用的工具。"
+    },
+    {
+      "name": "_own",
+      "note": "一条连接的拥有者任务：握手、发现、等待关闭、回收进程都在这里。"
+    },
+    {
+      "name": "connect_all",
+      "note": "连接全部服务，并把第一次发现的工具指纹记为基线。"
+    },
+    {
+      "name": "probe",
+      "note": "可用性探测：用登记好的一次真实只读调用确认服务能干活。"
+    },
+    {
+      "name": "service_info",
+      "note": "服务端诊断工具：报告进程号、借阅条数和收到的环境变量名。"
+    },
+    {
+      "name": "stop_process",
+      "note": "不带宽限地杀掉进程，模拟崩溃；只用于故障注入。"
+    },
+    {
+      "name": "close_and_count",
+      "note": "先关闭全部连接，再检查本次运行启动过的进程是否真的不在了。"
+    },
+    {
+      "name": "wait_gone",
+      "note": "用信号 0 检查进程号，最多等几秒，返回仍在运行的进程号。"
+    },
+    {
+      "name": "ConnectionLost",
+      "note": "调用发出后没有回复：结果不明，不是成功。"
+    },
+    {
+      "name": "WriteNotRepeated",
+      "note": "同一笔写入已确认或结果不明：宿主不再发送。"
+    },
+    {
+      "name": "ToolChanged",
+      "note": "工具定义在重连后变了，确认之前不调用。"
+    },
+    {
+      "name": "ServiceSpec",
+      "note": "宿主对一个服务的登记：标识、启动模块、期望名称、登记工具和探测调用。"
+    },
+    {
+      "name": "available",
+      "note": "交给平台的白名单：登记的读工具，加上本次允许时的写工具。"
+    },
+    {
+      "name": "model_tools",
+      "note": "交给模型的工具：登记、允许且服务现在可用的才在其中。"
+    },
+    {
+      "name": "bridge",
+      "note": "平台在工作线程里调用它，它把 MCP 调用送回事件循环。"
+    },
+    {
+      "name": "READ_TIMEOUT_SECONDS",
+      "note": "每个请求等回复的上限，5 秒；超时是错误码 -32001。"
+    },
+    {
+      "name": "max_reconnects",
+      "note": "每个服务在整个运行里最多重连几次。"
+    },
+    {
+      "name": "MAX_ROUNDS",
+      "note": "Agent 练习的模型调用上限，4 次。"
+    },
+    {
+      "name": "lesson.service_state",
+      "note": "宿主记下的一次连接状态变化：服务、状态、进程号、错误码等。"
+    }
+  ]
+}
