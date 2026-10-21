@@ -189,6 +189,7 @@ class Texts:
     budget_too_small: str
     answer_heading: str
     answer_invalid: str
+    answer_not_ended: str  # {steps}
     answer_claim: str
     status_checked: str
     status_failed: str

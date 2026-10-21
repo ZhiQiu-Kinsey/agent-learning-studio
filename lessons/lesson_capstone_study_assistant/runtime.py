@@ -405,11 +405,10 @@ def _report_suite(context: RunContext, t: Texts, values: Inputs, env: assistant.
                     {"id": "suite", "label": t.label_suite, "value": f"{suite} · {total}"},
                     {"id": "note", "label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.columns_suite), "rows": rows}})
-    # The failure classification: which link broke first, counted over every case that did not pass.
-    groups: dict[str, list[str]] = {}
-    for item in results:
-        if item["verdict"]["verdict"] != "passed":
-            groups.setdefault(item["verdict"]["category"], []).append(item["case"].id)
+    # The failure classification: which link broke first, counted over the cases that failed. An unassessable case
+    # did not fail (nothing broke, something could not be judged), so it is not a failure category; the suite
+    # table above keeps it with the reason.
+    groups = failure_groups(results)
     context.emit("lesson.report", {
         "title": t.report_failures_title, "summary": t.report_failures_summary,
         "metrics": [{"id": "failure_kinds", "label": t.label_failure_kinds, "value": len(groups)}],
@@ -433,13 +432,27 @@ def _report_suite(context: RunContext, t: Texts, values: Inputs, env: assistant.
                                  detail=detail)
 
 
+def failure_groups(results: list[dict]) -> dict[str, list[str]]:
+    """Failed cases by the first broken link. Passed and unassessable cases are not failures and never appear."""
+    groups: dict[str, list[str]] = {}
+    for item in results:
+        if item["verdict"]["verdict"] == "failed":
+            groups.setdefault(item["verdict"]["category"], []).append(item["case"].id)
+    return groups
+
+
+def _no_answer(t: Texts, outcome: dict) -> str:
+    """A run that never answered is not a malformed answer: say which of the two happened."""
+    return t.answer_invalid if outcome.get("ended") else t.answer_not_ended.format(steps=outcome.get("steps", 0))
+
+
 def _answer_single(t: Texts, case: Case, outcome: dict, verdict: dict) -> str:
     """The text shown to the learner is rebuilt from checked facts; unchecked model prose never passes as the answer."""
     lines = [t.answer_heading.format(case=_label(t, case), question=t.case_questions[case.id])]
     if case.kind in ("ask", "injection"):
         check = verdict.get("check")
         if check is None:
-            lines.append(t.answer_invalid)
+            lines.append(_no_answer(t, outcome))
         else:
             for claim in check.claims:
                 ids = ", ".join(c.chunk_id for c in claim.citations)
@@ -457,7 +470,7 @@ def _answer_single(t: Texts, case: Case, outcome: dict, verdict: dict) -> str:
     elif case.kind == "practice":
         answer = outcome.get("answer")
         if answer is None:
-            lines.append(t.answer_invalid)
+            lines.append(_no_answer(t, outcome))
         else:
             for item in answer.items:
                 ids = ", ".join(c.chunk_id for c in item.citations)
@@ -468,7 +481,7 @@ def _answer_single(t: Texts, case: Case, outcome: dict, verdict: dict) -> str:
         truth, explanation = outcome["truth"], outcome.get("explanation")
         lines.append(t.answer_trace_truth.format(**{key: (t.word_yes if value is True else t.word_no if value is False else value)
                                                     for key, value in truth.items()}))
-        lines.append(t.answer_trace_said.format(summary=explanation.summary) if explanation else t.answer_invalid)
+        lines.append(t.answer_trace_said.format(summary=explanation.summary) if explanation else _no_answer(t, outcome))
     else:
         approvals = [t.decisions.get(item["outcome"], item["outcome"]) for item in outcome["approvals"]]
         lines.append(t.answer_progress.format(

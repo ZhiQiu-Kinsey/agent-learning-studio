@@ -439,19 +439,22 @@ def resume_save(env: Env, case: Case, path: Path, state: dict, *, origin: str = 
             plan.set("approval", "skipped", t.reason_already_done)
             return {"resumed": True, "applied": False, "reason": "replayed", "approvals": 0,
                     "operation_id": payload["operation_id"], "version": done[0],
-                    "records": session.store.records(LEARNER)}
+                    "records": session.store.records(LEARNER), "executions": list(session.executions),
+                    "approval_records": list(session.approvals)}
         plan.set("approval", "in_progress")
         try:
             result = session.finish_write(payload)
             plan.set("approval", "done")
             return {"resumed": True, "applied": result["applied"], "reason": result["reason"],
                     "approvals": len(session.approvals), "operation_id": payload["operation_id"],
-                    "version": result["version"], "records": session.store.records(LEARNER)}
+                    "version": result["version"], "records": session.store.records(LEARNER),
+                    "executions": list(session.executions), "approval_records": list(session.approvals)}
         except gate.ApprovalRejected as error:
             plan.set("approval", "failed", str(error))
             return {"resumed": True, "applied": False, "reason": error.rule, "approvals": len(session.approvals),
                     "operation_id": payload["operation_id"], "version": None,
-                    "records": session.store.records(LEARNER)}
+                    "records": session.store.records(LEARNER), "executions": list(session.executions),
+                    "approval_records": list(session.approvals)}
     finally:
         session.close()
 
@@ -465,4 +468,8 @@ def resume_after_crash(env: Env, case: Case, path: Path, crashed: Session) -> di
     state = crashed.checkpoint_state
     first = resume_save(env, case, path, state)
     second = resume_save(env, case, path, state)
-    return {"resume_first": first, "resume_second": second, "state": state, "ended": True}
+    # The writes of the resumed sessions are real executions of this case too: the permission check must see them.
+    executions = list(crashed.executions) + first["executions"] + second["executions"]
+    approvals = list(crashed.approvals) + first["approval_records"] + second["approval_records"]
+    return {"resume_first": first, "resume_second": second, "state": state, "ended": True,
+            "executions": executions, "approvals": approvals}

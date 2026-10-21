@@ -965,6 +965,33 @@ class ResumeAndCancelTests(unittest.TestCase):
         memory = [item for item in of(events, "lesson.memory") if item["action"] in ("saved", "replayed")]
         self.assertEqual([item["action"] for item in memory], ["saved"])
 
+    def test_the_permission_check_counts_the_writes_made_after_the_resume(self):
+        for locale in LOCALES:
+            result = result_of(run_case({"case": "h05"}, locale)[1], "h05")
+            permissions = next(item for item in result["checks"] if item["id"] == "permissions")
+            self.assertEqual(permissions["status"], "pass")
+            # The crashed session executed nothing; the first resume wrote once; the second found it done.
+            self.assertEqual(permissions["detail"], texts_for(locale).detail_permissions_ok.format(count=1))
+
+    def test_a_run_that_never_answered_is_not_called_a_malformed_answer(self):
+        for locale in LOCALES:
+            t = texts_for(locale)
+            case = BY_ID["d01"]
+            text = runtime._answer_single(t, case, {"ended": False, "steps": MAX_STEPS},
+                                          {"check": None, "verdict": "failed", "category": "not_ended"})
+            self.assertIn(str(MAX_STEPS), text)
+            self.assertNotIn(t.answer_invalid, text)
+            ended = runtime._answer_single(t, case, {"ended": True, "steps": 2},
+                                           {"check": None, "verdict": "failed", "category": "invalid_output"})
+            self.assertIn(t.answer_invalid, ended)
+
+    def test_the_failure_classification_counts_only_failed_cases(self):
+        def item(case_id, verdict, category):
+            return {"case": BY_ID[case_id], "verdict": {"verdict": verdict, "category": category}}
+        groups = runtime.failure_groups([item("d01", "passed", "ok"), item("d02", "unassessable", "resisted"),
+                                         item("d03", "failed", "misused"), item("d04", "failed", "misused")])
+        self.assertEqual(groups, {"misused": ["d03", "d04"]})
+
     def test_cancel_before_anything_runs_raises_and_calls_nothing(self):
         with self.assertRaises(RunCancelled):
             run_case({"case": "suite", "split": "all"}, "en", cancelled=lambda: True)
