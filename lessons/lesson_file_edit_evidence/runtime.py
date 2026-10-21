@@ -47,8 +47,9 @@ class Inputs(LessonInputs):
 INPUT_MODEL = Inputs
 
 
-def tool_definitions(t: Texts, names: list[str]) -> list[dict]:
+def tool_definitions(locale: str, names: list[str] | None = None) -> list[dict]:
     """Tool definitions in the run's language; names and parameter names are code and stay the same."""
+    t = texts_for(locale)
     def string(description):
         return {"type": "string", "description": description}
 
@@ -71,7 +72,7 @@ def tool_definitions(t: Texts, names: list[str]) -> list[dict]:
     return [{"type": "function", "function": {
         "name": name, "description": specs[name][0],
         "parameters": {"type": "object", "properties": specs[name][1], "required": specs[name][2],
-                       "additionalProperties": False}}} for name in names]
+                       "additionalProperties": False}}} for name in (names or specs)]
 
 
 def read(path: Path) -> str:
@@ -190,7 +191,8 @@ def run_edit(context: RunContext, t: Texts, values: dict) -> str:
         meter = Meter(write_tool)
         available = {"read_file": file_tools.read_file, write_tool: getattr(file_tools, write_tool),
                      "run_tests": run_tests}
-        stop, claim = agent_loop(context, t, workspace, tool_definitions(t, list(available)), available, meter)
+        definitions = tool_definitions(context.locale, list(available))
+        stop, claim = agent_loop(context, t, workspace, definitions, available, meter)
         # The platform's own run: a command of the platform, but it still executes code the model edited, so it
         # goes past the same human as the model's own test runs.
         context.check_cancelled()
