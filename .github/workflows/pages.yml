@@ -1,0 +1,117 @@
+name: Website
+
+# Builds the static site in site/ and publishes it to GitHub Pages from main.
+# Pull requests only build it, as a check. The platform itself is never deployed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "curriculum/catalog.json"
+      - "curriculum/catalog.*.json"
+      - "lessons/*/lesson.json"
+      - "lessons/*/lesson.*.json"
+      - "lessons/*/recordings/**"
+      - "docs/assets/screenshots/**"
+      # The replay reuses the platform's views, styles, motion and UI texts.
+      - "frontend/src/stage/**"
+      - "frontend/src/components/**"
+      - "frontend/src/lesson-extensions/**"
+      - "frontend/src/styles/**"
+      - "frontend/src/motion/**"
+      - "frontend/src/i18n/**"
+      - "frontend/src/hooks/**"
+      - "frontend/src/types.ts"
+      - "frontend/src/trace.ts"
+      - "frontend/src/generated/**"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "curriculum/catalog.json"
+      - "curriculum/catalog.*.json"
+      - "lessons/*/lesson.json"
+      - "lessons/*/lesson.*.json"
+      - "lessons/*/recordings/**"
+      - "docs/assets/screenshots/**"
+      # The replay reuses the platform's views, styles, motion and UI texts.
+      - "frontend/src/stage/**"
+      - "frontend/src/components/**"
+      - "frontend/src/lesson-extensions/**"
+      - "frontend/src/styles/**"
+      - "frontend/src/motion/**"
+      - "frontend/src/i18n/**"
+      - "frontend/src/hooks/**"
+      - "frontend/src/types.ts"
+      - "frontend/src/trace.ts"
+      - "frontend/src/generated/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build website
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      # Only recordings that pass the platform's own check (integrity hash, envelope replay,
+      # secret scan, source hash) are published.
+      - name: Validate recordings
+        run: uv run python scripts/validate_recordings.py
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        run: npm ci --prefix site
+
+      - name: Build site
+        run: npm --prefix site run build
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
