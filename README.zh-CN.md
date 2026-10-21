@@ -18,6 +18,8 @@
 
 [English](README.md) · **简体中文**
 
+**官网：**[zhiqiu-kinsey.github.io/agent-learning-studio](https://zhiqiu-kinsey.github.io/agent-learning-studio/)：课程地图与真实运行的只读回放。平台本身在你的电脑上运行。
+
 <img alt="Agent Learning Studio 首页" src="docs/assets/screenshots/zh-CN/home.png" width="900">
 
 </div>
@@ -175,6 +177,7 @@ server/        FastAPI 接口、课程发现与校验、内容 schema、事件�
 lessons/       每课一个目录：lesson.json、content.json、Python 实现、测试夹具与测试
 curriculum/    课程目录 catalog.json（唯一数据源）、术语表、前置导学、JSON Schema
 frontend/      React + TypeScript + Vite + Tailwind CSS 4
+site/          官网（GitHub Pages 静态站）：课程地图与随课录制的只读回放
 scripts/       校验、生成、新课脚手架、录制导出、用词报告
 tests/         Python 测试（浏览器测试在 frontend/e2e/）
 docs/          课程大纲与架构文档

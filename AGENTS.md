@@ -44,6 +44,7 @@ Agent Learning Studio 是一个本地运行的 Agent 可视化教学平台，面
 | `lessons/lesson_*/` | 每课一个目录：`lesson.json`（实现清单）、`content.json`（教学内容 v2）、Python 实现、`locales/`（运行时文本，每种运行语言一份）、`fixtures.py`、`test_lesson.py`、README（英文 `README.md`，中文 `README.zh-CN.md`） |
 | `curriculum/` | `catalog.json`（课程目录唯一数据源）、`glossary.json`（术语表）、`onboarding.json`（前置导学）、`schema/`（导出的 JSON Schema） |
 | `frontend/src/` | 前端，结构见 `docs/architecture/frontend-workspace.md` |
+| `site/` | 官网静态站（GitHub Pages）：构建时从课程目录和随课录制生成，回放复用 `frontend/src` 的组件，见 `site/README.md` |
 | `tests/`、`frontend/e2e/` | Python 测试、Playwright 浏览器测试；前端单元测试在各模块的 `__tests__/` |
 | `scripts/` | 校验、生成、脚手架、录制导出、用词报告 |
 | `docs/` | `course-plan.md` / `course-plan.en.md`（由目录生成的中英文课程大纲）与 `architecture/`（架构约定与作者指南） |

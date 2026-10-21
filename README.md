@@ -18,6 +18,8 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 
 **English** · [简体中文](README.zh-CN.md)
 
+**Website:** [zhiqiu-kinsey.github.io/agent-learning-studio](https://zhiqiu-kinsey.github.io/agent-learning-studio/) — an introduction with the curriculum map and read-only replays of real runs. The platform itself runs on your machine.
+
 <img alt="Agent Learning Studio home page" src="docs/assets/screenshots/en/home.png" width="900">
 
 </div>
@@ -175,6 +177,7 @@ server/        FastAPI routes, lesson discovery & validation, content schema, ev
 lessons/       one folder per lesson: lesson.json, content.json, Python code, fixtures, tests
 curriculum/    catalog.json (single source of truth), glossary.json, onboarding, JSON Schemas
 frontend/      React + TypeScript + Vite + Tailwind CSS 4
+site/          static website (GitHub Pages): curriculum map and read-only replays of lesson recordings
 scripts/       validation, code generation, lesson scaffolding, recordings, terminology reports
 tests/         Python tests (browser tests live in frontend/e2e/)
 docs/          syllabus and architecture docs
