@@ -30,8 +30,8 @@ TEXTS = Texts(
     tasks={
         "approve_write": "The problem in TKT-102 has been dealt with. First look at the ticket's current status, change its status to resolved, then notify its owner alice@corp.example that the ticket is done.",
         "reject_timeout": "The fix for TKT-103 is live. Change its status to resolved and notify the people concerned.",
-        "edit_recheck": "Notify the owner of TKT-104 that the ticket is done.",
-        "swap_guard": "Notify alice@corp.example that TKT-102 is done and ask her to check it.",
+        "edit_recheck": "The problem in TKT-104 has been dealt with. Notify the ticket's owner.",
+        "swap_guard": "The problem in TKT-102 has been dealt with. Notify alice@corp.example and ask her to check it.",
     },
     record_titles={
         "TKT-101": "Printer cannot reach the network",
@@ -59,6 +59,7 @@ TEXTS = Texts(
         "record_not_found": "Ticket {record_id} does not exist.",
         "unknown_owner": "Owner {owner} is not on the list.",
     },
+    recheck_edited_fields="Fields edited at approval: {fields}.",
     no_note="no note",
     approve_summary={
         "update_record": "Set {field} of {record_id} to \"{value}\"",

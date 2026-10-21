@@ -143,7 +143,9 @@ class Gate:
             event["denied_by"] = recheck.hook
         self.context.emit("lesson.hook_recheck", event)
         if recheck.verdict == "deny":
-            raise Refusal("hook_denied", hook=recheck.hook, reason=recheck.reason, phase="recheck")
+            # Name the fields the person edited, so the model (and the reader) can see which edit tripped the rule.
+            raise Refusal("hook_denied", hook=recheck.hook, reason=recheck.reason, phase="recheck",
+                          fields=", ".join(change["field"] for change in edited))
         if recheck.arguments != arguments:
             # Approving X does not approve X after a rewrite: the person would have to approve the rewritten call.
             raise Refusal("edit_not_normalized", fields=", ".join(change["field"] for change in recheck.changes))
@@ -198,6 +200,8 @@ class Gate:
         message = self.t.refusals[refusal.error_type].format(
             **{"fields": "", "hook": "", "note": "", "reason_text": self.t.hook_reasons.get(detail.get("reason"), ""),
                **detail})
+        if detail.get("phase") == "recheck":
+            message += " " + self.t.recheck_edited_fields.format(fields=detail["fields"])
         return {"ok": False, "executed": False, "tool": entry["tool"], "error_type": refusal.error_type,
                 "error": message, **detail}
 

@@ -22,6 +22,7 @@ class Texts:
     hook_reasons: dict[str, str]  # keyed by the reason code a deny hook returns
     desk_errors: dict[str, str]  # keyed by DeskError code; {record_id} / {owner}
     no_note: str
+    recheck_edited_fields: str  # {fields}: appended to a hook denial of an edited payload
     # The one-line summary on an approval card; the facts it states are checked against the payload.
     approve_summary: dict[str, str]  # update_record {record_id} {field} {value}; send_notice {recipient} {subject} {chars}
     # Report 1: the hooks and settings of this run.

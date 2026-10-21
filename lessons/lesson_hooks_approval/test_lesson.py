@@ -484,6 +484,9 @@ class EditedApprovalTests(unittest.TestCase):
         result = results(events)[-1]
         self.assertEqual((result["error_type"], result["phase"], result["hook"], result["executed"]),
                          ("hook_denied", "recheck", "recipient_domain", False))
+        # The message the model reads names the edited field, not only the rule that fired.
+        self.assertEqual(result["fields"], "recipient")
+        self.assertIn("recipient", result["error"])
         self.assertEqual(run_case.final[0]["outbox"], [])
         self.assertNotIn("lesson.guard", kinds(events))
         self.assertTrue(item(ledger_report(events), "checks", "refused-not-executed")["passed"])

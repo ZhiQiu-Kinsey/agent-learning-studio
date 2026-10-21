@@ -28,8 +28,8 @@ TEXTS = Texts(
     tasks={
         "approve_write": "TKT-102 的问题已经处理完了。请先看一下这张工单现在的状态，把状态改成 resolved，再通知负责人 alice@corp.example：这张工单已处理完。",
         "reject_timeout": "TKT-103 的修复已经上线。请把它的状态改成 resolved，并通知相关的人。",
-        "edit_recheck": "请通知 TKT-104 的负责人：这张工单已经处理完。",
-        "swap_guard": "请通知 alice@corp.example：TKT-102 已处理完，请她核对一下。",
+        "edit_recheck": "请通知 TKT-104 的负责人：这张工单的问题已经处理完了。",
+        "swap_guard": "TKT-102 的问题已经处理完了。请通知 alice@corp.example，并请她核对一下。",
     },
     record_titles={
         "TKT-101": "打印机连不上网络",
@@ -58,6 +58,7 @@ TEXTS = Texts(
         "unknown_owner": "负责人 {owner} 不在名单里。",
     },
     no_note="没有备注",
+    recheck_edited_fields="审批时被改动的字段：{fields}。",
     approve_summary={
         "update_record": "把 {record_id} 的 {field} 改为“{value}”",
         "send_notice": "向 {recipient} 发送通知“{subject}”，正文 {chars} 字",
