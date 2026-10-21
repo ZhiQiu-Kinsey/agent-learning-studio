@@ -18,7 +18,11 @@
       "modeLocal": "Run locally",
       "noteModel": "Model requests are billed by the provider's rules. Tools run in local Python.",
       "noteLocal": "This exercise doesn't call a model or need a model connection. A local runner executes it.",
-      "runtimeLocale": "This lesson's runner only speaks {{language}} for now: its questions, prompts and run events are in {{language}}."
+      "runtimeLocale": "This lesson's runner only speaks {{language}} for now: its questions, prompts and run events are in {{language}}.",
+      "stopping": "Stopping: the server was asked to stop; waiting for it to record how the run ended.",
+      "detach": "Disconnect the event stream (the run goes on)",
+      "detachedNote": "The event stream is disconnected; the run on the server has not stopped. Reconnecting reads on from the last event, and the server's record decides how the run ended.",
+      "reattach": "Reconnect"
     },
     "answer": {
       "title": "Final answer",
@@ -27,7 +31,15 @@
       "waitingLocal": "Waiting for the local program to finish the task…",
       "empty": "The answer will appear here.",
       "emptyReplay": "During replay, this stays in sync with the selected position.",
-      "runLocale": "This run was recorded in {{language}}: its question, prompts and events stay in {{language}} when you replay it."
+      "runLocale": "This run was recorded in {{language}}: its question, prompts and events stay in {{language}} when you replay it.",
+      "resumedFrom": "This run resumed from checkpoint “{{name}}” of run {{run}}: nothing of the old run was replayed, and every request here is a new one.",
+      "stream": {
+        "receiving": "Streaming: the text of the {{chunks}} chunks that have arrived so far.",
+        "completed": "The stream ended after {{chunks}} chunks; the final answer is the run's answer event.",
+        "stopped": "The lesson code stopped receiving after {{chunks}} chunks.",
+        "cancelled": "The run was stopped: only the {{chunks}} chunks received before the stop are here; later chunks were not recorded.",
+        "error": "The stream broke off: these are the {{chunks}} chunks received before the error."
+      }
     },
     "connection": {
       "none": "Not connected",
@@ -48,7 +60,9 @@
       "running": "Running",
       "completed": "Completed",
       "ended": "Ended",
-      "idle": "Waiting to run"
+      "idle": "Waiting to run",
+      "stopping": "Stopping",
+      "awaitingApproval": "Awaiting approval"
     },
     "metrics": {
       "requests": "Model requests",
@@ -59,7 +73,10 @@
       "model": "Waiting for the model response",
       "round": "Round {{round}} request",
       "connecting": "Connecting",
-      "seconds": "{{value}} s"
+      "seconds": "{{value}} s",
+      "approval": "The run is paused, waiting for a person's approval",
+      "streaming": "Streaming · {{chunks}} chunks received",
+      "firstChunk": "first chunk {{ms}} ms"
     },
     "calls": {
       "region": "Tool calls in this run",
@@ -90,7 +107,11 @@
         "tool_result": "Python execution result",
         "answer": "Final answer",
         "error": "Run error",
-        "done": "Run finished"
+        "done": "Run finished",
+        "response_delta": "Stream chunks",
+        "approval_requested": "Approval requested",
+        "approval_resolved": "Approval result",
+        "checkpoint": "Checkpoint"
       },
       "programCall": "Runner calls a tool",
       "sdkRequest": "SDK-standardized request",
@@ -113,7 +134,37 @@
       "embeddingResponseSummary_one": "{{count}} vector · dimensions {{dimensions}} · {{seconds}} s",
       "embeddingResponseSummary_other": "{{count}} vectors · dimensions {{dimensions}} · {{seconds}} s",
       "embeddingDefaultDimensions": "provider default",
-      "embeddingUnknownDimensions": "not returned"
+      "embeddingUnknownDimensions": "not returned",
+      "streamRequest": "Streamed request",
+      "streamResponse": "Assembled streamed response",
+      "deltaSummary": "chunks {{from}}–{{to}} · +{{chars}} chars",
+      "streamResponseSummary": "assembled from {{chunks}} chunks · {{status}}",
+      "streamStatus": {
+        "completed": "stream ended",
+        "stopped": "stopped by the lesson",
+        "cancelled": "stopped",
+        "error": "broke off"
+      },
+      "approvalResolvedSummary": "{{outcome}} · {{by}}",
+      "approvalOutcome": {
+        "approved": "approved",
+        "rejected": "rejected",
+        "timeout": "timed out",
+        "cancelled": "run stopped"
+      },
+      "approvalBy": {
+        "learner": "decided by the learner",
+        "offline_fixture": "decided by an offline fixture",
+        "timeout": "nobody decided",
+        "run_cancelled": "run stopped"
+      },
+      "checkpointSummary": "{{name}} ({{id}})",
+      "doneCancelled": "cancelled · {{reason}}",
+      "cancelReason": {
+        "user_stop": "Stop pressed",
+        "page_closed": "page closed",
+        "api": "another caller"
+      }
     },
     "list": {
       "title": "Execution order",
@@ -140,7 +191,15 @@
       "embeddingShowFull": "Show full JSON",
       "embeddingShowShort": "Truncate vectors",
       "embeddingHidden_one": "…{{count}} more number (display truncated)",
-      "embeddingHidden_other": "…{{count}} more numbers (display truncated)"
+      "embeddingHidden_other": "…{{count}} more numbers (display truncated)",
+      "streamDelta": "Stream chunks: the provider's chunks recorded unchanged, in arrival order. Chunks that arrive within a short interval share one event so there are not too many events; no chunk is dropped.",
+      "streamAssembled": "The full response the platform assembled from {{count}} chunks, not a single response body the provider sent. data.stream records the first-chunk time, how the stream ended and why it stopped.",
+      "streamHttp": "Bailian native HTTP: each chunk is the JSON of one SSE data line, with the SSE framing removed.",
+      "streamSdk": "LiteLLM: each chunk is the SDK's standardized chunk object, not the provider's raw SSE line.",
+      "approval": "Approval record: the request holds the complete payload awaiting approval and its digest; the result says who decided what, and when. Replays are read-only and cannot approve again.",
+      "checkpoint": "Checkpoint: the execution position and state the lesson saved. It is kept in the run record and survives a server restart.",
+      "resumeHint": "You can start a new run from this checkpoint; the old run's requests are not replayed.",
+      "resume": "Resume from “{{name}}”"
     },
     "source": {
       "file": "Lab source files",
@@ -216,5 +275,51 @@
   "language": {
     "zh-CN": "Chinese",
     "en": "English"
+  },
+  "approval": {
+    "region": "Approvals",
+    "title": "Approval: {{kind}}",
+    "payload": "Payload awaiting approval",
+    "digest": "Payload digest {{digest}}",
+    "remaining": "{{seconds}} s left (timed by the server's deadline; then it counts as a timeout)",
+    "noteLabel": "Reason (optional, written into the run record)",
+    "notePlaceholder": "For example: path checked, OK to write",
+    "approve": "Approve",
+    "approveEdited": "Approve the edited payload",
+    "reject": "Reject",
+    "edit": "Edit payload",
+    "editCancel": "Keep the payload",
+    "editLabel": "Edited payload (a JSON object)",
+    "editHint": "You approve the payload as you edited it; the edit is recorded next to the original.",
+    "editSyntax": "The JSON is malformed; check the quotes, commas and brackets.",
+    "editNotObject": "The payload must be a JSON object.",
+    "sentApprove": "“Approve” sent; waiting for the run to record the decision.",
+    "sentReject": "“Reject” sent; waiting for the run to record the decision.",
+    "decided": "{{outcome}} · {{by}}",
+    "waited": "waited {{seconds}} s",
+    "noteRecorded": "Reason: {{note}}",
+    "editedPayload": "Payload actually approved (edited)",
+    "readonly": "Run record, read-only.",
+    "notLive": "You cannot decide while the event stream is disconnected or the run is stopping; reconnect first.",
+    "replayPending": "At this point of the replay the run is waiting for approval. Replays are read-only.",
+    "risk": {
+      "low": "low risk",
+      "medium": "medium risk",
+      "high": "high risk",
+      "critical": "critical risk"
+    },
+    "status": {
+      "pending": "awaiting decision",
+      "approved": "approved",
+      "rejected": "rejected",
+      "timeout": "timed out",
+      "cancelled": "run stopped"
+    },
+    "by": {
+      "learner": "decided by the learner",
+      "offline_fixture": "decided by an offline test fixture",
+      "timeout": "nobody decided in time",
+      "run_cancelled": "the run was stopped"
+    }
   }
 }

@@ -6,6 +6,7 @@ import { ContextFilm } from "../../../stage/ContextFilm";
 import { Lenses } from "../../../stage/Lenses";
 import { Timeline } from "../../../stage/Timeline";
 import { ToolCards } from "../../../stage/ToolCards";
+import { ApprovalPanel } from "./ApprovalPanel";
 import { EventDetail } from "./EventDetail";
 import { EventList } from "./EventList";
 import { ReplayToolbar } from "./ReplayToolbar";
@@ -54,7 +55,15 @@ export function RunObservatory({
         />
       </LessonExtension>
       <RunMetrics visible={s.visible} cursor={s.cursor} />
-      {s.running && <RunActivity openLlm={run.openLlm} last={run.last} />}
+      {s.running && (
+        <RunActivity
+          openLlm={run.openLlm}
+          openApproval={run.openApproval}
+          stream={run.stream}
+          last={run.last}
+        />
+      )}
+      <ApprovalPanel studio={s} live={run.live} />
       <ToolCallChips
         spans={run.stage.spans}
         events={s.events}

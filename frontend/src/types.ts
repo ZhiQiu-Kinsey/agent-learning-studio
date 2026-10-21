@@ -140,9 +140,15 @@ export type RunRecord = {
   representation: Representation | null;
   provenance: Provenance;
   schema_version: number;
-  status: "running" | "completed" | "error" | "cancelled" | "interrupted";
+  /** paused: the run waits at an approval gate for a person's decision. */
+  status:
+    "running" | "paused" | "completed" | "error" | "cancelled" | "interrupted";
   created_at: string;
   finished_at: string | null;
+  /** Shared by a run and every run resumed from its checkpoints. */
+  thread_id?: string | null;
+  resumed_from_run?: string | null;
+  resumed_from_checkpoint?: string | null;
   event_count: number;
   last_seq: number;
 };

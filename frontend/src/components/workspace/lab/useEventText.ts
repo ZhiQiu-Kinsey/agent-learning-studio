@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type { Trace } from "../../../types";
+import { approvalRequestOf, approvalResolutionOf } from "./approvals";
 import { embeddingFacts, isEmbeddingEvent } from "./embeddings";
+import { deltaRange, streamFacts } from "./streaming";
 
 const NAMED = new Set([
   "run_start",
@@ -13,6 +15,10 @@ const NAMED = new Set([
   "answer",
   "error",
   "done",
+  "response_delta",
+  "approval_requested",
+  "approval_resolved",
+  "checkpoint",
 ]);
 
 const isSdkExchange = (e: Trace) =>
@@ -39,6 +45,9 @@ export function eventText(t: EventT) {
       return e.type === "request"
         ? t("embeddingRequest")
         : t("embeddingResponse");
+    if (e.type === "request" && e.data.stream === true)
+      return t("streamRequest");
+    if (streamFacts(e)) return t("streamResponse");
     if (isSdkExchange(e))
       return e.type === "request" ? t("sdkRequest") : t("sdkResponse");
     if (NAMED.has(e.type)) return t(`name.${e.type}` as "name.run_start");
@@ -76,6 +85,41 @@ export function eventText(t: EventT) {
             : "?",
       });
     }
+    if (e.type === "response_delta") {
+      const range = deltaRange(e);
+      const added = typeof e.data.text === "string" ? e.data.text.length : 0;
+      return range
+        ? t("deltaSummary", { from: range[0], to: range[1], chars: added })
+        : t("custom");
+    }
+    const facts = streamFacts(e);
+    if (facts)
+      return t("streamResponseSummary", {
+        chunks: facts.chunkCount,
+        status: t(`streamStatus.${facts.status}` as "streamStatus.completed", {
+          defaultValue: facts.status,
+        }),
+      });
+    const approval = approvalRequestOf(e);
+    if (approval) return approval.summary;
+    const resolution = approvalResolutionOf(e);
+    if (resolution)
+      return t("approvalResolvedSummary", {
+        outcome: t(
+          `approvalOutcome.${resolution.outcome}` as "approvalOutcome.approved",
+          {
+            defaultValue: resolution.outcome,
+          },
+        ),
+        by: t(`approvalBy.${resolution.decidedBy}` as "approvalBy.learner", {
+          defaultValue: resolution.decidedBy,
+        }),
+      });
+    if (e.type === "checkpoint")
+      return t("checkpointSummary", {
+        name: String(e.data.name ?? ""),
+        id: String(e.data.checkpoint_id ?? ""),
+      });
     if (e.type === "request") return t("request", { round: e.round || 1 });
     if (e.type === "response")
       return typeof e.data.duration_ms === "number"
@@ -83,7 +127,17 @@ export function eventText(t: EventT) {
         : t("responded");
     if (e.type === "answer") return String(e.data.content || "");
     if (e.type === "error") return String(e.data.message || t("errorDetail"));
-    if (e.type === "done") return String(e.data.status || t("ended"));
+    if (e.type === "done")
+      return typeof e.data.cancel_reason === "string"
+        ? t("doneCancelled", {
+            reason: t(
+              `cancelReason.${e.data.cancel_reason}` as "cancelReason.user_stop",
+              {
+                defaultValue: e.data.cancel_reason,
+              },
+            ),
+          })
+        : String(e.data.status || t("ended"));
     if (e.type === "run_start") return t("runStart");
     return typeof e.data.summary === "string"
       ? e.data.summary

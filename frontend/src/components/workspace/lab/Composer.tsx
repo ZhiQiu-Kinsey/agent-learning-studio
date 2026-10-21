@@ -103,6 +103,39 @@ export function Composer({
           kind="runtime"
           testId="lab-runtime-locale"
         />
+        {/* Closing the event stream is not a stop: the run goes on at the server. */}
+        {s.running && s.runId && (
+          <div className="composer-connection">
+            {s.stopping ? (
+              <p role="status" data-testid="lab-stopping">
+                {t("stopping")}
+              </p>
+            ) : s.detached ? (
+              <>
+                <p role="status" data-testid="lab-detached-note">
+                  {t("detachedNote")}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={s.reattach}
+                  data-testid="lab-reattach-button"
+                >
+                  {t("reattach")}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={s.detach}
+                data-testid="lab-detach-button"
+              >
+                {t("detach")}
+              </Button>
+            )}
+          </div>
+        )}
         {s.restored && (
           <p
             className="composer-restored"

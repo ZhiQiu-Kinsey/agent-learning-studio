@@ -19,7 +19,8 @@ export const TRACE_CONTRACT = {
     "agent",
     "step",
     "llm",
-    "tool"
+    "tool",
+    "approval"
   ],
   "default_actor": "agent",
   "span_events": {
@@ -47,6 +48,13 @@ export const TRACE_CONTRACT = {
       "model_payload": true,
       "pair_field": "branch"
     },
+    "response_delta": {
+      "phase": "progress",
+      "span_kind": "llm",
+      "opened_by": "request",
+      "model_payload": true,
+      "pair_field": "branch"
+    },
     "tool_call": {
       "phase": "start",
       "span_kind": "tool",
@@ -58,6 +66,21 @@ export const TRACE_CONTRACT = {
       "span_kind": "tool",
       "opened_by": "tool_call",
       "pair_field": "tool_call_id"
+    },
+    "approval_requested": {
+      "phase": "start",
+      "span_kind": "approval",
+      "closed_by": "approval_resolved",
+      "pair_field": "approval_id"
+    },
+    "approval_resolved": {
+      "phase": "end",
+      "span_kind": "approval",
+      "opened_by": "approval_requested",
+      "pair_field": "approval_id"
+    },
+    "checkpoint": {
+      "phase": "instant"
     },
     "answer": {
       "phase": "instant"

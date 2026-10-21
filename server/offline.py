@@ -75,3 +75,17 @@ def completion_for(spec, exercise_id, inputs=None, locale="zh-CN"):
 def embedding_for(spec, exercise_id, inputs=None, locale="zh-CN"):
     """Embedding 夹具：create_embedding(exercise_id, inputs, locale) 返回 embedding(body, api_key)。"""
     return _fixture_for(spec, "embedding_factory", exercise_id, inputs, locale)
+
+
+def stream_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+    """流式夹具：create_stream(exercise_id, inputs, locale) 返回 stream(body, api_key)，后者返回分块字典的可迭代对象。"""
+    return _fixture_for(spec, "stream_factory", exercise_id, inputs, locale)
+
+
+def approval_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+    """审批夹具：create_approval_policy(exercise_id, inputs, locale) 返回 policy(request)。
+
+    policy 返回 {"decision": "approve" | "reject" | "timeout", "note"?, "edited_payload"?}，事件记为
+    decided_by="offline_fixture"；返回 None 时交给 POST /api/runs/{id}/approvals，与真实运行相同。
+    """
+    return _fixture_for(spec, "approval_factory", exercise_id, inputs, locale)

@@ -100,6 +100,46 @@ class SDKCompletion:
         response = sdk_completion(**kwargs)
         return response if isinstance(response, dict) else response.model_dump(exclude_none=True)
 
+    def stream(self, body, api_key):
+        """Open one streamed request (the body already says stream=True); yields each SDK chunk's model_dump().
+
+        The chunks are LiteLLM's standardized chunk objects, not the provider's SSE lines, so the
+        run keeps the sdk_standardized label. Only the iterating thread closes the stream.
+        """
+        profile = self.profile
+        if not profile.config_ready or not body.get("model"):
+            raise ValueError(texts_for(self.locale).provider_not_configured)
+        if profile.requires_key and not api_key:
+            raise ValueError(texts_for(self.locale).provider_key_missing)
+        kwargs = {**body, "model": _CHAT_PREFIXES[profile.id] + "/" + body["model"],
+                  **_sdk_call_options(profile, api_key)}
+        return _SDKStream(sdk_completion(**kwargs))
+
+
+class _SDKStream:
+    """Iterate a LiteLLM stream as plain dicts; close() releases the SDK's connection when it can."""
+    done_marker = None  # LiteLLM hides the provider's closing marker
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def __iter__(self):
+        try:
+            for chunk in self._stream:
+                yield chunk if isinstance(chunk, dict) else chunk.model_dump(exclude_none=True)
+        finally:
+            self.close()
+
+    def close(self):
+        for target in (self._stream, getattr(self._stream, "completion_stream", None)):
+            close = getattr(target, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # closing is best effort; the run's outcome is already decided
+                    pass
+                return
+
 
 class SDKEmbedding:
     """Only sends one embeddings request and standardizes the response; it never splits or retries."""

@@ -213,11 +213,16 @@ def _manifest(root, path, catalog_lesson):
     # 单个练习可以不调用模型（如运行器构造的故障注入），只在独立运行器里由课程代码分流。
     _require(kind == "custom" or all(exercise.get("requires_model", True) for exercise in exercises),
              path, "只有 custom 运行器的练习可以声明 requires_model=false")
-    testing = _object(data.get("testing", {}), str(path) + ": testing", {"completion_factory", "embedding_factory"})
-    # Embedding 请求也是模型调用：只做 Embedding 的课可以只声明 embedding_factory。
-    _require(not runtime["requires_model"] or "completion_factory" in testing or "embedding_factory" in testing,
-             path, "模型课程必须声明 testing.completion_factory（只用 Embedding 的课声明 testing.embedding_factory）")
-    for factory in ("completion_factory", "embedding_factory"):
+    # stream_factory 给 context.complete_stream 提供确定性分块；approval_factory 给 context.request_approval
+    # 提供确定性决定。两者都只在离线测试模式使用，学生网页没有入口。
+    testing = _object(data.get("testing", {}), str(path) + ": testing",
+                      {"completion_factory", "embedding_factory", "stream_factory", "approval_factory"})
+    # Embedding 与流式请求也是模型调用：只做 Embedding（或只发流式请求）的课可以只声明对应的夹具。
+    _require(not runtime["requires_model"]
+             or any(name in testing for name in ("completion_factory", "embedding_factory", "stream_factory")),
+             path, "模型课程必须声明 testing.completion_factory（只用 Embedding 的课声明 testing.embedding_factory，"
+                   "只发流式请求的课声明 testing.stream_factory）")
+    for factory in ("completion_factory", "embedding_factory", "stream_factory", "approval_factory"):
         if factory in testing:
             _reference(root, module, testing[factory], f"{path}: testing.{factory}", callable_required=True)
     # 要不要 Embedding（server/app.py 据此在真实模式先检查配置）：练习可以显式声明 requires_embedding，

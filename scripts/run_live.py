@@ -1,10 +1,13 @@
 """用真实模型运行一门课的一个或全部练习，打印事件摘要；会产生模型用量。
 
-用法：python scripts/run_live.py <课程 slug> [练习 id ...] [--url http://127.0.0.1:8765] [--locale en] [--offline] [--json]
+用法：python scripts/run_live.py <课程 slug> [练习 id ...] [--url http://127.0.0.1:8765] [--locale en] [--offline]
+      [--json] [--ask-approvals]
 需要先启动后端（run_web.py 或 uvicorn），后端从自己的环境读取密钥；本脚本不读取、不打印密钥。
 --locale 选择运行语言（默认 zh-CN）：练习的问题与预设输入取该语言，本课不支持时按平台规则回落，摘要里写实际语言。
-摘要只含事件类型、请求数、用量、Embedding 调用（条数、维度、用量）、回答、报告检查与错误，
-便于核对正文说法与真实运行是否一致。
+--ask-approvals：运行停在审批点时在终端显示审批卡，由你输入批准或拒绝（和网页一样经接口提交，记为 learner）；
+不加时脚本不替你决定，审批要在网页上处理，否则按超时结束。
+摘要只含事件类型、请求数、用量、Embedding 调用（条数、维度、用量）、流式响应（分块数、首块时间、结束方式）、
+审批结果、检查点、回答、报告检查与错误，便于核对正文说法与真实运行是否一致。
 """
 import argparse
 import json
@@ -21,6 +24,36 @@ def call(base, path, payload=None, timeout=300):
                                      headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8")
+
+
+def stream_events(base, run_id, on_event, timeout=600):
+    """边读边处理事件流（审批需要在运行暂停时作答）；返回全部事件。"""
+    events = []
+    with urllib.request.urlopen(base + f"/api/runs/{run_id}/events", timeout=timeout) as response:
+        for raw in response:
+            line = raw.decode("utf-8").rstrip("\r\n")
+            if not line.startswith("data: "):
+                continue
+            event = json.loads(line[6:])
+            events.append(event)
+            on_event(event)
+            if event["type"] == "done":
+                break
+    return events
+
+
+def ask_approval(base, run_id, event, read=input):
+    """在终端显示一条审批请求并按输入提交决定；输入为空或不是 y 时拒绝。"""
+    data = event["data"]
+    print(json.dumps({"approval": data["approval_id"], "kind": data["kind"], "summary": data["summary"],
+                      "payload": data["payload"], "risk": data.get("risk")}, ensure_ascii=False, indent=2))
+    answer = read("批准这次操作？[y/N] ").strip().lower()
+    note = read("理由（可留空）：").strip()
+    body = {"approval_id": data["approval_id"], "decision": "approve" if answer == "y" else "reject",
+            "payload_digest": data["payload_digest"]}
+    if note:
+        body["note"] = note
+    call(base, f"/api/runs/{run_id}/approvals", body)
 
 
 def _embedding_pairs(events):
@@ -68,6 +101,15 @@ def summarize(events):
                         "vectors": len(response.get("data") or []),
                         "dimensions": _dimensions(response), "usage": response.get("usage")}
                        for request, response in embeddings],
+        "streams": [{"status": event["data"]["stream"].get("status"),
+                     "chunks": event["data"]["stream"].get("chunk_count"),
+                     "first_chunk_ms": event["data"]["stream"].get("first_chunk_ms"),
+                     "cancel_reason": event["data"]["stream"].get("cancel_reason")}
+                    for event in events if event["type"] == "response" and event["data"].get("stream")],
+        "approvals": [(event["data"].get("approval_id"), event["data"].get("outcome"), event["data"].get("decided_by"))
+                      for event in events if event["type"] == "approval_resolved"],
+        "checkpoints": [(event["data"].get("checkpoint_id"), event["data"].get("name"))
+                        for event in events if event["type"] == "checkpoint"],
         "answer": next((event["data"].get("content") for event in events if event["type"] == "answer"), None),
         "reports": [{"title": report.get("title"),
                      "checks": [(check.get("label"), check.get("passed")) for check in report.get("checks", [])],
@@ -85,6 +127,7 @@ def main(argv=None):
     parser.add_argument("--locale", default="zh-CN", help="运行语言，如 zh-CN、en（默认 zh-CN）")
     parser.add_argument("--offline", action="store_true", help="用离线测试模式运行（不调用模型）")
     parser.add_argument("--json", action="store_true", help="同时打印完整事件 JSON")
+    parser.add_argument("--ask-approvals", action="store_true", help="运行停在审批点时在终端作答")
     args = parser.parse_args(argv)
     base = args.url.rstrip("/")
     query = "" if args.locale == "zh-CN" else "?lang=" + urllib.parse.quote(args.locale)
@@ -112,8 +155,13 @@ def main(argv=None):
                               "http_status": error.code, "body": error.read().decode("utf-8", "replace")[:300]},
                              ensure_ascii=False, indent=2))
             continue
-        stream = call(base, f"/api/runs/{created['run_id']}/events")
-        events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
+        run_id = created["run_id"]
+        if args.ask_approvals:
+            events = stream_events(base, run_id, lambda event: event["type"] == "approval_requested"
+                                   and ask_approval(base, run_id, event))
+        else:
+            stream = call(base, f"/api/runs/{run_id}/events")
+            events = [json.loads(line[6:]) for line in stream.splitlines() if line.startswith("data: ")]
         summary = {"lesson": detail["id"], "exercise": exercise["id"], "run_id": created["run_id"], **summarize(events)}
         failed = failed or summary["status"] != "completed"
         print(json.dumps(summary, ensure_ascii=False, indent=2))

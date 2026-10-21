@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Check, Code2, Copy } from "lucide-react";
+import { ArrowRight, Check, Code2, Copy, RotateCcw } from "lucide-react";
 import { useReducedMotion } from "../../../motion";
 import type { StudioState } from "../../../hooks/useStudio";
 import type { Trace } from "../../../types";
@@ -12,7 +12,9 @@ import {
   isEmbeddingEvent,
   truncateVectors,
 } from "./embeddings";
+import { checkpointOf } from "./approvals";
 import { useEvidenceFocus } from "./evidenceFocus";
+import { isStreamDelta, streamFacts } from "./streaming";
 import { printJson, shownPath, shownValue } from "./jsonLines";
 import { useEventText } from "./useEventText";
 
@@ -53,6 +55,36 @@ function EmptyDetail({ active }: { active: boolean }) {
         <span>{t("flowTool")}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * A checkpoint of the learner's own finished run can start a new run from it.
+ * Nothing of the old run is replayed: the new run's requests are new requests.
+ */
+function ResumeFromCheckpoint({
+  studio: s,
+  event,
+}: {
+  studio: StudioState;
+  event: Trace;
+}) {
+  const { t } = useTranslation("lab", { keyPrefix: "bench.detail" });
+  const checkpoint = checkpointOf(event);
+  if (!checkpoint || !s.runId || s.running) return null;
+  return (
+    <p className="event-explanation event-resume">
+      <span>{t("resumeHint")}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void s.resume(checkpoint.id)}
+        data-testid="lab-resume-button"
+      >
+        <RotateCcw size={14} aria-hidden="true" />
+        {t("resume", { name: checkpoint.name || checkpoint.id })}
+      </Button>
+    </p>
   );
 }
 
@@ -141,14 +173,33 @@ export function EventDetail({
       {event ? (
         <div className="event-detail-body" key={activeIndex}>
           <p className="event-explanation">
-            {event.data.representation === "sdk_standardized"
-              ? t("sdk")
-              : embedding
-                ? t("embeddingHttp")
-                : isExchange(event)
-                  ? t("http")
-                  : t("generic")}
+            {isStreamDelta(event)
+              ? t("streamDelta")
+              : streamFacts(event)
+                ? t("streamAssembled", {
+                    count: streamFacts(event)!.chunkCount,
+                  })
+                : event.type.startsWith("approval_")
+                  ? t("approval")
+                  : event.type === "checkpoint"
+                    ? t("checkpoint")
+                    : event.data.representation === "sdk_standardized"
+                      ? t("sdk")
+                      : embedding
+                        ? t("embeddingHttp")
+                        : isExchange(event)
+                          ? t("http")
+                          : t("generic")}
           </p>
+          {(isStreamDelta(event) || streamFacts(event)) && (
+            <p className="event-explanation">
+              {event.representation === "sdk_standardized" ||
+              event.data.representation === "sdk_standardized"
+                ? t("streamSdk")
+                : t("streamHttp")}
+            </p>
+          )}
+          <ResumeFromCheckpoint studio={s} event={event} />
           {shortened.truncated && (
             <p
               className="event-explanation"

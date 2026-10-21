@@ -56,7 +56,10 @@ flowchart LR
 | --- | --- | --- |
 | `run_start` | 执行来源、课程与模式 | 运行元数据 |
 | `request` | 实际准备发送的完整请求体 | `body`；Embedding 请求另有 `endpoint: "embeddings"` |
-| `response` | 模型返回的原始响应 | `body`、`duration_ms`；Embedding 响应另有 `endpoint` |
+| `response` | 模型返回的原始响应 | `body`、`duration_ms`；Embedding 响应另有 `endpoint`；流式请求的 `response` 是平台按分块拼合的，带 `stream` |
+| `response_delta` | 流式响应真实到达的一组分块 | `chunks`、`chunk_range`、`received_ms`、`text` |
+| `approval_requested` / `approval_resolved` | 运行停在审批点 / 审批结果 | `approval_id`、`summary`、`payload`、`payload_digest` / `outcome`、`decided_by`、`note` |
+| `checkpoint` | 课程保存的执行位置 | `checkpoint_id`、`name`、`state`、`state_digest` |
 | `tool_call` | 模型提出的函数调用 | `id`、`function` |
 | `tool_result` | 本机 Python 执行结果 | `tool_call_id`、`name`、`result` |
 | `answer` | 最终回答 | `content` |
@@ -68,6 +71,15 @@ Embedding 请求由 `RunContext.embed` 发出（百炼走原生 HTTP 的 `/embed
 请求事件保存当时的消息快照，不能随着下一轮追加消息而变化。完整 JSON 指请求体与响应体，认证密钥不属于教学记录。后端对事件中的实际密钥做脱敏。
 
 中止会阻止后续轮次与工具执行；已经发送的上游 HTTP 请求可能继续直到返回或超时。网页回放不调用模型，也不重新执行工具。
+
+### 流式、审批与检查点
+
+后续课程（流式输出与取消、Hooks 与审批闸门、人工介入与恢复，以及编码 Agent、后台任务和综合项目）需要的三项平台能力都在 `RunContext` 上，事件格式见 [事件信封 v2](event-envelope-v2.md) 第 7 节，用法见 [新增课程](adding-lessons.md) 的“流式、审批与检查点怎么用”：
+
+- **流式**：`context.complete_stream(...)`。百炼原生 HTTP 发 `stream: true`（默认带 `stream_options.include_usage`），按 SSE 的 data 行逐块解析；LiteLLM 用 `stream=True`，记录 SDK 的分块对象。分块在单独的读线程里读取，运行线程每 50 毫秒检查一次停止，所以没有新分块时也能及时停下。分块原样记录，按时间（默认 0.25 秒）或块数（默认 40）合并成 `response_delta`，第一块单独一条；结束时平台把分块拼成一条 `response`，标明 `assembled_from_chunks`、结束方式和停止原因。网页把已经到达的文字按事件原样拼出来，没有打字机效果。
+- **审批**：`context.request_approval(...)` 记 `approval_requested`，运行状态变为 `paused`，网页出现批准 / 拒绝卡（可写理由，`editable` 时可改参数），`POST /api/runs/{id}/approvals` 提交，运行线程把决定记成 `approval_resolved` 后续跑；超时、停止都有明确结果。离线测试的决定来自课程夹具 `testing.approval_factory` 或测试注入的 `approval_policy`，学生网页没有模拟入口。
+- **检查点与恢复**：`context.checkpoint(name, state)` 把状态记进运行存储；`POST /api/runs/{id}/resume` 从某个检查点启动新运行（新运行记 `resumed_from` 与 `thread_id`，课程读 `context.resume_state`）。恢复不重放模型请求，之后的请求都是真实新请求；服务重启后仍可恢复。
+- **停止的原因**：`cancel` 接受 `reason`（`user_stop`、`page_closed`），写进 `done.data.cancel_reason`；读事件的连接断开不是停止，只在 `done.data.client_disconnects` 计数。
 
 ## 新增课程流程
 

@@ -366,13 +366,14 @@ class StorageTests(RunApiTestCase):
 
 
 class LifecycleTests(RunApiTestCase):
-    def test_mutex_cancel_by_run_id_and_approval_skeleton(self):
+    def test_mutex_cancel_by_run_id_and_approval_without_pending_request(self):
         run_id, gate = self.start_gated()
         busy = self.client.post("/api/runs", json=offline_body())
         self.assertEqual((busy.status_code, busy.json()["code"]), (409, "run_busy"))
         cleared = self.client.delete("/api/runs")
         self.assertEqual((cleared.status_code, cleared.json()["code"]), (409, "run_active"))
-        approval = {"approval_id": "missing", "decision": "approve"}
+        # 形状合法但没有待决请求：运行中拒绝为 no_pending_approval，运行结束后拒绝为 approval_run_finished。
+        approval = {"approval_id": "approval-1", "decision": "approve", "payload_digest": "sha256:" + "0" * 64}
         pending = self.client.post(f"/api/runs/{run_id}/approvals", json=approval)
         self.assertEqual((pending.status_code, pending.json()["code"]), (409, "no_pending_approval"))
         self.assertEqual(self.client.get(f"/api/runs/{run_id}").json()["status"], "running")
@@ -381,13 +382,15 @@ class LifecycleTests(RunApiTestCase):
         gate.release.set()
         events = sse_events(self.client.get(f"/api/runs/{run_id}/events").text)
         self.assertEqual(events[-1]["data"]["status"], "cancelled")
+        # 没有请求体的停止记为 api；停止按钮与页面关闭分别带 user_stop / page_closed。
+        self.assertEqual(events[-1]["data"]["cancel_reason"], "api")
         self.assertNotIn("answer", [e["type"] for e in events])
         self.wait_finished(run_id)
         again = self.client.post(f"/api/runs/{run_id}/cancel")
         self.assertEqual((again.status_code, again.json()["code"]), (409, "run_not_active"))
         self.assertEqual(self.client.post(f"/api/runs/{'f' * 32}/cancel").status_code, 404)
         finished = self.client.post(f"/api/runs/{run_id}/approvals", json=approval)
-        self.assertEqual((finished.status_code, finished.json()["code"]), (409, "no_pending_approval"))
+        self.assertEqual((finished.status_code, finished.json()["code"]), (409, "approval_run_finished"))
         unknown = self.client.post(f"/api/runs/{'f' * 32}/approvals", json=approval)
         self.assertEqual((unknown.status_code, unknown.json()["code"]), (404, "run_not_found"))
         invalid = self.client.post(f"/api/runs/{run_id}/approvals", json={"approval_id": "x", "decision": "maybe"})

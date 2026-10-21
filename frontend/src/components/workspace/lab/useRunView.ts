@@ -1,6 +1,7 @@
 import type { StudioState } from "../../../hooks/useStudio";
-import { openLlmSpan } from "../../../stage/spans";
+import { openApprovalSpan, openLlmSpan } from "../../../stage/spans";
 import { useStageProjection } from "../../../stage/useStageProjection";
+import { streamProgress } from "./streaming";
 
 /**
  * One projection of the real events feeds the stage, film, cards, chips and
@@ -17,6 +18,10 @@ export function useRunView(s: StudioState) {
     last,
     live,
     openLlm: live ? openLlmSpan(stage.spans) : undefined,
+    /** The approval gate the live run is paused at right now. */
+    openApproval: live ? openApprovalSpan(stage.spans) : undefined,
+    /** The latest streamed request up to the cursor and what has arrived for it. */
+    stream: streamProgress(s.visible),
     completed: last?.type === "done" && last.data.status === "completed",
   };
 }

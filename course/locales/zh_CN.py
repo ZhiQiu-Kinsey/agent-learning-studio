@@ -20,6 +20,8 @@ TEXTS = Texts(
         "请在模型设置里填写 Embedding 模型，或按文档设置对应的环境变量后再运行。"
     ),
     embedding_response_invalid="Embedding 响应里的向量数量（{actual}）与输入条数（{expected}）不一致，已停止。",
+    stream_interrupted="流式响应中途断开，已收到的分块已经记录；请求没有自动重发。\n{reason}",
+    stream_provider_error="服务商在流式响应中返回了错误，已收到的分块已经记录：{detail}",
     cli_model="当前模型：{model}",
     cli_examples="可尝试：",
     cli_prompt="\n你：",
