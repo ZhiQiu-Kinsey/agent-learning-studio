@@ -2309,11 +2309,13 @@ Sandboxed command execution and file edits that can be verified.
 
 In a fixture repository with a failing test, let the agent fix the code with a single bash tool, and have the platform rerun the tests for acceptance.
 
+**Terms in this lesson:** Sandbox, Temporary Workspace, Command Policy, Process Tree, Head-and-Tail Truncation
+
 **Sections**
 
 1. **Task and acceptance**: The fixture repository has one failing test. The agent fixes it, and the platform reruns the tests for acceptance.
 2. **One bash tool is enough**: Give the agent a single tool that runs commands, and watch how it reads files, edits code, and runs tests.
-3. **Temporary workspace and environment cleanup**: Run in an isolated directory that doesn't inherit the machine's secrets or environment variables.
+3. **Temporary workspace and environment cleanup**: Commands run in a disposable temporary directory without inheriting the machine's secrets or environment variables; this is a guardrail, not isolation.
 4. **Timeouts and killing the process tree**: When a command hangs, time it out and end every child process it started.
 5. **Command policy and output truncation**: Dangerous commands are denied by default. Long output keeps only the head and tail, with the truncation marked.
 6. **"I fixed it" doesn't count**: The result of the platform's rerun is what counts. Record the commands, exit codes, and diffs.
@@ -2344,7 +2346,7 @@ Deliverable: Command records, file diffs, and the platform's acceptance result.
 
 **Acceptance**
 
-- Child processes can't get any secrets.
+- The child process does not inherit secret-like environment variables from the machine.
 - A timeout terminates the whole process tree.
 - The acceptance result comes from tests the platform reruns.
 
@@ -2361,6 +2363,8 @@ Deliverable: Command records, file diffs, and the platform's acceptance result.
 **Prerequisites:** Lesson 38 A single-bash-tool coding agent and its sandbox
 
 Replace bash file editing with dedicated read, write, and edit tools, compare edit strategies, and prove changes with before-and-after hashes and diffs.
+
+**Terms in this lesson:** Stale Write, Change Evidence
 
 **Sections**
 
@@ -2724,6 +2728,8 @@ Manage connections to several services, and compare how MCP and A2A divide the w
 
 Manage the connections, naming, exit, and reconnection of several tool servers, and verify state and permissions in real disconnects.
 
+**Terms in this lesson:** Connection Lifecycle, Capability Negotiation, Service Prefix, Availability Probe
+
 **Sections**
 
 1. **The lifecycle of a connection**: Start, initialize, call, close: every step can fail.
@@ -2739,8 +2745,8 @@ Manage the connections, naming, exit, and reconnection of several tool servers, 
 
 **Topics**
 
-- Server registration and namespaces
-- Connection, process, and session lifecycle
+- Service registration and service prefixes
+- Connection, process, and session lifecycle, and capability negotiation
 - Differences between stdio and remote transport
 - Timeout, disconnect, and reconnect strategy
 - Server-level permissions and identity
@@ -2953,6 +2959,8 @@ The boundaries of background execution, scheduled triggers, and goal loops.
 
 Run slow tasks in the background, inject their results in later rounds, and repeat execution with scheduled triggers.
 
+**Terms in this lesson:** Background Job, Result Injection, Scheduled Trigger, Overlap Policy, Orphan Job
+
 **Sections**
 
 1. **Which tasks belong in the background**: A slow task shouldn't block the conversation. Its result comes back later.
@@ -2964,14 +2972,14 @@ Run slow tasks in the background, inject their results in later rounds, and repe
 
 - Manage a background task's start, end, and exit code
 - Inject background results at the right round
-- Constrain long loops with goal evaluation
+- Bound long loops with a goal check
 
 **Topics**
 
 - Background tasks
 - When to inject results
-- Scheduled triggers
-- Cancellation and terminal state of background tasks
+- Scheduled triggers and overlap policy
+- Cancelling background jobs, terminal states, and orphan jobs
 - Labeling the source of injected results
 
 **Experiments**
@@ -2979,15 +2987,15 @@ Run slow tasks in the background, inject their results in later rounds, and repe
 A background task and a goal loop:
 
 1. Start a slow background fixture task, and record its start and end, exit code, and the round it was injected.
-2. Use goal evaluation each round to judge ok, impossible, or keep going.
+2. Use a goal check each round to decide ok, impossible, or continue.
 3. Set a budget limit and observe what happens when it is reached.
 
-Deliverable: A background lane timeline and the goal evaluation record.
+Deliverable: A background-lane timeline and a goal-check record.
 
 **Acceptance**
 
 - The model did not see the background result before the round it was injected.
-- The reasons for goal evaluation are recorded.
+- The reasons of every goal check are recorded.
 - When the budget is reached, the run stops explicitly.
 
 **References**
@@ -3061,6 +3069,8 @@ Produce a complete application that can start, resume, and be evaluated.
 
 Turn the learning tool into a local app that can be started, configured, and observed, and verify that the real service works.
 
+**Terms in this lesson:** Configuration Layering, Liveness Probe, Readiness Probe, Orphan Process
+
 **Sections**
 
 1. **From running to deliverable**: The minimum for delivery is that another machine can start it by following the instructions.
@@ -3071,30 +3081,31 @@ Turn the learning tool into a local app that can be started, configured, and obs
 **Objectives**
 
 - Separate configuration, credentials, and runtime data
-- Build availability checks for the real model and tools
+- Tell "configured" apart from "verified" and build service availability probes
 - Verify restart recovery, log diagnosis, and upgrade rollback
 
 **Topics**
 
 - Runtime environment and pinned dependencies
 - Provider configuration and credential management
-- Start, stop, and service probes
-- Error logs and handling sensitive data
+- Starting, stopping, and reaping orphan processes
+- Liveness probes and readiness probes
+- Error logs and sensitive data
 
 **Experiments**
 
 Starting from an empty environment and recovering from interruption:
 
-1. Install and start in a separate local environment following the delivery instructions, pick a verified model configuration, and make sure no credentials end up in source code or the trace.
-2. Check service availability with a real model request and MCP discovery and calls, then shut down and restart at a paused task.
+1. Start the local service from a temporary directory following the delivery instructions; layered configuration takes effect and credentials come only from environment variables, never entering source, logs, or events.
+2. Check availability with liveness and readiness probes, simulate a stuck start, a busy port, and killing only the main process, then shut down and restart after a write.
 3. Check the recovered content, the actual side effects, the diagnostic logs, and the data backup, and try one configuration upgrade that can be rolled back.
 
-Deliverable: Local startup instructions, a real availability report, and recovery and rollback records.
+Deliverable: Local start instructions, a service availability report, and recovery and rollback records.
 
 **Acceptance**
 
-- Following the instructions, the app starts from a clean environment, and the model and the tools each pass a real probe.
-- After a restart, state and documents are restored as agreed, completed writes aren't repeated, and unknown providers are not marked as verified.
+- Following the instructions, the app starts from a clean environment, liveness and readiness are each probed for real, and a failed start has a clear cause.
+- After a restart, state and data come back as agreed, completed writes are not repeated, and a service that was never actually probed is not marked available.
 - Configuration errors can be located from the UI or the logs, credentials don't leak, and backup and rollback have actual check records.
 
 **References**
@@ -3111,7 +3122,9 @@ Deliverable: Local startup instructions, a real availability report, and recover
 
 **Prerequisites:** Lesson 51 Local delivery: startup, configuration, and credentials
 
-Back up run records and memory data, verify they work after recovery, and roll back to the previous version when an upgrade fails.
+Back up run records and memory data, verify they work after a restore, and roll back to the previous version when an upgrade fails. This lesson does not call a model.
+
+**Terms in this lesson:** Backup Manifest, Restore Drill, Data Migration, Upgrade Rollback
 
 **Sections**
 

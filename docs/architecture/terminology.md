@@ -99,6 +99,7 @@
 | 实验报告（实验台的报告面板） | 证据板 |
 | 编码 Agent（Claude Code、Cursor 这类工具；背景词，不加英文括注） | 编程助手、编码助手 |
 | 学习者备注 | 问题栏 |
+| 子进程（运行器拉起的应用进程）、后台工作进程（应用自己再启动的进程；`local-delivery` 引入） | 指它们时的“后台进程”“工人进程” |
 | 回归（改动后原来通过的题不再通过；`evaluation-sets` 引入） | 指这件事时的“退化” |
 | 配对分析（同一批题逐题比较两个版本；`evaluation-sets` 引入） | 指这件事时的“配对比较” |
 | 开发集、留出集（`evaluation-sets` 引入） | 调参集、测试集（指留出的题时） |
@@ -112,6 +113,8 @@
 | 归并函数（`langgraph-state` 引入：规定节点的更新怎样并入旧值） | 合并函数、规约函数、正文里的 reducer |
 | 路由函数（条件边上读状态、返回去向的函数；`langgraph-state`） | 条件函数、指它时的“路由器” |
 | 状态差异（节点返回的那几个字段，记为 `lesson.graph_update`；`langgraph-state`） | 状态增量、状态补丁 |
+| 整文件重写、精确替换、行号替换（`file-edit-evidence` 的三种编辑策略，对应 `write_file`、`edit_file`、`edit_lines`） | 全文替换、字符串替换、按行替换、补丁 |
+| 过期写入（`file-edit-evidence` 引入：基于读取之后已被改动的版本做的写入，工具返回 `StaleRead`；与 `memory-lifecycle` 的“过时写入”同一思路，文件工具一课叫过期） | 指这件事时的“冲突写入”“覆盖写入” |
 | 委派方、被委派方（A2A 委派的两端；`a2a-delegation` 引入；“远端”只作形容词，如远端任务、远端失败） | 客户端 Agent、服务端 Agent、远端 Agent（指这两端时；“客户端”“服务端”留给 MCP） |
 
 “评审”和“评估者”的分界：
@@ -139,6 +142,8 @@
 - `langgraph-state`：终态节点（answer、ask_user、fail）、业务预算（`max_repairs`，与递归上限相对）、修正（验证失败后回到 plan 重新调用）、验证节点（`verify`）；
 - `agentic-rag`：检索记录（运行器每轮插入的消息，事件 `lesson.harness_injected`）、重复查询（词集合相同且 top_k 不更大，照常计数）、停止原因（`lesson.stop`）、最后一次请求（到上限后 `tool_choice` 为 none、只能回答的那次请求）、变差（逐题对照里不如静态 RAG 的题；术语“回归”由 `evaluation-sets` 引入）。
 - `goal-loops`：执行者（模型，代码里是 `Worker`；它交出的 `status` 叫完成声明）、验收器（`evaluate_goal`，执行目标评估的程序）、完成条件（`CRITERIA`：字段、值的形状和来源，是验收标准在本课的写法）、通知卡（执行者的产物，不同于任务卡）、结局（完成、放弃、预算耗尽三种，事件字段 `decision`）、停止原因（`reason_code`）、轮数上限（`max_rounds`，不叫迭代上限，那是修订循环的）。放弃条件和预算耗尽已在更早的课里出现，登记为背景词。
+- `long-running-tasks`：后台任务（`start_background_job` 启动、立刻返回任务编号，在后台执行器的线程里真实运行）、结果注入（运行层在下一轮请求前追加的单独消息，事件 `lesson.harness_injected` 的 `kind` 是 `background_result`；与 `todo-planning` 的“插入”同指运行层追加消息，本课沿用目录写法“注入”）、目标检查（每轮结束时运行层判定 `ok`、`impossible`、`continue`；“目标评估”由 `goal-loops` 引入，本课不用）、重叠策略（`skip` 跳过、`queue` 排队、`parallel` 有上限的并行）、孤儿任务（运行结束后仍在后台跑的任务）、虚拟时钟（秒是虚拟的，不是测得的耗时）。
+- `backup-upgrade`：一致性备份（备份接口或 `VACUUM INTO`，不叫快照复制）、备份清单（动词写“核对清单”，名词写“清单核对”，不写“校验”）、恢复演练（备份、核对、恢复到新目录、验收；“验收”在本课指恢复或升级之后用服务读数据的方式检查，函数 `service_check`）、内容摘要（`content_digest`，逻辑内容的 sha256，区别于文件的字节摘要 `sha256`）、数据迁移（`migrate_memory`、`migrate_runs`，版本写在 `user_version`）、升级回退（事务回滚与从备份恢复是两种回退办法，前者只管没提交的修改）、故障（程序制造的失败，事件 `origin` 写 `fault_injection`，不写“模拟”）。
 
 ## 4. 作者流程（新课和改课都适用）
 
