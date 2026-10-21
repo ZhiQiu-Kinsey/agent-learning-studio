@@ -121,7 +121,7 @@ TEXTS = Texts(
     check_scope_detail="Files changed: {files}; functions changed, removed or added: {symbols}; outside the task: {unexpected}.",
     check_scope_unparsable="The changed file does not parse as Python, so the scope cannot be compared (files: {files}).",
     check_chain="Every write has a before and after hash, and they link up",
-    check_chain_ok="{rows} writes took effect: each before hash equals the previous after hash, and the last one equals the file's hash now.",
+    check_chain_ok="Writes that took effect: {rows}; each before hash equals the previous after hash, and the last one equals the file's hash now.",
     check_chain_broken="The hash chain does not add up: {problems}.",
     chain_reasons={
         "broken_chain": "this row does not start at the file's hash at that moment",

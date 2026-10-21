@@ -89,7 +89,7 @@ TEXTS = Texts(
     repeat_cell="same as step {step}",
     check_no_repeats="No call was executed twice",
     check_no_repeats_ok="Every fingerprint ran once.",
-    check_no_repeats_found="{count} fingerprints ran more than once; see the Repeat column in the table.",
+    check_no_repeats_found="Fingerprints that ran more than once: {count}; see the Repeat column in the table.",
     columns_bottleneck=("Rank", "Step", "Kind", "Name", "Time ms", "Share of end-to-end", "Repeat"),
     compare_title="Before and after: {baseline} → {strategy}",
     compare_summary=("Both passes use the same four receipts and the same human labels. Check first whether quality "
@@ -113,7 +113,7 @@ TEXTS = Texts(
     columns_compare=("Measure", "Baseline", "After", "Change"),
     answer=(
         "Checked {total} receipts with \"{strategy}\": {passed}/{total} match the human labels; "
-        "{calls} model calls, {tools} tool calls, {hits} cache hits, {ms} ms end to end."
+        "model calls: {calls}, tool calls: {tools}, cache hits: {hits}, {ms} ms end to end."
     ),
     answer_compare="Comparing \"{baseline}\" with \"{strategy}\": {regressions}",
 )

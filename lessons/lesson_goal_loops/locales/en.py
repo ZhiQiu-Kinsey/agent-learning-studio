@@ -100,11 +100,11 @@ TEXTS = Texts(
     value_empty="(empty)",
     table_columns=("Round", "Notes newly read", "Worker status", "Passing", "Evaluation", "Next step", "Reason"),
     answers={
-        "complete": "Outcome: complete ({reason}), in {rounds} rounds. Notice card: {card}",
+        "complete": "Outcome: complete ({reason}), rounds used: {rounds}. Notice card: {card}",
         "abandoned": ("Outcome: abandoned; the goal was not reached. Reason: {reason}. "
-                      "{passed}/{total} checks passed when it stopped, after {rounds} rounds. Current card: {card}"),
+                      "{passed}/{total} checks passed when it stopped, rounds used: {rounds}. Current card: {card}"),
         "budget_exhausted": ("Outcome: budget exhausted; the goal was not reached. Reason: {reason}. "
-                             "{passed}/{total} checks passed when it stopped, after {rounds} rounds. Current card: {card}"),
+                             "{passed}/{total} checks passed when it stopped, rounds used: {rounds}. Current card: {card}"),
     },
     fixture_notes={"partial": "Some fields are still empty", "full": "Every field is filled",
                    "missing": "The notes have no contact phone", "rushed": "Filled in as asked"},

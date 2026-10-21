@@ -72,7 +72,7 @@ TEXTS = Texts(
     classify_check_retried="Both transient failures succeeded after a retry",
     classify_check_retried_detail="The lock was released after the first attempt; the second attempt succeeded.",
     classify_check_once="The store holds exactly 1 active submission and 1 file",
-    classify_check_once_detail="{rows} active submissions, {credits} credits left, {files} files in the outbox.",
+    classify_check_once_detail="Active submissions: {rows}, credits left: {credits}, files in the outbox: {files}.",
     classify_columns=("Operation", "Attempts", "Last error", "Error category", "Result"),
     classify_answer="Classification done: four operations made {calls} tool calls in total; see the report.",
     modes={
@@ -84,13 +84,13 @@ TEXTS = Texts(
     lost_summary="Each of the three approaches gets a fresh store and the same fault: the first submission is "
                  "written to the store, but its result never comes back. No model was called.",
     lost_check_once="{mode}: the store was written exactly once",
-    lost_check_detail="{rows} submission rows, {credits} credits left; the caller saw: {status}.",
+    lost_check_detail="Submission rows: {rows}, credits left: {credits}; the caller saw: {status}.",
     lost_check_key="The idempotency record can be found in the store",
     lost_check_key_detail="The operations table holds key {key} and the first result.",
     lost_columns=("Approach", "Attempts", "Result the caller saw", "Submissions in store", "Credits left",
                   "operations rows"),
-    lost_answer="After the lost result: blind retry wrote {blind} times, stop when unknown wrote {stop} times, "
-                "retry with an idempotency key wrote {keyed} times.",
+    lost_answer="After the lost result: writes made by a blind retry: {blind}, by stopping when unknown: {stop}, "
+                "by a retry with an idempotency key: {keyed}.",
     step_submit="Step 1: take a credit and record the submission",
     step_export="Step 2: write to the outbox",
     step_compensate="Compensation: cancel the submission and refund the credit",

@@ -42,9 +42,9 @@ TEXTS = Texts(
         "user_stop": "A stop request arrived",
     },
     stop_details={
-        "deadline": "The overall deadline of {deadline_ms} ms was reached; every task is told to stop; {running} were running at this moment.",
-        "policy": "{origin} did not succeed; the failure policy tells every task to stop; {running} were running at this moment.",
-        "user_stop": "A stop request arrived; every task is told to stop; {running} were running at this moment.",
+        "deadline": "The overall deadline of {deadline_ms} ms was reached; every task is told to stop; tasks running at this moment: {running}.",
+        "policy": "{origin} did not succeed; the failure policy tells every task to stop; tasks running at this moment: {running}.",
+        "user_stop": "A stop request arrived; every task is told to stop; tasks running at this moment: {running}.",
     },
     variant_title="Variant: {variant}",
     variant_summary="Tasks, dependencies, times and reasons all come from this run's records; times are the backend clock, counted from the start of this variant, in milliseconds.",

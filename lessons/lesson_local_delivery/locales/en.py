@@ -135,7 +135,7 @@ TEXTS = Texts(
         "log-sources": "config_loaded records every setting's source; api_key has only set and source.",
         "log-clean": "Searching every line for the fake key finds nothing.",
         "log-startup-measured": "listening records startup_ms={ms} and version={version}.",
-        "leak-log-clean": "{count} leaks found.",
+        "leak-log-clean": "Leaks found: {count}.",
         "leak-located": "Line {line}, event {event}, setting {setting}.",
         "leak-report-clean": "Every credential value was replaced by a marker before display; scanning what is displayed finds nothing left.",
         "crash-reaped": "All {pids} crashed processes are gone and the old port no longer accepts connections.",
