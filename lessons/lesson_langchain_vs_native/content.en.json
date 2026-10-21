@@ -1,0 +1,1258 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "FRAMEWORKS / LANGCHAIN",
+      "source": "ed7ea1faa47c"
+    },
+    "hero.headline": {
+      "text": "Hand the same task to a framework,",
+      "source": "593c96265855"
+    },
+    "hero.highlight": {
+      "text": "and the request is still the same request.",
+      "source": "57936b8cc573"
+    },
+    "hero.takeaway": {
+      "text": "LangChain builds the message objects, generates tool definitions, parses call proposals and writes tool results back for you; the stop condition, what counts as an error, how many model calls to make and what counts as done are still your code. This lesson puts both styles in one run and compares the requests they send, field by field.",
+      "source": "d05e44464522"
+    },
+    "concepts.01-same-task.label": {
+      "text": "01 / SAME TASK",
+      "source": "a965251a5ab7"
+    },
+    "concepts.01-same-task.title": {
+      "text": "Same task, same yardstick",
+      "source": "97d690e932bc"
+    },
+    "concepts.01-same-task.description": {
+      "text": "The same question, system prompt, tool functions, round limit and acceptance function. The native loop runs first, then LangChain, with round numbers continuing.",
+      "source": "7ec3fc7d0671"
+    },
+    "concepts.02-handover.label": {
+      "text": "02 / HANDOVER",
+      "source": "e3985078a821"
+    },
+    "concepts.02-handover.title": {
+      "text": "Four jobs the framework takes over",
+      "source": "a594d766b783"
+    },
+    "concepts.02-handover.description": {
+      "text": "Building message objects, generating tool definitions from functions, parsing the response into an AIMessage, and wrapping tool results as ToolMessages.",
+      "source": "fc850db608fa"
+    },
+    "concepts.03-layers.label": {
+      "text": "03 / LAYERS",
+      "source": "af6429c42d66"
+    },
+    "concepts.03-layers.title": {
+      "text": "Two layers, recorded apart",
+      "source": "41a22fcba023"
+    },
+    "concepts.03-layers.description": {
+      "text": "lesson.framework_input records the framework input (Framework Input): the messages the framework holds. The request right after it is the converted body sent to the provider.",
+      "source": "e93368f35f65"
+    },
+    "concepts.04-defaults.label": {
+      "text": "04 / DEFAULTS",
+      "source": "ef10200d114f"
+    },
+    "concepts.04-defaults.title": {
+      "text": "Defaults can hide failures",
+      "source": "4246c396a182"
+    },
+    "concepts.04-defaults.description": {
+      "text": "The default tool validation turns the string \"23\" into 23.0; an invalid tool call (Invalid Tool Call) that failed to parse is not in tool_calls, so a loop over tool_calls alone misses it.",
+      "source": "dead99af0f40"
+    },
+    "section-1.title": {
+      "text": "The same task, two implementations",
+      "source": "e2f8122363b7"
+    },
+    "section-1.paragraphs.0": {
+      "text": "This lesson takes a task the native loop already did and does it again with LangChain, in the same run, side by side. You followed the addition in {{lesson:tool-selection}} and the zero divisor in {{lesson:fail-safely}} from request body to tool result. Now the style changes: an agent framework (Agent Framework) like LangChain supplies message objects, tool registration and call parsing, and the code gets much shorter. This lesson teaches no new loop; it puts a new shell on a loop you know and asks where the missing code went, and whether it is still under your control.",
+      "source": "f9f0e359ab78"
+    },
+    "section-1.paragraphs.1": {
+      "text": "A fair comparison changes one variable only. Both sides use the same question, the same system prompt (taken straight from the earlier lessons' runtime text), the same Python tool functions, the same round limit of 3, and the same acceptance function, accept. With different prompts or limits you could not tell whether a difference came from the style or the conditions; the acceptance function must be shared too, so one side is not judged by wording and the other by tool results. The runner runs the native loop first, in rounds 1 and 2, then LangChain from round 3 on, so the two sets of requests line up in the timeline.",
+      "source": "499c4adf3de7"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The native side calls the platform's run_agent directly, the same loop you read in {{lesson:tool-selection}}; the tool definitions are hand-written JSON and the allowlist comes from available_tools. The LangChain side lives in run_langchain: messages become objects such as SystemMessage and HumanMessage, tools are registered with the @tool decorator, and the model is the platform's RunContextChatModel. It is a LangChain chat model whose every call goes out through RunContext, so the request is recorded, counts toward the model calls and can be stopped. Both sides use the same tool function: the LangChain tool only wraps it, and inside it still calls the native lesson's add_numbers.",
+      "source": "9204461cbc85"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The comparison shows what each style sent and executed in the same run; it does not show that one style makes the model smarter. In a real run each side asks the model once and the answers may differ; that is sampling variation (see {{lesson:sampling-variance}}), not the framework's credit or fault. In offline test mode both sides get responses from the same fixture, so the answers look almost the same, and that is only because the script says so. Read the acceptance function's verdict first, then the wording of the answers.",
+      "source": "f4018fb60b01"
+    },
+    "section-2.title": {
+      "text": "What the framework does for you",
+      "source": "6584712848ed"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Compare the message format, tool registration and the loop, and the framework takes over four jobs: building message objects, generating tool definitions, parsing call proposals, and wrapping tool results as messages to write back. In the native loop all four are in plain sight: messages are dicts with a role, tool definitions are hand-written JSON Schema, you take the arguments string out of the response and parse it yourself, and you build the message whose role is tool yourself. With the framework that code disappears, but every step still happens.",
+      "source": "88191beb3b55"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Walk through the addition task. The native loop receives the response and puts that assistant message back into the message history unchanged; it parses arguments only when it executes the call. LangChain receives the same response and first turns it into an AIMessage: calls that parse go into tool_calls, with arguments already a dict; calls that fail go into invalid_tool_calls. Before the next request it converts the AIMessage back into a format the provider understands. Count them: for a response with one call, the native loop changes nothing; the framework converts at least three times: response to AIMessage, AIMessage back to the assistant message in the request, tool result to ToolMessage and on to a tool message. The differences in the request bodies later come from these conversions.",
+      "source": "58b84979d3ca"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Keep track of who does which job. The message classes, @tool, generating tool definitions with convert_to_openai_tool and parsing arguments with parse_tool_call belong to langchain-core. Converting framework messages into a request body, filling in a missing call id and handing each call to RunContext are done by this platform's adapter, `course/frameworks.py`. In a production project a provider integration package does this adapter work, and each does it differently; this lesson installs only langchain-core so no request bypasses the platform's record. When you read a trace, a request wrapped by lesson.framework_input before and lesson.framework_output after came from the framework side. The dividing line is in the import statements on the code page: what is imported from `langchain_core` is the framework itself, and the parts named after RunContext are the platform.",
+      "source": "49a4f4dfdb5a"
+    },
+    "section-2.paragraphs.3": {
+      "text": "What the framework does not take over matters just as much. langchain-core goes as far as calling the model once and returning one AIMessage; it does not write the loop for you. The stop condition, how many rounds at most, how to tell the model a tool failed, the cap on model calls and what counts as task done are written in run_langchain or left to the platform. The structured errors from {{lesson:fail-safely}} still come from the same execute_tool. *Understanding AI Agents in Depth* (深入理解 AI Agent) sums up the harness as five jobs: context, tool interface, constraints, verification and correction. Frameworks mostly help with the first two; the other three stay in your code.",
+      "source": "b7f331ccf577"
+    },
+    "deep-dive-references.title": {
+      "text": "How the references describe frameworks",
+      "source": "36637ddd2247"
+    },
+    "deep-dive-references.summary": {
+      "text": "All three say a framework saves repetitive work, not judgement.",
+      "source": "2bd58bf7e38f"
+    },
+    "deep-dive-references.paragraphs.0": {
+      "text": "The Hugging Face Agents Course opens its frameworks unit by saying that an application built on a large language model does not always need an agent framework: when the flow is simple and a few chained prompts are enough, plain code gives you full control of the system; abstractions start to help once the model has to call functions or several agents have to coordinate. It lists the parts a framework should provide: a model that drives the system, a list of tools, a parser that extracts calls from the model output, a system prompt that matches the parser, memory, and logging and retries for model mistakes.",
+      "source": "24a03de7ed27"
+    },
+    "deep-dive-references.paragraphs.1": {
+      "text": "Against this lesson: LangChain provides the tool list and the parser. The system prompt is still the one written by hand in the earlier lessons, because with function calling the provider returns structured calls directly and the model no longer needs to be taught a text format. Memory and retries are not done for you by langchain-core. Microsoft AI Agents for Beginners sums up a framework's benefit as modular components: model connections, tool definitions and message management are ready to use, and the team spends its effort on business logic. In its examples a tool is also a Python function with type hints and a docstring from which the framework generates the Schema, the same approach as this lesson's @tool.",
+      "source": "ac0b89c006b3"
+    },
+    "deep-dive-references.paragraphs.2": {
+      "text": "Chapter 1 of *Understanding AI Agents in Depth* (深入理解 AI Agent) looks at it from the other side: early frameworks focused on context and tools, letting an agent act; production systems shifted the weight to constraints, verification and correction, keeping it from acting wrongly. The book also quotes a design principle: calling the interface directly often beats a complex framework, because every extra layer of abstraction is another blind spot when debugging. This lesson's answer is to put a window in that layer: framework input, request body and framework output are recorded apart, so the blind spot becomes evidence you can check field by field.",
+      "source": "65453a2430ab"
+    },
+    "misconception-framework-handles-it.claim": {
+      "text": "With a framework, someone else takes care of stop conditions and error handling.",
+      "source": "76cf860ed9cc"
+    },
+    "misconception-framework-handles-it.correction": {
+      "text": "langchain-core only handles the format conversion around one model call; the loop, the round limit, what happens after a tool fails and acceptance are yours to write. Fuller prebuilt agents come with their own defaults, which you also have to read and check. In this lesson's argument coercion exercise, the default @tool lets through three sets of arguments the native tool rejects.",
+      "source": "a991e19b8492"
+    },
+    "predict-requests.prompt": {
+      "text": "Before running \"Normal task: addition\", guess: counting both implementations, how many request events will this run have?",
+      "source": "53473188c308"
+    },
+    "mq-not-handled.core-does-not.prompt": {
+      "text": "Which of these does langchain-core not do for you?",
+      "source": "f364507698ae"
+    },
+    "mq-not-handled.core-does-not.a.text": {
+      "text": "Decide how many rounds of model calls at most, and when to stop",
+      "source": "c20e221556f8"
+    },
+    "mq-not-handled.core-does-not.a.feedback": {
+      "text": "Right. langchain-core has no loop; the round limit and the stop condition are written in this lesson's run_langchain.",
+      "source": "61cefa1b1bd0"
+    },
+    "mq-not-handled.core-does-not.b.text": {
+      "text": "Turn a tool function's type hints into a parameter Schema",
+      "source": "c0829aa7a9df"
+    },
+    "mq-not-handled.core-does-not.b.feedback": {
+      "text": "No. That is exactly what @tool and convert_to_openai_tool do.",
+      "source": "1c8de184b21c"
+    },
+    "mq-not-handled.core-does-not.c.text": {
+      "text": "Parse the arguments string into a dict",
+      "source": "8e23bed12a87"
+    },
+    "mq-not-handled.core-does-not.c.feedback": {
+      "text": "No. parse_tool_call parses it and the result goes into the AIMessage's tool_calls.",
+      "source": "cf3bc3836cf4"
+    },
+    "mq-not-handled.core-does-not.explanation": {
+      "text": "The framework takes over repetitive format work; the edges of the loop are still decided by your code.",
+      "source": "2d9566b23a8f"
+    },
+    "section-3.title": {
+      "text": "The request is still the same request",
+      "source": "1cdead55c4b6"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Capture the request the framework actually sends, compare it field by field with the native request, and most fields match exactly. The message list, system prompt, user question and tool names are the same, because in the end the framework must also send an OpenAI-compatible request body that follows the provider's interface. The lesson's \"Request bodies, field by field\" report pairs the two sides' requests in order and lists only fields whose values differ or that only one side has, so every row in the table is a real difference. A difference is not necessarily bad; what matters is knowing where it is and where it comes from.",
+      "source": "02a2ba175cd5"
+    },
+    "section-3.paragraphs.1": {
+      "text": "In the addition task the first pair of requests differs in the tool definitions. The native side hand-wrote the parameter description \"The first number\" and set additionalProperties to false; the Schema @tool infers from `a: float, b: float` has only types, no parameter descriptions and no additionalProperties. The native side also sets tool_choice to auto; the LangChain side did not bind that option, so the field is absent from its request. Providers usually treat a missing tool_choice as auto, but that is the provider's convention, not a fact stated in the request. These differences change what the model sees: without parameter descriptions, the model can only guess from the names what `a` and `b` mean.",
+      "source": "cd61dadfd3b1"
+    },
+    "section-3.paragraphs.2": {
+      "text": "The second pair differs in the messages. The native loop puts the provider's assistant message back unchanged, so arguments is still the text the provider wrote; the framework parses it into a dict first and serializes it again, and the spacing may change. The tool results differ too: the default @tool validates arguments as `float`, so the integers 19 and 23 become floats first; the native tool returns 42 and the framework side returns 42.0. Neither difference makes the request invalid, but both show that the framework writes back its own reading of the data, not the original.",
+      "source": "b58255c16c59"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Read the request body apart from the framework input. lesson.framework_input records the messages the framework holds, with LangChain's field names type, content and tool_calls; that is the framework input from the concept card. The request right after it is the body the adapter converted, labelled like every other request according to the run path. In offline test mode the request and response come from the fixture; only in a real run is it what the provider actually received. Mixing the two up means mistaking the framework's internal representation for what was sent to the model. The lesson's request comparison works on the request layer, where the two sides can be put side by side field by field.",
+      "source": "a4e35d75043d"
+    },
+    "deep-dive-defaults.title": {
+      "text": "How defaults hide failures",
+      "source": "ad0c2dcad7d2"
+    },
+    "deep-dive-defaults.summary": {
+      "text": "Lax validation quietly repairs bad arguments; calls that fail to parse are not in tool_calls.",
+      "source": "231b8398890b"
+    },
+    "deep-dive-defaults.paragraphs.0": {
+      "text": "@tool validates arguments with Pydantic. Pydantic's default is lax mode, which performs type coercion: when the target type is a float, the string \"23\" becomes 23.0 and the boolean true becomes 1.0; the inferred Schema does not forbid extra fields, so an extra `c` is quietly dropped. The arguments are \"repaired\" before they reach the native function, and the type checks inside the native add_numbers never get a chance to run.",
+      "source": "2066105e5102"
+    },
+    "deep-dive-defaults.paragraphs.1": {
+      "text": "The argument coercion exercise hands the same arguments text to three entry points. Of four sets of arguments, the native tool rejects three: a number written as a string, a boolean, and one extra argument. The default @tool runs all three successfully, and the boolean case returns 24.0. Swap the parameter Schema for StrictNumbers, with strict mode on and extra fields forbidden, and all three become ValidationError again, matching the native verdict. Strict mode still turns integers into floats, so the valid case still returns 42.0.",
+      "source": "8d813b0738f7"
+    },
+    "deep-dive-defaults.paragraphs.2": {
+      "text": "Invalid tool calls are another kind of default behavior. When the arguments are not valid JSON, or parse to an array instead of an object, the framework does not raise; it puts the call into invalid_tool_calls. A loop over tool_calls alone misses it: the model proposed three calls and only one gets an answer. OpenAI-compatible interfaces usually require a tool result for every call id and reject the next request when one is missing. This lesson's execute_tool_calls runs both kinds, but valid calls first and invalid calls after, so the order written back may differ from the order the provider sent.",
+      "source": "80f03ea76f7b"
+    },
+    "deep-dive-defaults.paragraphs.3": {
+      "text": "There are three ways to bring the framework side back to the native tool's verdict. One is a strict parameter Schema like this lesson's StrictNumbers; another is to type the parameters loosely and let the native function do all the checking; the third is a separate business check before execution. Each needs a set of deliberately wrong arguments to test it, as in the argument coercion exercise: without that test you do not know where the framework's defaults made a decision for you.",
+      "source": "a7ea0179ea1f"
+    },
+    "misconception-same-schema.claim": {
+      "text": "The tool definition a framework generates from a function is as complete as a hand-written one.",
+      "source": "352329d2bfc5"
+    },
+    "misconception-same-schema.correction": {
+      "text": "@tool generates the definition only from the type hints and the description you pass: the version generated in this lesson has no parameter descriptions and no additionalProperties. The model reads less as a result, and the provider will not stop extra fields. To add them, use type hints with descriptions or a separate parameter Schema, then confirm with the request comparison that they really reached the request.",
+      "source": "76ea3a90a9a1"
+    },
+    "compare-responsibility.title": {
+      "text": "Who does what in the two implementations",
+      "source": "8bd3e17fd68b"
+    },
+    "compare-responsibility.columns.0": {
+      "text": "Step",
+      "source": "28475230f056"
+    },
+    "compare-responsibility.columns.1": {
+      "text": "Native loop",
+      "source": "5bd0a20432cf"
+    },
+    "compare-responsibility.columns.2": {
+      "text": "LangChain (core package plus adapter)",
+      "source": "7e9d17d8c997"
+    },
+    "compare-responsibility.columns.3": {
+      "text": "Still yours",
+      "source": "74542e179ed5"
+    },
+    "compare-responsibility.rows.0.0": {
+      "text": "Messages",
+      "source": "4da199fae933"
+    },
+    "compare-responsibility.rows.0.1": {
+      "text": "Dicts with a role",
+      "source": "dea2ed01e8de"
+    },
+    "compare-responsibility.rows.0.2": {
+      "text": "SystemMessage, HumanMessage, AIMessage, ToolMessage",
+      "source": "56527fabbfb9"
+    },
+    "compare-responsibility.rows.0.3": {
+      "text": "What goes into the message history",
+      "source": "568532166e13"
+    },
+    "compare-responsibility.rows.1.0": {
+      "text": "Tool definitions",
+      "source": "2433800bfcbe"
+    },
+    "compare-responsibility.rows.1.1": {
+      "text": "Hand-written JSON Schema",
+      "source": "aa0451cf3696"
+    },
+    "compare-responsibility.rows.1.2": {
+      "text": "Generated by @tool from type hints",
+      "source": "a061fc61bc74"
+    },
+    "compare-responsibility.rows.1.3": {
+      "text": "Parameter descriptions, strict validation or not",
+      "source": "2b8916206a9b"
+    },
+    "compare-responsibility.rows.2.0": {
+      "text": "Call parsing",
+      "source": "8ccd5cf225a3"
+    },
+    "compare-responsibility.rows.2.1": {
+      "text": "Parses arguments only at execution",
+      "source": "8ad7c02d184d"
+    },
+    "compare-responsibility.rows.2.2": {
+      "text": "Parsed into tool_calls or invalid_tool_calls",
+      "source": "52e113ee3df7"
+    },
+    "compare-responsibility.rows.2.3": {
+      "text": "Invalid tool calls need an answer too",
+      "source": "810d07d6a0da"
+    },
+    "compare-responsibility.rows.3.0": {
+      "text": "Writing results back",
+      "source": "da00dedd09fc"
+    },
+    "compare-responsibility.rows.3.1": {
+      "text": "Builds the message whose role is tool",
+      "source": "7aa417dc7e1c"
+    },
+    "compare-responsibility.rows.3.2": {
+      "text": "ToolMessage",
+      "source": "26328172ba5b"
+    },
+    "compare-responsibility.rows.3.3": {
+      "text": "Failures written as structured errors",
+      "source": "fbf8ec6fcb71"
+    },
+    "compare-responsibility.rows.4.0": {
+      "text": "Loop and stopping",
+      "source": "115166a9bc75"
+    },
+    "compare-responsibility.rows.4.1": {
+      "text": "run_agent",
+      "source": "2e2fed92f400"
+    },
+    "compare-responsibility.rows.4.2": {
+      "text": "Not provided by langchain-core",
+      "source": "99cb9bc6913f"
+    },
+    "compare-responsibility.rows.4.3": {
+      "text": "Round limit, stop condition, model calls",
+      "source": "75212ab4ddf9"
+    },
+    "compare-responsibility.rows.5.0": {
+      "text": "Acceptance",
+      "source": "7acb62b7d929"
+    },
+    "compare-responsibility.rows.5.1": {
+      "text": "accept",
+      "source": "c125d0397b60"
+    },
+    "compare-responsibility.rows.5.2": {
+      "text": "accept",
+      "source": "c125d0397b60"
+    },
+    "compare-responsibility.rows.5.3": {
+      "text": "The same yardstick",
+      "source": "7012d7ac42da"
+    },
+    "mq-coercion.default-coercion.prompt": {
+      "text": "The default @tool receives the arguments `{\"a\": 19, \"b\": \"23\"}`. What is the tool result?",
+      "source": "ea74773da2e4"
+    },
+    "mq-coercion.default-coercion.a.text": {
+      "text": "ok, result 42.0",
+      "source": "f9e045d7a94e"
+    },
+    "mq-coercion.default-coercion.a.feedback": {
+      "text": "Right. Lax validation turns \"23\" into 23.0 first, so the native function's type check never runs.",
+      "source": "d811dd071331"
+    },
+    "mq-coercion.default-coercion.b.text": {
+      "text": "ValueError: Argument b must be a number.",
+      "source": "948eedfa78f7"
+    },
+    "mq-coercion.default-coercion.b.feedback": {
+      "text": "No. That is the native tool's verdict; the default @tool has already turned the string into a number before it.",
+      "source": "ffe520845dc7"
+    },
+    "mq-coercion.default-coercion.c.text": {
+      "text": "ValidationError",
+      "source": "bdfaef14be91"
+    },
+    "mq-coercion.default-coercion.c.feedback": {
+      "text": "No. You only get a ValidationError with a strict Schema such as StrictNumbers.",
+      "source": "a77a7fef1ce7"
+    },
+    "mq-coercion.default-coercion.explanation": {
+      "text": "A framework's defaults can quietly repair input the native tool would reject, and the failure disappears from the trace.",
+      "source": "224e906b4f80"
+    },
+    "section-4.title": {
+      "text": "Callbacks and a unified trace",
+      "source": "d8989e73f575"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Use callbacks to feed the framework's internal steps into the platform's event record, so what the framework did shows up in the same trace. LangChain components call the callback handler at key moments: on_chat_model_start when a chat model starts and on_llm_end when it ends; on_tool_start, on_tool_end and on_tool_error when a tool starts, ends or fails. The platform's RunContextCallbackHandler records these moments as lesson.framework_callback events, with only the callback name and the nesting, no inputs or outputs. Run numbers are written in order of appearance as `fw-1`, `fw-2`, so a replay shows the same nesting every time.",
+      "source": "29a0ca6194b9"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Why not record inputs and outputs? Because they already have a more reliable record. On the model side there is one event each for the framework input before conversion, the actual request, the response and the AIMessage the framework built; on the tool side, execute_tool_calls hands every call to RunContext, which produces tool_call and tool_result as usual. Callbacks add one thing: what the framework itself thinks happened, and in what order. In the zero-divisor task, for example, an on_tool_error sits between tool_call and tool_result, showing that the exception really was raised from the LangChain tool before the platform turned it into a structured error.",
+      "source": "7d381b16ccf3"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The key to a unified trace is that every path goes through the same exit. Model calls go only through RunContext's complete and tool calls only through execute_proposal, so the native side and the framework side produce events in the same format, and the replay and lab report do not need to know who sent them. The counterexample is LangGraph's prebuilt tool node: it calls the tool function directly, without RunContext, so the trace loses tool_call and tool_result. Course runs always use execute_tool_calls instead. In this lesson the native side goes through execute_proposal and the framework side through execute_tool_calls, which hands off to the former in the end, so the two sides' tool events can be compared directly. When you write framework code yourself, judge whether an execution path is usable by asking whether it goes through these two exits.",
+      "source": "14bddb408acb"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The callback handler sets raise_error, so when the platform's stop request is raised inside a callback the framework does not swallow it. Another exit that is easy to miss is LangSmith: langchain-core depends on it, and when an environment variable turns tracing on, the framework uploads messages to an external service. This lesson runs framework calls inside local_tracing_only, and with tracing on the adapter refuses to send the request, so run data stays on this machine. Callbacks tell you which steps the framework took, but they do not replace the requests and tool results themselves: to judge right or wrong, go back to those events.",
+      "source": "d0d961eb1319"
+    },
+    "section-5.title": {
+      "text": "Dependency versions",
+      "source": "a13e56fc5cb2"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Pin versions and record capability differences, so the comparison can be rerun after a framework upgrade. This lesson pins langchain-core 1.6.x; the dependency is in `pyproject.toml`, with a lower bound of 1.6.10 and an upper bound below 2. The report's \"langchain-core version\" is the version actually installed for this run, and every lesson.framework_input carries it too. Framework interfaces change fast, and many tutorials online still use older versions, so check the version before copying an example. The interface names in this lesson were checked against the installed version; check them again after changing versions.",
+      "source": "e790f209c9ea"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Write capability differences down one by one instead of saying \"the framework supports it\". For example, this lesson's adapter accepts only text messages and rejects image blocks outright; it does not implement streaming, so the framework falls back to a single call; when the provider reports no usage, the AIMessage's usage_metadata stays empty and the framework output says usage_reported is false, never 0. These are facts about this version of the adapter, to be checked again if you switch to a provider integration package. The provider layer differs too: for the same request body, providers support tool_choice and parallel calls differently; check them one by one in real runs and write them down as measured, fallback or unverified.",
+      "source": "6f5cd4914e31"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Rerunning the comparison depends on tests. This lesson's test writes the tool definition @tool generates for add_numbers into an assertion as is: types only, no parameter descriptions, no additionalProperties. If an upgrade ever changes how it is generated, that test fails first, telling you to rerun both implementations, look at the request differences again, and then decide whether the text and the acceptance rules need to change. \"The program still runs\" is not enough: with one field more or less in the request, the model sees something different. The tests also run all four exercises in both run languages, confirming that the event sequence and the report structure have not changed.",
+      "source": "3dea694a3f18"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Finally, the scope. This lesson installs only langchain-core: not the whole `langchain` package and not a provider integration package. The prebuilt agent in the `langchain` package wraps up the loop and tool execution, running on LangGraph underneath; what it saves you is exactly the steps this lesson wants you to see. Once you have seen them, you will know which defaults to check when you use it. If a project really needs a prebuilt agent, compare it this way first, then decide which of its defaults to trust. The next lesson, {{lesson:langchain-tools}}, uses the framework's tool and validation components to connect existing business contracts, and {{lesson:langgraph-state}} draws the loop as a graph with terminal states.",
+      "source": "a81c812db4e1"
+    },
+    "deep-dive-packages.title": {
+      "text": "How the LangChain packages divide the work",
+      "source": "9c55b18fe262"
+    },
+    "deep-dive-packages.summary": {
+      "text": "langchain-core is the shared interface, the langchain package is the prebuilt agent, integration packages connect to providers.",
+      "source": "67f00b3b4cfa"
+    },
+    "deep-dive-packages.paragraphs.0": {
+      "text": "LangChain 1.x is split into several packages. langchain-core defines the shared interfaces, such as messages, tools, the chat model base class and callbacks, with almost no concrete implementations; the `langchain` package builds prebuilt agents such as `create_agent` on top of it, with the loop and tool execution driven by LangGraph; integration packages like `langchain-openai` connect chat models to a specific provider and convert framework messages into that provider's request format. The `from langchain.tools import tool` in the official docs is the same decorator, just re-exported from the `langchain` package.",
+      "source": "ad7707537565"
+    },
+    "deep-dive-packages.paragraphs.1": {
+      "text": "This lesson installs only langchain-core, for two reasons. First, integration packages send their own HTTP requests, which do not go through RunContext: the platform cannot record them, and they ignore the model call budget and stop requests. That is why the platform wrote RunContextChatModel to take the integration package's place. Second, a prebuilt agent hides the loop, and this lesson is about seeing who does each step in it. Once you can compare, you will know which defaults to check when you use a prebuilt agent: how many steps it runs at most, how a tool error goes back to the model, and how invalid tool calls are handled.",
+      "source": "af4606e8a18a"
+    },
+    "deep-dive-packages.paragraphs.2": {
+      "text": "The tool use lesson of Microsoft AI Agents for Beginners follows the same order: first write the function's JSON Schema by hand, execute the function name and arguments the model picked yourself, and send the result back to the model; only then does it show how a framework wraps up this round trip so the developer writes just a function with type hints. Writing it by hand first and using a framework later is also why this course puts the framework lessons after the native loop: knowing what got wrapped tells you what to check.",
+      "source": "c3fc718e4381"
+    },
+    "deep-dive-packages.paragraphs.3": {
+      "text": "Compare also the first lesson of Learn Claude Code: its minimal loop is a `while` loop with no limit that exits when the model stops calling tools, about twenty lines of code; production agents stack constraints, hooks and lifecycle control on top of that skeleton. A framework does the same thing, adding layers on the same skeleton. Which layers were added, and what each layer's defaults are, is what to look for when you read a framework's source and docs.",
+      "source": "0768919e27a3"
+    },
+    "walkthrough-round.title": {
+      "text": "One round on the LangChain side",
+      "source": "7b88d43e63f7"
+    },
+    "walkthrough-round.description": {
+      "text": "A step-by-step account of one round of run_langchain; the code is a simplified illustration, not a run record. The evidence of your own run is in the events on the lab bench.",
+      "source": "c2a823c4126f"
+    },
+    "walkthrough-round.step-1.label": {
+      "text": "Build messages",
+      "source": "2d6c152c4572"
+    },
+    "walkthrough-round.step-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough-round.step-1.title": {
+      "text": "Message objects enter the framework",
+      "source": "dfbd7d271b5b"
+    },
+    "walkthrough-round.step-1.body": {
+      "text": "The system prompt and the question are wrapped as SystemMessage and HumanMessage, with the same text as the native side.",
+      "source": "fdba0cb4ee11"
+    },
+    "walkthrough-round.step-1.evidence": {
+      "text": "messages in lesson.framework_input",
+      "source": "b39835171e28"
+    },
+    "walkthrough-round.step-2.label": {
+      "text": "Send the request",
+      "source": "48e219025ae4"
+    },
+    "walkthrough-round.step-2.actor": {
+      "text": "Adapter",
+      "source": "b39514ce6b25"
+    },
+    "walkthrough-round.step-2.title": {
+      "text": "Framework messages become a request body",
+      "source": "b08468342628"
+    },
+    "walkthrough-round.step-2.body": {
+      "text": "RunContextChatModel converts the messages and the bound tools into an OpenAI-compatible request body and sends it through RunContext.",
+      "source": "bedb3592df87"
+    },
+    "walkthrough-round.step-2.evidence": {
+      "text": "The request in round 3",
+      "source": "6406743a8e46"
+    },
+    "walkthrough-round.step-3.label": {
+      "text": "Parse",
+      "source": "fbff7b5046d9"
+    },
+    "walkthrough-round.step-3.actor": {
+      "text": "langchain-core",
+      "source": "335a7441b379"
+    },
+    "walkthrough-round.step-3.title": {
+      "text": "The response becomes an AIMessage",
+      "source": "5b9277cd4f72"
+    },
+    "walkthrough-round.step-3.body": {
+      "text": "Calls that parse go into tool_calls, those that fail into invalid_tool_calls; the adapter fills in a missing call id.",
+      "source": "a2a6c7b9d5f7"
+    },
+    "walkthrough-round.step-3.evidence": {
+      "text": "lesson.framework_output",
+      "source": "8e1237e04bf3"
+    },
+    "walkthrough-round.step-4.label": {
+      "text": "Execute and write back",
+      "source": "7537fb62cfbe"
+    },
+    "walkthrough-round.step-4.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough-round.step-4.title": {
+      "text": "Every call gets a ToolMessage",
+      "source": "1b5ae88eeb74"
+    },
+    "walkthrough-round.step-4.body": {
+      "text": "execute_tool_calls hands the calls to RunContext one by one and appends each result to the message history as a ToolMessage.",
+      "source": "3c83d5a206fc"
+    },
+    "walkthrough-round.step-4.evidence": {
+      "text": "tool_call and tool_result",
+      "source": "023bc05a7bab"
+    },
+    "walkthrough-round.step-5.label": {
+      "text": "Stop",
+      "source": "ca4d973c0b00"
+    },
+    "walkthrough-round.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough-round.step-5.title": {
+      "text": "No calls, so stop",
+      "source": "a18e5af55f7f"
+    },
+    "walkthrough-round.step-5.body": {
+      "text": "This rule and the round limit are written in this lesson's loop, not in the framework.",
+      "source": "484b65812108"
+    },
+    "walkthrough-round.step-5.evidence": {
+      "text": "The \"Stop condition\" row in the lab report",
+      "source": "c9827cfd1cd5"
+    },
+    "mq-tool-node.why-not-tool-node.prompt": {
+      "text": "Why do course runs not use LangGraph's prebuilt tool node to execute tools?",
+      "source": "fa5adfef6633"
+    },
+    "mq-tool-node.why-not-tool-node.a.text": {
+      "text": "It calls the tool function directly, without RunContext, so the trace would lack tool_call and tool_result",
+      "source": "49d94737f725"
+    },
+    "mq-tool-node.why-not-tool-node.a.feedback": {
+      "text": "Right. A unified trace needs every tool call to go through the same exit.",
+      "source": "8e86e9f240d8"
+    },
+    "mq-tool-node.why-not-tool-node.b.text": {
+      "text": "It cannot execute Python functions",
+      "source": "2ea146dd277e"
+    },
+    "mq-tool-node.why-not-tool-node.b.feedback": {
+      "text": "No. It can execute them; the problem is that the execution is not recorded by the platform.",
+      "source": "1510ffe5b585"
+    },
+    "mq-tool-node.why-not-tool-node.c.text": {
+      "text": "It makes one extra model call",
+      "source": "60da5443c47e"
+    },
+    "mq-tool-node.why-not-tool-node.c.feedback": {
+      "text": "No. Executing a tool calls no model; the difference is in the record.",
+      "source": "1b2bcc642ef1"
+    },
+    "mq-tool-node.why-not-tool-node.explanation": {
+      "text": "An execution path that bypasses the record looks, in a replay, as if nothing happened.",
+      "source": "29085833d97b"
+    },
+    "references.hf-frameworks.title": {
+      "text": "When you need an agent framework (Hugging Face Agents Course)",
+      "source": "40e889238fd4"
+    },
+    "references.hf-langgraph.title": {
+      "text": "LangGraph and LangChain, control and freedom (Hugging Face Agents Course)",
+      "source": "9b1c312036a9"
+    },
+    "references.hf-llamaindex.title": {
+      "text": "Another framework's components, tools and workflows (Hugging Face Agents Course)",
+      "source": "a3b52259395b"
+    },
+    "references.ms-frameworks.title": {
+      "text": "Modular components of agent frameworks (Microsoft AI Agents for Beginners)",
+      "source": "3fa2d61cb029"
+    },
+    "references.ms-tool-use.title": {
+      "text": "Tool schemas and tool calling in frameworks (Microsoft AI Agents for Beginners)",
+      "source": "446c74eb8407"
+    },
+    "references.book-harness.title": {
+      "text": "Harness engineering: the edge beyond the model — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "db0fb4a77dde"
+    },
+    "references.lcc-loop.title": {
+      "text": "The minimal agent loop (Learn Claude Code)",
+      "source": "01df760d0322"
+    },
+    "references.langchain-tools-docs.title": {
+      "text": "The @tool decorator, Schema inference and tool execution (LangChain docs, checked 2026-10-20)",
+      "source": "2ac7972a5b68"
+    },
+    "code-langchain-loop.n-signature.text": {
+      "text": "The whole loop of the LangChain side. first_round continues after the native side's last round, so the two sets of requests never share a round number in the timeline.",
+      "source": "81982007770a"
+    },
+    "code-langchain-loop.n-tools.text": {
+      "text": "The tools are generated by @tool from the same Python functions, and the system prompt comes from the earlier lessons' setup too; the two sides differ only in style.",
+      "source": "c335c050d1a7"
+    },
+    "code-langchain-loop.n-callbacks.text": {
+      "text": "The callback handler records the framework's steps as lesson.framework_callback. Both the model and the tools get it, with one event each for start, end and error.",
+      "source": "a31741e9a4a7"
+    },
+    "code-langchain-loop.n-bind.text": {
+      "text": "bind_tools converts the tools into OpenAI-format tool definitions and binds them to the model. Note that no tool_choice is bound, so the request has no such field.",
+      "source": "643e2e633fbe"
+    },
+    "code-langchain-loop.n-allowlist.text": {
+      "text": "The allowlist: tool names mapped to functions that call the LangChain tools. Execution still goes through the platform's execute_tool, so failures are still structured errors.",
+      "source": "b8d1dc6a3138"
+    },
+    "code-langchain-loop.n-messages.text": {
+      "text": "The message history becomes framework message objects, with exactly the same text as the native side.",
+      "source": "c80a3ecb2a86"
+    },
+    "code-langchain-loop.n-tracing.text": {
+      "text": "Turn LangSmith tracing off: with tracing on in the environment, the framework would upload messages to an external service.",
+      "source": "d9ef662c3029"
+    },
+    "code-langchain-loop.n-loop.text": {
+      "text": "langchain-core has no loop. The round limit is 3, the same as the native side, and it is written here.",
+      "source": "030504233de2"
+    },
+    "code-langchain-loop.n-body.text": {
+      "text": "Keep the request body about to be sent, for the request comparison; a test proves it matches the request the platform records.",
+      "source": "1a716225fded"
+    },
+    "code-langchain-loop.n-invoke.text": {
+      "text": "One invoke is one model call through RunContext, with a framework input event before it and a framework output event after it. It returns an AIMessage.",
+      "source": "7ec7d7726bb9"
+    },
+    "code-langchain-loop.n-counts.text": {
+      "text": "The framework has already sorted the calls into two kinds: those that parsed are in tool_calls, those that failed in invalid_tool_calls.",
+      "source": "02dd626fd8df"
+    },
+    "code-langchain-loop.n-stop.text": {
+      "text": "The stop condition: only when both kinds of calls are absent has the model answered. Checking tool_calls alone would treat one broken call as the final answer.",
+      "source": "9ea3817f84dc"
+    },
+    "code-langchain-loop.n-execute.text": {
+      "text": "Valid and invalid calls both go to RunContext, and each comes back as a ToolMessage; only then is the next request valid.",
+      "source": "539e5c5f099c"
+    },
+    "code-langchain-loop.n-kinds.text": {
+      "text": "Framework message types are named `system`, `human`, `ai` and `tool`; the report puts them next to the native roles.",
+      "source": "7b613ffdf510"
+    },
+    "code-tools.n-strict-class.text": {
+      "text": "A strict parameter Schema, used only in the argument coercion exercise as the counterpart to the default @tool.",
+      "source": "335fd5d199f6"
+    },
+    "code-tools.n-strict-config.text": {
+      "text": "strict turns off type coercion and extra set to forbid rejects extra fields. Only with both does the verdict match the native tool.",
+      "source": "ef25fb5e50b1"
+    },
+    "code-tools.n-factory.text": {
+      "text": "Builds the tool for one run language: the tool name is code, the description comes from the runtime text of {{lesson:tool-selection}}.",
+      "source": "a25cecf37182"
+    },
+    "code-tools.n-native.text": {
+      "text": "This binds the native lesson's add_numbers, keeping its type checks and error messages unchanged.",
+      "source": "a4120e9d4529"
+    },
+    "code-tools.n-decorator.text": {
+      "text": "The name and description of @tool are given as arguments; when args_schema is empty, the parameter Schema is inferred from the type hints of the function below.",
+      "source": "476d8c37715e"
+    },
+    "code-tools.n-body-call.text": {
+      "text": "The type hints set the target type for lax validation: \"23\" and true are both turned into floats before reaching the native function.",
+      "source": "47a270945a5b"
+    },
+    "code-parse.n-parse-signature.text": {
+      "text": "Platform adapter: turns an OpenAI-format response into the framework's AIMessage. The call parsing exercise calls it directly.",
+      "source": "97583924ddf2"
+    },
+    "code-parse.n-parse-loop.text": {
+      "text": "Handles the provider's calls one by one; position is the call's place in the original list.",
+      "source": "d55e40e8b1ae"
+    },
+    "code-parse.n-parse-id.text": {
+      "text": "A missing call id is filled in, or the tool result could not be matched to the call. The adapter does this; langchain-core itself records the id as empty.",
+      "source": "195339df36dd"
+    },
+    "code-parse.n-parse-synth.text": {
+      "text": "Filled-in ids are listed separately in the framework output's synthesized_call_ids, so they never pass for provider ids.",
+      "source": "6cfbf391c949"
+    },
+    "code-parse.n-parse-core.text": {
+      "text": "langchain-core's parsing function: parses the arguments string into a dict.",
+      "source": "a6335ac03906"
+    },
+    "code-parse.n-parse-invalid.text": {
+      "text": "Invalid JSON is not raised to you; it becomes an invalid tool call, keeping the raw arguments and an error message.",
+      "source": "288766666080"
+    },
+    "code-parse.n-parse-object.text": {
+      "text": "parse_tool_call accepts any JSON, arrays included; anything that is not an object cannot be passed by name, so it is an invalid tool call too.",
+      "source": "11b61908125b"
+    },
+    "code-parse.n-parse-valid.text": {
+      "text": "A valid call keeps only the parsed dict; the original arguments text is lost here, and the next request carries a re-serialized version.",
+      "source": "9fdd30553c1b"
+    },
+    "code-parse.n-parse-message.text": {
+      "text": "The two kinds of calls go into tool_calls and invalid_tool_calls. When the provider reports no usage, usage_metadata is empty, never 0.",
+      "source": "05e3a134cf59"
+    },
+    "code-parse.fold-choice.label": {
+      "text": "Platform: check the response shape and take the message of the first choice",
+      "source": "5aad23f64688"
+    },
+    "code-parse.fold-metadata.label": {
+      "text": "Platform: collect response metadata such as the finish reason and model name",
+      "source": "e5b29cef3d5f"
+    },
+    "code-decision.title": {
+      "text": "Only langchain-core, our own loop, execution through RunContext",
+      "source": "519a4ea50202"
+    },
+    "code-decision.chosen": {
+      "text": "The model is the platform's RunContextChatModel, the tools are generated by @tool from the native functions, and execution goes to execute_tool_calls; the loop, round limit and acceptance function are written out in this lesson, the same as on the native side.",
+      "source": "4efedb48db9e"
+    },
+    "code-decision.prebuilt-agent.title": {
+      "text": "Use the prebuilt agent from the langchain package",
+      "source": "dd4569a9b4c7"
+    },
+    "code-decision.prebuilt-agent.why_not": {
+      "text": "It wraps up the loop and tool execution, which are exactly the steps this lesson compares; its defaults have to be understood before it can be used.",
+      "source": "b48c522d9a47"
+    },
+    "code-decision.provider-package.title": {
+      "text": "Install a provider integration package and use its chat model",
+      "source": "9bf41c30338e"
+    },
+    "code-decision.provider-package.why_not": {
+      "text": "The integration package sends its own requests without RunContext: no record, no model call count, no way to stop it.",
+      "source": "1a0d70501e92"
+    },
+    "code-decision.tool-node.title": {
+      "text": "Execute tools with LangGraph's prebuilt tool node",
+      "source": "d982f6ea4d01"
+    },
+    "code-decision.tool-node.why_not": {
+      "text": "It calls the tool functions directly, so the trace lacks tool_call and tool_result.",
+      "source": "41c6a5b5d453"
+    },
+    "paired-run.title": {
+      "text": "The same task, two implementations",
+      "source": "e2f8122363b7"
+    },
+    "paired-run.hypothesis": {
+      "text": "With the same question, tool functions, round limit and acceptance function, both implementations get the same acceptance verdict; request bodies differ only in fields the framework generates or rewrites: tool definitions, tool_choice, and the arguments written back.",
+      "source": "7e2a1307d4fa"
+    },
+    "paired-run.sum.label": {
+      "text": "Normal task: addition",
+      "source": "fa77acd63b3b"
+    },
+    "paired-run.divide.label": {
+      "text": "Failing task: zero divisor",
+      "source": "ab86f0ec92e4"
+    },
+    "paired-run.native-choice.text": {
+      "text": "tool_choice in the native side's first request.",
+      "source": "bba39a0f45f5"
+    },
+    "paired-run.framework-input.text": {
+      "text": "The framework input before the LangChain side's first call: the messages use the framework's own field names.",
+      "source": "a9df062da6d0"
+    },
+    "paired-run.framework-tools.text": {
+      "text": "The converted request body in the same round: tool definitions generated by @tool.",
+      "source": "c2b2a3eebb2e"
+    },
+    "paired-run.framework-output.text": {
+      "text": "The parsed tool_calls in the AIMessage the framework built from the response.",
+      "source": "e709b01224d7"
+    },
+    "paired-run.callback.text": {
+      "text": "The first framework step the callback handler recorded.",
+      "source": "b8e27a964823"
+    },
+    "paired-run.diff.text": {
+      "text": "How many fields differ in the first pair of requests.",
+      "source": "bd4dddad68c7"
+    },
+    "paired-run.acceptance.text": {
+      "text": "The acceptance verdict for the LangChain side.",
+      "source": "f99da87486bf"
+    },
+    "paired-run.guide.0.text": {
+      "text": "One run executes both implementations, one after the other: the native loop in rounds 1 and 2, LangChain from round 3.",
+      "source": "0d5f2ffbcab3"
+    },
+    "paired-run.guide.1.text": {
+      "text": "Every native request states tool_choice as auto.",
+      "source": "d24250ca1274"
+    },
+    "paired-run.guide.2.text": {
+      "text": "Before the LangChain side calls the model, the framework input is recorded first: type is `system` or `human`, not role.",
+      "source": "a87855f5f555"
+    },
+    "paired-run.guide.3.text": {
+      "text": "The request right after it is the body actually sent. Compare: the tool definitions lack parameter descriptions.",
+      "source": "57b64042c550"
+    },
+    "paired-run.guide.4.text": {
+      "text": "When the response comes back, the framework parses the calls into an AIMessage; arguments is already a dict.",
+      "source": "d9343078c4c6"
+    },
+    "paired-run.guide.5.text": {
+      "text": "Callbacks feed the framework's own steps into the same trace; the first is the chat model starting.",
+      "source": "0b6b93f56a95"
+    },
+    "paired-run.guide.6.text": {
+      "text": "The request comparison report lists only real differences; start with how many the first pair has.",
+      "source": "b58b46fb8617"
+    },
+    "paired-run.guide.7.text": {
+      "text": "Finally the acceptance: one function, reading tool results and request bodies, not the wording of the answer.",
+      "source": "90debe03cf93"
+    },
+    "paired-run.conclusion.proves.0": {
+      "text": "Which requests each implementation sent in this run, which tools it executed, why it stopped, and the acceptance function's verdict for each side.",
+      "source": "ce19c7b5eb16"
+    },
+    "paired-run.conclusion.proves.1": {
+      "text": "Which request fields differ because of the framework: generated tool definitions, the missing tool_choice, re-serialized arguments and tool results turned into floats.",
+      "source": "f64fa3bda7e2"
+    },
+    "paired-run.conclusion.does_not_prove.0": {
+      "text": "Differences in the answers' wording cannot be blamed on the framework: two model calls can differ on their own.",
+      "source": "4e1210000348"
+    },
+    "paired-run.conclusion.does_not_prove.1": {
+      "text": "How a given provider treats a missing tool_choice depends on its documentation and real runs.",
+      "source": "c8995a660884"
+    },
+    "paired-run.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the model responses come from the fixture, and the way arguments are written is set by the script.",
+      "source": "33706caf3f6f"
+    },
+    "paired-run.conclusion.does_not_prove.3": {
+      "text": "The same acceptance verdict in one comparison does not make the two styles equivalent on every task; compare again for other tasks and tools.",
+      "source": "af22f0f52ec4"
+    },
+    "hidden-defaults.title": {
+      "text": "What the framework does quietly",
+      "source": "f7202dc58694"
+    },
+    "hidden-defaults.hypothesis": {
+      "text": "The default @tool converts and runs arguments the native tool rejects; with a strict Schema the verdict matches the native one. When parsing calls, the framework fills in missing call ids, puts calls that fail to parse into invalid_tool_calls, and writes valid calls back first.",
+      "source": "38f58c06a0d9"
+    },
+    "hidden-defaults.arguments.label": {
+      "text": "Argument coercion (runner-built)",
+      "source": "93fe57c3894f"
+    },
+    "hidden-defaults.parsing.label": {
+      "text": "Call parsing (runner-built)",
+      "source": "bb41d6390511"
+    },
+    "hidden-defaults.masked.text": {
+      "text": "Cases the native tool rejects but the default @tool runs successfully.",
+      "source": "0f4729836134"
+    },
+    "hidden-defaults.default-string.text": {
+      "text": "The result of the \"number as a string\" case through the default @tool.",
+      "source": "57b0741af130"
+    },
+    "hidden-defaults.strict-string.text": {
+      "text": "The same case through the strict Schema.",
+      "source": "e611a79149ec"
+    },
+    "hidden-defaults.invalid.text": {
+      "text": "Calls that failed to parse and went into invalid_tool_calls.",
+      "source": "7d384e0a50cc"
+    },
+    "hidden-defaults.synthesized.text": {
+      "text": "Call ids filled in by the adapter.",
+      "source": "1ff04d26d8a0"
+    },
+    "hidden-defaults.order.text": {
+      "text": "Whether the order written back matches the order the provider sent.",
+      "source": "c007b0790196"
+    },
+    "hidden-defaults.guide.0.text": {
+      "text": "Neither arm calls a model: the arguments and the provider response are built by the runner, while the tools and the parsing code really run.",
+      "source": "01fa8443db71"
+    },
+    "hidden-defaults.guide.1.text": {
+      "text": "Start with the argument coercion summary: of the cases the native tool rejects, how many did the default @tool let through?",
+      "source": "b3266b841dad"
+    },
+    "hidden-defaults.guide.2.text": {
+      "text": "The string \"23\" goes to the default @tool and the result is ok.",
+      "source": "b8e319f9c659"
+    },
+    "hidden-defaults.guide.3.text": {
+      "text": "The same arguments through the strict Schema give a ValidationError, matching the native verdict.",
+      "source": "ba56fed1aa3e"
+    },
+    "hidden-defaults.guide.4.text": {
+      "text": "On to call parsing: the truncated JSON and the array both went into invalid_tool_calls instead of being dropped.",
+      "source": "5954e1527336"
+    },
+    "hidden-defaults.guide.5.text": {
+      "text": "The call without an id got an id from the adapter, listed separately.",
+      "source": "280c8f670d73"
+    },
+    "hidden-defaults.guide.6.text": {
+      "text": "Writing back puts the valid call first, so the order differs from the provider's.",
+      "source": "25886eee98e4"
+    },
+    "hidden-defaults.conclusion.proves.0": {
+      "text": "How the default @tool treats these four argument sets on the installed langchain-core version, and how a strict Schema restores the native verdict.",
+      "source": "baff5119b111"
+    },
+    "hidden-defaults.conclusion.proves.1": {
+      "text": "How the adapter handles truncated JSON, array arguments and a missing call id: every call gets a tool result, and filled-in ids are recorded.",
+      "source": "1250e167d793"
+    },
+    "hidden-defaults.conclusion.does_not_prove.0": {
+      "text": "Whether a real model would send such arguments or responses: the inputs of these arms are built by the runner, not written by a model.",
+      "source": "e8dc18f95080"
+    },
+    "hidden-defaults.conclusion.does_not_prove.1": {
+      "text": "That provider integration packages behave the same: this lesson's parsing goes through the platform adapter, and other packages must be checked separately.",
+      "source": "e70ac8b99ec1"
+    },
+    "hidden-defaults.conclusion.does_not_prove.2": {
+      "text": "That a strict Schema is the only fix: typing the parameters loosely and checking in the native function, or a business check before execution, also gives the native verdict.",
+      "source": "924d6173f0e4"
+    },
+    "quiz.q1.prompt": {
+      "text": "What do the two implementations share in this lesson, so that the comparison is fair?",
+      "source": "ead106d7f3d4"
+    },
+    "quiz.q1.a.text": {
+      "text": "The question, system prompt, tool functions, round limit and acceptance function",
+      "source": "996d53e8dbf3"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. Only the style changes, so differences can be traced to the framework.",
+      "source": "3c959db2549a"
+    },
+    "quiz.q1.b.text": {
+      "text": "The same tool names are enough",
+      "source": "950bd1354feb"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. With a different prompt or round limit, the results cannot be attributed.",
+      "source": "ab6261e97c28"
+    },
+    "quiz.q1.c.text": {
+      "text": "The two model answers must match word for word",
+      "source": "1818f72e9427"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. The answers depend on model sampling; they are not a condition of the comparison.",
+      "source": "16d42dd8ef18"
+    },
+    "quiz.q1.explanation": {
+      "text": "A controlled experiment changes one variable at a time.",
+      "source": "6cb2f9f44b23"
+    },
+    "quiz.q2.prompt": {
+      "text": "How does lesson.framework_input differ from the request right after it?",
+      "source": "5e49fadb8819"
+    },
+    "quiz.q2.a.text": {
+      "text": "The first is the messages the framework holds; the second is the request body the adapter converted",
+      "source": "d7be4de01de6"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. The framework input uses LangChain's field names; the request body is in the provider's format.",
+      "source": "2b2122e17526"
+    },
+    "quiz.q2.b.text": {
+      "text": "They are identical, recorded twice",
+      "source": "7d88fa922b66"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The field names and structure of the messages differ, for example type versus role.",
+      "source": "c5b6b17e8669"
+    },
+    "quiz.q2.c.text": {
+      "text": "The first is the raw request the provider received",
+      "source": "33847e54c1d4"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The framework input is the representation before conversion and cannot be taken for the request body.",
+      "source": "c4f3f04344c2"
+    },
+    "quiz.q2.explanation": {
+      "text": "Recording the two layers apart keeps the framework's internal representation from passing for the request sent.",
+      "source": "3b52a848c264"
+    },
+    "quiz.q3.prompt": {
+      "text": "A call from the provider has arguments [19, 23]. What happens on the LangChain side?",
+      "source": "5ebd51ed3a2c"
+    },
+    "quiz.q3.a.text": {
+      "text": "It goes into invalid_tool_calls, is still executed once, and gets a structured error saying the arguments must be a JSON object",
+      "source": "9e521003ba1d"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. Without an object the arguments cannot be passed by name, but the call is not dropped.",
+      "source": "d17712d46e8e"
+    },
+    "quiz.q3.b.text": {
+      "text": "It is passed to a and b by position and returns 42",
+      "source": "efb66ccd1c47"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. Tool arguments are passed by name only.",
+      "source": "2f54be69fe4b"
+    },
+    "quiz.q3.c.text": {
+      "text": "The whole call is dropped",
+      "source": "e06f10a32e15"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. Dropping it would leave the next request one tool result short.",
+      "source": "d71b1cc8328a"
+    },
+    "quiz.q3.explanation": {
+      "text": "Invalid tool calls need tool results too, so the message history stays complete.",
+      "source": "786a9f9e960a"
+    },
+    "quiz.q4.prompt": {
+      "text": "The default @tool receives `{\"a\": 19, \"b\": 23, \"c\": 1}`. What is the result? And for the native tool?",
+      "source": "3536702d2156"
+    },
+    "quiz.q4.a.text": {
+      "text": "The default @tool drops `c` and returns 42.0; the native tool reports a TypeError",
+      "source": "5f009e8b1790"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. The inferred Schema does not forbid extra fields, while the native function accepts no unknown argument.",
+      "source": "ba73f08afe66"
+    },
+    "quiz.q4.b.text": {
+      "text": "Both report an error",
+      "source": "29447459097d"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. Only with a Schema that forbids extra fields, like StrictNumbers, does the framework side report an error.",
+      "source": "fb15091e0e4b"
+    },
+    "quiz.q4.c.text": {
+      "text": "Both return 43",
+      "source": "3a83076ba795"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. `c` takes no part in the sum, and the native tool does not accept it either.",
+      "source": "7d0f170923ca"
+    },
+    "quiz.q4.explanation": {
+      "text": "A framework's defaults can make failures disappear from the trace; a strict Schema or a business check puts them back.",
+      "source": "ee4f4f1ad969"
+    },
+    "quiz.q5.prompt": {
+      "text": "After upgrading langchain-core, how do you know the comparison of the two implementations still holds?",
+      "source": "5663c53af2dd"
+    },
+    "quiz.q5.a.text": {
+      "text": "Run this lesson's tests: the generated tool definition is in an assertion and fails if it changes; then rerun both implementations and look at the request differences",
+      "source": "659f9812456b"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. Pinned versions plus a comparison you can rerun keep upgrades under control.",
+      "source": "bd563229b58b"
+    },
+    "quiz.q5.b.text": {
+      "text": "If the program raises no error, nothing changed",
+      "source": "55a096d269c2"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. With one field more or less in the request, the program still runs.",
+      "source": "4eb9b5cefaf0"
+    },
+    "quiz.q5.c.text": {
+      "text": "Check whether the framework's version number went up",
+      "source": "e113409e46c7"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. A version number does not tell you whether the generated content changed.",
+      "source": "afc2900aeab5"
+    },
+    "quiz.q5.explanation": {
+      "text": "Put what the framework generates into tests, and differences surface by themselves on upgrade.",
+      "source": "bc5b03185533"
+    },
+    "quiz.q6.prompt": {
+      "text": "In the zero-divisor task, on what basis does the acceptance function accept the LangChain side?",
+      "source": "d4a834d48be8"
+    },
+    "quiz.q6.a.text": {
+      "text": "Every divide_numbers call returns ok=false and the failure is written into a tool message of the next request",
+      "source": "b4b31a5db8d2"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. Acceptance reads the tool results and request bodies; the failure was not hidden.",
+      "source": "fa89dbb0e4d1"
+    },
+    "quiz.q6.b.text": {
+      "text": "The model's answer says it cannot divide by 0",
+      "source": "f4fe79412cc2"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. Acceptance does not read the wording, which changes with sampling.",
+      "source": "d6ffb5940e81"
+    },
+    "quiz.q6.c.text": {
+      "text": "The run raised no exception",
+      "source": "6d20895c99cd"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The flow ending is not the same as the task passing acceptance.",
+      "source": "51d657964a48"
+    },
+    "quiz.q6.explanation": {
+      "text": "Telling apart flow ended, tool executed and task accepted is the yardstick both implementations share.",
+      "source": "20b19402c9f3"
+    },
+    "quiz.q7.prompt": {
+      "text": "In the zero-divisor task, an on_tool_error callback sits between the LangChain side's tool_call and tool_result. What does it show?",
+      "source": "1526aeea2256"
+    },
+    "quiz.q7.a.text": {
+      "text": "The exception was raised from the LangChain tool, then turned by the platform into a structured error written back to the model",
+      "source": "28b5a0bc61ac"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. The callback records the steps the framework went through; the outcome is still read from tool_result.",
+      "source": "e2f640430dd9"
+    },
+    "quiz.q7.b.text": {
+      "text": "The run stopped because the tool failed",
+      "source": "2a3bf404abb7"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. A tool_result and the next request follow, and the run continues.",
+      "source": "27efb2831b4d"
+    },
+    "quiz.q7.c.text": {
+      "text": "The framework retried the tool call automatically",
+      "source": "fa783898a9e5"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. langchain-core does not retry for you, and the events show only one execution.",
+      "source": "541cb67d795c"
+    },
+    "quiz.q7.explanation": {
+      "text": "Callbacks add the framework's internal order; judging right or wrong still means reading the requests and tool results.",
+      "source": "d3ef234b1d07"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Call parsing (runner-built)\" and find the evidence that the adapter filled in a call id.",
+      "source": "a55be3731c33"
+    },
+    "check-hunt.explanation": {
+      "text": "synthesized_call_ids in lesson.parse_result lists the ids the adapter filled in. The third call in the sample has no id; it is third in the provider's list, so the filled-in id ends in 3, and the later tool_call and tool_result pair up under that id. The native side has no such step: it puts the provider's message back unchanged, and a missing id is filled in by the platform, starting with synthesized_call, when it executes the call proposal. By contrast, the first two calls carry their own ids; although they failed to parse, they are written back under the provider's ids.",
+      "source": "780691037a71"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own run and this lesson's source, and tick an item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In one run I found both implementations' first requests and can say which fields differ.",
+      "source": "f39b7ee0b530"
+    },
+    "check-points.item-2.text": {
+      "text": "I can say which layer lesson.framework_input, request and lesson.framework_output each record.",
+      "source": "a7119cc65ccb"
+    },
+    "check-points.item-3.text": {
+      "text": "I read the argument coercion report and can say which arguments the default @tool let through, and why.",
+      "source": "6d20829a4049"
+    },
+    "check-points.item-4.text": {
+      "text": "I can point to the lines in run_langchain the framework did not write for me and I had to write myself.",
+      "source": "308c8173ba5e"
+    },
+    "check-points.item-5.text": {
+      "text": "I opened a lesson.framework_callback and can say how it is ordered relative to tool_call and tool_result.",
+      "source": "7be28c9bf279"
+    },
+    "code_notes.tool_calls.note": {
+      "text": "AIMessage field: calls that parsed, with arguments already a dict and a call id on each.",
+      "source": "8f9fdb1fb0e5"
+    },
+    "code_notes.invalid_tool_calls.note": {
+      "text": "AIMessage field: calls that failed to parse, keeping raw arguments and an error; not in tool_calls.",
+      "source": "8997428f4905"
+    },
+    "code_notes.bind_tools.note": {
+      "text": "Converts tools into OpenAI-format tool definitions and binds them; every later invoke sends them.",
+      "source": "ba81e853ead1"
+    },
+    "code_notes.invoke.note": {
+      "text": "The common call method of LangChain components; a chat model's invoke takes messages, returns an AIMessage.",
+      "source": "c182ce619b20"
+    },
+    "code_notes.RunContextChatModel.note": {
+      "text": "The platform's LangChain chat model: every call goes out and is recorded through RunContext.",
+      "source": "38b45b2e8446"
+    },
+    "code_notes.execute_tool_calls.note": {
+      "text": "Platform function: runs valid and invalid calls through RunContext, returns ToolMessages.",
+      "source": "6dc176e2f1cd"
+    },
+    "code_notes.StrictNumbers.note": {
+      "text": "This lesson's strict parameter Schema: no type coercion, no extra fields; matches the native tool.",
+      "source": "e91ddc8965d2"
+    },
+    "code_notes.local_tracing_only.note": {
+      "text": "Context manager that turns LangSmith tracing off, keeping framework data on this machine.",
+      "source": "60c46c564697"
+    },
+    "code_notes.accept.note": {
+      "text": "The acceptance function both sides share: reads tool results and request bodies, not wording.",
+      "source": "e2329251dd3d"
+    },
+    "code_notes.synthesized_call_ids.note": {
+      "text": "Lists the call ids the adapter filled in, so they never pass for provider ids.",
+      "source": "3e8482e48eff"
+    },
+    "code_notes.parse_tool_call.note": {
+      "text": "langchain-core's parser: turns the arguments string into a dict, raising on invalid JSON.",
+      "source": "38baf757b7fe"
+    }
+  }
+}
