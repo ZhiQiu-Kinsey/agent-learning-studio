@@ -1,6 +1,7 @@
 """Reuse LiteLLM's provider adapters; lessons keep their own agent loop and tool execution."""
 from dataclasses import dataclass
 import os
+import re
 import threading
 
 from course.i18n import SOURCE_LOCALE
@@ -28,6 +29,17 @@ class ModelProfile:
     @property
     def representation(self):
         return "http_body" if self.id == "bailian" else "sdk_standardized"
+
+    @property
+    def unsupported_params(self):
+        """Request parameters the provider rejects for this model, so the run omits them and says so.
+
+        Anthropic's 5-series models answer ``temperature`` with a 400 ("deprecated for this
+        model"); drop_params stays False, so the omission is made visibly by RunContext.
+        """
+        if self.id == "anthropic" and re.match(r"^claude-[a-z]+-5(?:-|$)", self.model or ""):
+            return frozenset({"temperature"})
+        return frozenset()
 
 
 def load_sdk():

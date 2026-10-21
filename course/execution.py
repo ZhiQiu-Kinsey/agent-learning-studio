@@ -44,6 +44,9 @@ class RunContext:
     emit_event: Callable = field(repr=False)
     cancelled: Callable[[], bool] = field(default=lambda: False, repr=False)
     max_model_calls: int = 3
+    # Parameters the provider rejects for this model. They are left out of the request that is
+    # sent and recorded, and the request event lists them under ``omitted_params``.
+    unsupported_params: frozenset = frozenset()
     # The run's language (course/i18n.py). Lesson code reads its runtime text for this
     # locale; the server picked it from the UI language and the locales the lesson supports.
     locale: str = SOURCE_LOCALE
@@ -98,7 +101,8 @@ class RunContext:
         request = {"model": self.model, **copy.deepcopy({k: v for k, v in body.items() if k != "model"})}
         self._round = round_number
         tag = {} if branch is None else {"branch": branch}
-        self.emit("request", {"body": request, "representation": self.representation, **tag}, round_number)
+        omitted = self._without_unsupported(request)
+        self.emit("request", {"body": request, "representation": self.representation, **tag, **omitted}, round_number)
         started = time.perf_counter()
         response = self._invoke_completion(request, self.api_key)
         self.emit("response", {
@@ -107,6 +111,13 @@ class RunContext:
         }, round_number)
         self.check_cancelled()
         return response
+
+    def _without_unsupported(self, request: dict) -> dict:
+        """Event fields for the parameters taken out of ``request`` (in place); {} when none were."""
+        omitted = {key: request.pop(key) for key in sorted(self.unsupported_params) if key in request}
+        if not omitted:
+            return {}
+        return {"omitted_params": {"values": omitted, "reason": "unsupported_by_model"}}
 
     def _check_model_budget(self):
         if self._model_count >= self.max_model_calls:
@@ -320,7 +331,8 @@ class RunContext:
             request["stream_options"] = {"include_usage": True}
         self._round = round_number
         tag = {} if branch is None else {"branch": branch}
-        self.emit("request", {"body": request, "representation": self.representation, "stream": True, **tag},
+        omitted = self._without_unsupported(request)
+        self.emit("request", {"body": request, "representation": self.representation, "stream": True, **tag, **omitted},
                   round_number)
         started = time.perf_counter()
         stream = self._invoke(self.stream_completion, copy.deepcopy(request), self.api_key)
