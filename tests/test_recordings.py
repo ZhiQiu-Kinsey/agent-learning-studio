@@ -368,8 +368,15 @@ class RecordingApiTests(RecordingTestCase):
             detail = self.client.get(f"/api/lessons/{lesson_id}/recordings/demo-run").json()
             self.assertEqual(detail["events"], load_document(self.path)["events"])
             self.assertTrue(all(event["provenance"] == "recorded_run" for event in detail["events"]))
+        # 真实课程只列出仓库里它自己目录下的录制，临时目录里导出的不会混进来。
+        shipped = sorted(path.stem for path in
+                         (Path(__file__).resolve().parents[1] / "lessons" / "lesson_01_tool_selection"
+                          / "recordings").glob("*.json"))
         real = self.client.get("/api/lessons/tool-selection/recordings").json()
-        self.assertEqual(real, {"lesson_id": "tool-selection", "recordings": []})
+        self.assertEqual(real["lesson_id"], "tool-selection")
+        self.assertEqual(sorted(r["name"] for r in real["recordings"]), shipped)
+        self.assertNotIn("demo-run", shipped)
+        self.assertTrue(all(r["valid"] for r in real["recordings"]))
         # 录制不进入运行存储，也不出现在“你的运行”列表中。
         self.assertEqual(self.client.get("/api/runs").json(), {"runs": []})
 
