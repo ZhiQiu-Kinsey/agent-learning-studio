@@ -37,9 +37,11 @@ class FirstWords(AgentExecutor):
 
 
 def main():
+    # 先 listen 再报端口：uvicorn 启动前到达的连接在积压队列里等待，而不是被拒绝（CI 较慢时会遇到）。
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
-    url = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    sock.listen(64)
+    url =f"http://127.0.0.1:{sock.getsockname()[1]}"
     card = AgentCard(
         name="first-words-worker", description="Keeps the first three words.", version="0.1.0",
         default_input_modes=["text/plain"], default_output_modes=["text/plain"],
