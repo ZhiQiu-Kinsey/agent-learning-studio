@@ -39,14 +39,16 @@ The shared corpus, query wording and chunking live in `lessons/lesson_document_l
 | Take one result's score apart | By default the top result of `q03`; `query_id`, your own `query` or a `chunk_id` can be set | `lesson.score`: per query term the document frequency, inverse document frequency (raw and floored), term frequency, term frequency part and contribution, plus length and the length normalization factor; the report checks that the contributions add up to the score and shows the score under default parameters for comparison |
 | Misses and unanswerable queries | Finds a reason for each of the 3 reworded queries and asks them again in the handbook's words; shows what BM25 returns for the 2 unanswerable queries | One `lesson.miss` per miss (reason `no_shared_terms` or `outranked`, the terms the annotated chunks share and their rank, the rewrite result); one `lesson.no_answer` per unanswerable query (how many results, top score) |
 
+Three more exercises are the same two scenarios with different preset parameters, one per experiment arm that changes a parameter: "Hit table: top 1 only" (`top_k=1`), "Score breakdown: length normalization off (b=0)" and "Score breakdown: term frequency saturates later (k1=3)". The test mode accepts only an exercise's own preset inputs, so each such arm points at its own exercise instead of carrying inputs.
+
 Inputs: `top_k` (1–10), `k1` (0–3), `b` (0–1); the explain exercise also takes `query_id`, `query` and `chunk_id`. The question box on the web page is a learner note; it goes into the report and does not change the search.
 
 With default parameters both languages give the same hit table: of 12 annotated queries, 9 hit, 7 are fully covered, the mean reciprocal rank is 0.75, and `q04`, `q05` and `q06` miss. In Chinese all three misses share no term at all; in English `q06` shares only `after` with its annotated chunk, which ranks 9th, so setting `top_k` to 10 makes it hit.
 
 ## What to look at in the experiments
 
-- **Keyword retrieval on one query set** ("Top 5 (default)" against "Top 1 only"): versions and parameters in `lesson.index`; the first query's terms and top result; `hit`, `complete` and `first_rank` in the verdict; the report table, hit rate and full coverage rate (with `top_k=1` coverage drops clearly while the hit count holds); the rerun check.
-- **Take one result's score apart** (default, `b=0`, `k1=3`): the per-term table; the length normalization factor (1 when `b=0`); the total; the check that term contributions add up to the score; the score under default parameters for comparison.
+- **Keyword retrieval on one query set** ("Top 5 (default)" runs the exercise "Hit table for the whole query set", "Top 1 only" runs "Hit table: top 1 only"): versions and parameters in `lesson.index`; the first query's terms and top result; `hit`, `complete` and `first_rank` in the verdict; the report table, hit rate and full coverage rate (with `top_k=1` coverage drops clearly while the hit count holds); the rerun check.
+- **Take one result's score apart** (default, `b=0`, `k1=3`; each arm is its own exercise): the per-term table; the length normalization factor (1 when `b=0`); the total; the check that term contributions add up to the score; the score under default parameters for comparison.
 - **Where misses come from**: the first miss's reason and shared terms; the first hit rank after asking in the handbook's words; how many results the unanswerable queries return and their top score; the report table.
 
 Prediction: how many `lesson.search` events a "Top 5 (default)" run emits (one per query).

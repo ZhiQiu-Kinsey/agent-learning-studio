@@ -338,6 +338,26 @@ class ExperimentTests(unittest.TestCase):
         names = {item["name"] for item in content["scenes"]["lab"]["inputs"]}
         self.assertEqual(names, set(runtime.Inputs.model_fields))
 
+    def test_arms_use_preset_inputs_only(self):
+        # The offline mode rejects inputs that differ from the exercise preset, so an arm may not carry its own.
+        content = json.loads((HERE / "content.json").read_text(encoding="utf-8"))
+        for experiment in content["scenes"]["lab"]["experiments"]:
+            for arm in experiment["arms"]:
+                with self.subTest(arm=arm["id"]):
+                    self.assertNotIn("inputs", arm)
+
+    def test_query_id_options_show_the_query_text_of_each_language(self):
+        content = json.loads((HERE / "content.json").read_text(encoding="utf-8"))
+        layer = json.loads((HERE / "content.en.json").read_text(encoding="utf-8"))["texts"]
+        field = next(item for item in content["scenes"]["lab"]["inputs"] if item["name"] == "query_id")
+        zh = {item.id: item.text for item in load_queries("zh-CN")}
+        en = {item.id: item.text for item in load_queries("en")}
+        self.assertEqual([option["value"] for option in field["options"]], list(typing.get_args(runtime.QueryId)))
+        for option in field["options"]:
+            query_id = option["value"]
+            self.assertEqual(option["label"], f"{query_id} · {zh[query_id]}")
+            self.assertEqual(layer[f"inputs.query_id.options.{query_id}.label"]["text"], f"{query_id} · {en[query_id]}")
+
 
 if __name__ == "__main__":
     unittest.main()
