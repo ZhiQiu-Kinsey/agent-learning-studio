@@ -299,6 +299,19 @@ class ExperimentTests(unittest.TestCase):
             events = [{"type": kind, "round": number, "data": data} for kind, data, number in raw]
             self.assertEqual(count_events(predict["rule"], events), 5)
 
+    def test_arms_use_their_own_preset_exercise(self):
+        """Offline runs only accept an exercise's preset inputs, so an arm may not carry different inputs."""
+        content = json.loads((Path(__file__).parent / "content.json").read_text(encoding="utf-8"))
+        manifest = json.loads((Path(__file__).parent / "lesson.json").read_text(encoding="utf-8"))
+        presets = {item["id"]: {**manifest["input_defaults"], **item["inputs"]} for item in manifest["exercises"]}
+        for experiment in content["scenes"]["lab"]["experiments"]:
+            for arm in experiment["arms"]:
+                with self.subTest(experiment=experiment["id"], arm=arm["id"]):
+                    self.assertIn(arm["exercise"], presets)
+                    if "inputs" in arm:
+                        self.assertEqual({**manifest["input_defaults"], **arm["inputs"]}, presets[arm["exercise"]])
+        self.assertEqual(presets["multi-with-rules"]["handoff"], "with_rules")
+
     def test_handoff_arms_differ_where_the_guide_says(self):
         def first(events, path, round_number=None):
             for kind, data, number in events:

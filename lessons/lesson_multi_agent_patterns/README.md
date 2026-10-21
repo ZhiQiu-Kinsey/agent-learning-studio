@@ -19,7 +19,7 @@ Before splitting work across several agents, measure with one acceptance set. Th
 | Role switching | 3 | One shared message history; each stage only swaps the system prompt | `assistant` (3 roles) |
 | Independent agents | 5 | Three researchers, one shard each, in parallel with their own `branch`; the program merges; writer and reviewer each work in a new context | `researcher-1..3`, `writer`, `reviewer` |
 
-The `handoff` parameter only affects the independent agents: `minimal` (default) passes only the task and the assigned documents; `with_rules` also adds the rule that d4 is out of date.
+The `handoff` parameter only affects the independent agents: `minimal` (default) passes only the task and the assigned documents; `with_rules` also adds the rule that d4 is out of date. The `multi` exercise presets `minimal`; the separate `multi-with-rules` exercise presets `with_rules`, so the second experiment's arms are two exercises rather than edited inputs.
 
 ## Evidence
 
@@ -31,7 +31,7 @@ The `handoff` parameter only affects the independent agents: `minimal` (default)
 ## What the experiments show
 
 1. **Comparing modes for research, writing and review**: four arms, one task. Look at the first call's context, the number of run identities and roles, the verifier call, task acceptance, model calls (1, 3, 3, 5), usage and wall-clock time.
-2. **A handoff package that leaves out one rule**: both arms are independent agents and differ only in `handoff`. With the minimal handoff, `researcher-3` holds `d4` but not the rule, the merge shows a duplicate and a conflict, and the verifier fails `worker_cap`; with the rule the conflict disappears and the input characters grow.
+2. **A handoff package that leaves out one rule**: both arms are independent agents (exercises `multi` and `multi-with-rules`) and differ only in `handoff`. With the minimal handoff, `researcher-3` holds `d4` but not the rule, the merge shows a duplicate and a conflict, and the verifier fails `worker_cap`; with the rule the conflict disappears and the input characters grow.
 
 The offline fixture (`fixtures.py`) only serves automated tests: a researcher skips `d4` only when the rule is in its context; the writer takes the last allowed fact per topic, so the minimal handoff always ends with a question built on `d4`; the reviewer passes the draft unchanged; usage is made up from the request size, and each call pauses 20 ms. A real model may choose differently, so trust your own real runs.
 
