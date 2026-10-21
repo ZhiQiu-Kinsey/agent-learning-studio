@@ -1,0 +1,1454 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "FRAMEWORKS / LANGGRAPH",
+      "source": "70e8ccc776db"
+    },
+    "hero.headline": {
+      "text": "When branches and loops pile up,",
+      "source": "74ad8075442c"
+    },
+    "hero.highlight": {
+      "text": "draw the flow as a graph.",
+      "source": "82a40e567e09"
+    },
+    "hero.takeaway": {
+      "text": "The state lives in one place, each node returns only what it changed, and edges decide where to go next. The normal, missing-parameter and failure paths each have an end, and loops are closed by budgets the program sets.",
+      "source": "892bc1aaecb9"
+    },
+    "concepts.01-state.label": {
+      "text": "01 / STATE",
+      "source": "7d55fbf91c4c"
+    },
+    "concepts.01-state.title": {
+      "text": "Shared task facts",
+      "source": "c37ee29d1a18"
+    },
+    "concepts.01-state.description": {
+      "text": "Every node reads the same state: which lessons to estimate, which tool results came back, how many checks failed, and how it ended.",
+      "source": "c43b8c3956bc"
+    },
+    "concepts.02-node.label": {
+      "text": "02 / NODE",
+      "source": "1c19ea906436"
+    },
+    "concepts.02-node.title": {
+      "text": "Nodes return only changes",
+      "source": "313ba48303ac"
+    },
+    "concepts.02-node.description": {
+      "text": "A node is an ordinary function: it reads the whole state and returns only the few fields it changed.",
+      "source": "6f0b1ba31601"
+    },
+    "concepts.03-edge.label": {
+      "text": "03 / EDGE",
+      "source": "c37411ba9196"
+    },
+    "concepts.03-edge.title": {
+      "text": "Edges pick the next step",
+      "source": "b1411988728d"
+    },
+    "concepts.03-edge.description": {
+      "text": "Some edges have a fixed target; others let a function that reads the state pick one of several targets.",
+      "source": "e21e1e4e9975"
+    },
+    "concepts.04-end.label": {
+      "text": "04 / END",
+      "source": "9ea1d1f6335a"
+    },
+    "concepts.04-end.title": {
+      "text": "Every path has an end",
+      "source": "dba06879f6b9"
+    },
+    "concepts.04-end.description": {
+      "text": "Success, a missing parameter and failure each have a terminal node; loops stop on a counter in the state and on the framework's step ceiling.",
+      "source": "9c004529e91a"
+    },
+    "section-1.title": {
+      "text": "Why draw it as a graph",
+      "source": "87f519e75162"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Branches, loops and terminal states written as a graph are easier to check than nested if statements. The runner in {{lesson:application-state}} has one main line: read the index, check the source, write the key points, with two if branches splitting off two failures, missing material and an exhausted budget. This lesson's task is a little longer: estimate how many days a set of lessons takes. First check that the parameters are all there, then let the model propose a tool call; after the tool runs a program verifies the result, goes back to repair it if the check fails, and ends in failure once the repairs run out. Written as one function, that is three or four levels of if inside a `while` loop, plus a repair counter.",
+      "source": "ed01a771e655"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Code like that runs. The hard part is answering a few questions: how many paths are there? Does every path stop? Where does the counter go up, and where is it checked? To answer, you read the function top to bottom and unfold every branch in your head. Think of asking for directions: a paragraph that says \"go straight, turn left at the bank, and if the road is closed go round to the next junction\" holds about as much information as a subway map, but only the map shows at a glance which stations are terminals and which line loops back.",
+      "source": "f4a7f01f1791"
+    },
+    "section-1.paragraphs.2": {
+      "text": "A graph lifts the flow out of the function body and writes down three things on their own: which fields the state has, which nodes there are, and which edges connect them. This lesson's graph has 7 nodes and 11 edges. When a run starts, the runner uses get_graph to read every edge from the compiled graph object and records them as a lesson.report titled \"Graph structure\": one row per edge, starting at START, with all three paths ending in END. Checking that every path has an end starts with reading that table, without running a single step.",
+      "source": "fb81579fd766"
+    },
+    "section-1.paragraphs.3": {
+      "text": "A graph does not make the model smarter, and more complex is not better. *Understanding AI Agents in Depth* (深入理解 AI Agent) warns that once a workflow's topology is fixed, every unforeseen case can only be handled by adding another node. When the flow is a straight line, one function is enough; the graph pays off when there are many branches, loops, and terminal states to confirm one by one. This lesson builds the graph with LangGraph, and model calls and tool calls still go through the platform's adapter, so requests, responses and tool results are recorded as in {{lesson:langchain-tools}}.",
+      "source": "36f44fc30486"
+    },
+    "section-2.title": {
+      "text": "State, Node, Edge",
+      "source": "80edabb2c4b7"
+    },
+    "section-2.paragraphs.0": {
+      "text": "The state is shared data, nodes read and write it, and edges decide the next step. This lesson's state is StudyState, a TypedDict: request is the lessons and minutes per day the learner wants estimated, evidence holds the tool results, failed_checks counts failed checks, and status and reason record how it ended. It corresponds to TaskState in {{lesson:application-state}} and does the same job: it writes \"how far the task got\" into fixed fields instead of making the model count it from the messages.",
+      "source": "be43b0a517ed"
+    },
+    "section-2.paragraphs.1": {
+      "text": "A node is an ordinary Python function that takes the whole state and returns a dict with only the changed fields. intake returns just missing and status; every other field stays as it was. There are two kinds of edges: plain edges fixed with add_edge, for example plan always goes on to tools, and conditional edges (Conditional Edge) registered with add_conditional_edges, covered in the next section. Finally a StateGraph (StateGraph) holds all three together, and it can run only after compile. Compiling checks the structure: an edge that points at a node that does not exist fails at compile time, not at run time.",
+      "source": "1442cbebf541"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The native version maps one to one: the TaskState dataclass is StudyState; each step function is a node; the transition table and the if branches in run are the plain and conditional edges; terminal states such as completed and failed are the three terminal nodes answer, ask_user and fail, all connected to END. The difference is that the native flow is scattered through a function body, while the graph gathers it into a dozen lines of graph-building code that can be listed, drawn and tested on their own.",
+      "source": "c98e563f2fd6"
+    },
+    "section-2.paragraphs.3": {
+      "text": "A TypedDict is only a type annotation; nothing checks it at run time. Measured on LangGraph 1.2: a node that writes failed_checks as a string raises no error, and an update to a field name that was never declared is silently dropped. The native lesson's dataclass fails at once on a misspelled field; there is no such guard here, so this lesson's tests check the fields every node writes back. The official documentation also lists defining the state as a Pydantic model, at a performance cost.",
+      "source": "da4678fea1f2"
+    },
+    "deep-dive-harness.title": {
+      "text": "The graph from the harness point of view: where constraint, verification and correction sit",
+      "source": "489dd02e754e"
+    },
+    "deep-dive-harness.summary": {
+      "text": "*Understanding AI Agents in Depth* (深入理解 AI Agent) splits the harness's safeguards into constraint, verification and correction; in this lesson's graph each lands on one node.",
+      "source": "50ff3be33b51"
+    },
+    "deep-dive-harness.paragraphs.0": {
+      "text": "Chapter 1 of *Understanding AI Agents in Depth* (深入理解 AI Agent) writes an agent as \"Model + Harness\". Besides context and tool interfaces, the harness has three safeguards: constraints limit what may be done, verification checks whether it was done right, and correction repairs what went wrong. The book stresses that verification reads only the structured fields a tool returns, not the model's free text, because that text may already have been steered off course.",
+      "source": "341fa7c56cfd"
+    },
+    "deep-dive-harness.paragraphs.1": {
+      "text": "Compare this lesson's graph. intake is the constraint: with incomplete parameters the run goes no further, and the model may not assume a daily time on the learner's behalf. verify is the verification: it reads ok, the arguments and the result in evidence, not the content of the assistant message. Going from verify back to plan is the correction: the reason for the failure becomes a message to the model, which calls again following the original request. Correction has a limit too: once max_repairs runs out the graph goes to fail and keeps the reason and the evidence in the state instead of handing over a half-finished result.",
+      "source": "4a8c801f8967"
+    },
+    "deep-dive-harness.paragraphs.2": {
+      "text": "The book also mentions \"Graph Engineering\", a name the industry began using in July 2026: agent loops, deterministic programs and human approval organized as an explicit execution graph, where nodes carry capabilities, edges set routing, and structured state flows along the edges. A single agent loop can be just one node in such a graph. The plan, tools, verify stretch of this lesson is the loop from {{lesson:tool-selection}} taken apart, with a program check inserted in the middle.",
+      "source": "2021acf51f83"
+    },
+    "deep-dive-harness.paragraphs.3": {
+      "text": "The same chapter warns about the opposite mistake: a graph with dozens of nodes from day one is often slow and brittle. The practical order is still a single call first, then a workflow, and complex orchestration last; a step is frozen into a node only when a business rule requires it or when the same kind of failure keeps showing up in tests.",
+      "source": "03df317414cb"
+    },
+    "predict-graph-updates.prompt": {
+      "text": "Before running \"Normal path: plan, call, verify, answer\", guess: how many lesson.graph_update events will this run record?",
+      "source": "cf21ef2d8ec2"
+    },
+    "mq-node-update.node-returns.prompt": {
+      "text": "The intake node returned {missing: [], status: running}. After it runs, what happens to request in the state?",
+      "source": "b6083d3d7b0b"
+    },
+    "mq-node-update.node-returns.a.text": {
+      "text": "It stays as it was: a node returns only the changed fields, and the others are untouched",
+      "source": "67c4af45b3ea"
+    },
+    "mq-node-update.node-returns.a.feedback": {
+      "text": "Right. A node returns an update, not a whole new state.",
+      "source": "a19441fec027"
+    },
+    "mq-node-update.node-returns.b.text": {
+      "text": "It is cleared, because the node did not return it",
+      "source": "30795ed24287"
+    },
+    "mq-node-update.node-returns.b.feedback": {
+      "text": "No. Fields that are not in the update are not affected.",
+      "source": "fab4360ea0c7"
+    },
+    "mq-node-update.node-returns.c.text": {
+      "text": "LangGraph raises an error; a node must return every field",
+      "source": "8281e45b9001"
+    },
+    "mq-node-update.node-returns.c.feedback": {
+      "text": "No. Returning only the changed fields is the recommended style.",
+      "source": "ced3f7c32459"
+    },
+    "mq-node-update.node-returns.explanation": {
+      "text": "A node returns some fields, and LangGraph merges each one into the old state by that field's rule.",
+      "source": "f61caddfb1c4"
+    },
+    "section-3.title": {
+      "text": "Reducers: how an update joins the state",
+      "source": "edf9e175a620"
+    },
+    "section-3.paragraphs.0": {
+      "text": "How the fields a node returns are merged into the old state is decided by each field's reducer (Reducer). A field without a reducer is overwritten by the last write: when verify returns failed_checks as 2, the old value 1 is gone, which is exactly what a counter or status needs. messages and evidence are different: each has a reducer attached inside Annotated. add_messages appends new messages at the end, and operator.add joins two lists.",
+      "source": "98199d397d44"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Work through the \"failed terminal state\" exercise by hand. The first tools run returns one evidence record with attempt 1, so after merging the state holds 1 record; after plan repairs, the second tools run returns another with attempt 2. If evidence had no reducer, the second record would replace the first, and neither the fail node nor the report could see why the first attempt failed. With operator.add the state holds 2 records, each with its own arguments and error. Messages work the same way: without add_messages, the assistant message plan returns would push out the system prompt and the user request entirely, and the next request would contain a single assistant message.",
+      "source": "8bd50a32c162"
+    },
+    "section-3.paragraphs.2": {
+      "text": "add_messages does one more thing: a new message whose id matches an existing one replaces it instead of being appended, and a message without an id is given one. An appending reducer also never clears anything: if a node returns an empty list, the old evidence is still there; the official documentation describes a dedicated overwrite form for when you really want to clear it. The report check \"Evidence was not overwritten\" compares the number of evidence records with the number of tool messages in the history; when the two match, neither was lost.",
+      "source": "7da5d8817fdf"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Note also that messages is just one field of the state. In the reference course's document analysis graph the state holds little besides messages, and the router looks at whether the last message has a tool call. This lesson keeps business facts such as request, evidence and failed_checks in fields of their own, so a router function only reads fields and never parses messages. Messages decide what the model sees in the next request; business fields decide how the program judges. It is the same reasoning as keeping messages and application state apart in {{lesson:application-state}}.",
+      "source": "ffad1ac91fc8"
+    },
+    "mq-reducer.reducer-overwrite.prompt": {
+      "text": "Remove the reducer from evidence. After the \"failed terminal state\" exercise finishes, how many records does evidence hold?",
+      "source": "1e441cecaef5"
+    },
+    "mq-reducer.reducer-overwrite.a.text": {
+      "text": "1: the second tools update overwrote the first",
+      "source": "c42ba41ece0e"
+    },
+    "mq-reducer.reducer-overwrite.a.feedback": {
+      "text": "Right. Without a reducer the last write wins.",
+      "source": "f4ae8f3b4d35"
+    },
+    "mq-reducer.reducer-overwrite.b.text": {
+      "text": "2: lists append by nature",
+      "source": "361031378b47"
+    },
+    "mq-reducer.reducer-overwrite.b.feedback": {
+      "text": "No. LangGraph does not look at the type, only at whether there is a reducer.",
+      "source": "7e288e496ee8"
+    },
+    "mq-reducer.reducer-overwrite.c.text": {
+      "text": "0: the fail node clears it",
+      "source": "7e2c3dd32f85"
+    },
+    "mq-reducer.reducer-overwrite.c.feedback": {
+      "text": "No. fail does not return evidence, so it does not change it.",
+      "source": "3511affea51f"
+    },
+    "mq-reducer.reducer-overwrite.explanation": {
+      "text": "A list you need to keep must have an appending reducer, or only the last write remains.",
+      "source": "35a6d494b148"
+    },
+    "section-4.title": {
+      "text": "Conditional routing and the tool node",
+      "source": "0698d581a52d"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A conditional edge picks the next edge from the state, and tool calls become a node of their own. add_conditional_edges takes three arguments: the node it starts from, a router function, and the possible targets. after_intake hangs off intake: if missing is not empty it goes to ask_user, otherwise to plan. after_verify hangs off verify and picks one of answer, plan and fail from verdict and failed_checks. The targets are listed when the graph is built; measured, a router function that returns a name outside the list raises an error at once, so the graph cannot wander off the list.",
+      "source": "ea2142b26db9"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Router functions read state fields, not sentences the model wrote. A missing parameter is the program's call: the request has no minutes per day, intake writes missing as minutes_per_day, and the route goes straight to ask_user without a single model call. Why not let the model ask? It might assume 60 minutes a day and compute a plausible-looking number of days. With the missing parameter written as a state field, this path no longer depends on how the model answers; it is the same every time. One router in the reference course picks between two branches with a random number. That is fine for showing the syntax, but not in a task flow: every branch must match the state values of that moment.",
+      "source": "4bfda5190a84"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The tool node is the hand-written call_tools. It takes the last assistant message and passes it to execute_tool_calls; every call runs through RunContext and produces a paired tool_call and tool_result, and the results are returned as evidence together with their arguments. LangGraph has a ready-made tool node too, but it calls the functions directly, so the platform cannot record those calls, and this lesson does not use it. The tool node only executes; judging right or wrong is the next node's job.",
+      "source": "031403c945be"
+    },
+    "section-4.paragraphs.3": {
+      "text": "verify looks only at this attempt's evidence and sorts it by structured fields: no call is no_tool_call; any result with ok false is tool_error; a tool that succeeded but whose lessons or minutes per day differ from the request is arguments_mismatch. The last one is the easiest to miss: the model quietly drops a lesson the table does not have, the tool of course succeeds, and what it computed is no longer what the learner asked. Each route also emits a lesson.graph_route that says which fields it read, their values, and where it went.",
+      "source": "46a0277a21e7"
+    },
+    "mq-route.route-reads-state.prompt": {
+      "text": "after_verify reads verdict failed, failed_checks 1 and max_repairs 1. Where does the graph go next?",
+      "source": "aa498a0bffb5"
+    },
+    "mq-route.route-reads-state.a.text": {
+      "text": "plan: the failures have not exceeded the budget, so go back and repair",
+      "source": "3a2bcc8ad0c1"
+    },
+    "mq-route.route-reads-state.a.feedback": {
+      "text": "Right. 1 does not exceed 1, so one repair is still allowed.",
+      "source": "4c73fd195018"
+    },
+    "mq-route.route-reads-state.b.text": {
+      "text": "fail: it has already failed once",
+      "source": "65ba3e79792c"
+    },
+    "mq-route.route-reads-state.b.feedback": {
+      "text": "No. It goes to fail only when max_repairs is exceeded; when equal it can still go back.",
+      "source": "fbc3ebbd6a74"
+    },
+    "mq-route.route-reads-state.c.text": {
+      "text": "answer: the tool has already run",
+      "source": "6bf689666bc6"
+    },
+    "mq-route.route-reads-state.c.feedback": {
+      "text": "No. Having run is not the same as passing the check.",
+      "source": "8d13c46f3be0"
+    },
+    "mq-route.route-reads-state.explanation": {
+      "text": "A router function only compares numbers in the state, and you can check its decision against the read of lesson.graph_route.",
+      "source": "2114184c1b73"
+    },
+    "section-5.title": {
+      "text": "Loop budgets and terminal states",
+      "source": "93ca65b2f600"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Loops in a graph need a limit too, and every path must reach END. Going from verify back to plan is a loop, and this lesson guards it with two limits. One is the business budget max_repairs, inside the router function: the graph goes back to plan only while failed_checks does not exceed it, and to fail once it does. The other is the recursion limit (Recursion Limit), LangGraph's own ceiling, passed as recursion_limit, which counts how many super-steps have run. This lesson's graph runs one node per step, so one super-step is one node.",
+      "source": "375b834fa0e1"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Work through the \"failed terminal state\" exercise: max_repairs is 1. First intake, plan, tools, verify; the first check fails, failed_checks becomes 1, which does not exceed 1, so back to plan; then plan, tools, verify again, failed_checks becomes 2, and the graph goes to fail. That is 8 nodes and 2 model calls. With max_repairs raised to 3, it takes 1 + 3×4 + 1 = 14 nodes to reach fail. The \"stopped by the ceiling\" exercise also lowers recursion_limit to 6: after the sixth node, tools, LangGraph raises GraphRecursionError and the graph stops halfway.",
+      "source": "b1e5f4c6428d"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The two limits end differently. When the business budget triggers, the graph takes a path it drew itself: fail writes status failed and a reason, then enters END, and every item in the report can be traced. When the recursion limit triggers, LangGraph raises and the final state is never handed back; the runner catches the error and writes \"hit recursion_limit\" and the last node it ran into the report, without inventing a terminal state for the graph. So the business budget should come first, and the recursion limit is only a safety net.",
+      "source": "d9d2b6e95194"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Measured on 1.2.16, there is one more detail: recursion_limit must be at least one more than the number of nodes on the path. The normal path has 5 nodes; with a limit of 5, answer still runs and the model is still called, yet the run raises before finishing; it ends normally only at 6. The platform adds a third layer: max_rounds in lesson.json limits the model calls of one run and raises when exceeded, the same idea as the call budget in {{lesson:structured-output}}.",
+      "source": "38bc7e0fa82f"
+    },
+    "deep-dive-superstep.title": {
+      "text": "Super-steps: how LangGraph runs round by round",
+      "source": "a63949e6025e"
+    },
+    "deep-dive-superstep.summary": {
+      "text": "LangGraph runs in rounds: this round's nodes all finish, their updates are merged into the state, then the edges choose the next round; the recursion limit counts rounds.",
+      "source": "373c88e3d0a7"
+    },
+    "deep-dive-superstep.paragraphs.0": {
+      "text": "LangGraph's execution model comes from the round-synchronous style of large-scale graph computing: each round, find the nodes that should run in this round; once they have all run, merge their updates into the state with the reducers; then follow the edges to work out who runs next. When no node is left to run, the graph ends. Such a round is a super-step. In the official documentation's words, nodes that run in parallel share a super-step, and nodes that run one after another each take one.",
+      "source": "49ae8cef3fb3"
+    },
+    "deep-dive-superstep.paragraphs.1": {
+      "text": "Reducers matter even more in parallel. If two nodes write to evidence in the same super-step and there is no reducer, LangGraph cannot tell which to keep and raises an error saying the field can receive only one value per step; with operator.add the two updates are joined in order. This lesson's graph has no parallel branches, so each super-step holds one node and the number of super-steps equals the number of nodes.",
+      "source": "35e585025118"
+    },
+    "deep-dive-superstep.paragraphs.2": {
+      "text": "Counted this way, the four exercises take: normal path 5 steps, missing parameter 2, failed terminal state 8, and the ceiling exercise is cut off at step 6. Since 1.0.6 the default recursion limit is 1000 steps, which for a small graph like this one is almost no limit at all; so this lesson passes it explicitly and lets the business budget come first.",
+      "source": "78b800caa6f5"
+    },
+    "deep-dive-superstep.paragraphs.3": {
+      "text": "When does a router function run? It belongs to the end of the previous round: the node runs, its update is merged, then the router decides the next round. By the time stream_graph receives this round's update the route has already been decided, so in the events lesson.graph_route comes before the lesson.graph_update of the same node. When reading a replay, line them up by step and do not conclude that the route ran before the node.",
+      "source": "1858fb2ad194"
+    },
+    "misconception-auto-end.claim": {
+      "text": "With LangGraph, loops in the graph automatically have an end.",
+      "source": "0a83ad273080"
+    },
+    "misconception-auto-end.correction": {
+      "text": "LangGraph raises only when the number of super-steps reaches recursion_limit, whose default is 1000. Before that, a loop that cannot get out keeps requesting the model until the platform's call budget stops it first. You design the end yourself: put the business budget in the state, let a router function judge it, and give the graph a path to a failed terminal state.",
+      "source": "59addc9bace8"
+    },
+    "mq-limit.which-limit.prompt": {
+      "text": "max_repairs is 3 and recursion_limit is 6, and the tool fails every time. Which limit stops the graph first?",
+      "source": "d6f841617ea4"
+    },
+    "mq-limit.which-limit.a.text": {
+      "text": "recursion_limit: reaching fail takes 14 steps, and the graph is cut off at step 6",
+      "source": "09c765c9d945"
+    },
+    "mq-limit.which-limit.a.feedback": {
+      "text": "Right. The report then says \"hit recursion_limit\" and there is no terminal state.",
+      "source": "dc57d06f592f"
+    },
+    "mq-limit.which-limit.b.text": {
+      "text": "max_repairs: the business budget always comes first",
+      "source": "eff1211276d7"
+    },
+    "mq-limit.which-limit.b.feedback": {
+      "text": "No. The business budget comes first only if you set the recursion limit high enough.",
+      "source": "1e18de04ebad"
+    },
+    "mq-limit.which-limit.c.text": {
+      "text": "Both trigger at the same time",
+      "source": "294fc8d03378"
+    },
+    "mq-limit.which-limit.c.feedback": {
+      "text": "No. At step 6 failed_checks is only 1.",
+      "source": "9209d3c25345"
+    },
+    "mq-limit.which-limit.explanation": {
+      "text": "The recursion limit must exceed the node count of the longest normal path for the business budget to come first.",
+      "source": "0360e24a6baf"
+    },
+    "section-6.title": {
+      "text": "Node events and state diffs",
+      "source": "cce59e0c1555"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Record the state diff of each node, and a replay shows how the graph moved. stream_graph runs the graph step by step through LangGraph's streaming interface; after each node it records the update the node returned as a lesson.graph_update with three fields, step, node and update. The few fields a node returns are that step's state diff: intake's carries only missing and status, and tools' carries only the new tool messages and this attempt's evidence.",
+      "source": "d35014d3d27b"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Why record diffs and not the whole state? The whole state carries an ever longer message history, and storing it at every step soon makes the events too large to read; a diff answers exactly \"what did this step change\". To see the whole state at any moment, merge the diffs in order of step from the start, using the reducers from the earlier section. {{lesson:application-state}} records full snapshots; each style has its trade-off: snapshots are easy to inspect, diffs are small and show the change at a glance.",
+      "source": "daa51988be22"
+    },
+    "section-6.paragraphs.2": {
+      "text": "None of these events are model responses. The model's answer appears only in request and response, between lesson.framework_input and lesson.framework_output. The assistant message inside graph_update is a record the framework built from that response and the plan node wrote back into the state. So the report's \"runs of nodes that call the model\" should equal the number of request events: each run of plan or answer brings one request and one response; in the missing-parameter exercise both are 0.",
+      "source": "24a366c02701"
+    },
+    "section-6.paragraphs.3": {
+      "text": "A replay only reads these records; it never reruns the graph or requests the model again. This lesson does not save its position: a run stopped halfway can only start over. Pausing before a node with side effects, saving the position, and resuming from there after a restart is covered in {{lesson:human-in-the-loop}}.",
+      "source": "8ca42e29db7b"
+    },
+    "deep-dive-script.title": {
+      "text": "Another way to orchestrate: write the flow as a script",
+      "source": "84a33655a65a"
+    },
+    "deep-dive-script.summary": {
+      "text": "Not every orchestration has to be a graph; Learn Claude Code coordinates several calls with a resumable script, and each style has its strengths.",
+      "source": "d71817481903"
+    },
+    "deep-dive-script.paragraphs.0": {
+      "text": "The workflow runtime chapter of Learn Claude Code takes a different route: the orchestration is a trusted asynchronous script that may use only a few primitives: dispatch one agent call, wait for a group of calls in parallel, take each item through several stages in turn, and name a phase. The model decides only which saved flow to start and with what arguments; the flow itself is decided by the script. The result of each sub-call is written to a log on disk under a stable key computed from the call's content, and after an interruption the run resumes under the same run id, reusing the logged result of every call that did not change.",
+      "source": "9938fec29b60"
+    },
+    "deep-dive-script.paragraphs.1": {
+      "text": "A script and a graph solve the same problem: they take \"what to do next\" back from the model and give it to the program. The difference is in how it is expressed. A script is ordinary code, so loops, parallelism and dependencies are easy to write, but to know how many paths there are you still have to read the code; a graph declares nodes and edges as data, so they can be listed, drawn and checked for terminal states before running, at the price of breaking even a simple flow into nodes.",
+      "source": "b17f6c4feba8"
+    },
+    "deep-dive-script.paragraphs.2": {
+      "text": "The planning lesson of Microsoft's AI Agents for Beginners shows a third approach: the model first outputs a structured plan listing subtasks and the agent responsible for each, then a program dispatches by that plan. There, who does each step is decided at run time; in this lesson's graph the nodes and edges are fixed at compile time, and the model only decides the tool arguments inside the plan node. If the shape of the task can be drawn in advance, use a graph; if you can only tell how many steps there are after seeing intermediate results, let the model plan and let the program guard the boundaries.",
+      "source": "95e601f8bc32"
+    },
+    "mq-events.update-is-not-response.prompt": {
+      "text": "The \"failed terminal state\" exercise records 8 lesson.graph_update events and 2 request events. Which statement is right?",
+      "source": "8cd44934fab9"
+    },
+    "mq-events.update-is-not-response.a.text": {
+      "text": "The model was called twice, once in each run of the plan node",
+      "source": "94d0d739f74b"
+    },
+    "mq-events.update-is-not-response.a.feedback": {
+      "text": "Right. For model calls, look only at request and response.",
+      "source": "4f55ac5fc998"
+    },
+    "mq-events.update-is-not-response.b.text": {
+      "text": "The model was called 8 times, once per node",
+      "source": "bfde66870b19"
+    },
+    "mq-events.update-is-not-response.b.feedback": {
+      "text": "No. intake, tools, verify and fail are plain Python.",
+      "source": "d59374d9521c"
+    },
+    "mq-events.update-is-not-response.c.text": {
+      "text": "graph_update is another format of the model response",
+      "source": "001eee2a6863"
+    },
+    "mq-events.update-is-not-response.c.feedback": {
+      "text": "No. It is the state diff a node wrote back, not a model response.",
+      "source": "398522ce284f"
+    },
+    "mq-events.update-is-not-response.explanation": {
+      "text": "Node events and model calls are two kinds of evidence; their counts need not match, and neither may pass for the other.",
+      "source": "4615733d6726"
+    },
+    "compare-native.title": {
+      "text": "Native style and graph style",
+      "source": "33183232467d"
+    },
+    "compare-native.paragraphs.0": {
+      "text": "The left column is how {{lesson:application-state}} does it; the right column is this lesson's counterpart.",
+      "source": "8c31dedbfed4"
+    },
+    "compare-native.columns.0": {
+      "text": "Native style",
+      "source": "966ee5fecbf9"
+    },
+    "compare-native.columns.1": {
+      "text": "LangGraph style",
+      "source": "b5466774a3a7"
+    },
+    "compare-native.columns.2": {
+      "text": "What it handles",
+      "source": "67d4df5b5b02"
+    },
+    "compare-native.rows.0.0": {
+      "text": "TaskState dataclass",
+      "source": "3917002749ab"
+    },
+    "compare-native.rows.0.1": {
+      "text": "StudyState (TypedDict)",
+      "source": "845f8f64162f"
+    },
+    "compare-native.rows.0.2": {
+      "text": "Shared task facts",
+      "source": "c37ee29d1a18"
+    },
+    "compare-native.rows.1.0": {
+      "text": "Step functions that change state.status directly",
+      "source": "10a82e9f738d"
+    },
+    "compare-native.rows.1.1": {
+      "text": "Node functions that return only the changed fields",
+      "source": "f39fd8e5bc37"
+    },
+    "compare-native.rows.1.2": {
+      "text": "Do one step, write back to the state",
+      "source": "fac88bbe3dcf"
+    },
+    "compare-native.rows.2.0": {
+      "text": "Direct assignment",
+      "source": "7802796b1765"
+    },
+    "compare-native.rows.2.1": {
+      "text": "Overwrite by default; reducers on list fields",
+      "source": "e9dd39a8348e"
+    },
+    "compare-native.rows.2.2": {
+      "text": "How updates are merged",
+      "source": "78bfd30d8871"
+    },
+    "compare-native.rows.3.0": {
+      "text": "if branches in run",
+      "source": "5bedc771c0b8"
+    },
+    "compare-native.rows.3.1": {
+      "text": "Conditional edges plus router functions",
+      "source": "cba5fc1740c5"
+    },
+    "compare-native.rows.3.2": {
+      "text": "Choose the next step from the state",
+      "source": "1ee2902a5cb0"
+    },
+    "compare-native.rows.4.0": {
+      "text": "Transition table TRANSITIONS",
+      "source": "d022509701f0"
+    },
+    "compare-native.rows.4.1": {
+      "text": "add_edge and the listed targets",
+      "source": "ac063efd8234"
+    },
+    "compare-native.rows.4.2": {
+      "text": "Which paths are allowed",
+      "source": "54a79626e41e"
+    },
+    "compare-native.rows.5.0": {
+      "text": "step_budget and consume_step",
+      "source": "a63986ab97f8"
+    },
+    "compare-native.rows.5.1": {
+      "text": "max_repairs plus recursion_limit",
+      "source": "44b48c1a7123"
+    },
+    "compare-native.rows.5.2": {
+      "text": "Limits on loops and steps",
+      "source": "5f8423949a8f"
+    },
+    "compare-native.rows.6.0": {
+      "text": "lesson.state full snapshots",
+      "source": "62d3ce2f94b0"
+    },
+    "compare-native.rows.6.1": {
+      "text": "lesson.graph_update state diffs",
+      "source": "85a5738bdf36"
+    },
+    "compare-native.rows.6.2": {
+      "text": "Evidence for replay",
+      "source": "3bd4d9284c4e"
+    },
+    "walkthrough.title": {
+      "text": "Walking through the \"failed terminal state\" exercise",
+      "source": "1c7ecc26c905"
+    },
+    "walkthrough.description": {
+      "text": "Explains the run of \"Failed terminal state: one repair, still failing\" node by node; the code is a simplified illustration. The evidence of your own run is in the events on the lab bench.",
+      "source": "59c8fbde5e45"
+    },
+    "walkthrough.step-1.label": {
+      "text": "intake",
+      "source": "4736bc313525"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Parameters complete",
+      "source": "9b745c45b519"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Two lessons and 30 minutes a day are given, so missing is empty.",
+      "source": "e319998218f1"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.graph_update (intake)",
+      "source": "aff96041d447"
+    },
+    "walkthrough.step-2.label": {
+      "text": "plan",
+      "source": "64879f7d6b96"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Propose a tool call",
+      "source": "e10ed837ba4c"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The model passes the two lessons exactly as requested.",
+      "source": "cd0261d5885d"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "request / response",
+      "source": "3eefad89eb5b"
+    },
+    "walkthrough.step-3.label": {
+      "text": "tools",
+      "source": "f9d35d43770d"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-3.title": {
+      "text": "One lesson not found",
+      "source": "b547792f9c5c"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The tool returns a structured error, recorded as evidence for attempt 1.",
+      "source": "de61cb10ccfe"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "ok is false in tool_result",
+      "source": "cfe2dd739363"
+    },
+    "walkthrough.step-4.label": {
+      "text": "verify",
+      "source": "a12dd3a7fd32"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-4.title": {
+      "text": "First check fails",
+      "source": "39cb9f03ed51"
+    },
+    "walkthrough.step-4.body": {
+      "text": "failed_checks becomes 1, which does not exceed max_repairs, so the route goes back to plan.",
+      "source": "aa8a3cdf6494"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.graph_route",
+      "source": "ec0421829516"
+    },
+    "walkthrough.step-5.label": {
+      "text": "plan",
+      "source": "64879f7d6b96"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Try again with the reason",
+      "source": "3e7f4b0ff7c2"
+    },
+    "walkthrough.step-5.body": {
+      "text": "The runner first inserts a note saying the check failed, then requests the model.",
+      "source": "4cf78c8ff73e"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "The last message of the round 2 request",
+      "source": "f68bb940d416"
+    },
+    "walkthrough.step-6.label": {
+      "text": "verify",
+      "source": "a12dd3a7fd32"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Second check fails",
+      "source": "cec6a1f99e22"
+    },
+    "walkthrough.step-6.body": {
+      "text": "failed_checks becomes 2, over the budget, so the route goes to fail.",
+      "source": "751d705210a2"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "lesson.graph_route",
+      "source": "ec0421829516"
+    },
+    "walkthrough.step-7.label": {
+      "text": "fail",
+      "source": "51280dabfbc8"
+    },
+    "walkthrough.step-7.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-7.title": {
+      "text": "Write the failed terminal state",
+      "source": "99c650874819"
+    },
+    "walkthrough.step-7.body": {
+      "text": "status is failed; the reason and both evidence records stay in the state, then the graph enters END.",
+      "source": "b9b6e8ac2beb"
+    },
+    "walkthrough.step-7.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "wrap-up.title": {
+      "text": "Back to acceptance: where each path stops",
+      "source": "ea60859b79fc"
+    },
+    "wrap-up.paragraphs.0": {
+      "text": "Check this lesson's three acceptance requirements again; each one lands on specific events. First, branches match state values: the read of every lesson.graph_route holds the missing, verdict and failed_checks the router saw at that moment; the normal, missing-parameter and failure exercises stop at answer, ask_user and fail, with status completed, needs_input and failed. Second, the merge rules can be explained: messages and evidence are appended, the other fields overwritten, and in the report the number of evidence records equals the number of tool messages.",
+      "source": "d08dc4e311e9"
+    },
+    "wrap-up.paragraphs.1": {
+      "text": "Third, the nodes' state changes never pass for model responses, and loops are bounded by program budgets: every run of a node that calls the model brings one request and one response; the number of returns from verify to plan is capped by max_repairs, with recursion_limit as the backstop. These conclusions come from offline test mode. Whether a real model passes the arguments unchanged in the plan node, and whether it changes them when repairing, is something to see in a real run of your own.",
+      "source": "3a9684fef843"
+    },
+    "wrap-up.paragraphs.2": {
+      "text": "The next lesson, {{lesson:streaming-cancel}}, goes back to a single request and looks at how model output arrives chunk by chunk and what has already arrived when you stop. If this lesson's graph had a node with side effects, say one that really writes the study plan into a calendar, it would have to stop before that node to wait for a person's confirmation, and be able to continue from the same place after a restart; that is the subject of {{lesson:human-in-the-loop}}.",
+      "source": "2a43710f4aa6"
+    },
+    "references.hf-building-blocks.title": {
+      "text": "Building blocks of LangGraph: state, nodes, edges and StateGraph (Hugging Face Agents Course)",
+      "source": "6b096993b7c6"
+    },
+    "references.hf-first-graph.title": {
+      "text": "A first graph: mail sorting and conditional routing (Hugging Face Agents Course)",
+      "source": "2fc3281cbc2d"
+    },
+    "references.hf-document-agent.title": {
+      "text": "Document analysis graph: message reducers and the tool loop (Hugging Face Agents Course)",
+      "source": "e93859891951"
+    },
+    "references.book-harness.title": {
+      "text": "Harness engineering: constraint, verification and correction (Understanding AI Agents in Depth)",
+      "source": "bb9a25afb4dd"
+    },
+    "references.lcc-workflow-runtime.title": {
+      "text": "Workflow runtime: a script decides the orchestration (Learn Claude Code)",
+      "source": "4dfd0f49d0e0"
+    },
+    "references.ms-planning.title": {
+      "text": "Planning design: task decomposition and structured plans (Microsoft AI Agents for Beginners)",
+      "source": "ed038f80b173"
+    },
+    "references.langgraph-graph-api.title": {
+      "text": "LangGraph Graph API: state, reducers, edges and the recursion limit (LangChain docs, checked 2026-10-20)",
+      "source": "55b869786c72"
+    },
+    "code-state.n24.text": {
+      "text": "The state is just a TypedDict: every node shares this one, and the field names are the contract between nodes.",
+      "source": "6130ff007e7a"
+    },
+    "code-state.n27.text": {
+      "text": "Messages use add_messages: new messages are appended and same-id ones replaced, so the system prompt and the user request are never pushed out.",
+      "source": "ea833af154e7"
+    },
+    "code-state.n28.text": {
+      "text": "Evidence uses operator.add: each attempt's tool results are appended, so the reason for the first failure survives the repair.",
+      "source": "a131ab11c923"
+    },
+    "code-state.n30.text": {
+      "text": "The fields below have no reducer; the last write wins. request is the learner's original request, which the verifier compares with the arguments.",
+      "source": "2be12c61d6c0"
+    },
+    "code-state.n32.text": {
+      "text": "The number of failed checks: the business budget is judged on it, and it is a state field, not a local variable hidden in a function.",
+      "source": "a57a1492b965"
+    },
+    "code-state.n36.text": {
+      "text": "status and reason record the outcome: completed, needs_input or failed, each with a reason.",
+      "source": "33304c589a0c"
+    },
+    "code-state.n40.text": {
+      "text": "The verification rules are a function of their own: they read only structured tool results and return problem codes, so they can be tested alone.",
+      "source": "a81bbbc3eef4"
+    },
+    "code-state.n42.text": {
+      "text": "This attempt never called the tool, so there is no result to check.",
+      "source": "2c61e519233b"
+    },
+    "code-state.n45.text": {
+      "text": "Any record with ok false is a failure; it reads fields of the tool result, not what the model says.",
+      "source": "48dfd3930e47"
+    },
+    "code-state.n48.text": {
+      "text": "Even a successful tool is compared with the original request: if the model drops a lesson, the days it computes answer a different question.",
+      "source": "05bbdec3801c"
+    },
+    "code-nodes.n67.text": {
+      "text": "A node is an ordinary function: its argument is the whole state, its return value the fields to change.",
+      "source": "059366e3e118"
+    },
+    "code-nodes.n69.text": {
+      "text": "Missing parameters are the program's call: whichever of the two fields is empty is recorded, and the model is not asked to guess.",
+      "source": "170cf6e5a5e3"
+    },
+    "code-nodes.n70.text": {
+      "text": "Only two fields are returned; request, messages and the rest stay as they were.",
+      "source": "a82116b89f9f"
+    },
+    "code-nodes.n72.text": {
+      "text": "plan is the only node where the model proposes a tool call.",
+      "source": "420a8d74e763"
+    },
+    "code-nodes.n75.text": {
+      "text": "On a repair it first inserts a note saying why the last attempt failed; the first plan has no such note.",
+      "source": "80866b3fa2f8"
+    },
+    "code-nodes.n78.text": {
+      "text": "The model call goes through the platform adapter and is recorded as request and response; add_messages appends the returned assistant message.",
+      "source": "6a4e322925e0"
+    },
+    "code-nodes.n80.text": {
+      "text": "A hand-written tool node instead of the framework's prebuilt one, so every call is recorded.",
+      "source": "0266da6764eb"
+    },
+    "code-nodes.n84.text": {
+      "text": "Every call runs through RunContext; a tool error becomes a structured result with ok false.",
+      "source": "6a68bb196c66"
+    },
+    "code-nodes.n85.text": {
+      "text": "Evidence records the attempt number and the arguments used, because the verifier compares the arguments with the original request.",
+      "source": "09b24ac06f9e"
+    },
+    "code-nodes.n90.text": {
+      "text": "The verify node only judges: it runs no tools and calls no model.",
+      "source": "778702e80ad6"
+    },
+    "code-nodes.n92.text": {
+      "text": "Only this attempt's evidence counts: earlier failures have already been counted.",
+      "source": "824ac2b07541"
+    },
+    "code-nodes.n95.text": {
+      "text": "On failure it adds one to the counter and writes it back; where to go is the router's decision, the node never jumps by itself.",
+      "source": "f5153eea0a86"
+    },
+    "code-nodes.n98.text": {
+      "text": "On success it puts the checked tool result into result, the only thing the answer node reads.",
+      "source": "1625e082ea98"
+    },
+    "code-edges.n115.text": {
+      "text": "A router function reads the state and returns the name of the next node; it is the other half of a conditional edge.",
+      "source": "91663c9046ce"
+    },
+    "code-edges.n116.text": {
+      "text": "Missing parameters go to ask_user, otherwise to plan; the only field read is missing.",
+      "source": "373bde5065f4"
+    },
+    "code-edges.n118.text": {
+      "text": "After verify, one of three: answer, go back and repair, or fail.",
+      "source": "c9791154120e"
+    },
+    "code-edges.n122.text": {
+      "text": "The business budget lives here: back to plan only while failures do not exceed max_repairs, so this loop is sure to stop.",
+      "source": "bdda2108437d"
+    },
+    "code-edges.n125.text": {
+      "text": "With the budget spent the graph takes the failed terminal state, not an exception, and not the framework's step ceiling.",
+      "source": "4f784ade726e"
+    },
+    "code-edges.n126.text": {
+      "text": "The values read and the target are recorded together, so in a replay every branch matches the state of that moment.",
+      "source": "97ea50f1a6ce"
+    },
+    "code-edges.n129.text": {
+      "text": "The StateGraph takes the state structure as its parameter; nodes and edges are registered below.",
+      "source": "6924cd73f303"
+    },
+    "code-edges.n132.text": {
+      "text": "Seven nodes registered by name; the wrapper only notes the node name in the path.",
+      "source": "6f839909fb1e"
+    },
+    "code-edges.n133.text": {
+      "text": "START is the entry: every run begins at intake.",
+      "source": "5324084b55e8"
+    },
+    "code-edges.n134.text": {
+      "text": "A conditional edge: start node, router function, possible targets. The targets are fixed, and the router cannot leave the list.",
+      "source": "fcfb99ce82e6"
+    },
+    "code-edges.n135.text": {
+      "text": "Plain edges: after plan the tool node always runs, and after tools the check always runs.",
+      "source": "217baf66683f"
+    },
+    "code-edges.n137.text": {
+      "text": "The plan target in this conditional edge is what makes the graph loop.",
+      "source": "960df038f37a"
+    },
+    "code-edges.n138.text": {
+      "text": "All three terminal nodes connect to END: every path has an end, which you can check row by row in the graph structure report.",
+      "source": "e5f62dca2e0a"
+    },
+    "code-edges.n147.text": {
+      "text": "Compiling checks the structure, for example an edge to a node that does not exist; the graph runs only after compiling.",
+      "source": "ea098b8dcc37"
+    },
+    "code-edges.fold-note-route.label": {
+      "text": "Platform: emit lesson.graph_route and note this branch in the path",
+      "source": "398d5859239a"
+    },
+    "code-decision.title": {
+      "text": "This lesson writes its own tool node, missing-parameter check and terminal states",
+      "source": "f611f704a3be"
+    },
+    "code-decision.chosen": {
+      "text": "The tool node calls execute_tool_calls, so every call is recorded through RunContext; intake decides missing parameters from the structured request; the loop is closed by failed_checks and max_repairs in the state, and a spent budget leads to the fail terminal state; recursion_limit is only a safety net, and when it triggers the report says honestly which node ran last.",
+      "source": "07052ee57382"
+    },
+    "code-decision.prebuilt-tool-node.title": {
+      "text": "Use LangGraph's prebuilt tool node and a condition that routes on the shape of the message",
+      "source": "8fdfdd6e47b3"
+    },
+    "code-decision.prebuilt-tool-node.why_not": {
+      "text": "The prebuilt tool node calls functions directly, so the platform cannot record the calls; routing on \"is there a tool call\" looks at the shape of the message, not at business state.",
+      "source": "fdd5f55adf20"
+    },
+    "code-decision.model-asks.title": {
+      "text": "Let the model notice the missing parameter and ask",
+      "source": "5674ca239bf0"
+    },
+    "code-decision.model-asks.why_not": {
+      "text": "The model may assume a daily time on its own; the branch then varies with the answer, and the same input takes different paths.",
+      "source": "f6b9cff5b12d"
+    },
+    "code-decision.recursion-only.title": {
+      "text": "Rely on recursion_limit alone to close the loop",
+      "source": "f732a1c1fc9b"
+    },
+    "code-decision.recursion-only.why_not": {
+      "text": "It raises when it triggers, so there is no final state and no failure reason; the business budget sends the graph to a failed terminal state it drew itself.",
+      "source": "fbd2684a5bd6"
+    },
+    "code-decision.random-route.title": {
+      "text": "Pick branches with a random number, as the introductory example does",
+      "source": "20a9525c57e6"
+    },
+    "code-decision.random-route.why_not": {
+      "text": "The same state may take different paths, branches do not match the state values of that moment, and runs cannot be reproduced.",
+      "source": "f745740ed545"
+    },
+    "graph-paths.title": {
+      "text": "Plan, call, verify, answer graph",
+      "source": "ccf3e5b5038e"
+    },
+    "graph-paths.hypothesis": {
+      "text": "Three fixed inputs take three different paths: the normal input reaches answer, the missing-parameter input ends at ask_user without calling the model, and the input with an unknown lesson repairs once and reaches fail. Every branch matches the state values its router read at that moment.",
+      "source": "77ea54afe445"
+    },
+    "graph-paths.normal.label": {
+      "text": "Normal path: plan, call, verify, answer",
+      "source": "9cc70613d3d2"
+    },
+    "graph-paths.missing.label": {
+      "text": "Missing parameter: no daily time",
+      "source": "84893ed12cb8"
+    },
+    "graph-paths.repair-fail.label": {
+      "text": "Failed terminal state: one repair, still failing",
+      "source": "0b569e1978df"
+    },
+    "graph-paths.structure.text": {
+      "text": "Graph structure: every edge in the compiled graph, from START to END.",
+      "source": "730ecb49ab34"
+    },
+    "graph-paths.intake-route.text": {
+      "text": "The first route: the missing that after_intake read.",
+      "source": "b4e31e9374d3"
+    },
+    "graph-paths.verify-update.text": {
+      "text": "The state diff the verify node wrote back: verdict and problems.",
+      "source": "1536666cf5ca"
+    },
+    "graph-paths.verify-route.text": {
+      "text": "The route after verify: the verdict and failed_checks it read, and the target.",
+      "source": "5aa24156ce6f"
+    },
+    "graph-paths.path.text": {
+      "text": "The nodes this run actually visited.",
+      "source": "f1f6e008b547"
+    },
+    "graph-paths.terminal.text": {
+      "text": "The terminal check: the last node, status and reason.",
+      "source": "da6be0e3b0cc"
+    },
+    "graph-paths.guide.0.text": {
+      "text": "All three inputs run the same graph; only the state differs.",
+      "source": "db16d32db99f"
+    },
+    "graph-paths.guide.1.text": {
+      "text": "Start with the graph structure: 7 nodes, 11 edges, and all three terminal nodes connect to END.",
+      "source": "ae66a9f3cf27"
+    },
+    "graph-paths.guide.2.text": {
+      "text": "The first branch after intake. In the missing-parameter run, missing is not empty here and the graph goes straight to ask_user.",
+      "source": "38318510586d"
+    },
+    "graph-paths.guide.3.text": {
+      "text": "After the tool runs, the verify node writes back only its verdict and problem codes.",
+      "source": "c29507b9bf17"
+    },
+    "graph-paths.guide.4.text": {
+      "text": "The route after verify read three values, and they decide the target.",
+      "source": "6c8dbb87c619"
+    },
+    "graph-paths.guide.5.text": {
+      "text": "The path in the report comes from records made as each node ran.",
+      "source": "ad2f311e0e1e"
+    },
+    "graph-paths.guide.6.text": {
+      "text": "Finally check the terminal state: which node this path stopped at, and its status and reason.",
+      "source": "501eb290fb29"
+    },
+    "graph-paths.conclusion.proves.0": {
+      "text": "Which path each of these three runs took, what state values each branch read, and which terminal node it stopped at.",
+      "source": "8f1ae8e4e32f"
+    },
+    "graph-paths.conclusion.proves.1": {
+      "text": "The missing-parameter run sent no model request; both tool results of the failure run stayed in the evidence.",
+      "source": "cd1231d34832"
+    },
+    "graph-paths.conclusion.does_not_prove.0": {
+      "text": "A real model does not necessarily pass the arguments unchanged in the plan node; in offline test mode the tool call proposals come from a fixed script.",
+      "source": "00eb8ae627c2"
+    },
+    "graph-paths.conclusion.does_not_prove.1": {
+      "text": "completed only means the tool result passed the check; the text the answer node wrote got a single check, whether it mentions the number of days.",
+      "source": "c1f00b4bc89f"
+    },
+    "graph-paths.conclusion.does_not_prove.2": {
+      "text": "Three paths do not show that every possible input terminates; for example, with a recursion limit set too low no terminal state is reached.",
+      "source": "776e1538f338"
+    },
+    "loop-budget.title": {
+      "text": "Loop budget and recursion limit",
+      "source": "d33efbff085f"
+    },
+    "loop-budget.hypothesis": {
+      "text": "When the business budget comes first, the graph reaches the fail terminal state and leaves a reason; when the recursion limit comes first, LangGraph raises GraphRecursionError and the runner can only report the last node that ran, with no final state.",
+      "source": "feaf15b957b8"
+    },
+    "loop-budget.repair-fail.label": {
+      "text": "Failed terminal state: one repair, still failing",
+      "source": "0b569e1978df"
+    },
+    "loop-budget.recursion-limit.label": {
+      "text": "Stopped by the ceiling: recursion_limit comes first",
+      "source": "ce82931dbce2"
+    },
+    "loop-budget.tool-error.text": {
+      "text": "The structured error the tool returned: a lesson id it cannot find.",
+      "source": "3f5c25e0ce29"
+    },
+    "loop-budget.budget-route.text": {
+      "text": "The failed_checks and max_repairs read after verify.",
+      "source": "a843a275f459"
+    },
+    "loop-budget.limits.text": {
+      "text": "recursion_limit in the graph structure report.",
+      "source": "084c91ebf612"
+    },
+    "loop-budget.stop.text": {
+      "text": "Why it stopped: reached END, or hit recursion_limit.",
+      "source": "3760f139ad9b"
+    },
+    "loop-budget.steps.text": {
+      "text": "The number of nodes executed.",
+      "source": "66702adefb42"
+    },
+    "loop-budget.guide.0.text": {
+      "text": "Both runs have the same inputs except max_repairs and recursion_limit.",
+      "source": "f391e7af266c"
+    },
+    "loop-budget.guide.1.text": {
+      "text": "The tool never finds the same lesson, so the check always fails.",
+      "source": "6f8072501528"
+    },
+    "loop-budget.guide.2.text": {
+      "text": "The router compares failed_checks with max_repairs and decides between going back to plan and going to fail.",
+      "source": "5c565f973c49"
+    },
+    "loop-budget.guide.3.text": {
+      "text": "The two runs have different recursion_limit values: 25 and 6.",
+      "source": "f85d6f4b24c5"
+    },
+    "loop-budget.guide.4.text": {
+      "text": "Look at why it stopped: one run reached END, the other was cut off by the recursion limit.",
+      "source": "b4b936a42202"
+    },
+    "loop-budget.guide.5.text": {
+      "text": "Then the number of nodes executed: 8 and 6, to compare with the hand count in the text.",
+      "source": "518e226028fc"
+    },
+    "loop-budget.conclusion.proves.0": {
+      "text": "When the business budget comes first, the graph follows its own edges to fail; when the recursion limit comes first, the graph stops at the last node that ran, with no terminal state.",
+      "source": "7d9e71fb8570"
+    },
+    "loop-budget.conclusion.proves.1": {
+      "text": "The node counts of both runs match the hand count by super-steps.",
+      "source": "d4d261663a05"
+    },
+    "loop-budget.conclusion.does_not_prove.0": {
+      "text": "A real model may change the arguments when repairing, so the check may fail with arguments_mismatch instead of tool_error; the node count stays the same.",
+      "source": "7b9b21b8d8b9"
+    },
+    "loop-budget.conclusion.does_not_prove.1": {
+      "text": "Only a graph with one node per super-step was tested here; with parallel branches there are fewer super-steps than nodes.",
+      "source": "6ff07628308c"
+    },
+    "state-diff.title": {
+      "text": "State diffs and reducers",
+      "source": "201281e75d98"
+    },
+    "state-diff.hypothesis": {
+      "text": "Each lesson.graph_update holds only the fields its node changed; evidence has an appending reducer, so both attempts' tool results stay in the state; node events are never taken for model responses.",
+      "source": "a5ec14dd5aca"
+    },
+    "state-diff.repair-fail.label": {
+      "text": "Failed terminal state: one repair, still failing",
+      "source": "0b569e1978df"
+    },
+    "state-diff.tools-update.text": {
+      "text": "The state diff of the tools node: only the new tool messages and this attempt's evidence.",
+      "source": "d4a31c43c8e9"
+    },
+    "state-diff.counter-update.text": {
+      "text": "The failed_checks written back when verify fails.",
+      "source": "b5aef6d0a8ec"
+    },
+    "state-diff.evidence-kept.text": {
+      "text": "Evidence records compared with tool messages.",
+      "source": "e9a537c148bd"
+    },
+    "state-diff.model-nodes.text": {
+      "text": "Runs of nodes that call the model, compared with the number of request events.",
+      "source": "13f7ae246019"
+    },
+    "state-diff.first-request.text": {
+      "text": "The first model request, recorded apart from the node events.",
+      "source": "9fc52a724b87"
+    },
+    "state-diff.guide.0.text": {
+      "text": "This run has 8 nodes and 2 model calls; start with what the nodes wrote back.",
+      "source": "2d766b2b93f1"
+    },
+    "state-diff.guide.1.text": {
+      "text": "The tools update carries only this attempt's evidence, and attempt says which attempt it is.",
+      "source": "90d26ffd05b1"
+    },
+    "state-diff.guide.2.text": {
+      "text": "failed_checks has no reducer, so each write simply overwrites the old value.",
+      "source": "ca88219e6a98"
+    },
+    "state-diff.guide.3.text": {
+      "text": "The report compares the counts of evidence and tool messages; equal counts mean nothing was lost in merging.",
+      "source": "28306be6eae3"
+    },
+    "state-diff.guide.4.text": {
+      "text": "Model calls are recorded separately: this is the first request, sent by the plan node.",
+      "source": "ff46e6b6d420"
+    },
+    "state-diff.guide.5.text": {
+      "text": "There should be as many request events as runs of nodes that call the model.",
+      "source": "bf8b2270f62e"
+    },
+    "state-diff.conclusion.proves.0": {
+      "text": "The fields the nodes wrote back and both attempts' evidence were kept, and the number of model calls equals the runs of nodes that call the model.",
+      "source": "2c724c52690f"
+    },
+    "state-diff.conclusion.does_not_prove.0": {
+      "text": "It does not show parallel nodes writing the same field; without a reducer that raises an error.",
+      "source": "4be0e241a8d9"
+    },
+    "state-diff.conclusion.does_not_prove.1": {
+      "text": "Only one run is examined; the merge rules themselves are checked node by node in the tests.",
+      "source": "97f06e8df39f"
+    },
+    "inputs.lessons.label": {
+      "text": "Lessons to study",
+      "source": "192e04473a08"
+    },
+    "inputs.lessons.help": {
+      "text": "Lesson ids separated by commas, at most 6. An id that is not in the table makes the tool return an error.",
+      "source": "b0e9509fa3fc"
+    },
+    "inputs.minutes_per_day.label": {
+      "text": "Minutes per day",
+      "source": "5a8616d7aa3a"
+    },
+    "inputs.minutes_per_day.help": {
+      "text": "10 to 240; leave it empty (null) to mean not given, and the graph ends at ask_user.",
+      "source": "7aef88d3262c"
+    },
+    "inputs.max_repairs.label": {
+      "text": "Maximum repairs",
+      "source": "970e124b6df3"
+    },
+    "inputs.max_repairs.help": {
+      "text": "How many times a failed check may go back to plan, 0 to 3.",
+      "source": "2f77a529c3a0"
+    },
+    "inputs.recursion_limit.label": {
+      "text": "Recursion limit",
+      "source": "fd47e775013e"
+    },
+    "inputs.recursion_limit.help": {
+      "text": "The most super-steps LangGraph runs in one run, 3 to 40; it must be one more than the node count of the longest path.",
+      "source": "db5e212dd7fc"
+    },
+    "quiz.q1.prompt": {
+      "text": "Which case is most worth rewriting as a graph?",
+      "source": "d055237ed209"
+    },
+    "quiz.q1.a.text": {
+      "text": "A flow with missing-parameter, repair and failure paths, plus a loop that goes back",
+      "source": "d923c3e69b67"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. With many branches and loops, a graph lists every path and lets you check the terminal states.",
+      "source": "af5e601d74d3"
+    },
+    "quiz.q1.b.text": {
+      "text": "A fixed three-step prompt chain with no branches",
+      "source": "c77ea2a7c4f3"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. A straight line needs only one function.",
+      "source": "660b6ad3b6e1"
+    },
+    "quiz.q1.c.text": {
+      "text": "A question answered by a single model call",
+      "source": "6fc70b007cff"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. There is no flow to orchestrate.",
+      "source": "a9543a173603"
+    },
+    "quiz.q1.explanation": {
+      "text": "A graph is worth it because it writes branches, loops and terminal states down in one place where they can be checked.",
+      "source": "6f81a8b4fb7e"
+    },
+    "quiz.q2.prompt": {
+      "text": "A node returns a field name that StudyState never declared. What does LangGraph 1.2 do?",
+      "source": "146c7bddf4ee"
+    },
+    "quiz.q2.a.text": {
+      "text": "That update is silently dropped, with no error",
+      "source": "9a42e485e371"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. A TypedDict is not checked at run time, so tests have to catch it.",
+      "source": "59936141f890"
+    },
+    "quiz.q2.b.text": {
+      "text": "It raises an exception at once",
+      "source": "789afa130a8d"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. Measured, there is no error.",
+      "source": "d521b4646b47"
+    },
+    "quiz.q2.c.text": {
+      "text": "It adds the field to the state",
+      "source": "2d7a46f940ef"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The state has only the declared fields.",
+      "source": "86e03f6d6f1f"
+    },
+    "quiz.q2.explanation": {
+      "text": "A type annotation is not validation; a misspelled field name has to be caught by tests.",
+      "source": "e6d5f57d6a26"
+    },
+    "quiz.q3.prompt": {
+      "text": "Why does the missing-parameter exercise make no model call at all?",
+      "source": "c55591bbdd1c"
+    },
+    "quiz.q3.a.text": {
+      "text": "intake finds the missing parameter in the structured request and the route goes straight to ask_user",
+      "source": "ad008666adab"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. A missing parameter is the program's call, not the model's.",
+      "source": "2577397ad58b"
+    },
+    "quiz.q3.b.text": {
+      "text": "The model noticed the missing parameter and refused to answer",
+      "source": "a0dc3f835d28"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. This path never requests the model.",
+      "source": "6c723811aa6e"
+    },
+    "quiz.q3.c.text": {
+      "text": "The platform's call budget ran out",
+      "source": "2bc8e248cda2"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. Not a single call of the budget was used.",
+      "source": "40c807cb5f39"
+    },
+    "quiz.q3.explanation": {
+      "text": "A branch the program can decide should not vary with the model's answer.",
+      "source": "a2caa6dab805"
+    },
+    "quiz.q4.prompt": {
+      "text": "In the report of the \"stopped by the ceiling\" exercise, why does the terminal check fail?",
+      "source": "01ebc83be5ab"
+    },
+    "quiz.q4.a.text": {
+      "text": "LangGraph raised after hitting recursion_limit; the graph stopped at tools and never reached a terminal node",
+      "source": "3bbe87093b8a"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. The runner writes down honestly where it stopped and invents no terminal state.",
+      "source": "3c03eb6980ed"
+    },
+    "quiz.q4.b.text": {
+      "text": "The fail node raised an error while running",
+      "source": "ef20396a1360"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. This run never reached fail.",
+      "source": "9deb578fc644"
+    },
+    "quiz.q4.c.text": {
+      "text": "A failed tool call means there is no terminal state",
+      "source": "5ae69f3a8bbc"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. The \"failed terminal state\" exercise has the same tool failures and still reaches fail.",
+      "source": "911e9da7453a"
+    },
+    "quiz.q4.explanation": {
+      "text": "The business budget triggering means reaching a terminal state; the recursion limit triggering means stopping halfway. Keep the two apart.",
+      "source": "f392cd6e2e58"
+    },
+    "quiz.q5.prompt": {
+      "text": "The normal path has 5 nodes. What happens with recursion_limit set to 5?",
+      "source": "c7c805c5a8d6"
+    },
+    "quiz.q5.a.text": {
+      "text": "All 5 nodes run, but GraphRecursionError is still raised before the end, and there is no final state",
+      "source": "3f17d30229b3"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. Measured, it ends normally only at 6.",
+      "source": "50b1df3ef874"
+    },
+    "quiz.q5.b.text": {
+      "text": "It is just enough and ends normally",
+      "source": "1429b52293b8"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. Measured, the step count is checked before the end is detected.",
+      "source": "1da4e350d813"
+    },
+    "quiz.q5.c.text": {
+      "text": "It fails at step 1",
+      "source": "74bfcf081bf6"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. The first 5 steps all run.",
+      "source": "33b600aeb191"
+    },
+    "quiz.q5.explanation": {
+      "text": "The recursion limit must be one more than the node count of the longest path, and larger than the longest path the business budget allows.",
+      "source": "235541de4d7d"
+    },
+    "quiz.q6.prompt": {
+      "text": "While repairing, the model quietly drops the lesson that cannot be found, and the tool succeeds. How does verify judge it?",
+      "source": "b688d4a434d0"
+    },
+    "quiz.q6.a.text": {
+      "text": "arguments_mismatch: the arguments do not match the original request",
+      "source": "63a03a5041ac"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. The check compares with request, not just ok.",
+      "source": "d1236f4f8dda"
+    },
+    "quiz.q6.b.text": {
+      "text": "It passes: the tool succeeded",
+      "source": "a1abaaa47d62"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. What succeeded is no longer what the learner asked.",
+      "source": "9643d68240d7"
+    },
+    "quiz.q6.c.text": {
+      "text": "tool_error",
+      "source": "6305813c1f15"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The tool itself raised no error.",
+      "source": "c0c84b655204"
+    },
+    "quiz.q6.explanation": {
+      "text": "The verify node checks both the tool result and the arguments, so the task cannot be quietly made smaller.",
+      "source": "d6a1d1829c62"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Failed terminal state: one repair, still failing\" and find a state diff in which the verify node judged a failure.",
+      "source": "9bf10552fb9b"
+    },
+    "check-hunt.explanation": {
+      "text": "Only on a failed check does the update verify writes back contain failed_checks, together with verdict failed and the problem codes. This run has two: in the first failed_checks is 1, and the route then goes back to plan; in the second it is 2, and the route then goes to fail. On a passed check verify writes back only verdict, problems and result.",
+      "source": "2106011f9888"
+    },
+    "check-points.title": {
+      "text": "Hands-on check",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and this lesson's source; tick an item only when you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I can count the three paths in the graph structure report and say which terminal node each stops at.",
+      "source": "37bb355b4431"
+    },
+    "check-points.item-2.text": {
+      "text": "Using the read of each lesson.graph_route, I can say why that branch went where it did.",
+      "source": "08fcfb567c64"
+    },
+    "check-points.item-3.text": {
+      "text": "I changed max_repairs or recursion_limit, predicted the node count, and checked it against the report.",
+      "source": "ff507885a0d6"
+    },
+    "code_notes.lesson.graph_update.note": {
+      "text": "One per node from stream_graph: step is the step number, node the node name, update the fields it returned.",
+      "source": "46ed9116059e"
+    },
+    "code_notes.lesson.graph_route.note": {
+      "text": "One per router decision: from is the start node, read the state values it saw, to the target.",
+      "source": "09ed3e6be3cd"
+    },
+    "code_notes.add_messages.note": {
+      "text": "LangGraph's built-in message reducer: new messages are appended, and an old message with the same id is replaced.",
+      "source": "b7ca902b16db"
+    },
+    "code_notes.failed_checks.note": {
+      "text": "State field: how many checks failed. verify adds one on failure; after_verify compares it with max_repairs.",
+      "source": "fd07eab025c4"
+    },
+    "code_notes.max_repairs.note": {
+      "text": "Business budget: how many times a failed check may go back to plan before the graph goes to fail. Default 1.",
+      "source": "c84fc94f4355"
+    },
+    "code_notes.recursion_limit.note": {
+      "text": "LangGraph setting: the most super-steps one run may execute; beyond it GraphRecursionError is raised.",
+      "source": "8b030ae3a052"
+    },
+    "code_notes.GraphRecursionError.note": {
+      "text": "The exception LangGraph raises at the recursion limit; the runner catches it and reports it honestly.",
+      "source": "4adbc52ed513"
+    },
+    "code_notes.stream_graph.note": {
+      "text": "Platform adapter: runs the compiled graph step by step, records a lesson.graph_update per step, and checks for stop between steps.",
+      "source": "ebb83b757ef3"
+    },
+    "code_notes.execute_tool_calls.note": {
+      "text": "Platform adapter: hands each call in an assistant message to RunContext and records the call and its tool result.",
+      "source": "fc5b834a33c0"
+    },
+    "code_notes.verdict.note": {
+      "text": "State field: the verify node's conclusion, passed or failed; after_verify looks at it first.",
+      "source": "413fc934b048"
+    },
+    "code_notes.intake.note": {
+      "text": "The first node: it only checks whether the request has both lessons and minutes per day, and writes the result into missing.",
+      "source": "ab7fce554f76"
+    },
+    "code_notes.get_graph.note": {
+      "text": "A method of the compiled graph that returns its nodes and edges; this lesson uses it for the \"Graph structure\" report.",
+      "source": "7efbde309473"
+    }
+  }
+}

@@ -1,0 +1,1343 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "langgraph-state",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "orchestration",
+    "tools",
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "FRAMEWORKS / LANGGRAPH",
+          "headline": "分支和循环多了，",
+          "highlight": "就把流程画成图。",
+          "takeaway": "状态放在一处，节点只返回改了什么，边决定下一步去哪。正常、缺参、失败三条路各有终点，循环由程序设的预算收住。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-state",
+              "label": "01 / STATE",
+              "title": "共享的任务事实",
+              "description": "所有节点读同一份状态：要算哪些课、拿到了哪些工具结果、验证失败了几次、结局是什么。",
+              "token": "StudyState"
+            },
+            {
+              "id": "02-node",
+              "label": "02 / NODE",
+              "title": "节点只返回改动",
+              "description": "节点是普通函数，读整份状态，只返回它改了的那几个字段。",
+              "token": "return {...}"
+            },
+            {
+              "id": "03-edge",
+              "label": "03 / EDGE",
+              "title": "边决定下一步",
+              "description": "有的边写死去向，有的边由一个读状态的函数在几个去向里挑一个。",
+              "token": "add_conditional_edges"
+            },
+            {
+              "id": "04-end",
+              "label": "04 / END",
+              "title": "每条路都有终点",
+              "description": "成功、缺参、失败各有一个终态节点；循环靠状态里的计数和框架的步数上限停下。",
+              "token": "END · recursion_limit"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "为什么要画成图",
+          "paragraphs": [
+            "分支、循环和终态写成图，比嵌套的 if 更容易检查。{{lesson:application-state}}的运行器只有一条主线：读索引、核对来源、生成要点，中间两处 if 分出资料缺失和预算耗尽两种失败。本课的任务长一点：估算学完几门课要几天。先看参数齐不齐，再让模型提出工具调用，工具执行后由程序验证，不通过就回去修正，修正次数用完以失败收尾。写成一个函数，就是 `while` 循环里套三四层 if，外加一个修正计数器。",
+            "这样的代码能跑，难的是回答几个问题：一共有几条路？每条路都会停吗？计数器在哪里加一、在哪里判断？要答，只能把函数从头读到尾，在脑子里展开每个分支。好比问路：一段写着“直走，见到银行左转，如果修路就绕到下一个路口”的文字，和一张地铁线路图，信息差不多，可只有线路图让人一眼看出哪些站是终点、哪条线会绕回来。",
+            "图把流程从函数体里提出来，单独写下三样东西：状态有哪些字段，有哪些节点，节点之间有哪些边。本课的图有 7 个节点、11 条边。运行一开始，运行器用 get_graph 从编译好的图对象里读出所有的边，记成一份标题为“图结构”的 lesson.report：每行一条边，从 START 出发，三条路最后都进入 END。检查“每条路都有终点”，从读这张表开始，一步都不用执行。",
+            "图不会让模型更聪明，也不是越复杂越好。《深入理解 AI Agent》提醒过：工作流的拓扑一旦写死，遇到没想到的情况，就只能继续加节点。流程只是一条直线时，一个函数就够了；分支多、带环、需要逐条确认终态时，图的好处才显出来。本课用 LangGraph 建图，模型调用和工具调用仍经过平台的适配层，和{{lesson:langchain-tools}}一样，请求、响应和工具结果照常记录。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "State、Node、Edge",
+          "paragraphs": [
+            "状态是共享数据，节点读写状态，边决定下一步。本课的状态叫 StudyState，是一个 TypedDict：request 是学习者要算的课程和每天分钟数，evidence 是工具结果，failed_checks 是验证失败的次数，status 和 reason 记下结局。它对应{{lesson:application-state}}里的 TaskState，做的是同一件事：把“任务做到哪了”写成固定字段，不让模型从消息里去数。",
+            "节点是普通的 Python 函数，读入整份状态，返回一个只含改动字段的字典。intake 只返回 missing 和 status 两项，其余字段原样保留。边有两种：add_edge 写死的普通边，比如 plan 之后一定进入 tools；add_conditional_edges 登记的条件边（Conditional Edge），下一节讲。最后用状态图（StateGraph）把三者装在一起，compile 之后才能运行。编译时 LangGraph 会检查结构，边指向一个不存在的节点，编译就报错，不必等到运行时。",
+            "和原生写法一一对应：TaskState 数据类对应 StudyState；每个步骤函数对应一个节点；转换表和 run 里的 if 分支，对应普通边和条件边；completed、failed 这些终态，对应三个终态节点 answer、ask_user、fail，它们都连到 END。差别在于原生写法的流程散在函数体里，图把它集中在十来行建图代码里，可以列出来、画出来、单独测试。",
+            "TypedDict 只是类型标注，运行时不检查。实测 LangGraph 1.2：节点把 failed_checks 写成字符串不会报错；返回一个没声明的字段名，这条更新会被悄悄丢掉。原生课的数据类写错字段名会立刻报错，这里没有这层保护，所以本课的测试逐个核对每个节点写回的字段。官方文档也列出了用 Pydantic 模型定义状态的写法，代价是性能。"
+          ]
+        },
+        {
+          "id": "deep-dive-harness",
+          "type": "deep-dive",
+          "title": "从运行层看这张图：约束、验证、纠正各在哪个节点",
+          "summary": "《深入理解 AI Agent》把运行层的保障拆成约束、验证、纠正三层，本课的图恰好每层落在一个节点上。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第一章把 Agent 写成“Model + Harness”，运行层除了管上下文和工具接口，还有三层保障：约束限定能做什么，验证检查做得对不对，纠正负责做错之后怎么补救。书里特别强调，验证只看工具返回的结构化字段，不看模型自由写出的文字，因为那段文字可能已经被带偏了。",
+            "拿本课的图对照。intake 是约束：参数不全就不往下走，也不许模型替学习者假设每天学多久。verify 是验证：它读 evidence 里的 ok、实参和结果，不读助手消息的内容。verify 回到 plan 是纠正：把失败原因写成一条消息交给模型，让它按原始要求重新调用。纠正也有边界，max_repairs 用完就进入 fail，把原因和证据留在状态里，不把半成品交出去。",
+            "书里还提到 2026 年 7 月起业界开始说的“Graph 工程”：把 Agent 循环、确定性程序和人工审批组织成显式的执行图，节点承担能力，边规定路由，结构化状态沿边传递。单个 Agent 循环也可以只是图里的一个节点。本课的 plan、tools、verify 这一段，就是把{{lesson:tool-selection}}里那个循环拆开，在中间插进一个程序验证点。",
+            "同一章也提醒了反面：一上来就画一张几十个节点的图，往往又慢又脆。实用的顺序仍是先单次调用，再工作流，最后才是复杂编排；只有业务规则要求、或者反复测出同一类失败时，才把那一步固化成节点。"
+          ]
+        },
+        {
+          "id": "predict-graph-updates",
+          "type": "predict",
+          "prompt": "运行“正常路径：规划、调用、验证、回答”之前先猜：这次运行会记下几条 lesson.graph_update？",
+          "experiment": "graph-paths",
+          "arm": "normal",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.graph_update"
+          }
+        },
+        {
+          "id": "mq-node-update",
+          "type": "micro-quiz",
+          "question": {
+            "id": "node-returns",
+            "prompt": "intake 节点返回了 {missing: [], status: running}。运行之后，状态里的 request 会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "保持原样：节点只返回改动的字段，没返回的字段不变",
+                "feedback": "对。节点返回的是更新，不是整份新状态。"
+              },
+              {
+                "id": "b",
+                "text": "被清空，因为节点没有返回它",
+                "feedback": "不对。没出现在更新里的字段不受影响。"
+              },
+              {
+                "id": "c",
+                "text": "LangGraph 报错，节点必须返回全部字段",
+                "feedback": "不对。只返回改动的字段正是推荐写法。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "节点返回部分字段，LangGraph 按每个字段的规则并入旧状态。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "归并函数：更新怎样并入状态",
+          "paragraphs": [
+            "节点返回的字段怎样并入旧状态，由每个字段的归并函数（Reducer）决定。没写归并函数的字段后写覆盖：verify 返回 failed_checks 为 2，旧值 1 就没了，计数器和 status 要的正是这样。messages 和 evidence 不一样，它们在 Annotated 里各挂了一个归并函数：add_messages 把新消息追加到末尾，operator.add 把两个列表接起来。",
+            "拿“失败终态”那组手算一遍。第一次 tools 返回一条 evidence，attempt 为 1，并入后状态里有 1 条；plan 修正之后，第二次 tools 又返回一条，attempt 为 2。假如 evidence 没有归并函数，第二条会顶掉第一条，fail 节点和报告就看不到第一次失败的原因；有了 operator.add，状态里是 2 条，各自带着当时的实参和错误。消息同理：没有 add_messages，plan 返回的那条助手消息会把系统提示词和用户请求整个顶掉，下一次请求只剩一条助手消息。",
+            "add_messages 还多做一件事：新消息的 id 和已有消息相同，就替换那一条，不追加；没有 id 的消息会被分配一个。追加型的归并函数也不负责清空，节点返回空列表，旧的证据仍在；官方文档说明真要清空时用专门的覆盖写法。报告里“证据没有被覆盖”一项，比较 evidence 的条数和消息历史里工具消息的条数，两边相等，说明两路都没丢。",
+            "还要注意，messages 只是状态里的一个字段。参考教程的文档分析图，状态里几乎只有消息，路由看最后一条消息里有没有工具调用；本课把 request、evidence、failed_checks 这些业务事实单独放进字段，路由函数读字段就够了，不用去解析消息。消息管的是下一次请求里模型能看到什么，业务字段管的是程序怎样判断，这和{{lesson:application-state}}把消息与应用状态分开放是同一个道理。"
+          ]
+        },
+        {
+          "id": "mq-reducer",
+          "type": "micro-quiz",
+          "question": {
+            "id": "reducer-overwrite",
+            "prompt": "把 evidence 的归并函数去掉，“失败终态”那组跑完后，状态里的 evidence 有几条？",
+            "options": [
+              {
+                "id": "a",
+                "text": "1 条：第二次 tools 的更新覆盖了第一次",
+                "feedback": "对。没有归并函数就是后写覆盖。"
+              },
+              {
+                "id": "b",
+                "text": "2 条：列表天然会追加",
+                "feedback": "不对。LangGraph 不看类型，只看有没有归并函数。"
+              },
+              {
+                "id": "c",
+                "text": "0 条：fail 节点会清空它",
+                "feedback": "不对。fail 没有返回 evidence，不会改它。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "要保留的列表必须挂追加型的归并函数，否则只剩最后一次写入。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "条件路由与工具节点",
+          "paragraphs": [
+            "条件边按状态选择下一条边，工具调用成为一个节点。add_conditional_edges 有三个参数：从哪个节点出发、路由函数、可能的去向。intake 后面挂 after_intake：missing 不为空就去 ask_user，否则去 plan。verify 后面挂 after_verify，按 verdict 和 failed_checks 在 answer、plan、fail 三个去向里选一个。去向在建图时就列好了，实测路由函数返回表外的名字会直接报错，图不会走到表外。",
+            "路由函数只读状态字段，不读模型写的句子。缺参由程序判断：请求里没有每天分钟数，intake 写下 missing 为 minutes_per_day，路由直接去 ask_user，一次模型都不调用。为什么不让模型去问？模型可能自己假设每天 60 分钟，算出一个看着合理的天数。把缺参写成状态字段，这条路就和模型怎么回答无关，每次都一样。参考教程里有个路由函数用随机数二选一，演示语法可以，任务流里不该这样：每次分支都要能对上当时的状态值。",
+            "工具节点是自己写的 call_tools。它取最后一条助手消息交给 execute_tool_calls，每个调用都经过 RunContext 执行，产生成对的 tool_call 和 tool_result，再把结果连同实参整理成 evidence 返回。LangGraph 也有现成的工具节点，但它直接调用函数，平台记录不到这些调用，本课不用。工具节点只执行，不判断对错，判断交给下一个节点。",
+            "verify 只看这一轮的 evidence，按结构化字段归类：没有调用记为 no_tool_call；有 ok 为 false 的结果记为 tool_error；工具成功，可课程列表或每天分钟数和请求对不上，记为 arguments_mismatch。最后一种最容易漏：模型悄悄去掉一门查不到的课，工具当然成功，可算的已经不是学习者问的那件事。每次路由还会发一条 lesson.graph_route，写明读了哪些字段、值是多少、去了哪里。"
+          ]
+        },
+        {
+          "id": "mq-route",
+          "type": "micro-quiz",
+          "question": {
+            "id": "route-reads-state",
+            "prompt": "after_verify 读到 verdict 为 failed、failed_checks 为 1、max_repairs 为 1。图下一步去哪？",
+            "options": [
+              {
+                "id": "a",
+                "text": "plan：失败次数没超过预算，回去修正",
+                "feedback": "对。1 不超过 1，还能修正一次。"
+              },
+              {
+                "id": "b",
+                "text": "fail：已经失败过一次",
+                "feedback": "不对。超过 max_repairs 才去 fail，等于时还能回去。"
+              },
+              {
+                "id": "c",
+                "text": "answer：工具已经执行过了",
+                "feedback": "不对。执行过不等于验证通过。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "路由函数只比较状态里的数，结论可以从 lesson.graph_route 的 read 核对。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "循环预算与终态",
+          "paragraphs": [
+            "图里的循环也要有上限，每条路径都要走到 END。verify 回到 plan 就是一个环，本课用两层上限守住它。一层是业务预算 max_repairs，放在路由函数里：failed_checks 不超过它才回 plan，超过就去 fail。另一层是递归上限（Recursion Limit），LangGraph 自己的上限，通过 recursion_limit 传入，数的是执行了多少个超步。本课的图每一步只运行一个节点，一个超步就是一个节点。",
+            "手算“失败终态”那组：max_repairs 为 1。先走 intake、plan、tools、verify，第一次验证失败，failed_checks 变成 1，不超过 1，回到 plan；再走 plan、tools、verify，failed_checks 变成 2，去 fail。一共 8 个节点，2 次模型调用。把 max_repairs 放宽到 3，要走 1 + 3×4 + 1 = 14 个节点才到 fail。“上限截停”那组同时把 recursion_limit 收紧到 6，第 6 个节点 tools 执行完，LangGraph 抛出 GraphRecursionError，图停在半路。",
+            "两层上限的结局不同。业务预算触发时，图走的是自己画好的路：fail 写下 status 为 failed 和原因，再进入 END，报告里每一项都有据可查。递归上限触发时，LangGraph 直接抛错，最后的状态不会交回来；运行器接住这个错误，在报告里写“达到 recursion_limit”和最后执行的节点，不替图编一个终态。所以业务预算应当先到，递归上限只是安全网。",
+            "实测 1.2.16 还有一个细节：路径上有几个节点，recursion_limit 至少要比它多 1。正常路径 5 个节点，设成 5 时 answer 照样执行、模型也被调用了，结束前仍然报错；设成 6 才正常结束。平台还有第三层：lesson.json 的 max_rounds 限制一次运行的模型调用数，超过就抛错，和{{lesson:structured-output}}的调用预算是同一个想法。"
+          ]
+        },
+        {
+          "id": "deep-dive-superstep",
+          "type": "deep-dive",
+          "title": "超步：LangGraph 怎样一轮一轮地执行",
+          "summary": "LangGraph 按轮执行：这一轮的节点都跑完、更新并入状态，再按边决定下一轮，递归上限数的就是轮数。",
+          "paragraphs": [
+            "LangGraph 的执行模型来自大规模图计算里的“按轮同步”思路：每一轮，先找出这一轮该运行的节点；它们都运行完之后，把各自的更新按归并函数并入状态；然后沿边算出下一轮该运行谁。没有节点要运行时，图就结束。这样的一轮叫超步。官方文档的说法是，并行的节点同属一个超步，先后执行的节点各占一个。",
+            "归并函数在并行时更要紧。假如两个节点在同一个超步里都往 evidence 写，又没有归并函数，LangGraph 不知道该留哪一个，会直接报错，提示这个字段一步只能收一个值；挂上 operator.add，两个更新就按顺序接起来。本课的图没有并行分支，每个超步只有一个节点，所以超步数就等于节点数。",
+            "按这个口径手算本课四个练习的超步数：正常路径 5 步，缺参 2 步，失败终态 8 步，上限截停在第 6 步被打断。递归上限的默认值在 1.0.6 之后是 1000 步，对本课这样的小图几乎等于没有上限；所以本课把它显式传进去，并且让业务预算先到。",
+            "路由函数在哪一刻执行？它属于上一轮的收尾：节点跑完、更新并入，再调用路由函数算下一轮。stream_graph 拿到这一轮的更新时，路由已经算完了，所以在事件里，lesson.graph_route 排在同一个节点的 lesson.graph_update 前面。读回放时按 step 对齐，不要以为路由先于节点执行。"
+          ]
+        },
+        {
+          "id": "misconception-auto-end",
+          "type": "misconception",
+          "claim": "用了 LangGraph，图里的循环就自动有终点。",
+          "correction": "LangGraph 只在超步数达到 recursion_limit 时抛错，默认值是 1000。在那之前，一个回不了头的环会一直请求模型，直到平台的调用预算先拦下。终点要自己设计：把业务预算放进状态，由路由函数判断，并且有一条路通向失败终态。"
+        },
+        {
+          "id": "mq-limit",
+          "type": "micro-quiz",
+          "question": {
+            "id": "which-limit",
+            "prompt": "max_repairs 为 3、recursion_limit 为 6，工具每次都报错。哪个上限先让图停下？",
+            "options": [
+              {
+                "id": "a",
+                "text": "recursion_limit：走到 fail 要 14 步，第 6 步就被截停",
+                "feedback": "对。这时报告写“达到 recursion_limit”，没有终态。"
+              },
+              {
+                "id": "b",
+                "text": "max_repairs：业务预算总是先到",
+                "feedback": "不对。业务预算要靠你把递归上限设得足够大才能先到。"
+              },
+              {
+                "id": "c",
+                "text": "两个同时触发",
+                "feedback": "不对。第 6 步时 failed_checks 才是 1。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "递归上限要大于最长正常路径的节点数，业务预算才能先到。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "节点事件与状态差异",
+          "paragraphs": [
+            "记录每个节点前后的状态差异，回放时能看到图怎样走。stream_graph 用 LangGraph 的流式接口逐步运行，每个节点执行完，就把它返回的更新记成一条 lesson.graph_update，带 step、node、update 三项。节点返回的那几个字段，就是这一步的状态差异：intake 那条只有 missing 和 status，tools 那条只有新的工具消息和这一轮的证据。",
+            "为什么记差异，不记整份状态？整份状态里有越来越长的消息历史，每步都存一遍，事件很快就大得读不动；差异恰好回答“这一步改了什么”。要看某一刻的完整状态，按 step 从头把差异依次并入即可，规则就是上一节的归并函数。{{lesson:application-state}}记的是完整快照，两种写法各有取舍：快照查看方便，差异体积小，改动一眼可见。",
+            "这些事件都不是模型响应。模型的回答只出现在 request 和 response 里，前后夹着 lesson.framework_input 和 lesson.framework_output。graph_update 里的助手消息，是框架从那次响应构造出来、由 plan 节点写回状态的一份记录。所以报告里“调用模型的节点执行次数”应当等于 request 事件数：plan 或 answer 每执行一次，就有一对请求和响应；缺参那组两边都是 0。",
+            "回放只读这些记录，不会重新运行图，也不会重新请求模型。本课没有保存执行位置：运行中途停下，下次只能从头开始。在有副作用的节点前暂停、保存执行位置、重启后从原处恢复，留到{{lesson:human-in-the-loop}}讲。"
+          ]
+        },
+        {
+          "id": "deep-dive-script",
+          "type": "deep-dive",
+          "title": "另一种编排：把流程写成脚本",
+          "summary": "不是所有编排都要画成图；Learn Claude Code 用一段可续跑的脚本协调多次调用，两种写法各有所长。",
+          "paragraphs": [
+            "Learn Claude Code 的工作流运行时一节换了个做法：编排写成一段受信任的异步脚本，里面只能用几个原语：派出一次 Agent 调用、并行等齐一组调用、让每一项依次走完几个阶段、标一个阶段名。模型只决定启动哪个保存好的流程、传什么参数，流程本身由脚本决定。每次子调用的结果写进磁盘上的日志，按调用内容算出稳定的键，中断后用同一个运行编号续跑，没改过的调用直接取日志里的结果。",
+            "脚本和图要解决的是同一件事：把“下一步做什么”从模型手里拿回程序。差别在表达方式。脚本就是普通代码，循环、并行、依赖写起来顺手，可要知道一共有几条路，仍得读代码；图把节点和边声明成数据，能在运行前列出、画出、逐条检查终态，代价是简单的流程也要拆成节点。",
+            "Microsoft 的 AI Agents for Beginners 规划一课是第三种思路：先让模型输出结构化的计划，列出子任务和负责的 Agent，再由程序按计划分派。那里每一步由谁做是运行时才定的；本课的图里，节点和边在编译时就固定了，模型只在 plan 这个节点里决定工具实参。任务的形状事先能画出来，用图；要看到中间结果才知道有几步，就让模型规划，程序守住边界。"
+          ]
+        },
+        {
+          "id": "mq-events",
+          "type": "micro-quiz",
+          "question": {
+            "id": "update-is-not-response",
+            "prompt": "“失败终态”那组记下 8 条 lesson.graph_update、2 条 request。哪种说法对？",
+            "options": [
+              {
+                "id": "a",
+                "text": "模型被调用了 2 次，分别在两次 plan 节点里",
+                "feedback": "对。模型调用只看 request 与 response。"
+              },
+              {
+                "id": "b",
+                "text": "模型被调用了 8 次，每个节点一次",
+                "feedback": "不对。intake、tools、verify、fail 都是纯 Python。"
+              },
+              {
+                "id": "c",
+                "text": "graph_update 是模型响应的另一种格式",
+                "feedback": "不对。它是节点写回的状态差异，不是模型响应。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "节点事件和模型调用是两类证据，数量不必相同，也不能互相冒充。"
+          }
+        },
+        {
+          "id": "compare-native",
+          "type": "compare",
+          "title": "原生写法与图写法",
+          "paragraphs": [
+            "左列是{{lesson:application-state}}的写法，右列是本课的对应物。"
+          ],
+          "columns": [
+            "原生写法",
+            "LangGraph 写法",
+            "管什么"
+          ],
+          "rows": [
+            [
+              "TaskState 数据类",
+              "StudyState（TypedDict）",
+              "共享的任务事实"
+            ],
+            [
+              "步骤函数，直接改 state.status",
+              "节点函数，只返回改动的字段",
+              "做一步、写回状态"
+            ],
+            [
+              "直接赋值",
+              "默认覆盖；列表字段挂归并函数",
+              "更新怎样并入"
+            ],
+            [
+              "run 里的 if 分支",
+              "条件边加路由函数",
+              "按状态选下一步"
+            ],
+            [
+              "转换表 TRANSITIONS",
+              "add_edge 与列好的去向",
+              "规定能走哪些路"
+            ],
+            [
+              "step_budget 与 consume_step",
+              "max_repairs 加 recursion_limit",
+              "循环和步数的上限"
+            ],
+            [
+              "lesson.state 完整快照",
+              "lesson.graph_update 状态差异",
+              "回放证据"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "“失败终态”那组走一遍",
+          "description": "按节点顺序说明“失败终态：修正一次仍不通过”的运行，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "intake",
+              "actor": "程序",
+              "title": "参数齐全",
+              "body": "两门课和每天 30 分钟都在，missing 为空。",
+              "code": "return {'missing': [], 'status': 'running'}",
+              "language": "python",
+              "evidence": "lesson.graph_update（intake）"
+            },
+            {
+              "id": "step-2",
+              "label": "plan",
+              "actor": "模型",
+              "title": "提出工具调用",
+              "body": "模型按请求原样传入两门课。",
+              "code": "planner.invoke(state['messages'])",
+              "language": "python",
+              "evidence": "request / response"
+            },
+            {
+              "id": "step-3",
+              "label": "tools",
+              "actor": "工具",
+              "title": "查不到一门课",
+              "body": "工具返回结构化错误，记成第 1 轮的证据。",
+              "code": "execute_tool_calls(context, proposal, tools)",
+              "language": "python",
+              "evidence": "tool_result 的 ok 为 false"
+            },
+            {
+              "id": "step-4",
+              "label": "verify",
+              "actor": "程序",
+              "title": "第一次验证失败",
+              "body": "failed_checks 变成 1，不超过 max_repairs，路由回到 plan。",
+              "code": "after_verify(state)  # -> 'plan'",
+              "language": "python",
+              "evidence": "lesson.graph_route"
+            },
+            {
+              "id": "step-5",
+              "label": "plan",
+              "actor": "模型",
+              "title": "带着原因再试",
+              "body": "运行器先插入一条验证未通过的说明，再请求模型。",
+              "code": "planner.invoke(state['messages'] + feedback)",
+              "language": "python",
+              "evidence": "第 2 轮 request 的最后一条消息"
+            },
+            {
+              "id": "step-6",
+              "label": "verify",
+              "actor": "程序",
+              "title": "第二次验证失败",
+              "body": "failed_checks 变成 2，超过预算，路由去 fail。",
+              "code": "after_verify(state)  # -> 'fail'",
+              "language": "python",
+              "evidence": "lesson.graph_route"
+            },
+            {
+              "id": "step-7",
+              "label": "fail",
+              "actor": "程序",
+              "title": "写下失败终态",
+              "body": "status 为 failed，原因和两条证据都留在状态里，然后进入 END。",
+              "code": "return {'status': 'failed', 'reason': ...}",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "wrap-up",
+          "type": "prose",
+          "title": "回到验收：三条路各停在哪",
+          "paragraphs": [
+            "回头核对本课的三条验收要求，每条都能落到具体的事件上。第一，分支对得上状态值：每条 lesson.graph_route 的 read 写着路由函数当时读到的 missing、verdict、failed_checks；正常、缺参、失败三组分别停在 answer、ask_user、fail，status 分别是 completed、needs_input、failed。第二，归并规则说得清：messages 和 evidence 追加，其余字段覆盖，报告里证据条数等于工具消息条数。",
+            "第三，节点的状态变化没有冒充模型响应，循环受程序预算约束：调用模型的节点执行几次，就有几对 request 和 response；verify 回到 plan 的次数由 max_repairs 封顶，recursion_limit 兜底。这些是离线测试模式下的结论。真实模型在 plan 节点里会不会照原样传参、修正时会不会改动实参，要你自己真实运行一次再看。",
+            "下一课{{lesson:streaming-cancel}}回到单次请求，看模型输出怎样一块块到达、停止时已经收到了什么。本课的图如果有一个会产生副作用的节点，比如真的往日历里写入学习计划，就要在它之前停下来等人确认，重启后还能从原处接着走，那是{{lesson:human-in-the-loop}}的内容。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-building-blocks",
+              "title": "LangGraph 的基本组成：状态、节点、边与状态图（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/building_blocks.mdx"
+            },
+            {
+              "id": "hf-first-graph",
+              "title": "第一张图：邮件分拣与条件路由（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/first_graph.mdx"
+            },
+            {
+              "id": "hf-document-agent",
+              "title": "文档分析图：消息归并与工具循环（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/document_analysis_agent.mdx"
+            },
+            {
+              "id": "book-harness",
+              "title": "运行层工程：约束、验证与纠正（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            },
+            {
+              "id": "lcc-workflow-runtime",
+              "title": "工作流运行时：脚本决定编排（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s16_workflow_runtime/README.zh.md"
+            },
+            {
+              "id": "ms-planning",
+              "title": "规划设计：拆解任务与结构化计划（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/07-planning-design/README.md"
+            },
+            {
+              "id": "langgraph-graph-api",
+              "title": "LangGraph 图接口：状态、归并函数、边与递归上限（LangChain 文档，2026-10-20 核对）",
+              "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "application-state"
+        },
+        {
+          "id": "code-state",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langgraph_state/graph.py",
+          "start": 24,
+          "end": 51,
+          "notes": [
+            {
+              "id": "n24",
+              "line": 24,
+              "anchor": "class StudyState(TypedDict):",
+              "text": "状态就是一个 TypedDict：所有节点共用这一份，字段名就是节点之间的约定。"
+            },
+            {
+              "id": "n27",
+              "line": 27,
+              "anchor": "messages: Annotated[list[AnyMessage], add_messages]",
+              "text": "消息挂 add_messages：新消息追加，id 相同的替换，系统提示词和用户请求不会被顶掉。"
+            },
+            {
+              "id": "n28",
+              "line": 28,
+              "anchor": "evidence: Annotated[list[dict], operator.add]",
+              "text": "证据挂 operator.add：每轮工具结果接在后面，修正之后第一次失败的原因还在。"
+            },
+            {
+              "id": "n30",
+              "line": 30,
+              "anchor": "request: dict",
+              "text": "下面这些字段没有归并函数，后写覆盖。request 是学习者的原始要求，验证拿它对照实参。"
+            },
+            {
+              "id": "n32",
+              "line": 32,
+              "anchor": "failed_checks: int",
+              "text": "验证失败的次数：业务预算靠它判断，是状态字段，不是藏在函数里的局部变量。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "anchor": "status: str",
+              "text": "status 和 reason 记下结局：completed、needs_input 或 failed，各配一句原因。"
+            },
+            {
+              "id": "n40",
+              "line": 40,
+              "anchor": "def check_evidence(records: list[dict], request: dict)",
+              "text": "验证规则单独成函数，只读结构化的工具结果，返回问题代码，方便单独测试。"
+            },
+            {
+              "id": "n42",
+              "line": 42,
+              "anchor": "if not records:",
+              "text": "这一轮根本没有调用工具，就没有可核对的结果。"
+            },
+            {
+              "id": "n45",
+              "line": 45,
+              "anchor": "if any(not record[\"ok\"] for record in records):",
+              "text": "任何一条 ok 为 false 都算失败，看的是工具结果里的字段，不是模型怎么说。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "if succeeded and not any(_same_request(",
+              "text": "工具成功也要对照原始要求：模型删掉一门课，算出的天数就不是学习者问的那件事。"
+            }
+          ]
+        },
+        {
+          "id": "code-nodes",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langgraph_state/graph.py",
+          "start": 67,
+          "end": 98,
+          "notes": [
+            {
+              "id": "n67",
+              "line": 67,
+              "anchor": "def intake(state: StudyState) -> dict:",
+              "text": "节点就是普通函数：参数是整份状态，返回值是要改的字段。"
+            },
+            {
+              "id": "n69",
+              "line": 69,
+              "anchor": "missing = [name for name in (\"lessons\", \"minutes_per_day\")",
+              "text": "缺参由程序判断：两个字段哪个为空就记下哪个，不请模型猜。"
+            },
+            {
+              "id": "n70",
+              "line": 70,
+              "anchor": "return {\"missing\": missing, \"status\": \"running\"}",
+              "text": "只返回两项，request、messages 等字段原样保留。"
+            },
+            {
+              "id": "n72",
+              "line": 72,
+              "anchor": "def plan(state: StudyState) -> dict:",
+              "text": "plan 是唯一让模型提出工具调用的节点。"
+            },
+            {
+              "id": "n75",
+              "line": 75,
+              "anchor": "if state[\"verdict\"] == \"failed\":",
+              "text": "修正时先插入一条说明，写明上一轮为什么没通过；第一次规划时没有这条。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "anchor": "return {\"messages\": feedback + [planner.invoke(",
+              "text": "模型调用经平台适配层，记成 request 和 response；返回的助手消息由 add_messages 追加。"
+            },
+            {
+              "id": "n80",
+              "line": 80,
+              "anchor": "def call_tools(state: StudyState) -> dict:",
+              "text": "自己写的工具节点，不用框架预置的那个，这样每次调用都有记录。"
+            },
+            {
+              "id": "n84",
+              "line": 84,
+              "anchor": "results = execute_tool_calls(context, proposal, tools)",
+              "text": "每个调用都经 RunContext 执行，工具报错变成 ok 为 false 的结构化结果。"
+            },
+            {
+              "id": "n85",
+              "line": 85,
+              "anchor": "evidence = [{\"attempt\": state[\"failed_checks\"] + 1",
+              "text": "证据带上第几轮和当时的实参，验证要拿实参和原始要求比。"
+            },
+            {
+              "id": "n90",
+              "line": 90,
+              "anchor": "def verify(state: StudyState) -> dict:",
+              "text": "验证节点只判断，不执行工具，也不调用模型。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "attempt = [record for record in state[\"evidence\"]",
+              "text": "只看这一轮的证据：前几轮的失败已经计过数了。"
+            },
+            {
+              "id": "n95",
+              "line": 95,
+              "anchor": "return {\"verdict\": \"failed\", \"problems\": problems, \"failed_checks\"",
+              "text": "失败时把计数加一，写回状态；去哪由路由函数决定，节点自己不跳转。"
+            },
+            {
+              "id": "n98",
+              "line": 98,
+              "anchor": "return {\"verdict\": \"passed\", \"problems\": [], \"result\": passed[\"result\"]}",
+              "text": "通过时把核对过的工具结果放进 result，回答节点只看它。"
+            }
+          ]
+        },
+        {
+          "id": "code-edges",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langgraph_state/graph.py",
+          "start": 115,
+          "end": 147,
+          "notes": [
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "def after_intake(state: StudyState) -> str:",
+              "text": "路由函数读状态、返回下一个节点的名字，是条件边的另一半。"
+            },
+            {
+              "id": "n116",
+              "line": 116,
+              "anchor": "return note_route(\"intake\", \"ask_user\" if state[\"missing\"] else \"plan\"",
+              "text": "缺参就去 ask_user，否则去 plan；读的只有 missing 一个字段。"
+            },
+            {
+              "id": "n118",
+              "line": 118,
+              "anchor": "def after_verify(state: StudyState) -> str:",
+              "text": "verify 之后三选一：回答、回去修正、失败。"
+            },
+            {
+              "id": "n122",
+              "line": 122,
+              "anchor": "elif state[\"failed_checks\"] <= max_repairs:",
+              "text": "业务预算在这里：失败次数不超过 max_repairs 才回 plan，这个环因此一定会停。"
+            },
+            {
+              "id": "n125",
+              "line": 125,
+              "anchor": "target = \"fail\"",
+              "text": "预算用完走失败终态，不是抛错，也不是靠框架的步数上限。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "anchor": "return note_route(\"verify\", target, verdict=",
+              "text": "把读到的值和去向一起记下，回放时每次分支都能对上当时的状态。"
+            },
+            {
+              "id": "n129",
+              "line": 129,
+              "anchor": "graph = StateGraph(StudyState)",
+              "text": "状态图以状态结构为参数，下面登记节点和边。"
+            },
+            {
+              "id": "n132",
+              "line": 132,
+              "anchor": "graph.add_node(name, _traced(name, node, trail))",
+              "text": "七个节点按名字登记；包一层只为在路径里记下节点名。"
+            },
+            {
+              "id": "n133",
+              "line": 133,
+              "anchor": "graph.add_edge(START, \"intake\")",
+              "text": "START 是入口，每次运行都从 intake 开始。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "graph.add_conditional_edges(\"intake\", after_intake, [\"plan\", \"ask_user\"])",
+              "text": "条件边：出发节点、路由函数、可能的去向。去向写死，路由不能走到表外。"
+            },
+            {
+              "id": "n135",
+              "line": 135,
+              "anchor": "graph.add_edge(\"plan\", \"tools\")",
+              "text": "普通边：plan 之后一定执行工具节点，tools 之后一定验证。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "anchor": "graph.add_conditional_edges(\"verify\", after_verify, [\"answer\", \"plan\", \"fail\"])",
+              "text": "这条条件边里的 plan 让图出现一个环。"
+            },
+            {
+              "id": "n138",
+              "line": 138,
+              "anchor": "for name in TERMINAL_NODES:",
+              "text": "三个终态节点都连到 END：每条路都有终点，可以从图结构报告逐行核对。"
+            },
+            {
+              "id": "n147",
+              "line": 147,
+              "anchor": "return graph.compile()",
+              "text": "编译时检查结构，比如边指向不存在的节点；编译后才能运行。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-note-route",
+              "start": 141,
+              "end": 145,
+              "label": "平台：发出 lesson.graph_route 并把这次分支记进路径"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "工具节点、缺参判断和终态都由本课自己写",
+          "chosen": "工具节点调用 execute_tool_calls，让每次调用经 RunContext 记录；缺参由 intake 按结构化请求判断；循环由状态里的 failed_checks 和 max_repairs 收住，预算用完走 fail 终态；recursion_limit 只当安全网，触发时如实报告最后的节点。",
+          "alternatives": [
+            {
+              "id": "prebuilt-tool-node",
+              "title": "用 LangGraph 预置的工具节点和按消息形状路由的条件函数",
+              "why_not": "预置工具节点直接调用函数，平台记录不到调用；按“有没有工具调用”路由，看的是消息形状，不是业务状态。"
+            },
+            {
+              "id": "model-asks",
+              "title": "让模型自己发现缺参并追问",
+              "why_not": "模型可能自行假设每天的时长，分支随回答变化，同样的输入走不同的路。"
+            },
+            {
+              "id": "recursion-only",
+              "title": "只靠 recursion_limit 收住循环",
+              "why_not": "触发时直接抛错，拿不到最终状态，也没有失败原因；业务预算让图走到自己画好的失败终态。"
+            },
+            {
+              "id": "random-route",
+              "title": "像入门示例那样用随机数选分支",
+              "why_not": "同样的状态可能走不同的路，分支对不上当时的状态值，也无法复现。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "graph-paths",
+          "title": "规划、调用、验证、回答图",
+          "hypothesis": "三个固定输入走三条不同的路：正常输入走到 answer，缺参输入在 ask_user 结束且不调用模型，查不到课程的输入修正一次后走到 fail。每次分支都能对上路由函数当时读到的状态值。",
+          "predict": "predict-graph-updates",
+          "arms": [
+            {
+              "id": "normal",
+              "exercise": "normal",
+              "label": "正常路径：规划、调用、验证、回答"
+            },
+            {
+              "id": "missing",
+              "exercise": "missing",
+              "label": "缺参：没说每天学多久"
+            },
+            {
+              "id": "repair-fail",
+              "exercise": "repair-fail",
+              "label": "失败终态：修正一次仍不通过"
+            }
+          ],
+          "observe": [
+            {
+              "id": "structure",
+              "text": "图结构：编译后的图里每一条边，从 START 到 END。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "intake-route",
+              "text": "第一次路由：after_intake 读到的 missing。",
+              "selector": {
+                "event": "lesson.graph_route",
+                "path": "data.read.missing"
+              }
+            },
+            {
+              "id": "verify-update",
+              "text": "验证节点写回的状态差异：verdict 与 problems。",
+              "selector": {
+                "event": "lesson.graph_update",
+                "path": "data.update.verdict"
+              }
+            },
+            {
+              "id": "verify-route",
+              "text": "verify 之后的路由：读到的 verdict、failed_checks 和去向。",
+              "selector": {
+                "event": "lesson.graph_route",
+                "path": "data.read.failed_checks"
+              }
+            },
+            {
+              "id": "path",
+              "text": "本次运行实际走过的节点。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=path]"
+              }
+            },
+            {
+              "id": "terminal",
+              "text": "终态检查：最后一个节点、status 和原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=terminal]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三组输入跑的是同一张图，只是状态不同。"
+            },
+            {
+              "text": "先看图结构：7 个节点、11 条边，三个终态节点都连到 END。",
+              "observe": "structure",
+              "stage": "runtime"
+            },
+            {
+              "text": "intake 之后第一次分支。缺参那组这里的 missing 不为空，直接去 ask_user。",
+              "observe": "intake-route"
+            },
+            {
+              "text": "工具执行完，验证节点只写回结论和问题代码。",
+              "observe": "verify-update",
+              "stage": "tool"
+            },
+            {
+              "text": "verify 之后的路由读了三个值，去向由它们决定。",
+              "observe": "verify-route",
+              "stage": "model"
+            },
+            {
+              "text": "报告里的路径来自每个节点执行时的记录。",
+              "observe": "path"
+            },
+            {
+              "text": "最后核对终态：这条路停在哪个节点，status 和原因是什么。",
+              "observe": "terminal"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这三次运行各走了哪条路，每次分支读到的状态值是多少，停在哪个终态节点。",
+              "缺参那组没有发出任何模型请求；失败那组的两次工具结果都保留在证据里。"
+            ],
+            "does_not_prove": [
+              "真实模型在 plan 节点里不一定照原样传参；离线测试模式下的调用提议由固定脚本给出。",
+              "completed 只说明工具结果通过了验证，回答节点写出的文字只做了“是否提到天数”这一项检查。",
+              "三条路径不代表所有可能的输入都能终止，例如递归上限设得太小时就到不了终态。"
+            ]
+          }
+        },
+        {
+          "id": "loop-budget",
+          "title": "循环预算与递归上限",
+          "hypothesis": "业务预算先到时，图走到 fail 终态并留下原因；递归上限先到时，LangGraph 抛出 GraphRecursionError，运行器只能报告最后执行的节点，拿不到最终状态。",
+          "arms": [
+            {
+              "id": "repair-fail",
+              "exercise": "repair-fail",
+              "label": "失败终态：修正一次仍不通过"
+            },
+            {
+              "id": "recursion-limit",
+              "exercise": "recursion-limit",
+              "label": "上限截停：recursion_limit 先到"
+            }
+          ],
+          "observe": [
+            {
+              "id": "tool-error",
+              "text": "工具返回的结构化错误：查不到的课程标识。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error"
+              }
+            },
+            {
+              "id": "budget-route",
+              "text": "verify 之后读到的 failed_checks 与 max_repairs。",
+              "selector": {
+                "event": "lesson.graph_route",
+                "path": "data.read.max_repairs"
+              }
+            },
+            {
+              "id": "limits",
+              "text": "图结构报告里的 recursion_limit。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=recursion_limit]"
+              }
+            },
+            {
+              "id": "stop",
+              "text": "停止原因：走到 END，还是达到 recursion_limit。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=stop]"
+              }
+            },
+            {
+              "id": "steps",
+              "text": "执行的节点数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=steps]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组输入相同，只有 max_repairs 和 recursion_limit 不同。"
+            },
+            {
+              "text": "工具每次都查不到同一门课，验证一定失败。",
+              "observe": "tool-error",
+              "stage": "tool"
+            },
+            {
+              "text": "路由拿 failed_checks 和 max_repairs 比较，决定回 plan 还是去 fail。",
+              "observe": "budget-route",
+              "stage": "runtime"
+            },
+            {
+              "text": "两组的 recursion_limit 不同：25 和 6。",
+              "observe": "limits"
+            },
+            {
+              "text": "看停止原因：一组走到 END，一组被递归上限截停。",
+              "observe": "stop"
+            },
+            {
+              "text": "再看执行的节点数：8 个和 6 个，和正文的手算对照。",
+              "observe": "steps"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "业务预算先到时，图按自己画好的边走到 fail；递归上限先到时，图停在最后执行的节点，没有终态。",
+              "两组的节点数与按超步手算的结果一致。"
+            ],
+            "does_not_prove": [
+              "真实模型修正时可能改动实参，验证失败的原因可能是 arguments_mismatch 而不是 tool_error，节点数不变。",
+              "这里只验证了单节点超步的图；有并行分支时，超步数小于节点数。"
+            ]
+          }
+        },
+        {
+          "id": "state-diff",
+          "title": "状态差异与归并函数",
+          "hypothesis": "每条 lesson.graph_update 只含节点改动的字段；evidence 挂了追加型的归并函数，两轮工具结果都留在状态里；节点事件不会被当成模型响应。",
+          "arms": [
+            {
+              "id": "repair-fail",
+              "exercise": "repair-fail",
+              "label": "失败终态：修正一次仍不通过"
+            }
+          ],
+          "observe": [
+            {
+              "id": "tools-update",
+              "text": "tools 节点的状态差异：只有新的工具消息和这一轮的证据。",
+              "selector": {
+                "event": "lesson.graph_update",
+                "path": "data.update.evidence"
+              }
+            },
+            {
+              "id": "counter-update",
+              "text": "verify 失败时写回的 failed_checks。",
+              "selector": {
+                "event": "lesson.graph_update",
+                "path": "data.update.failed_checks"
+              }
+            },
+            {
+              "id": "evidence-kept",
+              "text": "证据条数与工具消息条数的对照。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=evidence-kept]"
+              }
+            },
+            {
+              "id": "model-nodes",
+              "text": "调用模型的节点执行次数，和 request 事件数对照。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_nodes]"
+              }
+            },
+            {
+              "id": "first-request",
+              "text": "第一次模型请求：它和节点事件分开记录。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.messages"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组运行有 8 个节点、2 次模型调用，先看节点写回了什么。"
+            },
+            {
+              "text": "tools 的更新只带这一轮的证据，attempt 写明是第几轮。",
+              "observe": "tools-update",
+              "stage": "tool"
+            },
+            {
+              "text": "failed_checks 没有归并函数，每次写入直接覆盖旧值。",
+              "observe": "counter-update",
+              "stage": "runtime"
+            },
+            {
+              "text": "报告比较证据和工具消息的条数，两边相等，说明归并时没有丢。",
+              "observe": "evidence-kept"
+            },
+            {
+              "text": "模型调用另有记录：这是 plan 节点发出的第一次请求。",
+              "observe": "first-request",
+              "stage": "model"
+            },
+            {
+              "text": "调用模型的节点执行了几次，就应该有几条 request。",
+              "observe": "model-nodes"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "节点写回的字段、两轮证据都保留下来，以及模型调用次数与调用模型的节点执行次数一致。"
+            ],
+            "does_not_prove": [
+              "没有演示并行节点同时写一个字段的情况；那时缺少归并函数会直接报错。",
+              "只看了一组运行；归并规则本身由测试逐个节点核对。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "lessons",
+          "label": "要学的课程",
+          "help": "课程标识，用英文逗号分隔，最多 6 个。课时表里没有的标识会让工具报错。"
+        },
+        {
+          "name": "minutes_per_day",
+          "label": "每天分钟数",
+          "help": "10 到 240；留空（null）表示没说，图会在 ask_user 结束。"
+        },
+        {
+          "name": "max_repairs",
+          "label": "最多修正次数",
+          "help": "验证失败后最多回到 plan 几次，0 到 3。"
+        },
+        {
+          "name": "recursion_limit",
+          "label": "递归上限",
+          "help": "LangGraph 一次运行最多执行的超步数，3 到 40；要比最长路径的节点数多 1。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "下面哪种情况最值得把流程改写成图？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "有缺参、修正、失败几条路，还带一个回头的环",
+                  "feedback": "对。分支和环多了，图能列出每条路并核对终态。"
+                },
+                {
+                  "id": "b",
+                  "text": "固定三步、没有分支的提示链",
+                  "feedback": "不对。一条直线，一个函数就够了。"
+                },
+                {
+                  "id": "c",
+                  "text": "只调用一次模型的问答",
+                  "feedback": "不对。没有流程可编排。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "图的价值在于把分支、环和终态集中写下，方便检查。"
+            },
+            {
+              "id": "q2",
+              "prompt": "节点返回了一个 StudyState 里没有声明的字段名，LangGraph 1.2 会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这条更新被悄悄丢掉，不报错",
+                  "feedback": "对。TypedDict 不做运行时检查，所以要靠测试核对。"
+                },
+                {
+                  "id": "b",
+                  "text": "立即抛出异常",
+                  "feedback": "不对。实测没有报错。"
+                },
+                {
+                  "id": "c",
+                  "text": "自动给状态加上这个字段",
+                  "feedback": "不对。状态只有声明过的字段。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "类型标注不等于校验，写错字段名要靠测试发现。"
+            },
+            {
+              "id": "q3",
+              "prompt": "缺参那组为什么一次模型都没调用？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "intake 按结构化请求判断缺参，路由直接去 ask_user",
+                  "feedback": "对。缺参是程序的判断，不交给模型。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型发现缺参后拒绝回答",
+                  "feedback": "不对。这条路上根本没有请求模型。"
+                },
+                {
+                  "id": "c",
+                  "text": "平台的调用预算用完了",
+                  "feedback": "不对。预算一次都没用。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "能用程序确定的分支，就不要让它随模型的回答变化。"
+            },
+            {
+              "id": "q4",
+              "prompt": "“上限截停”那组的报告里，终态检查为什么没有通过？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "LangGraph 达到 recursion_limit 后抛错，图停在 tools，没有走到终态节点",
+                  "feedback": "对。运行器如实写下停在哪里，不编终态。"
+                },
+                {
+                  "id": "b",
+                  "text": "fail 节点执行时出错了",
+                  "feedback": "不对。这一组根本没走到 fail。"
+                },
+                {
+                  "id": "c",
+                  "text": "工具调用失败就等于没有终态",
+                  "feedback": "不对。“失败终态”那组同样工具失败，却走到了 fail。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "业务预算触发是走到终态，递归上限触发是半路停下，两者要分开说。"
+            },
+            {
+              "id": "q5",
+              "prompt": "正常路径有 5 个节点。recursion_limit 设为 5 会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "5 个节点都执行，但结束前仍抛 GraphRecursionError，拿不到最终状态",
+                  "feedback": "对。实测要设到 6 才正常结束。"
+                },
+                {
+                  "id": "b",
+                  "text": "正好够用，正常结束",
+                  "feedback": "不对。实测在判断结束之前先检查步数。"
+                },
+                {
+                  "id": "c",
+                  "text": "第 1 步就报错",
+                  "feedback": "不对。前 5 步都会执行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "递归上限要比最长路径的节点数多 1，并且应当大于业务预算允许的最长路径。"
+            },
+            {
+              "id": "q6",
+              "prompt": "模型修正时悄悄去掉了查不到的那门课，工具返回成功。verify 会怎样判断？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "记为 arguments_mismatch：实参和原始要求对不上",
+                  "feedback": "对。验证要对照 request，不只看 ok。"
+                },
+                {
+                  "id": "b",
+                  "text": "通过：工具成功了",
+                  "feedback": "不对。成功算出的已经不是学习者问的那件事。"
+                },
+                {
+                  "id": "c",
+                  "text": "记为 tool_error",
+                  "feedback": "不对。工具本身没有报错。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "验证节点同时检查工具结果和实参，防止任务被悄悄改小。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“失败终态：修正一次仍不通过”，找出一条验证节点判定失败的状态差异。",
+          "target": {
+            "event": "lesson.graph_update",
+            "path": "data.update.failed_checks"
+          },
+          "explanation": "只有验证失败时，verify 写回的更新里才有 failed_checks，同时带着 verdict 为 failed 和问题代码。这组运行里有两条：第一条 failed_checks 为 1，随后路由回到 plan；第二条为 2，随后去了 fail。验证通过时只写回 verdict、problems 和 result。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我能从图结构报告里数出三条路，并说出它们各停在哪个终态节点。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能对照每条 lesson.graph_route 的 read，说出那次分支为什么这样走。"
+            },
+            {
+              "id": "item-3",
+              "text": "我改过 max_repairs 或 recursion_limit，预测过节点数，再用报告核对。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "lesson.graph_update",
+      "note": "stream_graph 每个节点执行完记一条：step 是第几步，node 是节点名，update 是它返回的字段。"
+    },
+    {
+      "name": "lesson.graph_route",
+      "note": "路由函数每次做决定记一条：from 是出发节点，read 是读到的状态值，to 是去向。"
+    },
+    {
+      "name": "add_messages",
+      "note": "LangGraph 自带的消息归并函数：新消息追加到末尾，id 相同的旧消息被替换。"
+    },
+    {
+      "name": "failed_checks",
+      "note": "状态字段：验证失败了几次。verify 失败时加一，after_verify 拿它和 max_repairs 比较。"
+    },
+    {
+      "name": "max_repairs",
+      "note": "业务预算：验证失败后最多回到 plan 修正几次，超过就走 fail。默认 1。"
+    },
+    {
+      "name": "recursion_limit",
+      "note": "LangGraph 的配置项：一次运行最多执行多少个超步，超过就抛 GraphRecursionError。"
+    },
+    {
+      "name": "GraphRecursionError",
+      "note": "达到递归上限时 LangGraph 抛出的异常；运行器接住它，如实写进报告。"
+    },
+    {
+      "name": "stream_graph",
+      "note": "平台适配层：逐步运行编译好的图，每步记一条 lesson.graph_update，步与步之间检查停止。"
+    },
+    {
+      "name": "execute_tool_calls",
+      "note": "平台适配层：把助手消息里的每个调用交给 RunContext 执行，记录调用与工具结果。"
+    },
+    {
+      "name": "verdict",
+      "note": "状态字段：verify 的结论，passed 或 failed；after_verify 先看它。"
+    },
+    {
+      "name": "intake",
+      "note": "第一个节点：只检查请求里的课程和每天分钟数是否齐全，结果写进 missing。"
+    },
+    {
+      "name": "get_graph",
+      "note": "编译后图对象的方法，返回节点和边；本课用它生成“图结构”报告。"
+    }
+  ]
+}
