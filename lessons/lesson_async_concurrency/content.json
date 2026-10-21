@@ -1,0 +1,1594 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "async-concurrency",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "orchestration",
+    "tools",
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "ASYNC / CONCURRENCY",
+          "headline": "先读出谁依赖谁，再让独立的任务同时跑；",
+          "highlight": "有上限、有期限，停的时候一个不留。",
+          "takeaway": "本课让四份笔记的读取、摘要和汇总在一个 `asyncio` 调度器里运行：依赖从参数里的引用读出来，同时运行的任务不超过并发上限，每个任务有自己的超时，整次运行有截止时间。超时、失败和取消的任务都写进报告，缺了什么就说缺了什么。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-dependency",
+              "label": "01 / DEPENDENCY",
+              "title": "依赖从引用里读出来",
+              "description": "任务的参数里写“用某个任务的结果”，调度器据此算出每个任务排在第几层。同一层的任务互不依赖，才可能同时运行；依赖的结果不存在，任务就不该开始。",
+              "token": "Ref · levels"
+            },
+            {
+              "id": "02-limit",
+              "label": "02 / LIMIT",
+              "title": "同时跑的有上限",
+              "description": "并发上限（Concurrency Limit）是同一时刻最多有几个任务占着名额。名额要等任务的工作真的结束才放回；已经发出的模型请求收不回，也算占着。",
+              "token": "Semaphore"
+            },
+            {
+              "id": "03-timeout",
+              "label": "03 / TIMEOUT",
+              "title": "每个任务一个期限，整次运行一个截止",
+              "description": "单任务超时从拿到名额才开始算，排队不占时间。整体截止时间一到，正在跑的任务取消，没开始的不再开始。",
+              "token": "asyncio.timeout"
+            },
+            {
+              "id": "04-stop",
+              "label": "04 / STOP",
+              "title": "停得干净，缺什么说什么",
+              "description": "停止信号要传给每个任务，工具监听它，几毫秒内就停。没做完的任务写进报告：超时、失败、取消、跳过各有原因，部分结果不能当完整结果。",
+              "token": "cancel_all"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "先判断能不能并行",
+          "paragraphs": [
+            "只有互不依赖的任务能同时跑，依赖关系决定执行顺序。{{lesson:workflow-patterns}}比较过串行和并行：三个互不相干的复述任务，并行的墙钟时间短得多。那一课的任务是人挑好的，这一课换成一张会出错的清单：读两份笔记，再汇总成一张复习单。汇总要用到两份笔记，如果它和两个读取同时开始，手里没有笔记，只能拿空值干活，干出来的东西看着像结果，其实是错的。",
+            "判断能不能并行，只问一个问题：这个任务需要别的任务产出的值吗？需要就得等，不需要就能一起。举个编的例子：读 A 要 200 毫秒，读 B 要 300 毫秒，汇总要 50 毫秒。串行要 550 毫秒；A、B 同时读，汇总等 B 到了再开始，只要 350 毫秒。350 毫秒是这张清单的下限，因为依赖链“读 B → 汇总”最长，再多的并行也快不过它。反过来，A 和 B 之间没有任何联系，让它们排队就是白白多等。",
+            "本课不让人手写依赖。任务的参数里需要别人的结果时，写一个 `Ref`，指向某个任务的某个字段，比如“读取 A 的 note 字段”。`Task` 创建时从参数里找出所有 `Ref`，得到它依赖哪些任务；`levels` 再算层数：什么都不依赖的在第 1 层，其余任务排在它最深的依赖的下一层。依赖是读出来的，就不会出现“参数里用了 A 的结果，清单里却忘了写依赖”的矛盾。本课的清单里，摘要的参数引用了读取的 `note`，汇总的参数引用了四个摘要的 `summary`，所以读取在第 1 层、摘要在第 2 层、汇总在第 3 层。",
+            "同一层的任务才可能同时跑，不等于一定同时跑：并发上限、超时和失败都会改变实际的先后。`levels` 也只管数据依赖。两个任务写同一个文件，彼此没有数据依赖，同时跑照样出问题，那要靠别的办法，{{lesson:memory-lifecycle}}的版本检查就是一种。还有一类依赖藏在模型的判断里：下一步做什么要看上一步的结果，那是{{lesson:dependent-calls}}里模型一步步发现的，调度器读不出来。所以看到“能并行”，先问是哪一种依赖，再决定谁来保证顺序。"
+          ]
+        },
+        {
+          "id": "deep-dive-graph",
+          "type": "deep-dive",
+          "title": "依赖图与关键路径：手算本课的清单",
+          "summary": "三层、九个任务：按默认参数手算串行、并行和各种上限下的耗时，再和报告里量出来的数对照。",
+          "paragraphs": [
+            "本课的清单有九个任务：四个读取在第 1 层，四个摘要在第 2 层，汇总在第 3 层。设每个读取和每个摘要都用 200 毫秒，汇总几乎不花时间（这是按默认参数手算，你的运行以报告里测出的数为准）。串行是 4×200 + 4×200 + 0 = 1600 毫秒，这就是报告里的“各任务耗时之和”。依赖链最长的是“一个读取 → 它的摘要 → 汇总”，200 + 200 = 400 毫秒，这是“依赖链最长耗时”，也是无论开多少并行都跨不过去的下限。这条最长的链，在项目管理里叫关键路径。",
+            "上限介于两者之间：上限 4 时每层同时跑，约 400 毫秒；上限 2 时每层分两批，约 800 毫秒；上限 1 就是串行，约 1600 毫秒。上限 4、2、1 的耗时比例是 1 : 2 : 4，因为有任务的这两层，每层正好四个。如果某一层有五个任务、上限是 4，那一层要分两批，第二批只有一个任务在跑，这一批的并行度只有 1。看依赖图时不只看层数，也看每层有几个任务。",
+            "《深入理解 AI Agent》第六章讲异步 Agent 时给过同样的判断：能独立推进的工作继续做，必须依据结果的决策留到结果到达之后。模型在一次回答里同时提出的几个工具调用，天然互不依赖：模型还没见到任何结果，不可能把某个结果写进另一个调用的参数。依赖别人结果的调用，只能等下一轮再提，这正是前面讲的依赖调用。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "async/await 与任务",
+          "paragraphs": [
+            "用 Python 的任务并行发请求，比较与串行的墙钟时间。`async def` 定义的函数，调用后不会马上运行，得到的是一个协程；`asyncio.create_task` 把协程交给事件循环，循环在各个任务的等待之间来回切换：一个任务停在 `await` 上等结果，循环就去跑别的任务。所以 `async` 和 `await` 本身不产生并行，是“等的时候换人干活”让重叠成为可能。",
+            "事件循环只有一个线程，遇到阻塞调用整个循环就卡住。工具里的 `time.sleep`、模型的一次 HTTP 请求都是阻塞调用。直接在协程里调用它们，循环被占着，别的任务动不了，“并行”就成了串行，而且程序看上去一切正常。办法是把阻塞的部分放进工作线程，协程只等线程交回结果，等的时候循环照常转。线程在等网络时不占着解释器，所以多个等待能真正重叠。举个编的例子：四个请求各等 1 秒，在一个线程里依次阻塞要 4 秒，放进四个线程只要 1 秒多一点。",
+            "常见的写法是 `asyncio.to_thread`。本课的调度器自己开线程、自己登记（`_in_thread`），原因在后面两节：任务超时或被取消时，`await` 马上结束，线程却可能还在跑。调度器必须知道线程什么时候真的结束，才敢说运行结束时没有任务留在后台。每个任务的工作线程都登记在表里，运行结束时登记表要是空的，报告里的收尾检查就读这张表。",
+            "怎样比较墙钟时间：同一张清单在一次运行里按并发上限 1、2、4 各跑一遍。报告里的 `wall_ms` 是后端用单调时钟量出来的，`serial_ms` 是各任务耗时之和。几遍的 `serial_ms` 差不多，`wall_ms` 差得很远，差的就是重叠掉的等待。并行不减少工作量：模型调用数和工具调用数几遍都一样，省下的只是等的时间，所以并行也不会让账单变小。报告里每个任务还有开始和结束的毫秒数，画成时间线，重叠的部分一眼就能看出来。"
+          ]
+        },
+        {
+          "id": "predict-naive",
+          "type": "predict",
+          "prompt": "运行“依赖图与调度顺序”之前先猜：一次运行里串行、按依赖调度、忽略依赖各跑一遍，汇总工具 `build_sheet` 一共会被调用几次？调度器会发现“忽略依赖”那一遍缺输入，把汇总跳过吗？",
+          "experiment": "dependency-order",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call",
+            "name": "build_sheet"
+          }
+        },
+        {
+          "id": "mq-dependency",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-dependency",
+            "prompt": "“忽略依赖”那一遍里，汇总工具 `build_sheet` 和两个读取同时开始。它会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "照样被调用，因为拿到的是空值，工具返回 MissingInput 错误",
+                "feedback": "对。调度器没有按依赖等，也就不知道它缺输入；是工具自己拒绝了空值，问题才暴露出来。"
+              },
+              {
+                "id": "b",
+                "text": "调度器发现它缺输入，自动把它调到读取之后",
+                "feedback": "不对。这一遍故意不看依赖，调度器不会替它调整顺序。"
+              },
+              {
+                "id": "c",
+                "text": "它等两个读取结束才开始，结果和按依赖调度完全一样",
+                "feedback": "不对。那是按依赖调度的做法；忽略依赖就是不等。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "错误的调度不会自己报错。要靠工具对输入的检查和报告里的依赖检查才发现它，所以工具要拒绝缺失的输入，不能悄悄补空值。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "并发上限",
+          "paragraphs": [
+            "同时进行的请求数要有上限，保护服务商配额与本机资源。四份笔记各要一次摘要请求，若是四十份，不设上限就是四十个请求同时发给服务商：配额先被打满，后面的请求收到限流错误，本机的连接和线程也一起吃紧。上限把“同时在做”的数量固定住，多出来的排队，排队的任务不占服务商的配额。这也是一种背压：上游发得太快，就让它在门口等。",
+            "上限用信号量（`asyncio.Semaphore`）实现。它像一道有 N 个名额的门：任务先拿到名额才开始工作，做完把名额放回，拿不到的在门口排队。本课 `_run` 里的 `async with self._slots` 就是这道门。asyncio 的信号量按先来后到发名额，不看任务重不重要。举个例子：上限 2，四个读取一起排队，前两个拿到名额，后两个等；某个摘要即使很快就绪，也排在这两个读取后面。",
+            "按默认参数手算：读取和摘要都是 200 毫秒，共四份笔记。上限 4，四个读取同时、四个摘要同时，再加汇总，约 400 毫秒多一点；上限 2，读取分两批、摘要分两批，约 800 毫秒；上限 1，一件一件来，约 1600 毫秒。上限每减半，耗时大约加倍，直到碰到依赖链的下限为止。这些是手算，实验报告里的数是你这次运行真实量出来的；“依赖链最长耗时”约 400 毫秒，就是上限再大也越不过的那条下限。",
+            "名额什么时候放回，是个容易错的地方。任务超时以后，调度器可以不再等它；可是模型请求已经发出，线程还在等服务商的响应。这时就放回名额，下一个请求马上发出，服务商那边同时在处理的请求就超过了上限。本课的调度器等线程真的结束才放回名额，报告里的峰值并发由各任务的开始和释放时间重新算出，不读信号量，所以信号量和现实对不上时它能发现。读取工具几毫秒就停，这一点看不出来；摘要请求收不回，才会暴露它。"
+          ]
+        },
+        {
+          "id": "deep-dive-semaphore",
+          "type": "deep-dive",
+          "title": "上限守的是什么：配额、背压和请求",
+          "summary": "几份参考资料都把并发上限放在“保护外部配额”这一条上，而不是“让程序跑得更快”。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第十章把资源调度比作操作系统的职能：进程世界稀缺的是 CPU 时间和内存，Agent 世界稀缺的是 Token 和并发额度。并发数要设上限，免得几十个 Agent 同时耗尽接口配额；并发数到顶时，更紧急的任务来了，可以打断正在跑的子任务，那叫抢占。本课的名额只按先来后到发，没有抢占。",
+            "Microsoft 的《AI Agents for Beginners》在讲生产部署的一课里，把这件事叫并发与背压：模型服务商有限速，所以要限制并发，用间隔递增的重试，并且失败时体面一点，排队返回“正在处理”比直接报 500 好。背压的意思是上游跑得太快时，让它慢下来，而不是让缓冲区无限变长。上限加排队就是最简单的背压。重试的间隔怎么设，留给{{lesson:reliable-tools}}。",
+            "Claude Cookbooks 的延迟示例里，团队里同时运行的帮手数写成常量 `MAX_HELPERS = 4`，并注明它是成本护栏，不是机制的一部分：去掉它，机制照样工作，只是账单和限流风险都放大了。上限的数字没有通用答案，要看服务商的配额、单个请求的耗时和本机能承受的线程数。本课把它做成参数，就是让你自己试 1、2、4 看耗时怎么变。"
+          ]
+        },
+        {
+          "id": "mq-limit",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-limit",
+            "prompt": "把并发上限从 4 改成 1，其余不变。下面哪一项不会变？",
+            "options": [
+              {
+                "id": "a",
+                "text": "模型调用数和工具调用数",
+                "feedback": "对。上限只改变先后和等待，不改变要做的事，调用数都是 4 次模型、5 次工具。"
+              },
+              {
+                "id": "b",
+                "text": "墙钟时间",
+                "feedback": "不对。上限 1 就是串行，墙钟时间接近各任务耗时之和。"
+              },
+              {
+                "id": "c",
+                "text": "峰值并发",
+                "feedback": "不对。峰值并发最多等于上限，上限 1 时就是 1。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "上限改变的是等待，不是工作量；比较几遍，调用数相同、墙钟时间不同，才是并行带来的差别。"
+          }
+        },
+        {
+          "id": "misconception-limit",
+          "type": "misconception",
+          "claim": "并发上限设得越大，运行越快。",
+          "correction": "上限只决定“最多”能同时跑几个。本课清单每一层最多四个任务，上限超过 4 没有任何作用；依赖链最长耗时是下限，再高的上限也越不过它；服务商的限速还会把过大的上限变成一串限流错误。上限该按配额和本机资源定，不是越大越好。"
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "超时与部分结果",
+          "paragraphs": [
+            "单个任务超时不拖垮整体，报告哪些完成、哪些超时。没有超时，一份笔记读 1500 毫秒还算慢，读到一刻钟整次运行就卡在那里，后面所有依赖它的任务都在等。超时的数字没有通用答案：太短，慢但正常的任务被误杀；太长，起不到保护作用。有了超时，慢任务被放弃，其余任务照常完成。放弃不等于消失：慢的那份在报告里写明是超时，依赖它的摘要写明是因它而没有开始。",
+            "超时的计时要从任务拿到名额才开始。如果排队时就计时，排在第四个的任务还没开始，时间已经被前面三个用掉，一个没毛病的任务也会超时。本课 `_execute` 里，`asyncio.timeout` 在拿到名额以后才创建。测试里有一组对照：上限 1，两个任务各跑 150 毫秒，超时给 250 毫秒，两个都完成；上限 2，超时只给 100 毫秒，两个都超时。同样的任务，差别只在计时从哪里开始。这些数字只用来验证机制，不代表适合真实的服务商。",
+            "单任务超时之外还有整体截止时间 `deadline_ms`：从运行开始算，到点后正在跑的任务取消，排队的不再开始。两个期限管的事不同：前者防一个任务拖住自己，后者防整次运行拖得太久，谁先到谁生效。本课由一个监视协程 `_watch` 每 10 毫秒看一次时钟和停止按钮，到点就调用 `cancel_all`。",
+            "超时之后要诚实地交报告。每个任务的结局有五种：完成、失败、超时、已取消、跳过，各有原因。依赖超时任务的摘要不会开始，记为跳过；汇总工具的 `join` 是 `settled`，等所有依赖都有了结局就运行，但它交回的复习单自己写着 `complete` 为假、缺哪一课。运行的回答把这一遍的结论写成“部分完成（不是完整结果）”。报告里每一行都有原因，比如“单任务超时：超过 500 毫秒仍没有结束”。部分结果有用，前提是缺了什么说得清清楚楚。"
+          ]
+        },
+        {
+          "id": "mq-timeout",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-timeout",
+            "prompt": "上限 1，任务 A 和 B 各跑 150 毫秒，每个任务的超时是 250 毫秒。为什么两个都能完成？",
+            "options": [
+              {
+                "id": "a",
+                "text": "计时从拿到名额才开始，B 排队的 150 毫秒不算",
+                "feedback": "对。B 拿到名额后只跑了 150 毫秒，没到 250 毫秒。"
+              },
+              {
+                "id": "b",
+                "text": "超时只对第一个任务生效",
+                "feedback": "不对。每个任务各有自己的超时。"
+              },
+              {
+                "id": "c",
+                "text": "调度器把 B 的超时自动加长了",
+                "feedback": "不对。超时是 `Task` 里写好的 250 毫秒，调度器不改它。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "超时应当只量任务自己的运行时间，排队时间由并发上限和整体截止时间管。"
+          }
+        },
+        {
+          "id": "misconception-late",
+          "type": "misconception",
+          "claim": "任务超时被取消了，就不再花钱、不再占资源了。",
+          "correction": "取消只停止等待。工具能在几毫秒内停，是因为它主动监听停止信号；模型请求已经发出，线程只能等响应回来，服务商照样生成、照样计量。报告里的 `late_ms` 记的就是调度器放弃等待以后，工作又多跑了多久。取消只能拦住还没发出的请求。"
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "取消与终态",
+          "paragraphs": [
+            "取消要传到每个子任务，最后的终态要一致。学习者点停止、整体截止时间到了、或者一个任务失败而策略是全部取消，来源不同，处理一样：所有任务一起停，三种来源走同一个入口，终态才只有一种写法。只停了主循环，已经开始的任务还在后台跑，运行都结束了，它们还在写文件、发请求，而报告已经说“全部结束”。",
+            "`cancel_all` 做三件事：记下第一个原因，把每个任务的停止信号置位，再取消每个等待中的 asyncio 任务。第一个原因生效，后面的不改写，因为同一时刻可能有好几个来源：停止按钮刚按下，截止时间也到了。任务被取消时先记录自己的结局，再把取消继续抛出去，不吞掉，上层才知道它被取消了。全部任务结束、全部线程结束以后，运行器才往下走；如果是学习者点了停止，这时才抛出 `RunCancelled`，运行以 cancelled 结束。",
+            "一个任务失败时有两种策略。`continue`：其余任务继续，最后报告缺了谁；`cancel_all`：其余任务一起停，省下还没发出的模型请求，也丢掉正在做的工作。没有哪个更好：笔记只缺一份，复习单还有用，该继续；要是每个结果都依赖这一份，继续做就是白花钱。同样的失败，两种策略下的模型调用数分别是 3 次和 0 次。",
+            "取消请求和客户端断开是两回事，{{lesson:streaming-cancel}}分开讲过：点停止，运行结束，`done` 的 `status` 是 `cancelled`；只断开事件连接，运行照常往下跑。多任务让这件事多了一层：终态是后端写下的，不是屏幕上最后一条事件。停止之后平台不再收课程事件，调度器没法在停止后写下“全部已停”，能查的是已经记下的东西：没有 `tool_result` 的 `tool_call`，以及 `done` 事件里的 `cancel_reason`。这也是实验里要手动点一次停止的原因：学习者自己制造的取消，证据只留在这些痕迹里。"
+          ]
+        },
+        {
+          "id": "deep-dive-stop",
+          "type": "deep-dive",
+          "title": "优雅停止、强制停止，和“没有人认领的任务”",
+          "summary": "参考资料里的几种停法：发信号等确认、层层向下取消、最后兜底强杀。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第十章把终止分成两种强度，对应 Unix 的 SIGTERM 和 SIGKILL。优雅终止：发起方发出信号，被终止的一方在当前步骤的安全点响应，先清理资源，返回确认再退出；强制终止是兜底，只在对方不响应优雅信号时用，代价是可能留下没收尾的资源。本课的工具走的是优雅这条，叫协作式取消：`read_note` 在等待时听停止信号，听到就抛出 `TaskStopped`，调用得到一条 `ok` 为假的结构化错误，而不是一个伪造的成功。第六章同样要求：取消点必须是能安全收尾的位置，没做完的结果要用明确的占位表示。",
+            "书里还有一条工程办法，借鉴 Go 的 context：取消沿创建关系向下传，取消一个任务，它派生的任务一起取消，从根上避免没人认领的任务。本课的做法更直接：所有任务都在同一个调度器名下，取消的是整个调度器。Claude Cookbooks 的异步编排示例用的是同一个收尾模式：`finally` 里取消所有帮手，再 `gather` 一遍并带上 `return_exceptions`，确认它们都真的结束了。",
+            "Python 自带的 `asyncio.TaskGroup` 也有相似的行为：一个任务抛出异常，同组的其余任务被取消。它对应本课的 `cancel_all` 策略，但没有 `continue` 这一档，也不会替你记录每个任务的结局和原因，所以本课自己写了调度器。Learn Claude Code 里讲慢操作放到后台的一课，有一句提醒值得带走：停掉进程组只是生命周期清理，不是隔离手段，进程换一个会话就能逃出去。本课的线程也一样：只能保证它们结束，不能保证它们做了什么。"
+          ]
+        },
+        {
+          "id": "mq-stop",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-stop",
+            "prompt": "学习者点停止时，一个读取工具正在等 1500 毫秒。哪一种说法对？",
+            "options": [
+              {
+                "id": "a",
+                "text": "工具一直在听停止信号，几毫秒内结束，运行以 cancelled 收场",
+                "feedback": "对。`read_note` 等的是停止信号，不是睡眠，信号一来就返回。"
+              },
+              {
+                "id": "b",
+                "text": "要等工具睡完 1500 毫秒才能停",
+                "feedback": "不对。如果工具用 `time.sleep` 才会这样；本课的工具没有。"
+              },
+              {
+                "id": "c",
+                "text": "调度器强行结束这个线程",
+                "feedback": "不对。Python 线程没有安全的外部终止办法，只能让它自己发现该停了。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "停止是协作式取消：任务要在能听到信号的地方等待，才停得下来。"
+          }
+        },
+        {
+          "id": "compare-exercises",
+          "type": "compare",
+          "title": "各对照一览",
+          "paragraphs": [
+            "下表是离线测试模式下的确定性结果，模型回答来自固定脚本，时间长短以你自己的实验报告为准；模型调用数由清单决定，不随机。每个场景是一次运行，里面按几种方式各跑一遍。"
+          ],
+          "columns": [
+            "对照组",
+            "和基线差在哪",
+            "模型调用数",
+            "任务结论"
+          ],
+          "rows": [
+            [
+              "按依赖调度（两个读取加汇总）",
+              "基线",
+              "0",
+              "完整完成，汇总在两个读取之后才开始"
+            ],
+            [
+              "串行（上限 1）",
+              "并发上限 1",
+              "0",
+              "完整完成，墙钟时间接近各任务耗时之和"
+            ],
+            [
+              "忽略依赖",
+              "故意不等依赖",
+              "0",
+              "汇总因缺输入失败，没有完成"
+            ],
+            [
+              "并发上限 1、2、4（四份笔记）",
+              "只改并发上限",
+              "每遍 4",
+              "完整完成，耗时约 4 : 2 : 1"
+            ],
+            [
+              "读得慢但不设超时",
+              "一份笔记读 1500 毫秒",
+              "4",
+              "完整完成，但整次运行被它拖慢"
+            ],
+            [
+              "单任务超时",
+              "同一份笔记的工具超时 500 毫秒",
+              "3",
+              "部分完成：缺这一份，复习单标明不完整"
+            ],
+            [
+              "整体截止时间",
+              "截止时间 700 毫秒，上限 2",
+              "4",
+              "部分完成：两个摘要被取消，汇总没有开始"
+            ],
+            [
+              "失败后继续",
+              "一份笔记被锁定",
+              "3",
+              "部分完成：缺被锁定的那份"
+            ],
+            [
+              "失败后全部取消",
+              "同上，策略改为 `cancel_all`",
+              "0",
+              "没有完成：其余任务全部停下或没有开始"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次到点取消的运行",
+          "description": "按步骤说明“整体截止时间”那一遍，代码是简化的示意；这次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "读依赖",
+              "actor": "调度器",
+              "title": "从引用算出三层",
+              "body": "九个任务，没有一个手写依赖：摘要的参数里引用了读取的结果，汇总的参数里引用了四个摘要，`levels` 据此排出三层。",
+              "code": "depth = levels(tasks)",
+              "language": "python",
+              "evidence": "lesson.graph"
+            },
+            {
+              "id": "step-2",
+              "label": "拿名额",
+              "actor": "调度器",
+              "title": "上限 2：先读四份笔记",
+              "body": "读取先到先得，前两个拿到名额，另外两个排队；摘要要等各自的读取结束，不会抢在前面。",
+              "code": "async with self._slots:",
+              "language": "python",
+              "evidence": "lesson.task"
+            },
+            {
+              "id": "step-3",
+              "label": "到点",
+              "actor": "监视协程",
+              "title": "整体截止时间到了",
+              "body": "监视协程每 10 毫秒看一次时钟。到点以后记下原因 `deadline`，记下这一刻有哪几个任务还在跑。",
+              "code": "return self.cancel_all(\"deadline\")",
+              "language": "python",
+              "evidence": "lesson.stop"
+            },
+            {
+              "id": "step-4",
+              "label": "取消",
+              "actor": "每个任务",
+              "title": "停止信号传到每个任务",
+              "body": "正在跑的摘要请求收不回，线程要等响应回来；等它们结束，名额才放回。排队的任务直接记为跳过，没开始的汇总也不再开始。",
+              "code": "cancelled_again = await self._thread_ended(task.id)",
+              "language": "python",
+              "evidence": "lesson.task"
+            },
+            {
+              "id": "step-5",
+              "label": "报告",
+              "actor": "运行器",
+              "title": "缺什么说什么",
+              "body": "报告里写明哪些完成、哪些取消、哪些跳过，以及迟到了多久；复习单没有生成，这一遍的结论写成“部分完成（不是完整结果）”。",
+              "code": "context.emit(\"lesson.report\", {...})",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch6",
+              "title": "异步与事件驱动：并行执行、取消与安全点（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter6.md"
+            },
+            {
+              "id": "book-async-agent",
+              "title": "带并行执行和打断能力的异步 Agent：并行对比串行、取消与恢复（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter6/async-agent/README.md"
+            },
+            {
+              "id": "book-ch10",
+              "title": "执行终止与资源调度：优雅终止、级联取消与并发额度（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter10.md"
+            },
+            {
+              "id": "cookbook-async",
+              "title": "异步多智能体编排：任务取消与收尾（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/patterns/agents/async_multi_agent_orchestration.ipynb"
+            },
+            {
+              "id": "cookbook-latency",
+              "title": "延迟压力下的多智能体团队：共享计时与并发上限（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/patterns/agents/latency_multi_agent.ipynb"
+            },
+            {
+              "id": "ms-16",
+              "title": "可扩展的 Agent 部署：并发与背压（AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/16-deploying-scalable-agents/README.md"
+            },
+            {
+              "id": "lcc-s11",
+              "title": "慢操作放到后台，结果在之后的轮次收取（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s11_background_tasks/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "workflow-patterns"
+        },
+        {
+          "id": "code-run",
+          "type": "annotated-source",
+          "path": "lessons/lesson_async_concurrency/scheduler.py",
+          "start": 102,
+          "end": 152,
+          "notes": [
+            {
+              "id": "n-run",
+              "line": 102,
+              "anchor": "async def _run(self, task: Task) -> None:",
+              "text": "每个任务一个 asyncio 任务，先等依赖，再等名额，最后才执行。"
+            },
+            {
+              "id": "n-schedule",
+              "line": 105,
+              "anchor": "if self.schedule == \"by_dependency\":",
+              "text": "按依赖调度才等；“忽略依赖”那一遍跳过这一段，直接去拿名额。"
+            },
+            {
+              "id": "n-wait-deps",
+              "line": 107,
+              "anchor": "await self._settled[need].wait()",
+              "text": "等每个依赖有了结局，不管是完成、失败还是超时。"
+            },
+            {
+              "id": "n-join",
+              "line": 109,
+              "anchor": "if blocked and task.join == \"all\":",
+              "text": "依赖没完成就跳过；`join` 是 `settled` 的任务（汇总）不在这里停下。"
+            },
+            {
+              "id": "n-slots",
+              "line": 112,
+              "anchor": "async with self._slots:",
+              "text": "并发上限这道门：拿到名额才往下走，名额由 `_finish` 在工作真正结束后放回。"
+            },
+            {
+              "id": "n-stopped-waiting",
+              "line": 113,
+              "anchor": "if self.stop_reason:",
+              "text": "排队时收到停止，拿到名额也不开始：记为跳过，原因是停止的原因。"
+            },
+            {
+              "id": "n-execute",
+              "line": 115,
+              "anchor": "await self._execute(task)",
+              "text": "真正执行的部分；名额一直占到它返回。"
+            },
+            {
+              "id": "n-cancel-run",
+              "line": 116,
+              "anchor": "except asyncio.CancelledError:",
+              "text": "排队或等依赖时被取消：补记一条跳过的结局，保证每个任务都有结局。"
+            },
+            {
+              "id": "n-reraise",
+              "line": 119,
+              "anchor": "raise  # a cancelled task",
+              "text": "记录之后把取消继续抛出，不吞掉，上层才知道它被取消了。"
+            },
+            {
+              "id": "n-settled",
+              "line": 121,
+              "anchor": "self._settled[task.id].set()",
+              "text": "不管怎么结束，都通知依赖它的任务：等待到此为止。"
+            },
+            {
+              "id": "n-execute-def",
+              "line": 123,
+              "anchor": "async def _execute(self, task: Task) -> None:",
+              "text": "任务拿到名额之后做的事：计时、执行、分类结局。"
+            },
+            {
+              "id": "n-stop-event",
+              "line": 124,
+              "anchor": "stop = self.stops[task.id] = threading.Event()",
+              "text": "每个任务一个停止信号，取消、超时和失败策略都靠置位它让工具停下。"
+            },
+            {
+              "id": "n-timer",
+              "line": 127,
+              "anchor": "# The timer starts here",
+              "text": "超时在这里才开始计时：已经拿到名额，排队的时间不算。"
+            },
+            {
+              "id": "n-resolve",
+              "line": 130,
+              "anchor": "inputs = resolve(task.inputs, self.results)",
+              "text": "拿到名额时才把引用换成值；依赖的结果不存在就是空值。"
+            },
+            {
+              "id": "n-run-task",
+              "line": 132,
+              "anchor": "result = await self.run_task(task, inputs, stop, self._in_thread)",
+              "text": "协程只等工作线程交回结果；超时一到，这个 await 就被取消。"
+            },
+            {
+              "id": "n-timeout",
+              "line": 138,
+              "anchor": "except TimeoutError as error:",
+              "text": "超时分两种：调度器自己的计时器到点，或者工作里抛出的网络超时。"
+            },
+            {
+              "id": "n-expired",
+              "line": 139,
+              "anchor": "if timeout.expired():",
+              "text": "只有计时器真的到点才算任务超时；别的超时是失败，要分开归因。"
+            },
+            {
+              "id": "n-cancelled",
+              "line": 143,
+              "anchor": "except asyncio.CancelledError:",
+              "text": "被整体取消：结局记为已取消，原因取停止的原因。"
+            },
+            {
+              "id": "n-user-stop",
+              "line": 146,
+              "anchor": "except RunCancelled:",
+              "text": "学习者点了停止，工作线程里的事件被平台拒收，也记为已取消。"
+            },
+            {
+              "id": "n-finish",
+              "line": 152,
+              "anchor": "await self._finish(task, stop, Outcome(",
+              "text": "不管怎么结束，都交给 `_finish` 记结局、应用失败策略、等线程结束。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-record",
+              "start": 133,
+              "end": 137,
+              "label": "成功时记下结果，工具返回错误时记为失败"
+            },
+            {
+              "id": "fold-generic",
+              "start": 148,
+              "end": 150,
+              "label": "其余异常：这个任务失败，记下错误类型和信息"
+            }
+          ]
+        },
+        {
+          "id": "code-stop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_async_concurrency/scheduler.py",
+          "start": 154,
+          "end": 193,
+          "notes": [
+            {
+              "id": "n-finish-def",
+              "line": 154,
+              "anchor": "async def _finish(",
+              "text": "任务结局的收口：记录、策略、等线程、通知。"
+            },
+            {
+              "id": "n-outcome",
+              "line": 156,
+              "anchor": "self.outcomes[task.id] = outcome",
+              "text": "结局先记下来：之后不管发生什么，报告都能读到它。"
+            },
+            {
+              "id": "n-policy",
+              "line": 157,
+              "anchor": "if outcome.status in TRIGGERS and self.on_failure == \"cancel_all\":",
+              "text": "失败或超时，而且策略是 `cancel_all`，就让其余任务一起停。"
+            },
+            {
+              "id": "n-stop-set",
+              "line": 159,
+              "anchor": "stop.set()",
+              "text": "任务已经有了结局，工作没有理由继续：把它的停止信号置位。"
+            },
+            {
+              "id": "n-hold",
+              "line": 161,
+              "anchor": "cancelled_again = await self._thread_ended(task.id)",
+              "text": "等工作线程真的结束；这期间名额还占着，下一个请求不能抢先发出。"
+            },
+            {
+              "id": "n-released",
+              "line": 162,
+              "anchor": "outcome.released_ms = self.now_ms()",
+              "text": "释放时刻：它和结束时刻的差就是报告里的 `late_ms`。"
+            },
+            {
+              "id": "n-again",
+              "line": 167,
+              "anchor": "if cancelled_again:",
+              "text": "等线程时又收到取消：等完再把取消抛出去，不丢。"
+            },
+            {
+              "id": "n-cancel-all",
+              "line": 170,
+              "anchor": "def cancel_all(self, reason: str",
+              "text": "三种来源的停止都走这里：停止按钮、整体截止时间、失败策略。"
+            },
+            {
+              "id": "n-first-reason",
+              "line": 172,
+              "anchor": "if self.stop_reason:",
+              "text": "第一个原因生效，后面的不改写。"
+            },
+            {
+              "id": "n-reason",
+              "line": 174,
+              "anchor": "self.stop_reason, self.stop_origin, self.stop_at_ms =",
+              "text": "记下原因、触发者和时刻，报告和 `lesson.stop` 都用它。"
+            },
+            {
+              "id": "n-signal-all",
+              "line": 179,
+              "anchor": "for event in self.stops.values():",
+              "text": "先把每个任务的停止信号置位：工具几毫秒内就听到。"
+            },
+            {
+              "id": "n-cancel-tasks",
+              "line": 182,
+              "anchor": "if task is not asyncio.current_task() and not task.done():",
+              "text": "再取消每个还没结束的等待，但不取消正在调用它的任务自己。"
+            },
+            {
+              "id": "n-watch",
+              "line": 185,
+              "anchor": "async def _watch(self) -> None:",
+              "text": "监视协程：只有时钟和停止按钮需要轮询。"
+            },
+            {
+              "id": "n-poll-stop",
+              "line": 189,
+              "anchor": "if self.stop_requested():",
+              "text": "平台的停止是一个标志，不会打断协程，所以每 10 毫秒看一次。"
+            },
+            {
+              "id": "n-deadline",
+              "line": 191,
+              "anchor": "if time.perf_counter() >= deadline_at:",
+              "text": "整体截止时间从运行开始算，到点就走同一条取消的路。"
+            },
+            {
+              "id": "n-sleep",
+              "line": 193,
+              "anchor": "await asyncio.sleep(WATCH_INTERVAL_S)",
+              "text": "让出循环：监视协程大部分时间在睡，不占着线程。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-on-stop",
+              "start": 175,
+              "end": 178,
+              "label": "平台：先记下停止事件，再取消任何东西"
+            }
+          ]
+        },
+        {
+          "id": "code-tool",
+          "type": "annotated-source",
+          "path": "lessons/lesson_async_concurrency/tools.py",
+          "start": 26,
+          "end": 48,
+          "notes": [
+            {
+              "id": "n-missing",
+              "line": 26,
+              "anchor": "class MissingInput(ValueError):",
+              "text": "继承 ValueError：工具循环会把它变成 `ok` 为假的结构化错误，而不是让运行崩溃。"
+            },
+            {
+              "id": "n-stopped-class",
+              "line": 30,
+              "anchor": "class TaskStopped(ValueError):",
+              "text": "工具自己放弃时抛出它，调用得到的是失败的结果，不是伪造的成功。"
+            },
+            {
+              "id": "n-read-note",
+              "line": 34,
+              "anchor": "def read_note(t: Texts, /, lesson: str",
+              "text": "读一份笔记；关键字参数 `stop` 是调度器给这个任务的停止信号。"
+            },
+            {
+              "id": "n-unknown",
+              "line": 36,
+              "anchor": "if lesson not in t.notes:",
+              "text": "不存在的笔记直接拒绝，不等待。"
+            },
+            {
+              "id": "n-wait-event",
+              "line": 39,
+              "anchor": "# 1. Wait on the stop signal",
+              "text": "等待用停止信号，不用睡眠：睡着的线程听不到停止。"
+            },
+            {
+              "id": "n-probe",
+              "line": 40,
+              "anchor": "wait_s = delay_ms *",
+              "text": "被锁定的笔记只等延迟的一部分就发现，所以失败比成功来得早。"
+            },
+            {
+              "id": "n-wait",
+              "line": 41,
+              "anchor": "if stop.wait(wait_s):",
+              "text": "返回真表示等待期间收到了停止；信号一来，这里立刻醒。"
+            },
+            {
+              "id": "n-raise-stopped",
+              "line": 42,
+              "anchor": "raise TaskStopped(",
+              "text": "写明等了多久才放弃，结果里留着这个数。"
+            },
+            {
+              "id": "n-locked",
+              "line": 44,
+              "anchor": "if lock:",
+              "text": "锁定是调用参数要求的故障：事件里看得到 `lock` 为真。"
+            },
+            {
+              "id": "n-result",
+              "line": 47,
+              "anchor": "return {\"lesson\": lesson, \"note\": note,",
+              "text": "真正读到的笔记，加上测出来的等待时间。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "自己写一个小调度器：任务图从引用读出，线程自己登记，名额等线程真的结束才放回",
+          "chosen": "依赖从任务参数里的引用读出，不手写；并发上限用信号量，名额占到工作线程真的结束；每个任务有自己的超时，整次运行有截止时间；取消走同一个入口，工具听停止信号；每个任务都有结局和原因，运行结束时线程登记表必须为空。",
+          "alternatives": [
+            {
+              "id": "gather",
+              "title": "把所有任务丢进 asyncio.gather",
+              "why_not": "gather 默认在第一个异常出现时就把它抛出来，其余任务仍在后台继续跑；它也没有并发上限、每个任务的超时和结局记录。"
+            },
+            {
+              "id": "to-thread",
+              "title": "用 asyncio.to_thread 跑阻塞的工具",
+              "why_not": "方便，但任务被取消后 await 就结束了，线程是否还在跑它不告诉你。本课要知道线程真的结束的时刻，才能放回名额、说“没有任务留在后台”。"
+            },
+            {
+              "id": "task-group",
+              "title": "用 asyncio.TaskGroup 管理整组任务",
+              "why_not": "任何一个任务出错，整组都被取消，没有“继续”这一档；它也不会替你记下每个任务的结局和原因。"
+            },
+            {
+              "id": "sleep-in-tool",
+              "title": "工具里直接用 time.sleep 等待",
+              "why_not": "睡着的线程听不到停止信号，停止要等它睡完；用 Event 的 wait 等待，信号一来就能醒。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "dependency-order",
+          "title": "依赖图与调度顺序",
+          "hypothesis": "两个读取互不依赖，可以同时发出；汇总需要两个读取的结果，必须等它们结束。同一次运行里，按依赖调度的墙钟时间约等于一个读取加汇总，串行是两个读取之和；忽略依赖不比按依赖调度慢，但汇总缺输入而失败，结论是没有完成。",
+          "predict": "predict-naive",
+          "arms": [
+            {
+              "id": "run",
+              "exercise": "dependency",
+              "label": "三种调度各跑一遍"
+            }
+          ],
+          "observe": [
+            {
+              "id": "graph",
+              "text": "调度器从参数里的引用读出的层：读取在第 1 层，汇总在第 2 层；三遍用的是同一张图。",
+              "selector": {
+                "event": "lesson.graph",
+                "path": "data.levels"
+              }
+            },
+            {
+              "id": "reads",
+              "text": "按依赖调度那一遍里第二个读取的 tool_call：它在第一个读取的结果回来之前就发出了。",
+              "selector": {
+                "event": "tool_call",
+                "name": "read_note",
+                "nth": 4
+              }
+            },
+            {
+              "id": "sheet-result",
+              "text": "汇总工具的结果：忽略依赖那一遍是 MissingInput，前两遍没有 error_type。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type",
+                "name": "build_sheet"
+              }
+            },
+            {
+              "id": "dep-check",
+              "text": "总表里忽略依赖那一遍的依赖检查：哪个任务在它依赖的任务结束之前就开始了。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=dependencies.all-at-once]"
+              }
+            },
+            {
+              "id": "walls",
+              "text": "串行那一遍的墙钟时间，后端单调时钟量出来的；另外两遍的在总表里并排放着。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=wall_ms.serial]"
+              }
+            },
+            {
+              "id": "peak",
+              "text": "按依赖调度那一遍的峰值并发，由各任务的开始和释放时间重新算出。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=peak.by-dependency]"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "忽略依赖那一遍的结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=verdict.all-at-once]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "同一次运行里，同一张清单按三种方式各跑一遍：串行、按依赖调度、忽略依赖。清单是两个读取，加一个需要两份笔记的汇总。"
+            },
+            {
+              "text": "三遍用同一张依赖图：读取在第 1 层，汇总在第 2 层，依赖是从参数里的引用读出来的。",
+              "observe": "graph",
+              "stage": "runtime"
+            },
+            {
+              "text": "按依赖调度那一遍，第二个读取的调用在第一个读取的结果回来之前就发出了，这就是并行。",
+              "observe": "reads",
+              "stage": "tool"
+            },
+            {
+              "text": "忽略依赖那一遍，汇总和读取同时开始，拿到的是空值：工具拒绝了它，返回 MissingInput。前两遍没有这个字段。",
+              "observe": "sheet-result"
+            },
+            {
+              "text": "总表里的依赖检查对照每个任务的开始和结束时间，指出忽略依赖那一遍的汇总在读取结束之前就开始了。",
+              "observe": "dep-check"
+            },
+            {
+              "text": "墙钟时间并排放着：串行最长，按依赖调度大约少一半，忽略依赖和它差不多快，但结果是错的。",
+              "observe": "walls"
+            },
+            {
+              "text": "峰值并发：串行是 1，按依赖调度是 2，因为只有两个读取可以同时跑。",
+              "observe": "peak"
+            },
+            {
+              "text": "结论：只有前两遍完整完成。快不等于对。",
+              "observe": "verdict"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每个任务的开始和结束时间（后端时钟）、汇总工具收到的输入，以及依赖检查对开始顺序的判定。",
+              "三遍的工具调用数相同，差别只在时间和结果：并行省的是等待，不是工作。"
+            ],
+            "does_not_prove": [
+              "延迟是注入的 200 毫秒，真实慢工具的耗时有波动，这里的比例不是通用倍数。",
+              "只有两个读取，并行度最多是 2；依赖链更长或更宽的清单，收益不同。",
+              "忽略依赖是故意做的错误调度。真实系统里的错误不一定被工具拒绝，有的会悄悄用旧值。"
+            ]
+          }
+        },
+        {
+          "id": "concurrency-limit",
+          "title": "并发上限 1、2、4",
+          "hypothesis": "四份笔记各做一次读取和一次摘要：并发上限越小，墙钟时间越长，但模型调用数和工具调用数不变；峰值并发由各任务的开始和释放时间算出，不超过上限。",
+          "arms": [
+            {
+              "id": "run",
+              "exercise": "concurrency-limit",
+              "label": "三个上限各跑一遍"
+            }
+          ],
+          "observe": [
+            {
+              "id": "branch",
+              "text": "摘要请求的 branch：前面是对照组的名字，后面是任务，响应按它配对。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.branch"
+              }
+            },
+            {
+              "id": "queued-read",
+              "text": "上限 1 那一遍里第四个读取的 tool_call：它要等前三个结束才拿到名额。",
+              "selector": {
+                "event": "tool_call",
+                "name": "read_note",
+                "nth": 4
+              }
+            },
+            {
+              "id": "peak",
+              "text": "上限 4 那一遍的峰值并发：由各任务的开始和释放时间重新算出。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=peak.limit-4]"
+              }
+            },
+            {
+              "id": "limit-held",
+              "text": "总表里的检查：每一遍的峰值有没有超过它的上限。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=limit_held]"
+              }
+            },
+            {
+              "id": "wall-1",
+              "text": "上限 1 那一遍的墙钟时间。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=wall_ms.limit-1]"
+              }
+            },
+            {
+              "id": "wall-4",
+              "text": "上限 4 那一遍的墙钟时间。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=wall_ms.limit-4]"
+              }
+            },
+            {
+              "id": "calls",
+              "text": "三遍加起来的模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_calls]"
+              }
+            },
+            {
+              "id": "critical",
+              "text": "依赖链最长耗时：第一遍的报告里量出来的，三遍都一样。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=critical_ms]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "同一次运行里，同一张清单按上限 1、2、4 各跑一遍。要做的事一样多，看等待怎么变。"
+            },
+            {
+              "text": "每个摘要请求带自己的 branch，前面是对照组的名字，响应按它配对，不会串。",
+              "observe": "branch",
+              "stage": "model"
+            },
+            {
+              "text": "上限 1 那一遍，第四个读取要等前三个结束才拿到名额，它的调用发得最晚。",
+              "observe": "queued-read",
+              "stage": "tool"
+            },
+            {
+              "text": "峰值并发由各任务的开始和释放时间重新算出：上限 4 那一遍是 4。",
+              "observe": "peak",
+              "stage": "runtime"
+            },
+            {
+              "text": "总表里的检查把每一遍的峰值和各自的上限比，通过才说明上限都守住了。",
+              "observe": "limit-held"
+            },
+            {
+              "text": "上限 1 那一遍的墙钟时间，接近各任务耗时之和。",
+              "observe": "wall-1"
+            },
+            {
+              "text": "上限 4 那一遍的墙钟时间，接近依赖链最长耗时。",
+              "observe": "wall-4"
+            },
+            {
+              "text": "模型调用数三遍加起来是 12：每遍 4 次，上限不改变要做的事。",
+              "observe": "calls"
+            },
+            {
+              "text": "依赖链最长耗时对三遍一样：再大的上限也越不过它。",
+              "observe": "critical"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "上限改变的是等待：同一张清单，调用数相同，峰值并发等于上限，墙钟时间随上限变小而变长。",
+              "峰值由时间戳重新算出，和信号量互相印证。"
+            ],
+            "does_not_prove": [
+              "离线测试模式下模型回答固定停顿，真实服务商的延迟不固定，倍数会不一样。",
+              "上限 4 以上不会更快：每层最多四个任务。本课没有演示服务商限流，限流后的重试在{{lesson:reliable-tools}}。"
+            ]
+          }
+        },
+        {
+          "id": "timeouts-and-failure",
+          "title": "超时、截止与失败策略",
+          "hypothesis": "一份笔记读得慢或被锁定：不设超时就被它拖慢；单任务超时放弃它，其余照常完成，复习单标明缺了谁；整体截止时间到点取消正在跑的任务；失败以后继续还是全部取消，决定还有几次模型请求会发出。",
+          "arms": [
+            {
+              "id": "timeouts",
+              "exercise": "timeout",
+              "label": "超时与截止时间各跑一遍"
+            },
+            {
+              "id": "failure",
+              "exercise": "failure-policy",
+              "label": "两种失败策略各跑一遍"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stopped-tool",
+              "text": "读取工具的失败结果：超时是 TaskStopped（它听到停止信号后自己放弃），锁定是 NoteLocked。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type",
+                "name": "read_note"
+              }
+            },
+            {
+              "id": "blocked",
+              "text": "依赖没完成的摘要：blocked_by 写明被谁挡住，它没有发出请求。",
+              "selector": {
+                "event": "lesson.task",
+                "path": "data.blocked_by"
+              }
+            },
+            {
+              "id": "stop",
+              "text": "到点或策略触发时的 lesson.stop：原因、触发者和当时正在运行的任务。",
+              "selector": {
+                "event": "lesson.stop",
+                "path": "data.running"
+              }
+            },
+            {
+              "id": "late",
+              "text": "整体截止时间那一遍里，调度器放弃等待以后才真正停下的任务数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=late.deadline]"
+              }
+            },
+            {
+              "id": "sheet-marker",
+              "text": "单任务超时那一遍里复习单自己的标记：不完整，并写明缺哪一课。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=sheet.task-timeout]"
+              }
+            },
+            {
+              "id": "wall",
+              "text": "不设超时那一遍的墙钟时间。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=wall_ms.waited]"
+              }
+            },
+            {
+              "id": "calls-continue",
+              "text": "失败后继续那一遍的模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_calls.continue]"
+              }
+            },
+            {
+              "id": "calls-cancel",
+              "text": "失败后全部取消那一遍的模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_calls.cancel-all]"
+              }
+            },
+            {
+              "id": "orphans",
+              "text": "收尾检查：每一遍结束时有没有任务线程还活着。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_orphans]"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "失败后全部取消那一遍的结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=verdict.cancel-all]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两次运行用同一张清单：第一次一份笔记读得很慢，不设超时、单任务超时、整体截止时间各跑一遍；第二次一份笔记被锁定，两种失败策略各跑一遍。"
+            },
+            {
+              "text": "超时和锁定都表现为读取工具的结构化错误：TaskStopped 是它听到停止信号后自己放弃的，NoteLocked 是笔记被锁定。",
+              "observe": "stopped-tool",
+              "stage": "tool"
+            },
+            {
+              "text": "依赖没完成的摘要没有发出请求：blocked_by 写明被谁挡住。",
+              "observe": "blocked"
+            },
+            {
+              "text": "整体截止时间到点，或失败策略触发时，lesson.stop 记下原因和这一刻正在运行的任务。",
+              "observe": "stop",
+              "stage": "runtime"
+            },
+            {
+              "text": "已经发出的模型请求收不回：放弃等待之后工作又多跑了一会儿，名额等它结束才放回。",
+              "observe": "late",
+              "stage": "model"
+            },
+            {
+              "text": "复习单自己说明是否完整：单任务超时那一遍，它写明缺 context-budget。",
+              "observe": "sheet-marker"
+            },
+            {
+              "text": "不设超时那一遍被慢笔记拖得很长；单任务超时放弃它，快得多。",
+              "observe": "wall"
+            },
+            {
+              "text": "失败后继续那一遍，模型调用数是 3：被锁定的笔记没有摘要请求。",
+              "observe": "calls-continue"
+            },
+            {
+              "text": "失败后全部取消那一遍，模型调用数是 0：其余任务一起停，一个请求也没发出。",
+              "observe": "calls-cancel"
+            },
+            {
+              "text": "每一遍结束时，没有任务线程还在跑。",
+              "observe": "orphans"
+            },
+            {
+              "text": "结论：全部取消那一遍没有完成，继续那一遍部分完成，各自写明缺什么。",
+              "observe": "verdict"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "每个任务的结局和原因、放弃等待之后工作又多跑了多久，以及每一遍结束时有没有线程残留。",
+              "超时和失败都不会让运行假装完整：复习单和报告都写着缺了什么。"
+            ],
+            "does_not_prove": [
+              "慢和失败是注入的（延迟参数和锁定参数，都写在调用里），真实服务商的慢和失败更不规律。",
+              "学习者点停止、断开事件连接没有出现在这两次运行里，它们要手动触发，见下面的手动核对。",
+              "报告里的“已取消”只说调度器让任务停了，不说服务商那边是否还在生成。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "场景",
+          "help": "每个场景在一次运行里把同一张清单按几种方式各跑一遍；dependency 不调用模型。",
+          "options": [
+            {
+              "value": "dependency",
+              "label": "依赖图与调度顺序（不调用模型）"
+            },
+            {
+              "value": "limits",
+              "label": "并发上限 1、2、4"
+            },
+            {
+              "value": "timeouts",
+              "label": "超时与整体截止时间"
+            },
+            {
+              "value": "failure",
+              "label": "失败后继续或全部取消"
+            }
+          ]
+        },
+        {
+          "name": "tool_delay_ms",
+          "label": "工具延迟（毫秒）",
+          "help": "read_note 被告知要等多久，是注入的延迟，读到的笔记是真的。离线测试模式下模型回答也停同样久。"
+        },
+        {
+          "name": "slow_lesson",
+          "label": "读得很慢的笔记",
+          "help": "超时场景：这份笔记改用下面的慢速延迟。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "messages-context",
+              "label": "messages-context"
+            },
+            {
+              "value": "application-state",
+              "label": "application-state"
+            },
+            {
+              "value": "context-budget",
+              "label": "context-budget"
+            },
+            {
+              "value": "prompt-caching",
+              "label": "prompt-caching"
+            }
+          ]
+        },
+        {
+          "name": "slow_delay_ms",
+          "label": "慢速延迟（毫秒）",
+          "help": "超时场景：慢笔记要读多久。"
+        },
+        {
+          "name": "task_timeout_ms",
+          "label": "单任务超时（毫秒）",
+          "help": "超时场景：单任务超时那一遍里，每个工具任务拿到名额后最多跑这么久。"
+        },
+        {
+          "name": "deadline_ms",
+          "label": "整体截止时间（毫秒）",
+          "help": "超时场景：整体截止时间那一遍里，从这一遍开始算，到点后取消正在跑的任务，排队的不再开始。"
+        },
+        {
+          "name": "locked_lesson",
+          "label": "被锁定的笔记",
+          "help": "失败场景：这份笔记读取时会失败（NoteLocked），锁定写在调用参数里。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "messages-context",
+              "label": "messages-context"
+            },
+            {
+              "value": "application-state",
+              "label": "application-state"
+            },
+            {
+              "value": "context-budget",
+              "label": "context-budget"
+            },
+            {
+              "value": "prompt-caching",
+              "label": "prompt-caching"
+            }
+          ]
+        },
+        {
+          "name": "max_concurrency",
+          "label": "并发上限",
+          "help": "超时和失败两个场景共用的并发上限，1 到 4；依赖和并发上限两个场景自己决定上限。"
+        }
+      ],
+      "blocks": [
+        {
+          "id": "manual-stop",
+          "type": "steps",
+          "title": "手动核对：停止与断开事件连接",
+          "paragraphs": [
+            "下面两项要学习者自己动手触发，没有放进上面的对照里。{{lesson:streaming-cancel}}讲过两者的区别，这里看多个任务时的样子。"
+          ],
+          "items": [
+            {
+              "id": "stop-1",
+              "text": "在“并发上限 1、2、4”练习里把 `tool_delay_ms` 改成 1500，运行；第一遍的读取开始后点“停止运行”。"
+            },
+            {
+              "id": "stop-2",
+              "text": "事件里应该看到：正在跑的读取有 `tool_call` 而没有 `tool_result`（停止以后平台不再收事件），后面几遍没有开始；运行以 cancelled 结束，`cancel_reason` 是 `user_stop`。"
+            },
+            {
+              "id": "stop-3",
+              "text": "再运行一次，这次点“断开事件连接（运行继续）”，十几秒后重新连接：运行照常跑完，三遍的所有任务都完成，`done` 里多一个 `client_disconnects`。"
+            },
+            {
+              "id": "stop-4",
+              "text": "两次都用运行记录里的 `done` 事件核对终态，不用屏幕上最后看到的那条事件。"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "本课里，每个任务依赖哪些任务是怎么确定的？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "从任务参数里的引用读出来",
+                  "feedback": "对。参数里写了用谁的结果，就依赖谁，`Task` 创建时自动读出。"
+                },
+                {
+                  "id": "b",
+                  "text": "写在清单里的执行顺序",
+                  "feedback": "不对。没有手写的顺序，手写的顺序可能和参数对不上。"
+                },
+                {
+                  "id": "c",
+                  "text": "由模型判断",
+                  "feedback": "不对。本课的依赖由程序读出，模型只负责写摘要。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "依赖是读出来的，不是声明出来的，才不会和实际用到的值矛盾。"
+            },
+            {
+              "id": "q2",
+              "prompt": "报告里的峰值并发为什么要由开始和释放时间重新算，而不是直接读信号量？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这样信号量和现实对不上时能被发现",
+                  "feedback": "对。比如名额放回得太早，重新算出来的峰值就会超过上限。"
+                },
+                {
+                  "id": "b",
+                  "text": "信号量读不出数字",
+                  "feedback": "不对。读得出，只是读的是它自己的账。"
+                },
+                {
+                  "id": "c",
+                  "text": "为了让报告更长",
+                  "feedback": "不对。这是独立核对，不是装饰。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "独立于被检查对象的核对才有证明力。"
+            },
+            {
+              "id": "q3",
+              "prompt": "整体截止时间到点时，一个已经发出的摘要请求会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "调度器不再等它，线程要等响应回来，名额随后才放回，报告记下迟了多久",
+                  "feedback": "对。请求收不回，所以名额要等它真的结束。"
+                },
+                {
+                  "id": "b",
+                  "text": "请求被收回，服务商不再生成",
+                  "feedback": "不对。已发出的请求收不回。"
+                },
+                {
+                  "id": "c",
+                  "text": "它的结果照常并入复习单",
+                  "feedback": "不对。到点以后结局记为已取消，结果不参与汇总。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "取消停的是等待和后续动作，不是已经在路上的请求。"
+            },
+            {
+              "id": "q4",
+              "prompt": "复习单自己写着 `complete` 为假、缺 context-budget，这说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "汇总工具在缺依赖的情况下运行了，并如实标出缺什么",
+                  "feedback": "对。汇总的 `join` 是 `settled`，它被告知缺什么，交回的复习单自己说明不完整。"
+                },
+                {
+                  "id": "b",
+                  "text": "汇总工具失败了",
+                  "feedback": "不对。它成功交回了一份标明不完整的复习单。"
+                },
+                {
+                  "id": "c",
+                  "text": "四份摘要都完成了",
+                  "feedback": "不对。缺的那一课的摘要没有完成。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "部分结果必须自己写明缺什么，不能靠读的人猜。"
+            },
+            {
+              "id": "q5",
+              "prompt": "什么情况下失败策略选 `cancel_all` 比 `continue` 更合适？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "后面每个结果都依赖失败的那一个，继续做只是白花钱",
+                  "feedback": "对。这时其余任务的结果用不上，早停能省下还没发出的请求。"
+                },
+                {
+                  "id": "b",
+                  "text": "总是更合适",
+                  "feedback": "不对。笔记只缺一份时，其余结果仍然有用，该继续。"
+                },
+                {
+                  "id": "c",
+                  "text": "失败的任务不影响其他任务",
+                  "feedback": "不对。不影响别人时，继续就好。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "两种策略各有代价：继续可能白花钱，全部取消可能丢掉有用的结果。"
+            },
+            {
+              "id": "q6",
+              "prompt": "学习者只点了“断开事件连接”，没有点停止。后端的运行会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "照常跑完，终态是 completed，`done` 里多一个 client_disconnects",
+                  "feedback": "对。读事件的人走了，写事件的运行没有理由停。"
+                },
+                {
+                  "id": "b",
+                  "text": "所有任务被取消",
+                  "feedback": "不对。那是点“停止运行”或关闭页面才会发生的事。"
+                },
+                {
+                  "id": "c",
+                  "text": "运行暂停，等重新连接再继续",
+                  "feedback": "不对。运行不会因为没人读事件而暂停。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "终态以后端写下的 `done` 为准，不看屏幕上最后一条事件。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“超时与整体截止时间”，找出读取工具听到停止信号后自己放弃的那条证据。",
+          "target": {
+            "event": "tool_result",
+            "path": "data.result.error_type",
+            "name": "read_note"
+          },
+          "explanation": "读取工具的 tool_result 里，`error_type` 是 TaskStopped：超时一到，调度器置位这个任务的停止信号，工具在等待中被叫醒，抛出 TaskStopped，调用得到的是 `ok` 为假的结构化错误，而不是伪造的成功。同一条结果里没有 note，因为笔记没有读完。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我把四个练习都跑了一遍，能说出每个对照里各遍的结论为什么不同。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在“忽略依赖”那一遍找到了 MissingInput，也在依赖检查里找到了它指出的任务。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在并发上限的总表里核对了三遍的峰值并发和调用数。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在“整体截止时间”那一遍找到了 lesson.stop，并看到了放弃等待之后才停下的任务。"
+            },
+            {
+              "id": "item-5",
+              "text": "我手动点过一次停止、断开过一次事件连接，用 done 事件核对了两次的终态。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "Ref",
+      "note": "任务参数里对另一个任务某个字段的引用；依赖就从它读出来。"
+    },
+    {
+      "name": "levels",
+      "note": "按依赖给任务分层：第 1 层什么都不依赖，同一层的任务互不依赖。"
+    },
+    {
+      "name": "_in_thread",
+      "note": "调度器自己开工作线程并登记，知道它什么时候真的结束。"
+    },
+    {
+      "name": "join",
+      "note": "任务的依赖策略：all 要依赖都完成，settled 等依赖都有结局就运行。"
+    },
+    {
+      "name": "settled",
+      "note": "join 的一个取值：依赖有了结局就运行，缺什么由任务自己标明。"
+    },
+    {
+      "name": "wall_ms",
+      "note": "整次运行的墙钟时间，后端单调时钟量出来的，单位毫秒。"
+    },
+    {
+      "name": "serial_ms",
+      "note": "各任务耗时之和，也就是串行要花的时间。"
+    },
+    {
+      "name": "deadline_ms",
+      "note": "整体截止时间：从运行开始算，到点后取消还没结束的任务。"
+    },
+    {
+      "name": "_watch",
+      "note": "监视协程：每 10 毫秒看一次时钟和停止按钮。"
+    },
+    {
+      "name": "cancel_all",
+      "note": "取消一切的入口；也是失败策略 cancel_all 的名字。"
+    },
+    {
+      "name": "late_ms",
+      "note": "任务被放弃等待以后，它的工作又多跑了多久。"
+    },
+    {
+      "name": "TaskStopped",
+      "note": "读取工具听到停止信号后抛出的错误，变成失败的工具结果。"
+    },
+    {
+      "name": "MissingInput",
+      "note": "任务在缺少它依赖的值时被拒绝：工具返回的结构化错误。"
+    }
+  ]
+}
