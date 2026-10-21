@@ -507,6 +507,9 @@ class RunContext:
     resumed_from: dict | None = None
     thread_id: str | None = None
     source_hash: str | None = None
+    # A resumed run numbers its checkpoints after the last one of the run it came from, so the ids on
+    # one thread stay distinct ("cp-1" in the source, "cp-2" in the resumed run).
+    checkpoint_offset: int = 0
     _checkpoint_count: int = field(default=0, init=False)
 
     def checkpoint(self, name: str, state: dict, round_number: int | None = None) -> str:
@@ -528,7 +531,7 @@ class RunContext:
         if self._checkpoint_count >= 100:
             raise ValueError("a run may save at most 100 checkpoints")
         self._checkpoint_count += 1
-        checkpoint_id = f"cp-{self._checkpoint_count}"
+        checkpoint_id = f"cp-{self.checkpoint_offset + self._checkpoint_count}"
         data = {"checkpoint_id": checkpoint_id, "name": name, "state": snapshot,
                 "state_digest": approval_digest(snapshot)}
         if self.thread_id:

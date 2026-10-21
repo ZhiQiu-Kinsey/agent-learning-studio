@@ -290,5 +290,6 @@ Embedding 请求与聊天请求走同一次运行的同一条连接，所以表�
 - `state` 必须能序列化为 JSON，序列化后不超过 64000 字符；一次运行最多 100 个检查点。`source_hash` 是课程源码哈希，规则与录制的 `source_hash` 相同。
 - `POST /api/runs/{run_id}/resume {checkpoint_id}` 用来源运行的课程、练习、问题、输入、模式和运行语言启动新运行。新运行的 `run_start.data.resumed_from` 是 `{run_id, checkpoint_id, name, seq, state, state_digest}`，`run_start.data.thread_id` 与运行记录的 `thread_id` 相同；课程从 `context.resume_state` 读状态。
 - 恢复**不重放**来源运行的任何请求、响应或工具调用；新运行里的请求都是真实的新请求。
+- 恢复出来的运行从来源运行已存的最大检查点编号之后接着编号（来源存到 `cp-2`，新运行从 `cp-3` 起），同一条线程里的检查点 id 互不重复。
 - 拒绝恢复的情况：来源运行还在执行（`run_still_active`）；没有这个检查点（`checkpoint_not_found`）；课程源码在保存检查点之后变了（`checkpoint_stale`）；另一次运行正在执行（`run_busy`）。来源运行的状态不限：完成、出错、停止和被中断（服务异常退出后标为 `interrupted`）的运行都可以恢复。检查点存在运行存储里，服务重启后照常可用。
 - 检查点只保存课程交给它的状态。外部副作用是否已经发生，要由课程在状态里记录操作标识并在恢复后核对；不能凭检查点存在就说外部动作天然幂等。

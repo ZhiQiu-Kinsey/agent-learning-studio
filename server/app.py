@@ -590,6 +590,7 @@ def start_run(plan: RunPlan) -> str:
                 resume_state=copy.deepcopy(resume["state"]) if resume else None,
                 resumed_from={key: resume[key] for key in ("run_id", "checkpoint_id", "name")} if resume else None,
                 thread_id=thread_id, source_hash=plan.source_hash,
+                checkpoint_offset=resume["checkpoint_offset"] if resume else 0,
             )
             execute_lesson(spec, plan.module, context)
         except RunCancelled:
@@ -789,7 +790,8 @@ def resume_run(run_id: str, body: ResumeInput):
     plan = prepare_run(resume_input)
     plan.resume = {"run_id": run_id, "checkpoint_id": checkpoint["checkpoint_id"], "name": checkpoint["name"],
                    "seq": event["seq"], "state": checkpoint["state"], "state_digest": checkpoint["state_digest"],
-                   "thread_id": source.get("thread_id") or run_id}
+                   "thread_id": source.get("thread_id") or run_id,
+                   "checkpoint_offset": store.last_checkpoint_number(run_id)}
     if not run_lock.acquire(blocking=False):
         raise ApiError(409, "run_busy", "上一次运行尚未结束，请等待网络请求返回（网络超时 60 秒）。")
     try:

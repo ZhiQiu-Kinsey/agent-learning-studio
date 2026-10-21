@@ -37,6 +37,12 @@ class CheckpointContextTests(unittest.TestCase):
         self.assertEqual((data["checkpoint_id"], data["name"], data["thread_id"], data["source_hash"]),
                          ("cp-1", "before-save", "t" * 32, "sha256:" + "b" * 64))
 
+    def test_a_resumed_run_numbers_its_checkpoints_after_the_source_run(self):
+        events = []
+        context = make_context(events, thread_id="t" * 32, checkpoint_offset=3)
+        self.assertEqual(context.checkpoint("again", {"step": 1}), "cp-4")
+        self.assertEqual(events[0][1]["checkpoint_id"], "cp-4")
+
     def test_invalid_checkpoints_fail_before_any_event(self):
         events = []
         context = make_context(events)
@@ -123,8 +129,12 @@ class ResumeApiTests(LessonHarness):
                          (source_id, source_id, "cp-1"))
         self.assertEqual(self.client.get(f"/api/runs/{source_id}").json()["thread_id"], source_id)
 
-        # 恢复出来的运行再存的检查点仍属于同一条线程；从它恢复，thread_id 不变。
-        again = self.resume(new_id, "cp-1")
+        # 恢复出来的运行再存的检查点仍属于同一条线程，编号接在来源运行之后，同一线程里的 id 互不重复；
+        # 从它恢复，thread_id 不变。
+        new_checkpoints = [e["data"]["checkpoint_id"] for e in events if e["type"] == "checkpoint"]
+        self.assertTrue(new_checkpoints and "cp-1" not in new_checkpoints, new_checkpoints)
+        self.assertEqual(new_checkpoints[0], "cp-2")
+        again = self.resume(new_id, new_checkpoints[0])
         self.assertEqual(again.status_code, 202, again.text)
         third = self.read(again.json()["run_id"])
         self.assertEqual(third[0]["data"]["thread_id"], source_id)

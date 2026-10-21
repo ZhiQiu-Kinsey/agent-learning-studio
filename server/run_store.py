@@ -117,6 +117,15 @@ class RunStore:
                 return event
         return None
 
+    def last_checkpoint_number(self, run_id: str) -> int:
+        """某次运行已存检查点的最大编号（cp-N 的 N）；没有检查点时为 0。恢复出来的运行从它之后接着编号。"""
+        with self._lock:
+            rows = list(self._db.execute(
+                "SELECT event FROM events WHERE run_id = ? AND type = 'checkpoint'", (run_id,)))
+        numbers = [int(str(json.loads(text).get("data", {}).get("checkpoint_id", "cp-0")).removeprefix("cp-") or 0)
+                   for (text,) in rows]
+        return max(numbers, default=0)
+
     def first_event(self, run_id: str, kind: str) -> dict | None:
         """按 seq 找某次运行第一条指定类型的事件（恢复时读取 run_start）。"""
         with self._lock:
