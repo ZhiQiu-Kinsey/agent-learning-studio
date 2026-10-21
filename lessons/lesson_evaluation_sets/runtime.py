@@ -249,7 +249,7 @@ def _suite_report(context, t, cases, version, repeats, results) -> None:
             all_passed += all(v == "passed" for v in verdicts)
             any_passed += any(v == "passed" for v in verdicts)
             rows.append([case.id, t.categories[case.category], *[t.verdicts[v] for v in verdicts],
-                         t.yes if len(set(verdicts)) == 1 else t.no])
+                         t.word_yes if len(set(verdicts)) == 1 else t.word_no])
         metrics += [{"id": "pass_all", "label": t.label_pass_all.format(k=repeats), "value": f"{all_passed}/{len(cases)}"},
                     {"id": "pass_any", "label": t.label_pass_any.format(k=repeats), "value": f"{any_passed}/{len(cases)}"},
                     {"id": "unstable", "label": t.label_unstable, "value": len(cases) - stable}]
@@ -318,6 +318,6 @@ def _judge_report(context, t, rows) -> str:
                     {"label": t.label_note, "value": context.question or t.value_empty}],
         "table": {"columns": list(t.columns_judge),
                   "rows": [[r["sample"], t.labels[r["human"]], t.labels[r["judge"]],
-                            t.yes if r["human"] == r["judge"] else t.no, r["reason"] or t.value_none] for r in rows]},
+                            t.word_yes if r["human"] == r["judge"] else t.word_no, r["reason"] or t.value_none] for r in rows]},
     })
     return t.answer_judge.format(agree=agree, total=len(rows))

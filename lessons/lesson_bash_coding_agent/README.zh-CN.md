@@ -42,7 +42,7 @@
 - 第三份 `lesson.report`（平台验收）：`tests-pass`、`tests-untouched`、`accepted`、测试数、diff、改动的文件，最后才是 Agent 的原话。
 - 最终回答由运行器写成：先写验收结论，再附 Agent 的最后一条回复。
 
-`tool_result` 里的 `ok` 和 `exit_code` 只说明这条命令；任务验收是否通过，只看验收报告里的 `accepted`。三者不能混为一谈。结果里的键 `omitted_bytes` 只在输出被截断时才有。
+`tool_result` 里的 `ok` 和 `exit_code` 只说明这条命令；任务验收是否通过，只看验收结果里的 `accepted`。三者不能混为一谈。结果里的键 `omitted_bytes` 只在输出被截断时才有。
 
 ## 后端怎么选
 

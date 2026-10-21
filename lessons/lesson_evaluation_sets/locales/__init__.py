@@ -61,8 +61,8 @@ class Texts:
     value_missing: str
     value_none: str
     value_empty: str
-    yes: str
-    no: str
+    word_yes: str
+    word_no: str
     # The report of one version.
     suite_title: str  # {version} {split}
     suite_summary: str  # {ended} {passed} {total}

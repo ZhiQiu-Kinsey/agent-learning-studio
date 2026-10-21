@@ -42,7 +42,7 @@ There are two inputs: `task` (the four task texts above) and `command_timeout_s`
 - The third `lesson.report` (platform acceptance): `tests-pass`, `tests-untouched`, `accepted`, the number of tests, the diff and the changed files, and only last the agent's own words.
 - The final answer is written by the runner: the acceptance verdict first, then the agent's last reply.
 
-`ok` and `exit_code` in `tool_result` describe that one command only; whether the task was accepted is shown only by `accepted` in the acceptance report. The three must not be confused. The key `omitted_bytes` in a result exists only when the output was cut.
+`ok` and `exit_code` in `tool_result` describe that one command only; whether the task was accepted is shown only by `accepted` in the acceptance result. The three must not be confused. The key `omitted_bytes` in a result exists only when the output was cut.
 
 ## How the backend is chosen
 
