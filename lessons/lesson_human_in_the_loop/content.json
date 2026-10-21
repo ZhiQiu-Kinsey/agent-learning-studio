@@ -1,0 +1,1375 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "human-in-the-loop",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "trust",
+    "orchestration",
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "HUMAN-IN-THE-LOOP / CHECKPOINT",
+          "headline": "有副作用的一步，",
+          "highlight": "先停下来，存好位置，再继续。",
+          "takeaway": "写入前由人确认，位置存进检查点，恢复时先查操作标识：同一次保存，不管恢复几次，只执行一次。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-human",
+              "label": "01 / HUMAN",
+              "title": "写入前停一下",
+              "description": "人工介入（Human-in-the-Loop）：在有副作用的一步前暂停，由人批准、修改或拒绝，再继续。",
+              "token": "request_approval"
+            },
+            {
+              "id": "02-checkpoint",
+              "label": "02 / CHECKPOINT",
+              "title": "把位置存下来",
+              "description": "检查点（Checkpoint）存运行到某一步的位置和状态；线程 ID（Thread ID）是一串恢复出来的运行共用的编号。",
+              "token": "checkpoint"
+            },
+            {
+              "id": "03-operation",
+              "label": "03 / OPERATION",
+              "title": "给副作用一个编号",
+              "description": "操作标识（Operation ID）在有副作用的步骤执行前生成，随检查点保存。恢复后先凭它查这一步做过没有。",
+              "token": "operation_id"
+            },
+            {
+              "id": "04-idempotent",
+              "label": "04 / IDEMPOTENT",
+              "title": "恢复不是重做",
+              "description": "幂等（Idempotency）：同一个操作执行一次和执行多次，效果相同。检查点不会替你做到这一点。",
+              "token": "lookup_operation"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "什么时候需要人",
+          "paragraphs": [
+            "有副作用、不可撤销或证据不足时，把决定交给人。本课的任务是让模型按主题写一道练习题，再保存进本地练习库。写草稿只是一次模型调用，不满意可以重来，什么也没改变；保存是往库里追加一行，之后每次运行都读得到它。两步的代价不同，所以只在第二步前放一道闸：人看过草稿，才允许写入。",
+            "怎么判断一步要不要人来决定？问三件事：能撤销吗？运行之外有人看得到结果吗？运行层有办法自己核对对错吗？读文件、做加法这类步骤，三个答案都让人放心，不必打扰人。发邮件、扣费、覆盖文件，前两个答案就是“不行”。练习题好不好，运行层没法核对，只有读过的人才知道。三条里有一条成立就停；三条都不成立还要停，人会习惯性地点同意，闸门就成了摆设。举个编的例子：一天 40 次审批，39 次是读文件，人很快就不看内容了，第 40 次真正有风险的写入也被点了同意。",
+            "拿本课的两步对一下。写草稿：能撤销（丢掉就行），外面没人看得到，格式能由程序检查、好坏不能，所以不设闸。保存：删掉一行不难，但这一行写进库以后，别的运行可能已经读过它，撤销并不干净；内容好不好同样没人核对，所以闸门放在这里。停下来用的是{{lesson:hooks-approval}}讲过的审批：`request_approval` 让运行进入 `paused` 状态，`approval_requested` 记着要批准的完整参数和摘要，人决定之后 `approval_resolved` 记结果。",
+            "本课不再讲审批本身，只关心它之后的事：运行可能在这里停几分钟甚至几小时，等的时候服务可能重启，那次运行里的一切都会丢。暂停、终态和可恢复是三件事。暂停是运行还活着，停在审批点等人；终态是运行结束了：`completed`、`error`、`cancelled`，被服务重启打断的叫 `interrupted`；可恢复说的是结束或被打断之后，还能从存好的位置开一次新运行。本课另有一层业务状态：`saved` 表示练习库里有这一行，`suspended` 表示按参数停在某一步等恢复。运行 `completed` 不等于 `saved`，`suspended` 的运行同样是 `completed`。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "检查点",
+          "paragraphs": [
+            "把执行位置和状态存下来，暂停后能原样恢复。没有它，服务一重启，等审批的那次运行就消失了：模型写好的草稿白写，已经花掉的调用白花。举个编的例子：草稿花了 8 秒、600 个 Token，没有检查点就要重来一遍；有检查点，新运行从 `drafted` 接着走，只做还没做的事。",
+            "好比游戏存档。存档记的是位置和背包，不是整段游戏画面；读档之后，游戏从这个位置重新开始运行。检查点同理：它存的不是 Python 进程，而是课程自己挑出来的一份 JSON 状态，挑的原则是“继续所需的最少信息”：把整段消息历史塞进去，既占空间，又会带上以后已经改掉的内容。本课存七个字段：`step`（走到哪一步）、`operation_id`、`draft`（模型的草稿）、`approved`（人批准的内容）、`approved_digest`、`edited` 和 `saved_id`。",
+            "`context.checkpoint(name, state)` 记一条 `checkpoint` 事件，返回 `cp-1` 这样的编号。状态必须能序列化成 JSON，不超过 64000 个字符，一次运行最多存 100 个。事件里还带着 `state_digest`（状态的摘要）、`thread_id` 和 `source_hash`（课程源码的哈希，后面讲拒绝恢复时用到）。本课在三处存：`drafted`（草稿有了，还没问人）、`approved`（人批准了这份内容）、`saved`（写入完成）。正常的一次运行记 3 条 `checkpoint` 事件，在事件详情里打开其中一条，就能看到完整的状态，这是“查看状态”最直接的办法。",
+            "线程 ID 把一串相关的运行连起来。第一次运行用自己的运行编号当 `thread_id`，从它的检查点恢复出来的运行沿用同一个。本课用它给练习库分文件夹：同一条线程的所有运行读写同一份库，另一条线程看不到它。检查点只存课程交给它的状态：模型的原始响应、练习库里的行、Python 变量都不在里面。它能告诉你运行到了哪里，不能告诉你外面的世界现在什么样。"
+          ]
+        },
+        {
+          "id": "predict-checkpoints",
+          "type": "predict",
+          "prompt": "运行“正常流程：批准后保存”之前先猜：这次运行会记几条 checkpoint 事件？",
+          "experiment": "approval-gate",
+          "arm": "approve-save",
+          "rule": {
+            "kind": "count_events",
+            "event": "checkpoint"
+          }
+        },
+        {
+          "id": "mq-paused-vs-suspended",
+          "type": "micro-quiz",
+          "question": {
+            "id": "paused-suspended",
+            "prompt": "“批准后暂停，重启并恢复”那一组的运行状态是 `completed`，报告里的业务状态是 `suspended`。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "运行没出错地结束了，但练习还没保存，停在某一步等恢复",
+                "feedback": "对。运行状态说的是这次运行有没有结束，业务状态说的是任务做到哪了。"
+              },
+              {
+                "id": "b",
+                "text": "运行失败了，所以才要恢复",
+                "feedback": "不对。失败的运行是 `error`；这里按参数主动结束，没有出错。"
+              },
+              {
+                "id": "c",
+                "text": "运行还停在审批点等人",
+                "feedback": "不对。审批已经决定，运行已经结束；等人的是 `paused`。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "运行状态和业务状态要分开看：`completed` 加 `suspended` 是一种正常组合。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "人工修改状态",
+          "paragraphs": [
+            "人可以改参数或计划，修改本身也要记录。草稿的标题太长，或者难度写错了：点“拒绝”重来，要再花一次模型调用；让人直接改，省钱也省时间。人也可能补信息，比如草稿里缺的东西。本课把这些都放在审批这一个入口：审批请求带 `editable=True`，审批卡上的参数可以改，改什么由人定。",
+            "改动记在 `approval_resolved` 里：`edited` 为真，`payload` 是人批准的版本，`payload_digest` 是它的摘要，`requested_digest` 是原来那份的摘要。两个摘要不同，就是改过的证据，不用逐字段去比。摘要是参数规范化 JSON 的 sha256，键的顺序不影响结果：`{\"a\":1,\"b\":2}` 和 `{\"b\":2,\"a\":1}` 是同一个摘要，值差一个字就不同。摘要还有第二个用处：之后拿它核对内容有没有被动过，恢复时就用到。",
+            "人可能改出库不接受的内容，比如把难度写成 `impossible`。所以改动要像草稿一样再检查一遍：不合格时运行以 `failed` 收尾，原因是 `invalid_edit`，不会留下 `approved` 检查点，更不会写入；合格才存检查点。`approved` 检查点里，`draft` 仍是模型的原稿，`approved` 是人批准的版本，`approved_digest` 是它的摘要。草稿、批准的版本、库里的行三份并排放进报告的字段对照表，之后能还原是谁改了什么。",
+            "要说清平台允许改什么。人只能在审批点改要批准的参数；`POST /api/runs/{id}/resume` 只收检查点编号，想顺手改检查点里的状态会被拒绝（422）。想改已经存好的内容，办法是从 `drafted` 检查点恢复，让它再走一遍审批，再改一次，旧检查点原样保留。LangGraph 的 `update_state` 思路类似：它在某个检查点上分出一个新检查点，不改历史。"
+          ]
+        },
+        {
+          "id": "mq-edit",
+          "type": "micro-quiz",
+          "question": {
+            "id": "edit-trail",
+            "prompt": "人在审批卡上把难度改成“挑战”。怎样不逐字段比较，就能知道内容被改过？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`approval_resolved` 里的 `payload_digest` 和 `requested_digest` 不同，`edited` 为真",
+                "feedback": "对。两份摘要是各自参数的规范化哈希，不同就是改过。"
+              },
+              {
+                "id": "b",
+                "text": "`approved` 检查点的编号变大了",
+                "feedback": "不对。检查点编号只表示第几个，和内容无关。"
+              },
+              {
+                "id": "c",
+                "text": "运行状态变成 `error`",
+                "feedback": "不对。人工修改是正常路径，运行状态不变。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "摘要是内容的指纹：内容变了，摘要必变；摘要相同，内容必相同。"
+          }
+        },
+        {
+          "id": "deep-dive-langgraph",
+          "type": "deep-dive",
+          "title": "LangGraph 的检查点与 `interrupt`：被中断的节点会从头重跑",
+          "summary": "LangGraph 用 `checkpointer` 存每一步的状态，用 `interrupt` 暂停；恢复时被中断的那个节点从头再跑一遍。",
+          "paragraphs": [
+            "{{lesson:langgraph-state}}的图可以挂一个 `checkpointer`，每次调用带一个 `thread_id`：同一个值接着同一份状态，换一个值就是一条全新的线程，状态为空。节点里调用 `interrupt()` 暂停，把一个可序列化的值交给调用方；调用方用 `Command(resume=...)` 恢复，这个值成为 `interrupt()` 的返回值。以下说法按 LangChain 官方文档核对（2026-10-21），LangGraph 版本以你安装的为准。",
+            "最要紧的一条：恢复时，被中断的节点从头开始运行，`interrupt()` 之前的代码会再跑一遍。所以官方文档提醒，`interrupt()` 之前的副作用要幂等，比如用 `upsert`，或者把副作用挪到 `interrupt()` 之后、放进单独的节点；在它前面追加记录、创建新对象，每次恢复都会重复。本课的平台恢复不同：它开一次新运行，由课程代码按 `step` 决定从哪继续，已经完成的步骤不会整体重跑。但“先查后写”的责任同样落在你的代码上，框架没有替你做。",
+            "存储决定检查点能不能熬过重启。`InMemorySaver` 把检查点放在内存里，进程一重启就没了；文档建议生产环境用 `PostgresSaver`，本地开发可以用 `SqliteSaver`。本课的检查点存在运行存储（SQLite）里，重启后仍在。另外两个概念别混：`update_state` 不会把线程退回去，而是在指定的检查点上产生一个新检查点，历史保留；重放（replay）是从旧检查点之后重跑节点，模型调用和接口请求可能得到不同的结果，所以重放不是恢复。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "重启后恢复",
+          "paragraphs": [
+            "进程重启后从检查点继续，不重复已完成的副作用。这句话的后半最容易做错。设想保存分三步：生成草稿、批准、写入。写入成功了，进程却在存 `saved` 检查点之前死了：磁盘上最后一个检查点是 `approved`，状态里的 `saved_id` 还是空的。接着照检查点走会怎样？检查点说“下一步是写入”，运行器就写入。练习库本来有 1 行，现在有 2 行，两行的 `operation_id` 都是 `save-a1b2c3d4-1`（举个编的例子）。",
+            "检查点没有说谎：它忠实记着崩溃前最后一次存下的位置。错在把“位置”当成了“外部世界的状态”。位置是课程自己存的，外部世界要去问外部世界。办法是先查后写：写入前，运行器调 `lookup_operation`，问练习库这个操作标识写过没有。写过，就跳过写入，把已有的行号记进状态；没写过，才调 `save_exercise`。这是幂等的一种做法：同一个操作执行一次和执行多次，效果相同。操作标识在第一次运行里生成，存进检查点，之后每次恢复都用它。",
+            "幂等还有另一种做法：让存储自己去重，细节在{{lesson:reliable-tools}}。本课的练习库故意没有唯一约束，同一个操作标识可以写出两行；防重复的责任在课程代码，“不先查会怎样”才看得见。把 `resume_guard` 改成 `blind`，恢复时就不查，直接写。先查后写也有缝：查完到写入之间，别的写入者可能插进来。单人本地、运行互斥时可以接受；多个进程要把标识放进存储的事务里。",
+            "恢复走 `POST /api/runs/{run_id}/resume`，只带一个检查点编号。平台用来源运行的课程、练习、问题、输入和运行语言开一次新运行，新运行的 `run_start` 记着 `resumed_from`，课程从 `resume_state` 读到存好的状态。来源运行的请求和工具调用一条都不会重放：恢复出来的运行里，只有这次真正新发的请求。检查点在运行存储（SQLite）里，服务重启后照常可用；被重启打断、标成 `interrupted` 的运行也能从最后一个检查点恢复。"
+          ]
+        },
+        {
+          "id": "deep-dive-stop-points",
+          "type": "deep-dive",
+          "title": "三个中断点各留下什么",
+          "summary": "用手算看每个 `stop_at` 之后磁盘上有什么、恢复时会发生什么。",
+          "paragraphs": [
+            "`stop_at` 有三个有效值，对应三种中断。`after_draft`：只存了 `drafted` 检查点，练习库 0 行，没有审批；恢复要重新请求审批，批准之后才写入。`before_save`：存了 `drafted` 和 `approved`，练习库 0 行；恢复后查询得到“没有”，于是写入，记为 `saved`。`after_save`：检查点同样停在 `approved`，练习库却已有 1 行；恢复后查询得到“有”，跳过写入，记为 `already_saved`。",
+            "把后两种并排看：最后一个检查点都是 `approved`，练习库的行数却一个是 0、一个是 1。只看检查点，分不出这两种情况；只有去问练习库才知道。这就是为什么恢复前的查询不能省，也是为什么不能从“检查点是 `approved`”推出“还没写”。反过来，从 `saved` 检查点恢复也要查一次：状态说已保存，库里却没有，就是 `ledger_mismatch`，要停下来交给人，而不是顺手补写。",
+            "还有一个本课没有做的中断点：写入进行到一半。练习库是 SQLite，一次写入是一个事务，要么整行写进去，要么什么也没有，所以不会出现半行。外部服务没有事务时，“进行到一半”本身就是无法判断的状态，比如邮件有没有发出去。那时只能靠对方提供的查询接口，或让对方凭编号去重的机制，没有这两样，就不应该让模型自动重试，而要把决定交回给人。"
+          ]
+        },
+        {
+          "id": "mq-duplicate",
+          "type": "micro-quiz",
+          "question": {
+            "id": "rows-after-crash",
+            "prompt": "最后一个检查点是 `approved`。练习库里这个操作标识有几行？",
+            "options": [
+              {
+                "id": "a",
+                "text": "可能是 0 行，也可能是 1 行，要去问练习库",
+                "feedback": "对。写入可能发生在崩溃之前，也可能没发生，检查点看不出来。"
+              },
+              {
+                "id": "b",
+                "text": "一定是 0 行，因为检查点还没到 `saved`",
+                "feedback": "不对。“写入后中断”那一组就是 1 行。"
+              },
+              {
+                "id": "c",
+                "text": "一定是 1 行，因为批准已经通过",
+                "feedback": "不对。批准只是允许写入，不是写入已经发生；“批准后暂停”那一组是 0 行。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "同一个 `approved` 检查点对应两种现实，所以恢复前要先查。"
+          }
+        },
+        {
+          "id": "misconception-checkpoint-idempotent",
+          "type": "misconception",
+          "claim": "有了检查点，从检查点恢复就不会重复执行任何动作。",
+          "correction": "检查点只记位置。写入发生在存下一个检查点之前，恢复后位置还停在写入之前，照位置走就会再写一次。“写入后中断”那一组里，最后一个检查点是 `approved`，练习库却已经有 1 行。要靠操作标识加先查后写，检查点本身不保证幂等。"
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "恢复的权限与错误路径",
+          "paragraphs": [
+            "谁能恢复、恢复失败怎么办，都要有明确规则。先说权限：本平台只绑定 127.0.0.1，面向单人学习，谁能打开网页，谁就能恢复。真实系统里，恢复和批准一样是有后果的动作，需要登录、角色和审计记录。本课能做的是一件更小的事：恢复不继承审批。从 `approved` 检查点恢复时，运行器先算一遍 `approved` 内容的摘要，和检查点里的 `approved_digest` 对一下；对不上就拒绝写入，状态记为 `failed`，原因是 `unapproved`。",
+            "从 `drafted` 检查点恢复则没有批准可继承，运行器重新请求审批。批准跟着摘要走：批准的是哪份内容，写入的就只能是那份。平台自己有四种拒绝恢复的情况。来源运行还在执行：`run_still_active`。没有这个检查点：`checkpoint_not_found`。另一次运行占着执行锁：`run_busy`。课程源码在存检查点之后改过：`checkpoint_stale`，因为检查点里的位置对应的是旧代码，新代码可能已经没有这一步了。",
+            "平台挡不住的，课程自己处理。写入失败（`save_failed`）：练习库没有新增，检查点还停在 `approved`，可以再恢复一次。检查点说已保存、库里却查不到（`ledger_mismatch`）：不擅自重写，交给人核对。草稿格式不对（`bad_draft`）和人改坏了（`invalid_edit`）：不进入下一步。每一种都有明确的业务状态和原因，写进报告和回答，不靠一句“出错了”。`checkpoint_stale` 靠检查点里的 `source_hash` 判断，规则和随课录制的源码哈希相同。",
+            "最后要分清谁保证什么。检查点存在，只说明位置存下了；它不说明外面的动作天然幂等。平台保证位置存得住、新运行不重放、源码变了会拒绝；课程代码保证批准对得上、写入前先查。两边都做到了，才能说恢复没有重复写入，缺哪一边都不行。下表把两边列开。"
+          ]
+        },
+        {
+          "id": "compare-guarantees",
+          "type": "compare",
+          "title": "平台保证什么，课程代码保证什么",
+          "paragraphs": [
+            "右边两列是各自的责任；写“不保证”的格子，就是要课程代码自己补的地方。"
+          ],
+          "columns": [
+            "事项",
+            "平台",
+            "课程代码"
+          ],
+          "rows": [
+            [
+              "位置能保存",
+              "`checkpoint` 事件写进运行存储，重启后仍可读",
+              "决定存哪些字段，状态要能序列化成 JSON"
+            ],
+            [
+              "不重放旧请求",
+              "新运行不重发来源运行的请求和工具调用",
+              "按 `step` 只做还没做的步骤"
+            ],
+            [
+              "源码变了",
+              "拒绝恢复（`checkpoint_stale`）",
+              "不用处理，旧检查点自动作废"
+            ],
+            [
+              "批准是否有效",
+              "记录审批请求、决定和两份摘要",
+              "恢复时核对 `approved_digest`"
+            ],
+            [
+              "外部写入只发生一次",
+              "不保证",
+              "操作标识加先查后写"
+            ],
+            [
+              "检查点和现实不符",
+              "不保证",
+              "发现 `ledger_mismatch` 就停下，交给人"
+            ]
+          ]
+        },
+        {
+          "id": "mq-stale",
+          "type": "micro-quiz",
+          "question": {
+            "id": "stale-reason",
+            "prompt": "你改了课程的 `runtime.py`，再从旧检查点恢复，平台返回 `checkpoint_stale`。为什么拒绝？",
+            "options": [
+              {
+                "id": "a",
+                "text": "检查点里的位置对应旧代码，新代码可能已经没有那一步，继续走可能做错事",
+                "feedback": "对。检查点记下了保存时的 `source_hash`，和现在的不一致就拒绝。"
+              },
+              {
+                "id": "b",
+                "text": "检查点保存太久，过期了",
+                "feedback": "不对。平台不按时间过期，只看源码哈希。"
+              },
+              {
+                "id": "c",
+                "text": "来源运行还在执行",
+                "feedback": "不对。那是 `run_still_active`。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "拒绝比带着可能不对的位置继续更安全；重新运行一遍就能得到新的检查点。"
+          }
+        },
+        {
+          "id": "deep-dive-idempotent",
+          "type": "deep-dive",
+          "title": "幂等的两条手段，以及“存位置”和“存结果”两种续跑",
+          "summary": "《深入理解 AI Agent》把幂等归成带唯一标识去重和先查后改两条；Learn Claude Code 的工作流则用稳定键缓存已完成调用的结果。",
+          "paragraphs": [
+            "书里第四章问的问题是：调用被取消或超时时，副作用到底发生了没有？转账超时返回失败，钱可能已经转出，也可能没有。核心办法是幂等，常用两条：一是操作带唯一标识，服务端凭标识去重，重复的请求直接返回首次结果；二是先查询后变更，重试前先查目标资源的当前状态，确认没做完再做。本课的 `operation_id` 加 `lookup_operation` 是第二条；{{lesson:reliable-tools}}讲的让存储凭编号去重，是第一条。两条的共同点是：判断“做过没有”的依据在外部世界，不在调用方的记忆里。",
+            "不是所有操作都能做成幂等：发邮件、拨电话、对外转账，每执行一次就是一个不可撤销的真实事件。书里对这类操作用“预检-确认”两段式：先做校验，比如查余额、确认收款方、生成待发送的内容；再真正执行；执行阶段失败不要盲目重试。本课的 `approved` 检查点就是两段之间的那条线：线以前可以随便重来，线以后每一步都要先查。微软教程的示例把审批放在 `input()` 里同步等待，进程一死等待就没了；本课把等待变成可恢复的检查点，这是两者的差别。",
+            "Learn Claude Code 的 `s16_workflow_runtime` 走的是另一条路。工作流脚本重新运行一遍，但每个 `agent()` 调用按内容（类型、标签、提示词、结构）算一个稳定哈希当键，日志文件里已有这个键的记录就直接取缓存，不再请求模型。它存的是“已完成调用的结果”，键不依赖并发完成的先后，续跑时不会错位。两种思路对照：检查点存位置，日志存结果。本课按位置恢复，因为副作用的“结果”在外面的练习库里，不在我们手里，只能去问。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "“写入后中断”那一组走一遍",
+          "description": "按顺序说明“写入后中断：恢复不重复保存”加一次恢复，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "drafted",
+              "actor": "模型",
+              "title": "生成草稿，存第一个检查点",
+              "body": "模型写出练习题，运行器生成操作标识，把草稿和标识一起存进 `drafted` 检查点。",
+              "code": "context.checkpoint('drafted', state)",
+              "language": "python",
+              "evidence": "request / response、checkpoint"
+            },
+            {
+              "id": "step-2",
+              "label": "批准",
+              "actor": "人",
+              "title": "批准内容",
+              "body": "审批卡上的参数就是草稿；批准后，运行器把批准的内容和它的摘要存进 `approved` 检查点。",
+              "code": "context.checkpoint('approved', state)",
+              "language": "python",
+              "evidence": "approval_resolved、checkpoint"
+            },
+            {
+              "id": "step-3",
+              "label": "查询",
+              "actor": "运行器",
+              "title": "先查：库里没有",
+              "body": "`lookup_operation` 返回 `found` 为假，可以写入。",
+              "code": "lookup_operation(operation_id)  # found: False",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-4",
+              "label": "写入",
+              "actor": "工具",
+              "title": "写入 1 行",
+              "body": "`save_exercise` 追加一行，行号 1。练习库此刻有 1 行。",
+              "code": "save_exercise(operation_id, title, difficulty, body, origin)",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-5",
+              "label": "中断",
+              "actor": "运行器",
+              "title": "进程在这里中断",
+              "body": "`stop_at` 为 `after_save`：运行在写入之后、存 `saved` 检查点之前结束。磁盘上最后一个检查点是 `approved`，里面的 `saved_id` 是空的。",
+              "code": "if trace.stop('after_save'): return state",
+              "language": "python",
+              "evidence": "lesson.report 里的业务状态 suspended"
+            },
+            {
+              "id": "step-6",
+              "label": "恢复",
+              "actor": "平台",
+              "title": "从 approved 恢复",
+              "body": "新运行读到 `approved` 状态，批准摘要对得上；来源运行的请求一条也不重放。",
+              "code": "context.resume_state",
+              "language": "python",
+              "evidence": "run_start 里的 resumed_from"
+            },
+            {
+              "id": "step-7",
+              "label": "再查",
+              "actor": "运行器",
+              "title": "再查：库里已经有了",
+              "body": "`found` 为真，行号 1：跳过写入，存 `saved` 检查点，业务状态 `already_saved`。练习库仍是 1 行。",
+              "code": "if found['found']: write = 'skipped'",
+              "language": "python",
+              "evidence": "tool_result、lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "wrap-up",
+          "type": "prose",
+          "title": "小结",
+          "paragraphs": [
+            "本课把一件有副作用的事拆成三个位置：草稿、批准、写入，每个位置存一个检查点。暂停时人可以批准、修改或拒绝；重启之后，新运行从检查点读回状态，先查操作标识，再决定要不要写。",
+            "三条规则可以带走：写入之前要有批准；存下的位置要带操作标识；恢复之后先查外部世界，不凭检查点推断。下一课{{lesson:bash-coding-agent}}把写入换成真实的命令执行，副作用更大，更需要这三条。",
+            "动手时按这个顺序：先跑“正常流程”，数三个检查点；再做“批准后暂停”，恢复一次；再做“写入后中断”，恢复两次；最后把 `resume_guard` 改成 `blind` 对照一次。每一步都用报告里的检查和练习库里的行数核对，不凭感觉。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-building-blocks",
+              "title": "LangGraph 的基本组成：状态、节点与边（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/building_blocks.mdx"
+            },
+            {
+              "id": "book-tools",
+              "title": "工具的幂等性与取消语义（深入理解 AI Agent，第四章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-async",
+              "title": "异步 Agent 的打断与恢复（深入理解 AI Agent，第六章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter6.md"
+            },
+            {
+              "id": "lcc-workflow",
+              "title": "工作流运行时：日志与稳定键续跑（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s16_workflow_runtime/README.zh.md"
+            },
+            {
+              "id": "ms-trustworthy",
+              "title": "构建可信的 AI Agent：人工介入（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/06-building-trustworthy-agents/README.md"
+            },
+            {
+              "id": "langgraph-interrupts",
+              "title": "LangGraph 的 `interrupt` 与恢复（LangChain 文档，2026-10-21 核对）",
+              "url": "https://docs.langchain.com/oss/python/langgraph/interrupts"
+            },
+            {
+              "id": "langgraph-time-travel",
+              "title": "LangGraph 的状态回看与分叉：update_state 与重放（LangChain 文档，2026-10-21 核对）",
+              "url": "https://docs.langchain.com/oss/python/langgraph/use-time-travel"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "langgraph-state"
+        },
+        {
+          "id": "code-flow",
+          "type": "annotated-source",
+          "path": "lessons/lesson_human_in_the_loop/runtime.py",
+          "start": 70,
+          "end": 111,
+          "notes": [
+            {
+              "id": "n-run",
+              "line": 70,
+              "anchor": "def run(context: RunContext)",
+              "text": "整个流程是一台小状态机：每一步只看状态里的 `step`，决定做不做。"
+            },
+            {
+              "id": "n-inputs",
+              "line": 72,
+              "anchor": "values = Inputs.model_validate",
+              "text": "输入先过 Pydantic：`stop_at` 和 `resume_guard` 是 `Literal`，写错一个值就在开跑前被拒绝。"
+            },
+            {
+              "id": "n-trace",
+              "line": 73,
+              "anchor": "trace = RunTrace(",
+              "text": "`resume_state` 不为空就是恢复出来的运行；`trace` 只收集报告要用的事实。"
+            },
+            {
+              "id": "n-bank",
+              "line": 74,
+              "anchor": "bank = ExerciseBank(",
+              "text": "练习库在线程文件夹里：恢复出来的运行换了运行编号，仍打开同一个库。"
+            },
+            {
+              "id": "n-start",
+              "line": 76,
+              "anchor": "state = context.resume_state if trace.resumed",
+              "text": "恢复就直接用存好的状态，不再生成草稿；全新的运行才进入 `draft_step`。"
+            },
+            {
+              "id": "n-approve-gate",
+              "line": 78,
+              "anchor": "if state and state[\"step\"] == \"drafted\"",
+              "text": "只有位置停在 `drafted` 才请求审批；`trace.stop` 在已结束或要模拟中断时返回真。"
+            },
+            {
+              "id": "n-commit-gate",
+              "line": 80,
+              "anchor": "if state and state[\"step\"] in (\"approved\", \"saved\")",
+              "text": "`approved` 和 `saved` 都进入写入步骤：前者要写（或发现已写过），后者只核对。"
+            },
+            {
+              "id": "n-finish",
+              "line": 82,
+              "anchor": "return finish(context, t, bank, state, trace)",
+              "text": "收尾统一在 `finish`：读库、算业务状态、发回执请求、发报告。"
+            },
+            {
+              "id": "n-draft",
+              "line": 95,
+              "anchor": "def draft_step(",
+              "text": "草稿是整个流程里唯一不会在恢复时重发的模型请求。"
+            },
+            {
+              "id": "n-complete",
+              "line": 97,
+              "anchor": "reply = context.complete(",
+              "text": "请求走 `context.complete`，平台记录请求和响应；`max_tokens` 限制草稿的长度。"
+            },
+            {
+              "id": "n-parse",
+              "line": 103,
+              "anchor": "draft = parse_draft(",
+              "text": "草稿要有标题行和正文，格式不对就以 `failed` 收尾，不进入审批。"
+            },
+            {
+              "id": "n-bad",
+              "line": 105,
+              "anchor": "trace.end(\"failed\", \"bad_draft\")",
+              "text": "失败是明确的业务状态加原因，不是抛一个异常了事。"
+            },
+            {
+              "id": "n-opid",
+              "line": 108,
+              "anchor": "\"operation_id\": f\"save-",
+              "text": "操作标识在这里生成一次，之后跟着状态走；同一条线程的每次恢复用的都是它。"
+            },
+            {
+              "id": "n-cp-drafted",
+              "line": 110,
+              "anchor": "trace.save_checkpoint(context, \"drafted\", state)",
+              "text": "存第一个检查点：草稿和操作标识都在里面，此时还没问人。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-parse",
+              "start": 85,
+              "end": 92,
+              "label": "本课：解析模型草稿的格式（第一行标题，其余是正文）"
+            }
+          ]
+        },
+        {
+          "id": "code-approve",
+          "type": "annotated-source",
+          "path": "lessons/lesson_human_in_the_loop/runtime.py",
+          "start": 114,
+          "end": 130,
+          "notes": [
+            {
+              "id": "n-approve",
+              "line": 114,
+              "anchor": "def approve_step(",
+              "text": "审批步骤收一个状态，返回新状态；人的决定只通过 `decision` 进来。"
+            },
+            {
+              "id": "n-request",
+              "line": 116,
+              "anchor": "decision = context.request_approval(",
+              "text": "运行停在这里（状态 `paused`）。`editable=True` 让人能改参数，`risk` 只是给人看的提示。"
+            },
+            {
+              "id": "n-payload",
+              "line": 117,
+              "anchor": "dict(state[\"draft\"])",
+              "text": "交给审批的是草稿的副本，原稿留在状态里。"
+            },
+            {
+              "id": "n-trace-approval",
+              "line": 118,
+              "anchor": "trace.approval = {",
+              "text": "决定者、结果、是否改过都记下来，报告里的“审批”一项来自这里。"
+            },
+            {
+              "id": "n-rejected",
+              "line": 119,
+              "anchor": "if not decision.approved:",
+              "text": "拒绝和超时不抛异常：运行以 `rejected` 或 `timed_out` 结束，没有 `approved` 检查点，也就没有写入。"
+            },
+            {
+              "id": "n-edit-check",
+              "line": 123,
+              "anchor": "if exercise_problems(decision.payload):",
+              "text": "人改的内容再检查一遍：写成 `impossible` 的难度，在这里就被挡下。"
+            },
+            {
+              "id": "n-approved-state",
+              "line": 127,
+              "anchor": "state = {**state, \"step\": \"approved\"",
+              "text": "新状态同时留着 `draft`（原稿）和 `approved`（批准版），再加批准内容的摘要。"
+            },
+            {
+              "id": "n-cp-approved",
+              "line": 129,
+              "anchor": "trace.save_checkpoint(context, \"approved\", state)",
+              "text": "第二个检查点：之后恢复要写入的，只能是这份内容。"
+            }
+          ]
+        },
+        {
+          "id": "code-commit",
+          "type": "annotated-source",
+          "path": "lessons/lesson_human_in_the_loop/runtime.py",
+          "start": 133,
+          "end": 170,
+          "notes": [
+            {
+              "id": "n-commit",
+              "line": 133,
+              "anchor": "def commit_step(",
+              "text": "写入步骤：恢复出来的运行和第一次运行走同一段代码。"
+            },
+            {
+              "id": "n-digest",
+              "line": 136,
+              "anchor": "if approval_digest(state[\"approved\"]) != state[\"approved_digest\"]:",
+              "text": "批准跟着摘要走：内容和批准时的摘要对不上，就不写，状态记 `unapproved`。"
+            },
+            {
+              "id": "n-guard",
+              "line": 141,
+              "anchor": "if values.resume_guard == \"check_first\":",
+              "text": "`check_first` 先问练习库；`blind` 跳过这一步，用来演示不先查的后果。"
+            },
+            {
+              "id": "n-lookup",
+              "line": 142,
+              "anchor": "looked = context.call_tool(\"lookup_operation\"",
+              "text": "查询也是工具调用，进事件：学习者能看到“先查”确实发生了。"
+            },
+            {
+              "id": "n-lookup-state",
+              "line": 147,
+              "anchor": "trace.lookup = \"found\" if",
+              "text": "查询结果写进报告：已找到、没找到、跳过，三种取值。"
+            },
+            {
+              "id": "n-mismatch",
+              "line": 150,
+              "anchor": "if state[\"step\"] == \"saved\" and not",
+              "text": "检查点说已保存、库里没有：不重写，以 `ledger_mismatch` 结束，让人核对。"
+            },
+            {
+              "id": "n-skip",
+              "line": 155,
+              "anchor": "trace.write, saved_id = \"skipped\"",
+              "text": "找到了就跳过写入，沿用已有的行号：恢复多少次，练习库还是这一行。"
+            },
+            {
+              "id": "n-cancel",
+              "line": 158,
+              "anchor": "context.check_cancelled()",
+              "text": "副作用之前先响应停止请求：已经收到停止，就不要再写。"
+            },
+            {
+              "id": "n-save",
+              "line": 159,
+              "anchor": "saved = context.call_tool(\"save_exercise\"",
+              "text": "真正的写入：带着操作标识和批准的内容，`origin` 记下是第一次运行还是恢复出来的运行写的。"
+            },
+            {
+              "id": "n-save-failed",
+              "line": 162,
+              "anchor": "trace.end(\"failed\", \"save_failed\")",
+              "text": "写入失败：练习库没变，检查点还停在 `approved`，可以再恢复一次。"
+            },
+            {
+              "id": "n-stop-after",
+              "line": 166,
+              "anchor": "if trace.stop(\"after_save\"):",
+              "text": "模拟中断点：写入已经发生，下面的检查点还没存，磁盘上的位置仍是 `approved`。"
+            },
+            {
+              "id": "n-cp-saved",
+              "line": 169,
+              "anchor": "trace.save_checkpoint(context, \"saved\", state)",
+              "text": "第三个检查点：记下行号，这个操作完成了。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "先查后写由课程代码做，存储故意不拦",
+          "chosen": "操作标识在第一次运行里生成并存进检查点；恢复时运行器先调 `lookup_operation`，找到就跳过写入。练习库没有唯一约束，不先查就会写出第二行。批准以摘要的形式跟着检查点走，摘要对不上就不写。",
+          "alternatives": [
+            {
+              "id": "unique-key",
+              "title": "把操作标识做成存储的唯一约束",
+              "why_not": "这样更稳，也是{{lesson:reliable-tools}}的做法。本课故意不用，为的是让“不先查会怎样”看得见；真实系统里应当两者都有。"
+            },
+            {
+              "id": "replay-tools",
+              "title": "恢复时重放来源运行的工具调用，靠工具自己判断",
+              "why_not": "平台不重放来源运行的任何请求或工具调用；而且重放等于把判断“做过没有”的责任交给每个工具，容易漏。"
+            },
+            {
+              "id": "permanent-approval",
+              "title": "把批准存成一个长期有效的许可",
+              "why_not": "批准针对的是那一份内容。内容变了，旧的批准就不再适用，所以存的是摘要，写入前再核对。"
+            },
+            {
+              "id": "framework-interrupt",
+              "title": "用 LangGraph 的 `interrupt` 实现暂停",
+              "why_not": "`interrupt` 恢复时节点会从头重跑，要把副作用另放一个节点。本课想直接看清“位置”和“副作用”的关系，用平台的检查点更直白；两种做法的差别见深入块。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "approval-gate",
+          "title": "写入前的确认与人工修改",
+          "hypothesis": "批准之前练习库里没有这个操作的行；批准之后，运行器才调用 `save_exercise`。人改过的内容进入 `approved` 检查点，模型的草稿原样保留，两份摘要不同。",
+          "predict": "predict-checkpoints",
+          "arms": [
+            {
+              "id": "approve-save",
+              "exercise": "approve-save",
+              "label": "正常流程：批准后保存"
+            },
+            {
+              "id": "edit-state",
+              "exercise": "edit-state",
+              "label": "人工修改后恢复"
+            }
+          ],
+          "observe": [
+            {
+              "id": "approval-request",
+              "text": "审批请求：要批准的完整参数和它的摘要。",
+              "selector": {
+                "event": "approval_requested",
+                "path": "data.payload_digest"
+              }
+            },
+            {
+              "id": "approval-result",
+              "text": "审批结果：`edited` 是否为真。",
+              "selector": {
+                "event": "approval_resolved",
+                "path": "data.edited"
+              }
+            },
+            {
+              "id": "approved-state",
+              "text": "`approved` 检查点：批准的内容、它的摘要，草稿仍在同一个状态里。",
+              "selector": {
+                "event": "checkpoint",
+                "path": "data.state.approved.difficulty"
+              }
+            },
+            {
+              "id": "lookup-result",
+              "text": "写入前的查询：练习库里有没有这个操作。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.found",
+                "name": "lookup_operation"
+              }
+            },
+            {
+              "id": "save-call",
+              "text": "写入调用：只出现在批准之后。",
+              "selector": {
+                "event": "tool_call",
+                "name": "save_exercise"
+              }
+            },
+            {
+              "id": "gate-check",
+              "text": "批准检查：没有批准就没有写入。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=approval-gate]"
+              }
+            },
+            {
+              "id": "edit-check",
+              "text": "人工修改检查：批准的内容和草稿不同，状态里两份都在。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=edit-traced]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "先看“正常流程”那一组：草稿、批准、写入，三个位置各存一个检查点。"
+            },
+            {
+              "text": "草稿出来后，运行停在审批点，等你在审批卡上决定。审批请求里是完整参数和它的摘要，你看到的就是这一份。",
+              "observe": "approval-request",
+              "stage": "user"
+            },
+            {
+              "text": "你决定之后，`approval_resolved` 记下结果。正常流程里直接批准，`edited` 是假；“人工修改后恢复”那一组要先在卡上改难度和标题，再批准，`edited` 才是真。",
+              "observe": "approval-result"
+            },
+            {
+              "text": "批准的内容和摘要进了 `approved` 检查点。人工修改那一组里，它和草稿不同，草稿仍在同一个状态里。",
+              "observe": "approved-state",
+              "stage": "runtime"
+            },
+            {
+              "text": "写入之前先查：库里没有这个操作，才轮到写入。",
+              "observe": "lookup-result",
+              "stage": "tool"
+            },
+            {
+              "text": "写入调用排在批准之后。把时间线拖回审批之前，练习库里一行也没有。",
+              "observe": "save-call"
+            },
+            {
+              "text": "报告里的检查按练习库的行和保存的状态计算：没批准就没有写入。",
+              "observe": "gate-check"
+            },
+            {
+              "text": "只有“人工修改后恢复”那一组有这一条检查：批准的内容和草稿不同，状态里两份都在。",
+              "observe": "edit-check"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "写入调用只出现在批准之后；批准之前，练习库里没有这个操作的行。",
+              "人改过的内容进了 `approved` 检查点，原稿同时保留，`approval_resolved` 里的两份摘要不同。"
+            ],
+            "does_not_prove": [
+              "离线测试模式里的批准来自固定脚本，不是真人的决定；真实运行里，决定权在人。",
+              "批准只说明人同意了这份内容，不说明练习题质量好。",
+              "三个检查点的位置是本课的选择，不代表所有流程都该存在这三处。"
+            ]
+          }
+        },
+        {
+          "id": "restart-resume",
+          "title": "暂停、重启与恢复",
+          "hypothesis": "在批准之后、写入之前结束的运行，在 `approved` 检查点留下继续所需的全部状态；从它恢复出来的新运行沿用同一个线程 ID，只新发一次请求，并写入一行。",
+          "arms": [
+            {
+              "id": "restart-resume",
+              "exercise": "restart-resume",
+              "label": "批准后暂停，重启并恢复"
+            }
+          ],
+          "observe": [
+            {
+              "id": "drafted-state",
+              "text": "`drafted` 检查点：操作标识在这里生成。",
+              "selector": {
+                "event": "checkpoint",
+                "path": "data.state.operation_id"
+              }
+            },
+            {
+              "id": "approved-cp",
+              "text": "`approved` 检查点：批准的内容和摘要。",
+              "selector": {
+                "event": "checkpoint",
+                "path": "data.state.approved.difficulty"
+              }
+            },
+            {
+              "id": "status",
+              "text": "业务状态：`completed` 的运行也可以是 `suspended`。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=status]"
+              }
+            },
+            {
+              "id": "thread",
+              "text": "线程 ID：第一次运行的编号，恢复出来的运行沿用它。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=thread]"
+              }
+            },
+            {
+              "id": "resumed-from",
+              "text": "恢复自哪个运行的哪个检查点。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=resumed-from]"
+              }
+            },
+            {
+              "id": "model-calls",
+              "text": "模型调用数：恢复出来的运行里应是 1，只有回执是新发的。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model-calls]"
+              }
+            },
+            {
+              "id": "draft-once",
+              "text": "草稿请求没有重发：第一次运行 1 次，恢复出来的运行 0 次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=draft-once]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这一组按参数在批准之后、写入之前结束，模拟进程中断。运行状态是 `completed`，业务状态是 `suspended`。"
+            },
+            {
+              "text": "操作标识在存 `drafted` 检查点时就生成了，之后每次恢复都用它。",
+              "observe": "drafted-state",
+              "stage": "runtime"
+            },
+            {
+              "text": "`approved` 检查点把批准的内容和摘要存下来，恢复要用的就是这一份。",
+              "observe": "approved-cp"
+            },
+            {
+              "text": "业务状态写在报告里：`suspended` 不是失败，也不是完成。",
+              "observe": "status"
+            },
+            {
+              "text": "线程 ID 是这次运行的编号；恢复出来的运行会沿用它。",
+              "observe": "thread"
+            },
+            {
+              "text": "现在动手：在事件里打开 `approved` 检查点，点“从「approved」恢复”。想更接近真实，先重启后端，再点：检查点存在运行存储里，重启不会丢。",
+              "stage": "user"
+            },
+            {
+              "text": "在恢复出来的运行里，这一项写着它从哪个运行、哪个检查点开始。",
+              "observe": "resumed-from"
+            },
+            {
+              "text": "模型调用数应该是 1：只有回执那次请求是新发的，草稿请求没有重放。",
+              "observe": "model-calls",
+              "stage": "model"
+            },
+            {
+              "text": "这条检查按“第一次运行 1 次、恢复出来的运行 0 次”判断草稿请求有没有重发。",
+              "observe": "draft-once"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "`approved` 检查点存下了继续所需的全部状态；恢复出来的运行不重发草稿请求，沿用同一个线程 ID，并写入一行。"
+            ],
+            "does_not_prove": [
+              "`stop_at` 让运行自己结束，不是真正的进程崩溃；真实的崩溃会留下 `interrupted` 状态，平台同样允许从最后一个检查点恢复。",
+              "重启后能恢复，只说明位置存住了；外部写入有没有发生，要看下一个实验。"
+            ]
+          }
+        },
+        {
+          "id": "no-duplicate",
+          "title": "写入后中断，恢复不重复保存",
+          "hypothesis": "写入发生在存 `saved` 检查点之前就中断：最后一个检查点仍是 `approved`，练习库却已有 1 行。恢复时先查到操作标识，就不再写；把 `resume_guard` 改成 `blind`，同一个操作标识会有两行。",
+          "arms": [
+            {
+              "id": "crash-after-write",
+              "exercise": "crash-after-write",
+              "label": "写入后中断：恢复不重复保存"
+            }
+          ],
+          "observe": [
+            {
+              "id": "lookup-call",
+              "text": "写入前的查询调用。",
+              "selector": {
+                "event": "tool_call",
+                "name": "lookup_operation"
+              }
+            },
+            {
+              "id": "save-result",
+              "text": "写入工具的结果：新行的行号。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.exercise_id",
+                "name": "save_exercise"
+              }
+            },
+            {
+              "id": "ledger-rows",
+              "text": "练习库里的行：直接读数据库得到。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "rows-metric",
+              "text": "这个操作标识在练习库里的行数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=rows]"
+              }
+            },
+            {
+              "id": "lookup-metric",
+              "text": "写入前查询的结果：已找到、没找到或跳过。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=lookup]"
+              }
+            },
+            {
+              "id": "write-metric",
+              "text": "写入是否发生。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=write]"
+              }
+            },
+            {
+              "id": "once-check",
+              "text": "同一个操作标识只写入一次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=written-once]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这一组在写入之后、存 `saved` 检查点之前结束，最后一个检查点还是 `approved`。"
+            },
+            {
+              "text": "写入前先查：这次练习库里没有这个操作，所以接着写。",
+              "observe": "lookup-call",
+              "stage": "tool"
+            },
+            {
+              "text": "写入成功，新行的行号是 1。",
+              "observe": "save-result"
+            },
+            {
+              "text": "报告里的行是直接读数据库得到的：库里已经有 1 行，检查点却还没记下这件事。",
+              "observe": "ledger-rows"
+            },
+            {
+              "text": "这个操作标识在库里是 1 行，作为恢复前的基线。",
+              "observe": "rows-metric"
+            },
+            {
+              "text": "现在从 `approved` 检查点恢复。运行器先查，找到了就不写。",
+              "stage": "runtime"
+            },
+            {
+              "text": "在恢复出来的运行里，查询结果是“已找到：这个操作已经完成”。",
+              "observe": "lookup-metric"
+            },
+            {
+              "text": "写入一栏写着“未写入（操作标识已完成）”。",
+              "observe": "write-metric"
+            },
+            {
+              "text": "检查按库里的行数计算：这个操作标识仍是 1 行。",
+              "observe": "once-check"
+            },
+            {
+              "text": "再做一次对照：把 `resume_guard` 改成 `blind`，重新运行并恢复。同一个操作标识会有 2 行，这条检查变成未通过。",
+              "stage": "user"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "最后一个检查点是 `approved` 时，练习库里可以已经有 1 行；先查后写让恢复不重复，去掉查询，同一个操作被写两次。"
+            ],
+            "does_not_prove": [
+              "先查后写不是原子的：查与写之间有别的写入者时仍会重复；多个进程要把标识放进存储的事务。",
+              "练习库是本地 SQLite。发邮件、转账这类没有查询接口的动作，不能用这个办法。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "topic",
+          "label": "练习主题",
+          "help": "交给模型写练习题的主题。"
+        },
+        {
+          "name": "difficulty",
+          "label": "难度",
+          "help": "写进草稿的难度；人可以在审批卡上改。",
+          "options": [
+            {
+              "value": "easy",
+              "label": "入门"
+            },
+            {
+              "value": "medium",
+              "label": "进阶"
+            },
+            {
+              "value": "hard",
+              "label": "挑战"
+            }
+          ]
+        },
+        {
+          "name": "stop_at",
+          "label": "在哪一步之后结束第一次运行",
+          "help": "模拟进程中断；恢复出来的运行不会再停。",
+          "options": [
+            {
+              "value": "none",
+              "label": "不中断"
+            },
+            {
+              "value": "after_draft",
+              "label": "生成草稿之后"
+            },
+            {
+              "value": "before_save",
+              "label": "批准之后、写入之前"
+            },
+            {
+              "value": "after_save",
+              "label": "写入之后、存检查点之前"
+            }
+          ]
+        },
+        {
+          "name": "resume_guard",
+          "label": "写入前是否先查操作标识",
+          "help": "`blind` 跳过查询，用来演示重复写入。",
+          "options": [
+            {
+              "value": "check_first",
+              "label": "先查再写"
+            },
+            {
+              "value": "blind",
+              "label": "不查直接写"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "运行状态 `completed`、业务状态 `suspended` 的运行，练习库里有这个操作的行吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "要看停在哪一步：`after_save` 有 1 行，另外两个中断点是 0 行",
+                  "feedback": "对。业务状态只说“停下了”，行数要看停的位置，或者直接读练习库。"
+                },
+                {
+                  "id": "b",
+                  "text": "一定没有，suspended 就是还没保存",
+                  "feedback": "不对。`after_save` 的运行已经写入了 1 行。"
+                },
+                {
+                  "id": "c",
+                  "text": "一定有，运行已经 completed",
+                  "feedback": "不对。`completed` 只说运行结束，不说任务做完。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "运行状态、业务状态和练习库的行数是三个不同层面的事实。"
+            },
+            {
+              "id": "q2",
+              "prompt": "从 `approved` 检查点恢复出来的运行里，有几条 `request` 事件？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "1 条：只有回执请求，草稿请求不会重发",
+                  "feedback": "对。来源运行的请求一条也不重放，恢复后发的是新请求。"
+                },
+                {
+                  "id": "b",
+                  "text": "2 条：草稿和回执都要再发一遍",
+                  "feedback": "不对。草稿已经在检查点里了。"
+                },
+                {
+                  "id": "c",
+                  "text": "0 条：恢复不需要模型",
+                  "feedback": "不对。本课的回执要一次新请求，由模型根据事实写一句话。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "恢复里的请求都是真实的新请求，不是旧请求的重放。"
+            },
+            {
+              "id": "q3",
+              "prompt": "人把难度改成 `impossible`，会发生什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "运行以 `failed` 收尾，原因 `invalid_edit`，没有 `approved` 检查点，也没有写入",
+                  "feedback": "对。改动要像草稿一样再检查一遍。"
+                },
+                {
+                  "id": "b",
+                  "text": "照样写入，练习库会收下它",
+                  "feedback": "不对。练习库只收 `easy`、`medium`、`hard`。"
+                },
+                {
+                  "id": "c",
+                  "text": "平台拒绝这次审批决定",
+                  "feedback": "不对。平台只管摘要和是否允许修改，内容合不合格由课程判断。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "谁能改、改成什么，是两个问题：平台管前者，课程管后者。"
+            },
+            {
+              "id": "q4",
+              "prompt": "下面哪一条让恢复后的写入不重复？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "恢复前先凭操作标识查练习库",
+                  "feedback": "对。判断“做过没有”的依据在外部世界。"
+                },
+                {
+                  "id": "b",
+                  "text": "检查点存在",
+                  "feedback": "不对。检查点只记位置，不保证幂等。"
+                },
+                {
+                  "id": "c",
+                  "text": "提示模型“不要重复保存”",
+                  "feedback": "不对。写入不是模型做的，是运行器调用的工具。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "幂等是课程代码的责任：操作标识加先查后写。"
+            },
+            {
+              "id": "q5",
+              "prompt": "平台返回 `run_still_active`，说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "来源运行还没结束，要等它结束或停止后才能从它的检查点恢复",
+                  "feedback": "对。同一时间只有一次运行在执行。"
+                },
+                {
+                  "id": "b",
+                  "text": "检查点编号写错了",
+                  "feedback": "不对。那是 `checkpoint_not_found`。"
+                },
+                {
+                  "id": "c",
+                  "text": "课程源码变了",
+                  "feedback": "不对。那是 `checkpoint_stale`。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "四个拒绝码各对应一个具体原因，课程不必猜。"
+            },
+            {
+              "id": "q6",
+              "prompt": "从 `drafted` 检查点恢复时，为什么要重新请求审批？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这个检查点里还没有批准；批准只跟着 `approved` 检查点里的摘要走",
+                  "feedback": "对。恢复不继承审批。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为审批每 5 分钟过期",
+                  "feedback": "不对。超时只发生在等待审批的那一次运行里。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为平台要求每次恢复都审批",
+                  "feedback": "不对。平台不管审批，这是课程自己的规则。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "批准针对的是一份具体的内容，要写入的内容没有被批准过，就不能写。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“写入后中断：恢复不重复保存”，找出写入工具返回的结果，看新行的行号。",
+          "target": {
+            "event": "tool_result",
+            "path": "data.result.result.exercise_id",
+            "name": "save_exercise"
+          },
+          "explanation": "`save_exercise` 的工具结果里有 `exercise_id` 和 `operation_id`。这一组在写入之后才中断，所以这里的 `exercise_id` 是 1，而最后一个检查点 `approved` 里的 `saved_id` 仍是空的：行已经在库里，状态却还不知道。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我能说出三个检查点各自存了什么，以及恢复出来的运行为什么不会重发草稿请求。"
+            },
+            {
+              "id": "item-2",
+              "text": "我做过“写入后中断”，并从 `approved` 恢复了两次，练习库里这个操作始终是 1 行。"
+            },
+            {
+              "id": "item-3",
+              "text": "我把 `resume_guard` 改成过 `blind`，亲眼看到同一个操作标识出现两行。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在审批卡上改过参数，并在检查点和练习库里找到了改动。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "operation_id",
+      "note": "第一次运行生成的保存操作编号，随检查点保存，恢复后凭它查库。"
+    },
+    {
+      "name": "approved_digest",
+      "note": "批准内容的摘要；恢复写入前要和现有内容核对。"
+    },
+    {
+      "name": "resume_state",
+      "note": "恢复出来的运行读到的检查点状态；全新运行里为空。"
+    },
+    {
+      "name": "stop_at",
+      "note": "让第一次运行在某一步之后结束，模拟进程中断。"
+    },
+    {
+      "name": "resume_guard",
+      "note": "check_first 写入前先查操作标识；blind 不查直接写。"
+    },
+    {
+      "name": "lookup_operation",
+      "note": "只读：这个操作标识在练习库里写过几行。"
+    },
+    {
+      "name": "save_exercise",
+      "note": "写入：往练习库追加一行，存储本身不拦重复。"
+    },
+    {
+      "name": "ledger_mismatch",
+      "note": "检查点说已保存，库里却没有：不重写，交给人。"
+    },
+    {
+      "name": "thread_id",
+      "note": "一串恢复出来的运行共用的编号，练习库按它分文件夹。"
+    }
+  ]
+}
