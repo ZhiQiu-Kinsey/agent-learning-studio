@@ -241,8 +241,11 @@ def run(context):
 
         ...  # 模型循环：context.complete(...)，context.execute_proposal(call, {"bash": bash})
 
-        # 平台验收：用同一个 runner 重跑测试，不经过审批（这是平台命令，不是模型命令）
-        verdict = runner.run("python -m unittest discover -s tests", timeout=60)
+        # 平台验收：用同一个 runner 重跑测试。命令是平台定的，但它会执行 Agent 写进项目的代码，
+        # 学习者批准的是命令而不是文件内容，所以无容器时验收也单独审批（kind: acceptance）
+        verdict = run_guarded("python -m unittest discover -s tests", runner=runner, policy=policy,
+                              approve=acceptance_approver, should_stop=context.cancelled,
+                              check_cancelled=context.check_cancelled)
         tampered = workspace.protected_changes(["tests/*"])
         context.emit("lesson.report", {...})          # verdict.ok、tampered、changes、diff
 ```
@@ -252,6 +255,7 @@ def run(context):
 - 系统提示词要说明 shell 类型（`runner.shell_flavor`）：Windows 上没有 Git Bash 时是 PowerShell。夹具里的命令最好只用两种 shell 都能执行的写法（例如 `python -m unittest …`）。
 - `CommandResult.to_dict()` 可以 JSON 序列化，不含本机路径，可以直接作为工具结果或 `lesson.*` 事件数据。
 - 结果分开报告“命令执行了”（`exit_code`）、“命令成功了”（`ok`）和“任务验收通过”（平台重跑测试）：这三者不能混为一谈。
+- 验收被拒绝或超时，结论写“验收没有完成”，不能写成“没通过”或“通过”。（2026-10-21 起两门编码课都这样做；有容器时按第 4 节默认不逐条审批。）
 - 离线测试：夹具给出确定性的模型响应，命令仍由 `RestrictedRunner` 真实执行。审批走 `lesson.json` 的 `testing.approval_factory`（事件里 `decided_by: offline_fixture`）；网页上不得有自动批准入口。
 - 课程事件一律用 `lesson.` 前缀。命令记录建议沿用 `tool_result` 加 `lesson.report`，确有需要再提议新的通用视图。
 

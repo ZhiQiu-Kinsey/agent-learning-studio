@@ -243,9 +243,12 @@ def run(context):
 
         ...  # model loop: context.complete(...), context.execute_proposal(call, {"bash": bash})
 
-        # Platform acceptance: re-run the tests through the same runner, without approval
-        # (a platform command, not a model command)
-        verdict = runner.run("python -m unittest discover -s tests", timeout=60)
+        # Platform acceptance: re-run the tests through the same runner. The platform chooses the command,
+        # but it runs code the agent wrote into the project, and the learner approved commands, not file
+        # contents, so without a container acceptance gets its own approval (kind: acceptance)
+        verdict = run_guarded("python -m unittest discover -s tests", runner=runner, policy=policy,
+                              approve=acceptance_approver, should_stop=context.cancelled,
+                              check_cancelled=context.check_cancelled)
         tampered = workspace.protected_changes(["tests/*"])
         context.emit("lesson.report", {...})          # verdict.ok, tampered, changes, diff
 ```
@@ -255,6 +258,7 @@ Key points:
 - The system prompt must name the shell (`runner.shell_flavor`): on Windows without Git Bash it is PowerShell. Fixture commands should stick to forms both shells accept (for example `python -m unittest …`).
 - `CommandResult.to_dict()` is JSON-serializable and carries no local paths; use it directly as a tool result or `lesson.*` event data.
 - Report "the command ran" (`exit_code`), "the command succeeded" (`ok`) and "the task passed acceptance" (the platform's own test run) separately; they are three different claims.
+- When acceptance is rejected or times out, the verdict is "acceptance did not complete", never "failed" or "passed". (Both coding lessons do this from 2026-10-21; with a container, section 4's default of no per-command approval applies.)
 - Offline tests: fixtures provide deterministic model responses; commands still run for real through `RestrictedRunner`. Approval goes through `testing.approval_factory` in `lesson.json` (events say `decided_by: offline_fixture`); the web page must have no auto-approve entry.
 - Lesson events always use the `lesson.` prefix. For command records, prefer `tool_result` plus `lesson.report`; propose a new generic view only when really needed.
 
