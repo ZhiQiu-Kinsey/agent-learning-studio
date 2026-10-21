@@ -309,6 +309,7 @@ class RunPlan:
     stream_completion: Callable | None = field(default=None, repr=False)
     # 离线测试的确定性审批决定（testing.approval_factory）；真实运行永远是 None，只能由人决定。
     approval_policy: Callable | None = field(default=None, repr=False)
+    unsupported_params: frozenset = frozenset()
     # 从检查点恢复时：{run_id, checkpoint_id, name, seq, state, state_digest, thread_id}。
     resume: dict | None = None
     # 课程源码哈希（与录制同一规则），写进检查点，恢复时据此拒绝源码已变化的检查点。
@@ -421,6 +422,7 @@ def prepare_run(body: RunInput) -> RunPlan:
         representation=representation,
         envelope_representation=representation if representation in ("http_body", "sdk_standardized") else None,
         sdk=sdk, completion=completion, completion_error=completion_error,
+        unsupported_params=profile.unsupported_params if profile else frozenset(),
         secrets=provider_registry.secrets(session_key),
         embedding=embedding, embedding_model=embedding_model, embedding_batch_limit=embedding_batch_limit,
         uses_embedding=uses_embedding, embedding_setting=embedding_setting(profile.id) if profile else None,
@@ -580,6 +582,7 @@ def start_run(plan: RunPlan) -> str:
                 mode=body.mode, model=plan.model, representation=plan.representation, inputs=plan.inputs,
                 api_key=plan.key, completion=plan.completion, emit_event=active.emit,
                 cancelled=active.cancelled.is_set, max_model_calls=spec["runtime"].get("max_rounds", 3),
+                unsupported_params=plan.unsupported_params,
                 locale=plan.locale, embedding=plan.embedding, embedding_model=plan.embedding_model,
                 embedding_batch_limit=plan.embedding_batch_limit,
                 stream_completion=plan.stream_completion, cancel_reason=lambda: active.cancel_reason,

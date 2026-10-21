@@ -99,6 +99,7 @@ Embedding 请求与聊天请求走同一次运行的同一条连接，所以表�
 
 - **step**：没有独立事件。同一 `round` 的事件属于同一个 step span，`round` 变化即开始新 step，父级是 run。`agent` 层预留给多 Agent 课程，当前单 Agent 运行不生成。
 - `llm`/`tool` span 的父级是当前 step；事件没有 `round` 时父级是 run。
+- 服务商对当前模型拒绝的请求参数（目前是 Anthropic 5 系列模型的 `temperature`）不会发出：`request.data.body` 是实际发出的请求，被省略的参数和课程原本写的值记在 `request.data.omitted_params`（`{values, reason: "unsupported_by_model"}`）；没有省略时没有这个字段。适配层仍不丢参数（`drop_params=False`），省略由 `RunContext` 在记录前完成。
 - `response` 带 `branch` 时关闭同一 `branch` 的 `llm` span，不带时关闭最近一个未关闭的 `llm` span（课程用 `context.complete(..., branch=...)` 发起并行请求）；`tool_result` 关闭 `id` 相同的 `tool` span。找不到可关闭的 span 时按瞬时事件处理，不凭空配对。
 - 瞬时事件挂在最内层未关闭的 `llm`/`tool` span；没有时，有 `round` 挂在该轮 step，无 `round` 挂在 run。
 - 新 step 开始或运行结束时，仍未关闭的 `llm`/`tool` span 保持未关闭，表示“没有结果”（例如被停止），不补造结束事件。

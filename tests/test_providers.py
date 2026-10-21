@@ -209,5 +209,13 @@ class SDKHttpTests(unittest.TestCase):
         self.assertEqual(json.loads(requests[0].content)["model"], "mock-model")
 
 
+class UnsupportedParamsTests(unittest.TestCase):
+    def test_anthropic_five_series_rejects_temperature_only(self):
+        for model in ("claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5", "claude-fable-5-1"):
+            self.assertEqual(ModelProfile("anthropic", "A", model, "k", None, True).unsupported_params, {"temperature"})
+        for provider, model in (("anthropic", "claude-sonnet-4-5"), ("openai", "claude-sonnet-5-5"), ("openai", "gpt-5")):
+            self.assertEqual(ModelProfile(provider, "P", model, "k", None, True).unsupported_params, frozenset())
+
+
 if __name__ == "__main__":
     unittest.main()
