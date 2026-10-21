@@ -2085,6 +2085,8 @@ Deliverable: A state graph, node contracts, and three reproducible execution pat
 
 Receive model output chunk by chunk, tell apart a user pressing stop, a client disconnecting, and the backend actually finishing, and record what had already arrived when cancellation happened.
 
+**Terms in this lesson:** Streaming, Time to First Token, Cancel Request, Client Disconnect, Partial Result
+
 **Sections**
 
 1. **What streaming is**: The model returns chunks as it generates, and time to first token affects the experience more than total time.
@@ -2135,6 +2137,8 @@ Deliverable: Three run records: complete, cancelled, and disconnected.
 **Prerequisites:** Lesson 34 Streaming and cancellation
 
 Check data dependencies first, then run independent tasks in parallel, set a concurrency limit and timeouts, and record partial results.
+
+**Terms in this lesson:** Concurrency Limit
 
 **Sections**
 
@@ -2192,6 +2196,8 @@ Add a gate before execution, pause and resume later, and recover from a checkpoi
 
 Add hooks and human approval before tool execution, so the run enters a paused state and resumes after approval or rejection.
 
+**Terms in this lesson:** Hook Phase, Approval Gate, Approval Request, Risk Level, Argument Digest
+
 **Sections**
 
 1. **Why hooks**: Insert checks before and after a tool runs without changing every tool's code.
@@ -2203,7 +2209,7 @@ Add hooks and human approval before tool execution, so the run enters a paused s
 
 - Tell a hook's stage from its verdict
 - Implement approval that can pause and resume
-- Make the approval summary match the actual arguments
+- Make the executed arguments the same as the approved ones
 
 **Topics**
 
@@ -2219,7 +2225,7 @@ Approval before a high-risk tool:
 
 1. Add an approval gate to an example tool that writes a file.
 2. The run enters paused, the learner approves or rejects in the UI, and the run resumes or ends accordingly.
-3. Check that the approval summary matches the arguments actually executed.
+3. Check the argument digest before executing, to confirm the arguments executed are the ones approved.
 
 Deliverable: The approval card record and the pause and resume timeline.
 
@@ -2227,7 +2233,7 @@ Deliverable: The approval card record and the pause and resume timeline.
 
 - The tool has not run before approval.
 - After a rejection the run ends honestly and gives the reason.
-- The approval summary matches the actual arguments item by item.
+- The approval's summary sentence states every key argument, and the digest of the executed arguments equals the approved digest.
 
 **References**
 
@@ -2244,7 +2250,7 @@ Deliverable: The approval card record and the pause and resume timeline.
 
 Pause before actions with side effects, use checkpoints to save the execution position, and verify recovery after a restart or a human edit.
 
-**Terms in this lesson:** Human-in-the-loop, Checkpoint, Idempotency
+**Terms in this lesson:** Human-in-the-loop, Checkpoint, Idempotency, Thread ID, Operation ID
 
 **Sections**
 
@@ -2604,7 +2610,7 @@ Deliverable: An error classification, a retry trace, and a table checking the ac
 
 Bring untrusted documents into a real retrieval chain, observe how injection affects the model, and let the execution side control tools, paths, and side effects.
 
-**Terms in this lesson:** Prompt injection
+**Terms in this lesson:** Prompt injection, Indirect prompt injection, Fail closed, False refusal
 
 **Sections**
 
@@ -3167,7 +3173,7 @@ Deliverable: A backup inventory, recovery acceptance, and a rollback record.
 
 - [深入理解 AI Agent：设计原理与工程实践](https://github.com/bojieli/ai-agent-book): `book/chapter2.md`.
 
-#### Lesson 53 · Capstone: a local coding or study assistant
+#### Lesson 53 · Capstone: a local study assistant
 
 **Lesson ID:** `capstone-study-assistant`
 
@@ -3177,11 +3183,13 @@ Deliverable: A backup inventory, recovery acceptance, and a rollback record.
 
 Integrate the course materials, task contract, learning progress, tools, and state graph into a study assistant that works from a real model and evidence.
 
+**Terms in this lesson:** Acceptance Report
+
 **Sections**
 
-1. **Pick a topic and a task contract**: Choose one route, coding assistant or study assistant, and write the task card and acceptance criteria first.
+1. **Pick a topic and a task contract**: Write the task contract first: which lessons are supported, the scope of the material, the practice outputs and the failure rules; then set the acceptance criteria.
 2. **Combine what you've learned**: Use tools, memory, retrieval, planning, and approval as needed, and explain each trade-off.
-3. **Evaluation and replay**: Score with a fixed question set and a hidden one, and submit a replay of a real run as evidence.
+3. **Evaluation and replay**: Score with a fixed development set and a holdout set, and hand in replays of real runs as evidence.
 4. **Delivery notes**: The README states installation, configuration, running, evaluation results, known limitations, and next steps.
 5. **Self-check before submitting**: Go through the checklist: no secrets in the repo, tests pass, the replay is readable, limitations are written down.
 6. **Scoring rubric**: Score by feature completeness, evidence sufficiency, reliability, code readability, and quality of the instructions.
