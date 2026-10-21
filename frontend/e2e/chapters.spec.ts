@@ -37,6 +37,8 @@ test("chapters two and three expose complete guides and run every real preset th
   request,
 }) => {
   test.setTimeout(120_000);
+  // 这里验的是课程内容与运行契约，不是动效；无头浏览器没有 GPU，WebGL 背景靠软件渲染会拖慢每次点击。
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
@@ -167,11 +169,14 @@ test("new lesson inputs and evidence reports fit a mobile viewport without requi
   await expect(page.getByTestId("lab-trace-status")).toHaveText("已完成");
   for (const width of [390, 1440, 2560]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1100 });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth + 1,
-      ),
-    ).toBe(true);
+    // 改窗口宽度后布局要过一帧才切换，轮询到稳定状态再判断有没有横向溢出。
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      )
+      .toBe(true);
     await page
       .getByRole("region", { name: t("lab:evidence.region") })
       .scrollIntoViewIfNeeded();

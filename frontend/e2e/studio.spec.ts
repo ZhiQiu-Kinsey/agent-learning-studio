@@ -827,6 +827,9 @@ test("new layouts use normal reading flow and side-by-side execution evidence", 
   await expect(header).toHaveCSS("margin-top", "0px");
   await expect(header).toHaveCSS("margin-bottom", "0px");
   await page.getByTestId("scene-tab-lab").click();
+  // boundingBox() 不会等待；实验场景按需加载，先等两栏都出现再量位置。
+  await expect(page.getByTestId("lab-trace-list")).toBeVisible();
+  await expect(page.getByTestId("lab-event-detail")).toBeVisible();
   const list = await page.getByTestId("lab-trace-list").boundingBox();
   const detail = await page.getByTestId("lab-event-detail").boundingBox();
   expect(detail!.x).toBeGreaterThanOrEqual(list!.x + list!.width - 1);
