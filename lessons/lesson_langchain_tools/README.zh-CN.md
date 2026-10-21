@@ -2,9 +2,7 @@
 
 [English](README.md) · 简体中文
 
-本课把 `structured-output` 一课的业务契约（`TaskCard` 与可信事实）原样交给 LangChain 的组件：用工具装饰器登记检索工具 `lookup_lesson`，用 `with_structured_output` 解析课程卡。要回答的问题是：框架接手解析以后，工具失败还算不算失败，解析失败会不会被吞掉，服务商到底支持哪些能力。本课需要真实模型连接；状态仍是 planned，目前只做过离线验证。
-
-## 文件导览
+本课把 `structured-output` 一课的业务契约（`TaskCard` 与可信事实）原样交给 LangChain 的组件：用工具装饰器登记检索工具 `lookup_lesson`，用 `with_structured_output` 解析课程卡。要回答的问题是：框架接手解析以后，工具失败还算不算失败，解析失败会不会被吞掉，服务商到底支持哪些能力。本课需要真实模型连接；## 文件导览
 
 | 文件 | 内容 |
 | --- | --- |
@@ -15,6 +13,8 @@
 | `test_lesson.py` | 行为测试：真实执行工具、四个练习两种运行语言、三类“安静的失败”、上限与停止、取消、观察点命中 |
 
 模型调用都经 `course/frameworks.py` 的 `RunContextChatModel` 发出，所以每次调用前后各有一条 `lesson.framework_input` / `lesson.framework_output`，中间是 RunContext 记录的 `request` / `response`。工具一律经 `execute_tool_calls` 执行，不用框架预置的工具节点。框架代码包在 `local_tracing_only()` 里，LangSmith 追踪不会上传数据。依赖只有 `langchain-core`（1.6 系列，实测 1.6.12）。
+
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 练习
 
@@ -38,11 +38,11 @@
 ```powershell
 # 离线测试（确定性模型数据，工具真实执行）
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_langchain_tools.test_lesson -v
-# 课程开放后真实运行（会产生模型用量）
+# 真实运行（会产生模型用量）
 .\.venv\Scripts\python.exe scripts/run_live.py langchain-tools missing-field --url http://127.0.0.1:8765 --locale en
 ```
 
-本课还没有做过真实模型运行，能力矩阵里没有任何服务商的实测记录。
+真实运行只有 2026-10-21 那一轮的一个服务商和模型（Anthropic，`claude-haiku-5-5`），能力矩阵里没有其他服务商的实测记录。
 
 ## 参考与改写
 

@@ -2,9 +2,9 @@
 
 [English](README.md) · 简体中文
 
-本课要解决的问题：检索到的片段交给模型以后，怎样知道回答里的每条结论真的来自这些片段？本课让模型按结构化 JSON 回答，每条结论附上片段 ID 和原文摘录，再由程序逐条核对；答错时，先判断是检索没找到依据，还是模型用错了依据。课程仍为 `planned`，本次只做了离线验证（见文末）。
+本课要解决的问题：检索到的片段交给模型以后，怎样知道回答里的每条结论真的来自这些片段？本课让模型按结构化 JSON 回答，每条结论附上片段 ID 和原文摘录，再由程序逐条核对；答错时，先判断是检索没找到依据，还是模型用错了依据。检索用 `keyword-retrieval`（关键词检索）一课的 BM25（`lessons/lesson_keyword_retrieval/bm25.py`），不用 Embedding：每次运行只有生成请求，证据链短。检索方式不是本课重点，换成 `hybrid-retrieval`（混合检索与重排）一课的混合检索，后面的格式、核对和分类都不用改。资料是共享语料“青石图书馆服务手册”，问题取自共享查询集 `lessons/lesson_document_loading/corpus/queries.json`。
 
-检索用 `keyword-retrieval`（关键词检索）一课的 BM25（`lessons/lesson_keyword_retrieval/bm25.py`），不用 Embedding：每次运行只有生成请求，证据链短。检索方式不是本课重点，换成 `hybrid-retrieval`（混合检索与重排）一课的混合检索，后面的格式、核对和分类都不用改。资料是共享语料“青石图书馆服务手册”，问题取自共享查询集 `lessons/lesson_document_loading/corpus/queries.json`。
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。`unprovided` 检查只在离线夹具运行里出现；真实模型只引用了提供的片段。
 
 ## 文件导览
 
@@ -56,7 +56,7 @@ classify(check: AnswerCheck | None, *, hit: bool | None, complete: bool | None) 
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_rag_citations.test_lesson -v
 ```
 
-真实运行（课程开放后；会产生模型用量）：
+真实运行（会产生模型用量）：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py rag-citations triage --url http://127.0.0.1:8765 --locale en
@@ -66,7 +66,7 @@ classify(check: AnswerCheck | None, *, hit: bool | None, complete: bool | None) 
 
 - `fixtures.py` 只服务测试。“失败分类三题”里的两个生成错误（编造的片段 ID `borrowing:11-13`、把“5 个开放日”改成“7 个开放日”）由夹具故意写出，响应里的 `x_offline_fixture` 和 `lesson.citation_check` 的 `answer_source: offline_fixture` 都写明了来源；真实模型可能不犯这两种错。
 - 夹具不报告用量，报告里的用量显示“未报告”。
-- 本次环境没有模型密钥，**没有做过真实模型运行**；课程保持 `planned`，开放前每个练习要在两种运行语言下各真实运行一次，核对正文说法。
+- 2026-10-21 的真实模型运行（每个练习每种语言一个样本）改过关于两种生成错误的正文：真实模型可能不犯这两种错，`missing` 过长会记为回答格式不合格。见验证记录。
 
 ## 参考
 

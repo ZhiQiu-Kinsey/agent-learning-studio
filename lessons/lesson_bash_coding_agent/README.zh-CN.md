@@ -8,6 +8,8 @@
 
 本课需要真实模型连接。先修课是 `hooks-approval`（审批闸门），正文接着 `text-actions` 讲“动作写在哪”，下一课是 `file-edit-evidence`。
 
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。命令策略不是隔离；依赖它之前请再在网页上手动跑一次。
+
 ## 夹具仓库
 
 `fixture_repo/` 是一个很小的 Python 项目 `gradebook`，每次运行都复制到一个新的临时目录里，夹具本身不会被改。

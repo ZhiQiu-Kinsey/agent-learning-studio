@@ -4,6 +4,8 @@
 
 工具会超时、会撞上别人的锁，写入成功了结果也可能送不回来。本课回答三个问题：哪些失败值得重试，重试到哪里为止，怎样保证一次写入不会因为重试而生效两次。本课不调用模型。
 
+**状态：**`available`。本课不调用模型；2026-10-21 每个练习在每种运行语言下各经真实运行路径跑过一次（[验证记录](../../docs/verification/live-runs-2026-10-21.md)），没有“真实模型验证”这一项。
+
 ## 本课的工具和故障
 
 每次运行都在一次性临时目录里新建一个练习提交库（SQLite）和一个批改箱文件夹，真实运行和离线测试模式走同一段代码，起点完全相同：学习者 `learner-a` 有 3 次批改额度，`learner-b` 有 0 次。
@@ -60,6 +62,6 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_reliable_tools.test_lesson -v
 ```
 
-本课仍是 `planned`，开放后在网页实验台运行，或用 `scripts/run_live.py reliable-tools <练习>`（本课不调用模型，不产生模型用量）。
+在网页实验台运行，或用 `scripts/run_live.py reliable-tools <练习>`（本课不调用模型，不产生模型用量）。
 
 参考：《深入理解 AI Agent》第 4 章“执行工具”的幂等性与取消语义、第 5 章“故障与错误恢复”；Microsoft AI Agents for Beginners 的 `04-tool-use` 与 `06-building-trustworthy-agents`；Learn Claude Code `s15_integrated_harness` 的退避重试；Claude Cookbooks 的 SRE 事故响应 Agent（读工具与写工具分开约束）。代码与实验为本项目编写。

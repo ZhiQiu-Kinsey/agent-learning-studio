@@ -8,6 +8,8 @@ This lesson asks one question: if an agent has only a `bash` tool and is asked t
 
 This lesson needs a real model connection. The prerequisite is `hooks-approval` (the approval gate), the text follows on from `text-actions` ("where is the action written"), and the next lesson is `file-edit-evidence`.
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. The command policy is not isolation; run it once more by hand on the web page before relying on it.
+
 ## The fixture repository
 
 `fixture_repo/` is a very small Python project, `gradebook`. Every run copies it into a fresh temporary directory; the fixture itself is never changed.

@@ -2,9 +2,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-This lesson hands the business contract of the `structured-output` lesson (`TaskCard` and the trusted facts) to LangChain components unchanged: the lookup tool `lookup_lesson` is registered with the tool decorator, and the lesson card is parsed with `with_structured_output`. The question is what happens once the framework does the parsing: is a tool failure still a failure, does a parsing failure get swallowed, and which capabilities does the provider actually support? The lesson needs a real model connection. It is still planned and has only been verified offline.
-
-## Files
+This lesson hands the business contract of the `structured-output` lesson (`TaskCard` and the trusted facts) to LangChain components unchanged: the lookup tool `lookup_lesson` is registered with the tool decorator, and the lesson card is parsed with `with_structured_output`. The question is what happens once the framework does the parsing: is a tool failure still a failure, does a parsing failure get swallowed, and which capabilities does the provider actually support? The lesson needs a real model connection. ## Files
 
 | File | Content |
 | --- | --- |
@@ -15,6 +13,8 @@ This lesson hands the business contract of the `structured-output` lesson (`Task
 | `test_lesson.py` | Behavior tests: real tool execution, four exercises in two run languages, three "silent" failures, limits and stops, cancellation, observation selectors |
 
 Every model call goes through `RunContextChatModel` in `course/frameworks.py`, so each call has a `lesson.framework_input` before and a `lesson.framework_output` after, with the `request` / `response` recorded by RunContext in between. Tools always run through `execute_tool_calls`, never through a prebuilt framework tool node. Framework code runs inside `local_tracing_only()`, so LangSmith tracing uploads nothing. The only framework dependency is `langchain-core` (1.6 series, checked on 1.6.12).
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Exercises
 
@@ -38,11 +38,11 @@ With the input `repair` set to `false`, the run stops after the first failed att
 ```powershell
 # Offline tests (deterministic model data, real tool execution)
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_langchain_tools.test_lesson -v
-# A real run once the lesson is available (uses model quota)
+# A real run (uses model quota)
 .\.venv\Scripts\python.exe scripts/run_live.py langchain-tools missing-field --url http://127.0.0.1:8765 --locale en
 ```
 
-No real model run has been done for this lesson yet, so the capability matrix has no observed record from any provider.
+Real runs exist only for the one provider and model of the 2026-10-21 round (Anthropic, `claude-haiku-5-5`); the capability matrix has no observed record from any other provider.
 
 ## References and adaptation
 

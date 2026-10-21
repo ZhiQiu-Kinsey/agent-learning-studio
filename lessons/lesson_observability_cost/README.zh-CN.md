@@ -4,7 +4,7 @@
 
 课程 ID：`observability-cost`。课号按目录顺序计算，只在网页上显示；文件里提到课程一律写课名或课程 ID。
 
-状态：`planned`。实现、离线测试和中英文内容已经写完，还没有用真实模型验收，网页上仍然置灰。
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 本课要解决的问题
 
@@ -38,14 +38,14 @@
 .venv/bin/python -m unittest lessons.lesson_observability_cost.test_lesson -v
 ```
 
-真实运行：课程开放后在网页实验台运行，或启动服务后用脚本（会产生模型用量）：
+真实运行：在网页实验台运行，或启动服务后用脚本（会产生模型用量）：
 
 ```bash
 .venv/bin/python scripts/run_live.py observability-cost baseline --url http://127.0.0.1:8765
 .venv/bin/python scripts/run_live.py observability-cost batched-compare --url http://127.0.0.1:8765 --locale en
 ```
 
-本课还没有做过真实运行；上面的命令是验收时要做的事。
+上面的命令在 2026-10-21 对每个练习、每种语言各跑过一次（见验证记录）。
 
 ## 练习
 

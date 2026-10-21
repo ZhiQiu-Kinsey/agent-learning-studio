@@ -2,11 +2,11 @@
 
 English · [简体中文](README.zh-CN.md)
 
-The first lesson on knowledge and retrieval. A model cannot read a whole body of material at once, so retrieval works in small chunks, and every chunk must still point back to the original; an "instruction" written in the material is only data. This lesson reads a fixed local handbook into documents that keep their source, cuts them into chunks you can check by line number, compares two chunking presets, records load problems, and shows the trust boundary when a request is assembled. The lesson is still `planned`.
-
-## Corpus
+The first lesson on knowledge and retrieval. A model cannot read a whole body of material at once, so retrieval works in small chunks, and every chunk must still point back to the original; an "instruction" written in the material is only data. This lesson reads a fixed local handbook into documents that keep their source, cuts them into chunks you can check by line number, compares two chunking presets, records load problems, and shows the trust boundary when a request is assembled. ## Corpus
 
 The "Bluestone Library Handbook" is fictional material written for this project, so the model knows nothing about it in advance. `corpus/zh-CN/` and `corpus/en/` each hold 10 Markdown files; files with the same name have the same line count and the same section anchors. Each file starts with a header giving `doc_id`, title, version and usage terms; `hours.md` also says `supersedes: hours-2025`. `corpus/problems/<locale>/` holds 5 problem files, and `corpus/queries.json` holds 14 queries shared by the later lessons (this lesson uses the cross-section queries `q09` and `q10`, and `q03`).
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Files
 
@@ -45,11 +45,11 @@ Offline tests (deterministic fixtures; loading, chunking and checks really run):
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_document_loading.test_lesson -v
 ```
 
-Real runs: once the lesson is open, run it in the web lab, or use `scripts/run_live.py document-loading <exercise> --url http://127.0.0.1:8765 [--locale en]`. The first two exercises need no model configuration; "Trust boundary" sends 2 model requests.
+Real runs: run it in the web lab, or use `scripts/run_live.py document-loading <exercise> --url http://127.0.0.1:8765 [--locale en]`. The first two exercises need no model configuration; "Trust boundary" sends 2 model requests.
 
 ## Verification so far
 
-Offline only. The fixture's two replies are a fixed script (the mixed round follows the comment, the tagged round answers from the rule); they test that the program records and judges both outcomes and stand for no model. "Trust boundary" has not been run against a real model yet, and the lesson text does not presume what a real model will answer.
+The fixture's two replies are a fixed script (the mixed round follows the comment, the tagged round answers from the rule); they test that the program records and judges both outcomes and stand for no model. "Trust boundary" was run once per language against a real model on 2026-10-21 (see the verification record), and the lesson text does not presume what a real model will answer.
 
 ## References
 

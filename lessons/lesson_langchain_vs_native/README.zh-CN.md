@@ -4,7 +4,7 @@
 
 同一个任务用两种写法各做一遍：平台已有的原生工具循环（`course/runner.py` 的 `run_agent`），和用 LangChain 写的同一个循环。两边共用问题、系统提示词、Python 工具函数、轮数上限（各 3 轮）和验收函数 `accept`，放在同一次运行里先后执行，时间线上可以逐轮对照。本课要回答：框架接手了哪几步（消息对象、工具定义生成、调用解析、结果回填），哪几步仍要自己写（循环、停止条件、错误处理、模型调用数上限、验收）。
 
-课程状态仍是 `planned`。本课的实现只做过离线验证（确定性夹具 + 真实执行的 Python 工具），**没有用真实模型运行过**。
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 文件
 
@@ -42,7 +42,7 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_langchain_vs_native.test_lesson -v
 ```
 
-真实运行（课程改为 `available` 之后，会产生模型用量；两种运行语言各跑一次）：
+真实运行（会产生模型用量；两种运行语言各跑一次）：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py langchain-vs-native sum --url http://127.0.0.1:8765

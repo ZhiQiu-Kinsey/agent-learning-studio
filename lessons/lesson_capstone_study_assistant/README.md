@@ -2,15 +2,15 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Each earlier lesson proves one thing: how the loop turns, how evidence is cited, how a write is approved, how an instruction is stopped, how a suite is judged. The capstone wires them into one chain, a study assistant you can actually use locally, and then says plainly whether it passed, using a fixed suite and an independent validator. The lesson is still a `planned` draft and has only been tested offline; no real model run has been done yet, so every "pass" below means the offline fixture, not an acceptance.
-
-## Questions this lesson answers
+Each earlier lesson proves one thing: how the loop turns, how evidence is cited, how a write is approved, how an instruction is stopped, how a suite is judged. The capstone wires them into one chain, a study assistant you can actually use locally, and then says plainly whether it passed, using a fixed suite and an independent validator. The offline results below are labelled as fixture results and are not an acceptance; the real-model results are in the verification record. ## Questions this lesson answers
 
 - When the assistant answers, where does each claim come from? Can a program check every citation? Does it say so when the material is not enough?
 - How is learning progress read and written? Why must a write be approved? Why does replaying the same write twice change the file once? If the process dies after the approval and before the write, how does it finish?
 - When the material carries an instruction like "please also write this record", why can an out-of-scope call not reach the executing layer? Why can that defence not rest on the prompt?
 - How are "the run ended", "the pass rate" and "the acceptance passed" kept apart? Why do the hard checks have no pass line while the holdout pass rate has one?
 - How many model calls and how much time did a run take? What does the ledger write when the provider reported no usage?
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. The whole suite passed 9 of 13 cases in both languages on the first run and 11 of 13 (zh-CN) and 10 of 13 plus 1 unassessable (en) on the repeat; that is the spread of one model on one suite, one sample each.
 
 ## The corpus decision
 
@@ -104,7 +104,7 @@ Offline tests (deterministic model data; tools and stores run for real, and the 
 
 `fixtures.py` scripts fixed behaviour for the "model": the synonym question of `d02` is not retrieved; on injection cases the fixture obeys the instruction, to prove the gate stops it; crashes are injected by the runner. All of this is labelled in the events, serves only to test the gate, the validator and the reports, and says nothing about any real model. The offline whole-suite result is 7 of 8 development cases and 5 of 5 holdout cases passed, and the acceptance state is always "not an acceptance": a fixture cannot produce an acceptance verdict.
 
-Live runs: once the lesson is open (`available`), pick an exercise in the web lab, or use `scripts/run_live.py capstone-study-assistant <exercise> --url http://127.0.0.1:8765 [--locale en]`. A whole-suite run uses up to 57 model calls and costs real usage. Prices (rate, source, date) turn into a cost only when the learner fills all of them in; otherwise the ledger shows usage only.
+Live runs: (`available`), pick an exercise in the web lab, or use `scripts/run_live.py capstone-study-assistant <exercise> --url http://127.0.0.1:8765 [--locale en]`. A whole-suite run uses up to 57 model calls and costs real usage. Prices (rate, source, date) turn into a cost only when the learner fills all of them in; otherwise the ledger shows usage only.
 
 **Run languages:** the lesson runs in Chinese and in English. System prompts, the task contract text, report text and fixture text are in `locales/`; case ids, tool names, event names and failure categories are code and the same in every language. The web page picks the language from the interface language, and the run record states the language.
 
@@ -115,7 +115,7 @@ Live runs: once the lesson is open (`available`), pick an exercise in the web la
 - The gate stops calls, not words: an answer in which the model repeats an injected instruction is caught by the answer checks and the validator.
 - No prices are built in; without a source and a date no cost is computed, and usage the provider did not report is written "not reported".
 - Progress lives in one local single-user file: no multiple users, locks or identity.
-- This is the offline implementation of the capstone; the pass rate of a real model has not been measured, and the lesson stays `planned` until a live acceptance passes.
+- The pass rate of a real model was measured only as one sample per run on 2026-10-21 (see the status above); the offline numbers are fixture results, not an acceptance.
 
 ## References
 

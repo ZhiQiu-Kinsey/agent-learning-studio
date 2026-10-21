@@ -2,9 +2,9 @@
 
 English · [简体中文](README.zh-CN.md)
 
-The question this lesson answers: once retrieved chunks go to the model, how do you know each claim in the answer really comes from those chunks? The model answers in structured JSON, every claim carrying a chunk ID and a verbatim quote, and a program checks them one by one; when an answer is wrong, the lesson first decides whether retrieval missed the evidence or the model misused it. The lesson is still `planned`, and only offline verification has been done so far (see the end).
+The question this lesson answers: once retrieved chunks go to the model, how do you know each claim in the answer really comes from those chunks? The model answers in structured JSON, every claim carrying a chunk ID and a verbatim quote, and a program checks them one by one; when an answer is wrong, the lesson first decides whether retrieval missed the evidence or the model misused it. Retrieval is BM25 from the `keyword-retrieval` lesson (`lessons/lesson_keyword_retrieval/bm25.py`), not Embedding, so each run has generation requests only and the evidence chain stays short. The retrieval method is not the point of the lesson: swap in the hybrid retrieval of the `hybrid-retrieval` lesson and the format, checks and triage stay the same. The material is the shared "Bluestone Library Handbook" corpus, and the questions come from the shared query set `lessons/lesson_document_loading/corpus/queries.json`.
 
-Retrieval is BM25 from the `keyword-retrieval` lesson (`lessons/lesson_keyword_retrieval/bm25.py`), not Embedding, so each run has generation requests only and the evidence chain stays short. The retrieval method is not the point of the lesson: swap in the hybrid retrieval of the `hybrid-retrieval` lesson and the format, checks and triage stay the same. The material is the shared "Bluestone Library Handbook" corpus, and the questions come from the shared query set `lessons/lesson_document_loading/corpus/queries.json`.
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. The `unprovided` check only shows in offline fixture runs; the real model cited only provided chunks.
 
 ## Files
 
@@ -56,7 +56,7 @@ Offline tests (fixture plus real BM25 retrieval and checks, no model calls):
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_rag_citations.test_lesson -v
 ```
 
-Real run (once the lesson is available; this uses model quota):
+Real run (this uses model quota):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py rag-citations triage --url http://127.0.0.1:8765 --locale en
@@ -66,7 +66,7 @@ Real run (once the lesson is available; this uses model quota):
 
 - `fixtures.py` serves tests only. The two generation errors in "Three failure-triage questions" (the invented chunk ID `borrowing:11-13`, and "5 opening days" changed to "7 opening days") are written on purpose by the fixture; `x_offline_fixture` in the response and `answer_source: offline_fixture` in `lesson.citation_check` both say so. A real model may make neither mistake.
 - The fixture reports no usage, so the report shows usage as not reported.
-- This environment had no model key, so **no real model run has been made**; the lesson stays `planned`. Before it opens, every exercise must be run for real once in each run language and checked against the text.
+- The real-model run of 2026-10-21 (one sample per exercise and language) changed the text about the two generation errors: a real model may not make them, and a too-long `missing` is reported as a malformed answer. See the verification record.
 
 ## References
 

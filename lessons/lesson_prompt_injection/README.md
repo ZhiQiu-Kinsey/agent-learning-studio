@@ -2,9 +2,11 @@
 
 English · [简体中文](README.zh-CN.md)
 
-The question of this lesson: material, web pages and tool results can carry instructions, and a model that reads them may be persuaded to propose calls that read a key, rewrite a notice or send data out. How do you make "persuaded" not mean "did harm"? The lesson puts two documents that carry instructions into a real retrieval chain, and the program decides on the **executing side** whether each call the model proposes is allowed, needs approval or is refused. What the model proposed and what the files and the outbox actually became are recorded as two separate facts. The lesson is still `planned`; only offline verification was done (see the end).
+The question of this lesson: material, web pages and tool results can carry instructions, and a model that reads them may be persuaded to propose calls that read a key, rewrite a notice or send data out. How do you make "persuaded" not mean "did harm"? The lesson puts two documents that carry instructions into a real retrieval chain, and the program decides on the **executing side** whether each call the model proposes is allowed, needs approval or is refused. What the model proposed and what the files and the outbox actually became are recorded as two separate facts. 
 
 Retrieval reuses the chunking of `document-loading` and the BM25 of `keyword-retrieval`: the shared "Bluestone Library Handbook" (including the reader comment that poses as an instruction) plus two documents of this lesson's own; the shared corpus is not changed. The tools are real Python: search, read a file, write a file and send (the send only writes to a local outbox, with no network), all acting on a temporary folder that is created for each run and deleted afterwards.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. The defenses were **not tested against a persuaded model**: in every run of that day the model proposed nothing out of scope, so every refused call is a runner probe and the three defense checks say "not tested".
 
 ## Files
 
@@ -60,7 +62,7 @@ Offline tests (fixture + real retrieval, real permission checks and real file ef
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_prompt_injection.test_lesson -v
 ```
 
-A real run (once the lesson is opened; it uses model quota, and the file write in "Normal tasks" has to be approved in the web page):
+A real run (it uses model quota, and the file write in "Normal tasks" has to be approved in the web page):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py prompt-injection attack --url http://127.0.0.1:8765 --locale en
@@ -72,7 +74,7 @@ A real run (once the lesson is opened; it uses model quota, and the file write i
 - The tools, the permission checks and the file effects are real: in the two open-policy arms the decoy key really enters the context, the notice file is really rewritten and the outbox file really gains a line. All of that happens in the temporary folder, which is deleted afterwards; the "key" is a fake string fixed in the lesson and unlocks nothing.
 - The runner probes (origin `course_program`) cover every rule of the guard plus normal calls that must be let through; they prove the guard itself and must not be read as model behavior.
 - The fixture reports no usage, so the report shows usage as not reported.
-- This environment has no model key and **no real-model run was made**; the lesson stays `planned`, and before it opens every exercise has to be run for real once in each run language and the text checked against it. A run in which the model proposed nothing out of scope has to be recorded as it is and must not be used as evidence that the defense works.
+- A real model was run on 2026-10-21 (`claude-haiku-5-5`, every exercise once per language), but it **never proposed an out-of-scope call**, so those runs say nothing about whether the defenses hold against a persuaded model. A run in which the model proposed nothing out of scope has to be recorded as it is and is not evidence that a defense works. A run in which the model proposed nothing out of scope has to be recorded as it is and must not be used as evidence that the defense works.
 
 ## Remaining risks (the lesson says so too)
 

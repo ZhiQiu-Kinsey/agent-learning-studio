@@ -2,7 +2,9 @@
 
 [English](README.md) · 简体中文
 
-用 State、Node、Edge 把“规划、调用、验证、回答”写成一张有终态的图：正常、缺参、失败三条路各停在一个终态节点，验证失败后的修正由状态里的计数收住，LangGraph 的 `recursion_limit` 只当安全网。本课需要真实模型连接（缺参那组不会调用模型），课程仍是 `planned`。
+用 State、Node、Edge 把“规划、调用、验证、回答”写成一张有终态的图：正常、缺参、失败三条路各停在一个终态节点，验证失败后的修正由状态里的计数收住，LangGraph 的 `recursion_limit` 只当安全网。本课需要真实模型连接（缺参那组不会调用模型）。
+
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 本课解决什么问题
 
@@ -47,13 +49,13 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_langgraph_state.test_lesson -v
 ```
 
-真实运行：课程开放后，在网页的实验台选择练习，或在后端启动后执行（会产生模型用量）：
+真实运行：在网页的实验台选择练习，或在后端启动后执行（会产生模型用量）：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py langgraph-state normal --url http://127.0.0.1:8765 --locale en
 ```
 
-本课尚未用真实模型验证；开放前每个练习在中英两种运行语言下各真实运行一次，核对正文说法。
+2026-10-21 每个练习在中英两种运行语言下各真实运行过一次，并核对了正文说法（见验证记录）。
 
 **运行语言：**提示词、工具描述与错误、验证反馈和报告文字写在 `locales/` 里；节点名、状态字段、问题代码和课程标识是代码，各语言相同。
 

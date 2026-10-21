@@ -2,6 +2,8 @@
 
 English · [简体中文](README.zh-CN.md)
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
+
 ## The question of this lesson
 
 A slow check should not block the conversation. The model sends it to the background, gets a job id at once and goes on with other work; when the job ends, its result has to come back to the model in a later round, with its source and time. The lesson answers four questions:

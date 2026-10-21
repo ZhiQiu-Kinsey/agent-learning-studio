@@ -2,11 +2,11 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Pause before a step with a side effect (saving a model-written exercise into a local exercise bank) and wait for a person to approve, edit or reject; keep the execution position in checkpoints; after a restart or a crash that followed the write, resume from a checkpoint, look the operation id up in the bank first, and only then decide whether to write. The lesson needs a real model connection (one model call for the draft and one for the receipt). It is still `planned`.
-
-## The problem
+Pause before a step with a side effect (saving a model-written exercise into a local exercise bank) and wait for a person to approve, edit or reject; keep the execution position in checkpoints; after a restart or a crash that followed the write, resume from a checkpoint, look the operation id up in the bank first, and only then decide whether to write. The lesson needs a real model connection (one model call for the draft and one for the receipt). ## The problem
 
 "Hooks and approval gates" (`hooks-approval`) lets a run stop at an approval point and wait for a person. But the wait happens inside one run: restart the service and that run is gone. This lesson answers three questions: how to save "where the run got to"; how an edit a person makes at the pause leaves a trace; and how to make sure that after a resume a write that already happened is not repeated. The answer keeps three things apart: the checkpoint stores the position, the approval travels with a digest, and "was it done" must be asked of the outside world.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Files
 
@@ -49,13 +49,13 @@ Offline tests (deterministic model and approval data; the bank, the checkpoints 
 
 In the tests a "restart" closes the run store and reopens it from the same path, so the new process can read only what is on disk; it is not a real process restart.
 
-Real run: once the lesson is opened, pick an exercise in the lab on the page, decide on the approval card when the run stops at the approval point, then press resume on a checkpoint in the events. From the command line (this produces model usage; `--ask-approvals` lets a person at the terminal decide the approval):
+Real run: pick an exercise in the lab on the page, decide on the approval card when the run stops at the approval point, then press resume on a checkpoint in the events. From the command line (this produces model usage; `--ask-approvals` lets a person at the terminal decide the approval):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py human-in-the-loop approve-save --url http://127.0.0.1:8765 --locale en --ask-approvals
 ```
 
-The bank lives in `.runtime/human-in-the-loop/<thread id>/bank.sqlite3` (real runs) or the system temp folder (offline test mode); events and reports carry only file names and rows, never a local path. The lesson has not been verified with a real model yet; before it opens, run each exercise once with a real model in both run languages, resume included, and check the text against what happens.
+The bank lives in `.runtime/human-in-the-loop/<thread id>/bank.sqlite3` (real runs) or the system temp folder (offline test mode); events and reports carry only file names and rows, never a local path. Each exercise was run once with a real model in both run languages on 2026-10-21, with real backend restarts and resumes for `restart-resume` and `crash-after-write` (see the verification record).
 
 **Run language:** prompts, answers and report text live in `locales/`; status codes, checkpoint names, tool names and field names are code and the same in every language.
 

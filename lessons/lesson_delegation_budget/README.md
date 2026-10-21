@@ -4,6 +4,8 @@ English · [简体中文](README.zh-CN.md)
 
 This lesson asks one question: once a coordinator has decided to split work among subagents, how should it hand the work out and take results back so that every step can be checked? The task is fixed: answer four questions about a final project (deadline, team size, share of the final grade, late policy) from five short fictional documents (a course syllabus, a registrar notice, team rules, grading rules and a late policy). The syllabus and the notice disagree about the deadline, which is how the lesson shows a conflict. Other lessons are named by slug, not by lesson number, which changes as the syllabus grows. This lesson needs a real model connection.
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
+
 ## Mechanism
 
 The coordinator is the runner, a program, not a model:
@@ -54,7 +56,7 @@ A real run needs a configured model (environment variables or `local_config.py`)
 .\.venv\Scripts\python.exe scripts/run_live.py delegation-budget full-contract --url http://127.0.0.1:8765 [--locale en]
 ```
 
-A real run uses model quota. The lesson is still a planned draft: it has only been verified offline and has not been run against a real model.
+A real run uses model quota.
 
 ## What it proves and does not prove
 

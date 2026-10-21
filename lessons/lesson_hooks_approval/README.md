@@ -8,6 +8,8 @@ The lesson needs a live model connection (the model proposes the calls), but an 
 
 > **The desk is a temporary directory, not an isolated environment.** The four tools really read and write files, but only inside a temporary directory made for this run, never over the network, and the directory is deleted when the run ends. The tools are ordinary Python functions in the local process: hooks and approval decide which calls may run, not what a running call can do.
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
+
 ## The desk and the four tools
 
 `Desk` in `store.py` seeds four tickets in a fresh temporary directory for every run (`TKT-101` to `TKT-104`, with made-up customer phone numbers and emails) and an empty outbox file `outbox.jsonl`.
@@ -79,7 +81,7 @@ Offline tests (the model and the approval decisions are scripts in `fixtures.py`
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_hooks_approval.test_lesson -v
 ```
 
-Until the status of this lesson in the catalog is changed to `available`, the web page and the API do not run it. Once it is available, a live run needs a configured model; start the service on another port and leave the 8765 you are using alone:
+Once it is available, a live run needs a configured model; start the service on another port and leave the 8765 you are using alone:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn server.app:app --host 127.0.0.1 --port 8790
@@ -93,7 +95,7 @@ On the web page you approve or reject the card and may write a note; the card of
 - It proves: for this run, which hook rewrote or stopped each call, the risk of each call that needed approval, who decided, whether the tool ran before approval (by comparing the desk's digest before and after), whether the digest of what ran equals the approved one, and which changes really happened in the files.
 - It does not prove: that the tools are safe. The desk is plain files in a temporary directory with no isolation; a hook enforces only the rules written into it; an approval shows that someone saw the card, not that the arguments are right, and it cannot stop a person misreading.
 - The "model" and the "approver" in the offline tests are scripts and stand for no real model or person; the swap in `swap-guard` is a fault made on purpose. Which calls a real model proposes, and whether it changes approach after a rejection note, is for your own run records to say.
-- No live-model verification has been done: the lesson has only been verified offline (scripted model, real Python tools, a real temporary directory), and no claim about a live run is written anywhere.
+- Live runs: all four exercises were run once per language on 2026-10-21. After the task wording was aligned with the seeded tickets, every run showed its approval cards. In the repeat the model still wrote the ticket number in capitals itself, so `normalize_arguments` rewrote nothing (`rewrite-on-read` does not hit). See the verification record.
 
 ## Files
 

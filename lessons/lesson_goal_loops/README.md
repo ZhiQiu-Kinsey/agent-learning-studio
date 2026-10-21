@@ -2,7 +2,7 @@
 
 English · [简体中文](README.zh-CN.md)
 
-This lesson answers one question: when should a loop that keeps trying stop, and who decides? The answer has three layers. At the end of every round an independent goal evaluation judges, by a completion condition written beforehand, whether to continue, finish or give up. The budget (rounds, model calls, time) and the abandon conditions (unreachable, the same failure repeating, no progress for several rounds) are written down before the run. And the outcome is one of three, complete, abandoned or budget exhausted, each with its reason and none passing for another. This lesson needs a real model connection; the lesson is still `planned` and has only been checked offline.
+This lesson answers one question: when should a loop that keeps trying stop, and who decides? The answer has three layers. At the end of every round an independent goal evaluation judges, by a completion condition written beforehand, whether to continue, finish or give up. The budget (rounds, model calls, time) and the abandon conditions (unreachable, the same failure repeating, no progress for several rounds) are written down before the run. And the outcome is one of three, complete, abandoned or budget exhausted, each with its reason and none passing for another. This lesson needs a real model connection.
 
 The task is fixed: fill in a reading group notice card from four notes. The date comes from the schedule, the room from the booking receipt, the start time from the speaker's reply, and the fourth note is the minutes of the last session, whose date, room and start time have the right shape from the wrong source, put there to mislead. The notes are read with `read_note`. Neighbouring lessons are named by slug, not by lesson number, which changes as the syllabus grows.
 
@@ -14,6 +14,8 @@ The task is fixed: fill in a reading group notice card from four notes. The date
 | The worker claims done and the evaluation fails it | same as the first | hasty: urged to say done in round 1 | 5 | the rounds where `status` and the verdict disagree; the reasons go back to the worker |
 
 Besides the exercises, the lab bench lets you adjust seven parameters one by one: `goal`, `worker_style`, `max_rounds`, `max_model_calls`, `max_seconds`, `max_stall` and `repeat_limit`.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. With this model the 2-round arm and the hasty worker both finished in one round, so the budget and false-done exercises did not show their point.
 
 ## Mechanism
 
@@ -61,7 +63,7 @@ A real run needs a configured model (see `local_config.example.py`) and uses mod
 .\.venv\Scripts\python.exe scripts/run_live.py goal-loops reachable --url http://127.0.0.1:8813 --locale en
 ```
 
-Each of the four exercises has to be run once in each run language, then replayed, and the lesson text checked against what happened. This lesson has not yet been verified with a real model.
+Each of the four exercises was run once in each run language on 2026-10-21 and the lesson text was checked against what happened (see the verification record).
 
 ## What to look at in the experiments
 

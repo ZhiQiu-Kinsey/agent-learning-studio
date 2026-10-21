@@ -2,14 +2,14 @@
 
 English · [简体中文](README.zh-CN.md)
 
-One successful run does not show that a new version is better. This lesson turns the tool tasks of the `tool-selection`, `dependent-calls` and `fail-safely` lessons into a fixed case suite, runs the same tool loop with two versions of the system prompt, and lets a validator outside the agent judge every case and pair the two versions case by case. The lesson is still a `planned` draft and has only been tested offline; no real model run has been done yet.
-
-## Questions this lesson answers
+One successful run does not show that a new version is better. This lesson turns the tool tasks of the `tool-selection`, `dependent-calls` and `fail-safely` lessons into a fixed case suite, runs the same tool loop with two versions of the system prompt, and lets a validator outside the agent judge every case and pair the two versions case by case. ## Questions this lesson answers
 
 - How are "the run ended", "the answer is correct", "the evidence is sufficient" and "no process violation" judged separately? Which cases can a program not judge, so they are marked unassessable?
 - Why keep a development set and a holdout set apart, and why does the holdout set run only once a version is chosen?
 - When two versions differ by a few passed cases, is that an improvement or luck? Which cases regressed?
 - Before an open-ended case is left to a judge model, how do you check the judge against human annotations?
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. Judge calibration had no disagreement to read in those runs.
 
 ## Files
 
@@ -72,7 +72,7 @@ Offline tests (deterministic model data; the tools really run, and the clock cas
 
 `fixtures.py` gives the two versions fixed behaviors: version A guesses arguments in the same step on dependent cases, gives a number after a tool error and invents a balance; version B makes one extra tool call on the holdout case `given-distance`, producing a regression; the scripted judge misjudges only `j6`. All of this is written by the script to test the reports and the validator; it does not represent any real model.
 
-Real runs: once the lesson is `available`, run an exercise from the lab bench on the web page, or use `scripts/run_live.py evaluation-sets <exercise> --url http://127.0.0.1:8765 [--locale en]`. One development-set comparison uses up to 36 model calls and incurs the corresponding usage.
+Real runs: run an exercise from the lab bench on the web page, or use `scripts/run_live.py evaluation-sets <exercise> --url http://127.0.0.1:8765 [--locale en]`. One development-set comparison uses up to 36 model calls and incurs the corresponding usage.
 
 **Run languages:** this lesson runs in Chinese and English. System prompts, questions, check details, report text, the judge rubric and the sample answers are in `locales/zh_CN.py` and `locales/en.py`; case ids, categories, check statuses and judge verdicts (`pass`, `fail`) are code and the same in every language. The web page picks the UI language, and the run record states the language of the run.
 

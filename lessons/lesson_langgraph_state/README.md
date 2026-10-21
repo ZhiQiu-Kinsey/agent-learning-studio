@@ -2,11 +2,11 @@
 
 English · [简体中文](README.zh-CN.md)
 
-State, Node and Edge turn "plan, call, verify, answer" into a graph with terminal states: the normal, missing-parameter and failure paths each stop at a terminal node, repairs after a failed check are bounded by a counter in the state, and LangGraph's `recursion_limit` is only a safety net. The lesson needs a real model connection (the missing-parameter exercise never calls the model). It is still `planned`.
-
-## The problem
+State, Node and Edge turn "plan, call, verify, answer" into a graph with terminal states: the normal, missing-parameter and failure paths each stop at a terminal node, repairs after a failed check are bounded by a counter in the state, and LangGraph's `recursion_limit` is only a safety net. The lesson needs a real model connection (the missing-parameter exercise never calls the model). ## The problem
 
 "Application State and Run Lifecycle" (`application-state`) keeps the task's progress in a dataclass and a few if branches. Once the flow has a loop such as "if the check fails, go back and repair; when repairs run out, fail", the branches and counters in one function are hard to see at a glance. This lesson hands the same kind of flow to LangGraph: the state is declared once, each node returns only the fields it changed, and the edges (conditional ones included) are listed in one place. The compiled graph can list every edge, so you can check that each path reaches `END` before running anything.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Files
 
@@ -47,13 +47,13 @@ Offline tests (deterministic model data, real tool execution):
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_langgraph_state.test_lesson -v
 ```
 
-Real runs: once the lesson is available, pick an exercise in the lab, or with the backend running (this uses model quota):
+Real runs: pick an exercise in the lab, or with the backend running (this uses model quota):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py langgraph-state normal --url http://127.0.0.1:8765 --locale en
 ```
 
-The lesson has not been verified with a real model yet. Before it opens, each exercise is run once for real in both run languages and the text is checked against the runs.
+Each exercise was run once for real in both run languages on 2026-10-21 and the text was checked against those runs (see the verification record).
 
 **Run languages:** prompts, tool description and errors, verifier feedback and report text live in `locales/`; node names, state fields, problem codes and lesson ids are code and the same in every language.
 

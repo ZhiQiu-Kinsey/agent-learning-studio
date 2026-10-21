@@ -2,7 +2,7 @@
 
 English · [简体中文](README.zh-CN.md)
 
-The lesson is still `planned`: the implementation, offline tests and bilingual content are done; acceptance with a real model has not been run yet.
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## The problem
 
@@ -55,7 +55,7 @@ Offline tests (deterministic fixture plus real BM25 searches, no key needed):
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_agentic_rag.test_lesson -v
 ```
 
-Real runs (once the lesson is open; this uses model quota):
+Real runs (this uses model quota):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py agentic-rag agentic --url http://127.0.0.1:8765

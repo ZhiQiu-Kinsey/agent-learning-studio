@@ -2,7 +2,9 @@
 
 [English](README.md) · 简体中文
 
-拆成几个 Agent 之前，先用同一份验收集量一量。本课让同一个“课程助教出题”任务用四种做法各跑一遍：单 Agent、固定流程、角色切换、独立多 Agent，最后都交给同一个程序验证器，并排比较通过与否、模型调用数、服务商报告的用量和墙钟时间。本课需要真实模型连接；课程目前仍是 `planned`，只做过离线验证。
+拆成几个 Agent 之前，先用同一份验收集量一量。本课让同一个“课程助教出题”任务用四种做法各跑一遍：单 Agent、固定流程、角色切换、独立多 Agent，最后都交给同一个程序验证器，并排比较通过与否、模型调用数、服务商报告的用量和墙钟时间。本课需要真实模型连接。
+
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 任务与验收集
 
@@ -47,7 +49,7 @@
 ```powershell
 # 离线测试（确定性模型数据，验证器真实执行）
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_multi_agent_patterns.test_lesson -v
-# 课程开放后真实运行一个练习（会产生模型用量）；--locale en 用英文运行
+# 真实运行一个练习（会产生模型用量）；--locale en 用英文运行
 .\.venv\Scripts\python.exe scripts/run_live.py multi-agent-patterns multi --url http://127.0.0.1:8765
 ```
 

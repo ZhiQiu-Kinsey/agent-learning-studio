@@ -2,9 +2,7 @@
 
 [English](README.md) · 简体中文
 
-课号按课程目录顺序计算，只在网页上显示；这里提到其他课一律写课程 ID。本课仍是 `planned`：实现、离线测试和教学内容已经写好，还没有用真实模型验收。
-
-## 本课要解决的问题
+课号按课程目录顺序计算，只在网页上显示；这里提到其他课一律写课程 ID。## 本课要解决的问题
 
 `keyword-retrieval` 和 `embedding-retrieval` 各自留下了漏检：关键词检索读不懂同义改写（“滞纳金”找不到“逾期费用”），向量检索可能排不上编号查询（“R-305 有几个座位？”）。本课在同一份资料、同一组 14 条查询上比较三种检索，并处理检索进入真实使用后绕不开的三件事：
 
@@ -13,6 +11,8 @@
 3. **过滤与更新**：按元数据去掉被取代的旧版；资料修改或删除后，找出过期的向量，只重算需要的片段，保证旧片段不再作为当前证据。
 
 本课的三个练习都只检查检索，不生成回答。命中与回答是否正确的区分留到 `rag-citations`。
+
+**状态：**`available`，带一个已知限制。本课需要配置了 Embedding 接口的服务商。2026-10-21 没有配置这样的服务商（Anthropic 没有 Embedding 接口），平台在创建时拒绝了本课的所有运行，所以本课**没有用真实模型运行过**，只有离线测试覆盖（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。
 
 ## 文件导览
 
@@ -51,14 +51,14 @@
 
 测试把工作目录指到 `.runtime/` 下的临时目录，结束后删除。
 
-真实运行需要所选服务商同时配置了聊天模型和 Embedding 模型（没有 Embedding 模型时平台在开始前拒绝运行，错误码 `embedding_model_missing`）。课程转为 `available` 之后，可以在网页实验台运行，或者：
+真实运行需要所选服务商同时配置了聊天模型和 Embedding 模型（没有 Embedding 模型时平台在开始前拒绝运行，错误码 `embedding_model_missing`）。可以在网页实验台运行，或者：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py hybrid-retrieval compare --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py hybrid-retrieval update --url http://127.0.0.1:8765 --locale en
 ```
 
-真实运行会产生模型用量。截至本文，本课**没有做过真实模型验证**。
+真实运行会产生模型用量。截至 2026-10-21，本课**没有用真实模型运行过**（见上面的状态）。
 
 ## 实验看什么
 

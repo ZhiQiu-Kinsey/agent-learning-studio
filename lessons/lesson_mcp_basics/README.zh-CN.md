@@ -2,9 +2,7 @@
 
 [English](README.md) · 简体中文
 
-前面各课的工具都是 Agent 代码里的 Python 函数。本课用官方 Python SDK（`mcp` 2.x）把手册检索做成一个独立的 MCP 服务端进程，运行器经标准输入输出（`stdio`）连上它：真实地发现工具（`tools/list`）、调用工具（`tools/call`），再看参数不符、未知工具、业务错误和服务崩溃四种失败各落在哪一层；最后把发现的工具交给模型，分清“协议负责发现与传输”和“Agent 负责调度与决策”。三个本地练习不调用模型；Agent 练习需要真实模型连接。课程目前仍是 `planned`，只做过离线验证。
-
-## 服务端与语料
+前面各课的工具都是 Agent 代码里的 Python 函数。本课用官方 Python SDK（`mcp` 2.x）把手册检索做成一个独立的 MCP 服务端进程，运行器经标准输入输出（`stdio`）连上它：真实地发现工具（`tools/list`）、调用工具（`tools/call`），再看参数不符、未知工具、业务错误和服务崩溃四种失败各落在哪一层；最后把发现的工具交给模型，分清“协议负责发现与传输”和“Agent 负责调度与决策”。三个本地练习不调用模型；Agent 练习需要真实模型连接。## 服务端与语料
 
 - `server.py` 用 `MCPServer`（1.x 里叫 `FastMCP`）登记三个工具，检索复用 `lessons.lesson_keyword_retrieval.bm25` 和 `lessons.lesson_document_loading` 的青石图书馆手册语料（只 import，不改）：
   - `search_handbook(query, top_k=3)`：BM25 检索，`top_k` 限 1–5；返回 `query`、`count`、`hits`（片段编号、标题、锚点、得分、原文）。返回类型是 TypedDict，所以有 `outputSchema` 和 `structuredContent`。空检索词抛 `ToolError`。
@@ -12,6 +10,8 @@
   - `service_status()`：报告进程号、片段数和收到的环境变量**名**（不含值），用来证明密钥没有传进子进程。
 - 工具描述与业务错误按启动参数 `--locale` 来自 `locales/`；`--fault exit-on-search` 只在错误练习的第二个服务上使用（故障注入：收到检索就退出进程）。
 - 服务端由 `course.protocols.python_module_server` 以 `python -m lessons.lesson_mcp_basics.server` 启动：只允许 `lessons.` 包下的模块，子进程只继承 SDK 的安全环境变量列表，标准错误输出被丢弃。
+
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 四个练习
 
@@ -53,7 +53,7 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_mcp_basics.test_lesson -v
 # 单独启动服务端看它的样子（它只读标准输入，Ctrl+C 退出）
 .\.venv\Scripts\python.exe -m lessons.lesson_mcp_basics.server --locale zh-CN
-# 课程开放后真实运行（Agent 练习会产生模型用量）；--locale en 用英文运行
+# 真实运行（Agent 练习会产生模型用量）；--locale en 用英文运行
 .\.venv\Scripts\python.exe scripts/run_live.py mcp-basics tour --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py mcp-basics agent --url http://127.0.0.1:8765
 ```

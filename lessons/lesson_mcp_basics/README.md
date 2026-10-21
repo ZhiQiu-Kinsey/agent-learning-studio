@@ -2,9 +2,7 @@
 
 English · [简体中文](README.zh-CN.md)
 
-In earlier lessons every tool was a Python function inside the agent's code. This lesson uses the official Python SDK (`mcp` 2.x) to turn the handbook search into a separate MCP server process, and the runner connects to it over standard input and output (`stdio`): it really discovers tools (`tools/list`) and calls them (`tools/call`), then sees which layer each of four failures lands in (bad arguments, unknown tool, business error, server crash). Finally the discovered tools go to the model, separating "the protocol discovers and transports" from "the agent schedules and decides". The three local exercises call no model; the agent exercise needs a real model connection. The lesson is still `planned` and has been verified offline only.
-
-## Server and corpus
+In earlier lessons every tool was a Python function inside the agent's code. This lesson uses the official Python SDK (`mcp` 2.x) to turn the handbook search into a separate MCP server process, and the runner connects to it over standard input and output (`stdio`): it really discovers tools (`tools/list`) and calls them (`tools/call`), then sees which layer each of four failures lands in (bad arguments, unknown tool, business error, server crash). Finally the discovered tools go to the model, separating "the protocol discovers and transports" from "the agent schedules and decides". The three local exercises call no model; the agent exercise needs a real model connection. ## Server and corpus
 
 - `server.py` registers three tools with `MCPServer` (`FastMCP` in 1.x); the search reuses `lessons.lesson_keyword_retrieval.bm25` and the Bluestone Library handbook corpus of `lessons.lesson_document_loading` (imported, never changed):
   - `search_handbook(query, top_k=3)`: BM25 search, `top_k` limited to 1–5; returns `query`, `count` and `hits` (chunk id, title, anchors, score, text). The return type is a TypedDict, so there is an `outputSchema` and `structuredContent`. Empty search terms raise `ToolError`.
@@ -12,6 +10,8 @@ In earlier lessons every tool was a Python function inside the agent's code. Thi
   - `service_status()`: reports the pid, the chunk count and the **names** (not values) of the environment variables it received, to show that no key reached the child.
 - Tool descriptions and business errors come from `locales/` according to the `--locale` start argument; `--fault exit-on-search` is used only for the second server of the error exercise (fault injection: the process exits when a search arrives).
 - The server is started by `course.protocols.python_module_server` as `python -m lessons.lesson_mcp_basics.server`: only modules under the `lessons.` package are allowed, the child inherits only the SDK's list of safe environment variables, and its standard error is discarded.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Four exercises
 

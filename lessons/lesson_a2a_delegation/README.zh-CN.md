@@ -2,13 +2,13 @@
 
 [English](README.md) · 简体中文
 
-前面各课的工具都是函数，MCP 把函数搬进了独立的服务。本课再往前一步：把一件**有状态的任务**交给另一个进程里的 Agent。青石图书馆的咨询台 Agent（委派方，在运行器里）读不到服务手册，手册归资料核对员（被委派方，`worker.py` 启动的另一个进程）管。运行器用官方 `a2a-sdk` 读它的 Agent Card（能力发现），发一条消息创建任务，跟着任务状态 `SUBMITTED → WORKING → COMPLETED` 走，取回产物，再自己验收。四个练习分别走正常委派、超时后取消、远端失败、远端报告完成但结果不完整。课程目前仍是 `planned`，只做过离线验证，没有用真实模型运行过。
-
-## 一个重要的取舍：被委派方是确定性程序
+前面各课的工具都是函数，MCP 把函数搬进了独立的服务。本课再往前一步：把一件**有状态的任务**交给另一个进程里的 Agent。青石图书馆的咨询台 Agent（委派方，在运行器里）读不到服务手册，手册归资料核对员（被委派方，`worker.py` 启动的另一个进程）管。运行器用官方 `a2a-sdk` 读它的 Agent Card（能力发现），发一条消息创建任务，跟着任务状态 `SUBMITTED → WORKING → COMPLETED` 走，取回产物，再自己验收。四个练习分别走正常委派、超时后取消、远端失败、远端报告完成但结果不完整。## 一个重要的取舍：被委派方是确定性程序
 
 被委派方是另一个进程，拿不到本次运行的 `RunContext`。它若调用模型，请求不会被记录，还得把密钥交给子进程，违反“密钥只在后端”和“运行数据只来自真实事件”两条红线。所以资料核对员**不调用模型**：它用 BM25 检索（复用 `lessons.lesson_keyword_retrieval.bm25` 和 `lessons.lesson_document_loading` 的青石图书馆手册语料，只 import，不改）加一条版本规则（现行版本取代旧版本，并在 `superseded` 里注明）。委派方的模型照常经 `RunContext.complete` 调用，请求和响应都被记录。
 
 这是教学取舍，不是 A2A 的要求：协议只看 Agent Card、任务状态和产物，不关心对方里面是模型还是规则。正文第七节和“真实系统里远端有模型时，观测和凭据怎么分开”一节说明被取舍掉的部分。平台目前没有“子进程把模型请求转回父进程”的能力，本课没有自建绕过 `RunContext` 的通道。
+
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 文件
 
@@ -57,7 +57,7 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_a2a_delegation.test_lesson -v
 # 单独启动被委派方看它的样子（第一行输出端口，Ctrl+C 退出）
 .\.venv\Scripts\python.exe -m lessons.lesson_a2a_delegation.worker --locale zh-CN --fault none
-# 课程开放后真实运行（会产生模型用量）；--locale en 用英文运行
+# 真实运行（会产生模型用量）；--locale en 用英文运行
 .\.venv\Scripts\python.exe scripts/run_live.py a2a-delegation delegate --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py a2a-delegation timeout --url http://127.0.0.1:8765
 ```

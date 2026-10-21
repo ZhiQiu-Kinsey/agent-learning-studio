@@ -4,7 +4,9 @@ English · [简体中文](README.zh-CN.md)
 
 **The question of this lesson:** when the data is damaged or an upgrade goes wrong, can you get back? The lesson calls no model. All four exercises work on two real SQLite files in a temporary directory, laid out like your local `.runtime/` (`runs.sqlite3` holds runs, `memory.sqlite3` holds memory), and never read or write your real `.runtime/`. The temporary directory is deleted when the run ends. It follows "Local delivery" (keys and configuration stay in the backend) and "Persistent memory" and "Memory updates, expiry, and recall scope" (reading and writing the memory store).
 
-**Status:** the lesson is still `planned`. Only after implementation, tests and teaching acceptance are done does the status in `curriculum/catalog.json` change to `available`. There is no model call here, so there is no "verified with a real model" item: a real run and offline test mode take the same code path, and pressing "Run" on the web page is a real local run.
+There is no model call here, so there is no "verified with a real model" item: a real run and offline test mode take the same code path, and pressing "Run" on the web page is a real local run.
+
+**Status:** `available`. This lesson calls no model. Its exercises were run once in each run language through the real run path on 2026-10-21 ([verification record](../../docs/verification/live-runs-2026-10-21.md)); no real-model verification applies.
 
 ## File guide
 
@@ -61,4 +63,4 @@ The lesson runs in Chinese and in English. The teaching data text, the report la
 .\.venv\Scripts\python.exe scripts/validate_lessons.py
 ```
 
-`run_live.py` produces no usage for exercises that call no model; until the lesson is `available` it is greyed out on the web page, and a `planned` lesson does not appear in the executable API.
+`run_live.py` produces no usage for exercises that call no model.

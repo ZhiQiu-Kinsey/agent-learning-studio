@@ -4,7 +4,7 @@ English · [简体中文](README.zh-CN.md)
 
 One task, done twice: with the platform's native tool loop (`run_agent` in `course/runner.py`) and with the same loop written in LangChain. Both sides share the question, system prompt, Python tool functions, round limit (3 each) and the acceptance function `accept`; they run one after the other in the same run, so the timeline can be compared round by round. The lesson answers which steps the framework takes over (message objects, generating tool definitions, parsing calls, writing results back) and which you still write yourself (the loop, the stop condition, error handling, the cap on model calls, acceptance).
 
-The lesson is still `planned`. Its implementation has only been verified offline (deterministic fixture plus Python tools that really run); **it has not been run against a real model**.
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Files
 
@@ -42,7 +42,7 @@ Offline tests:
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_langchain_vs_native.test_lesson -v
 ```
 
-Real runs (once the lesson is `available`; they use model quota; run once in each run language):
+Real runs (they use model quota; run once in each run language):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py langchain-vs-native sum --url http://127.0.0.1:8765

@@ -2,13 +2,13 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Lesson numbers follow the curriculum order and only appear on the web page; files refer to other lessons by lesson ID. This lesson is still `planned`: the implementation, offline tests and teaching content are written, but it has not been accepted with a real embedding model yet.
-
-## The problem this lesson solves
+Lesson numbers follow the curriculum order and only appear on the web page; files refer to other lessons by lesson ID. ## The problem this lesson solves
 
 BM25 from the previous lesson, `keyword-retrieval`, only matches words: a query about a "late fee" misses a document that only says "overdue charge". This lesson sends every chunk to an embedding model to turn it into a vector, searches by meaning with cosine similarity, and compares hits and misses with BM25 query by query on the same query set. Vectors cost model calls, so the lesson also covers how the index is saved, what it records about where it came from, and when an old index must not be used any more.
 
 This lesson only sends embedding requests. It does not call a chat model and writes no answer.
+
+**Status:** `available`, with a known limit. The lesson needs a provider with an Embedding interface. None was configured on 2026-10-21 (Anthropic has none), the platform refused every run of this lesson at creation, and so it has **not been run against a real model**; only the offline tests cover it ([verification record](../../docs/verification/live-runs-2026-10-21.md)).
 
 ## Files
 
@@ -57,7 +57,7 @@ Offline tests (no key needed; vectors come from the fixture):
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_embedding_retrieval.test_lesson -v
 ```
 
-A live run needs a provider with an embedding model (Bailian defaults to `text-embedding-v4`; for other providers see the model settings). Once the lesson is available, run it on the web page or with:
+A live run needs a provider with an embedding model (Bailian defaults to `text-embedding-v4`; for other providers see the model settings). run it on the web page or with:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py embedding-retrieval build-and-search --url http://127.0.0.1:8765 --locale en

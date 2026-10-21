@@ -2,9 +2,7 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Lesson numbers follow the curriculum order and appear only in the web page; this file refers to other lessons by lesson ID. The lesson is still `planned`: the implementation, offline tests and teaching content are written, but it has not been accepted with a real model yet.
-
-## The problem
+Lesson numbers follow the curriculum order and appear only in the web page; this file refers to other lessons by lesson ID. ## The problem
 
 `keyword-retrieval` and `embedding-retrieval` each left misses behind: keyword retrieval cannot read paraphrases ("late fee" never finds "overdue charge"), and vector retrieval may rank code queries poorly ("How many seats does R-305 have?"). This lesson compares three strategies on the same handbook and the same 14 queries, and handles the three things retrieval cannot avoid once it is used for real:
 
@@ -13,6 +11,8 @@ Lesson numbers follow the curriculum order and appear only in the web page; this
 3. **Filtering and updates**: superseded versions are removed by metadata; after documents are edited or deleted, outdated vectors are found, only the necessary chunks are re-embedded, and old chunks no longer count as current evidence.
 
 All three exercises check retrieval only and generate no answer. Separating hits from correct answers is left to `rag-citations`.
+
+**Status:** `available`, with a known limit. The lesson needs a provider with an Embedding interface. None was configured on 2026-10-21 (Anthropic has none), the platform refused every run of this lesson at creation, and so it has **not been run against a real model**; only the offline tests cover it ([verification record](../../docs/verification/live-runs-2026-10-21.md)).
 
 ## Files
 
@@ -51,14 +51,14 @@ Offline tests (deterministic fixtures + real Python retrieval, filtering, file c
 
 The tests point the working folder at a temporary directory under `.runtime/` and delete it afterwards.
 
-A real run needs a provider with both a chat model and an Embedding model configured (without an Embedding model the platform refuses before starting, with error code `embedding_model_missing`). Once the lesson is `available`, run it from the lab page, or:
+A real run needs a provider with both a chat model and an Embedding model configured (without an Embedding model the platform refuses before starting, with error code `embedding_model_missing`). run it from the lab page, or:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py hybrid-retrieval compare --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py hybrid-retrieval update --url http://127.0.0.1:8765 --locale en
 ```
 
-Real runs incur model usage. As of this writing, the lesson has **not been verified with a real model**.
+Real runs incur model usage. As of 2026-10-21 the lesson has **not been run with a real model** (see the status above).
 
 ## What to look at
 

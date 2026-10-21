@@ -4,6 +4,8 @@ English · [简体中文](README.zh-CN.md)
 
 This lesson answers one question: when several things have to happen at once, how do you decide which ones can run together, how do you avoid overwhelming the provider, and how do you face a slow task, a failure or a cancel without leaving half-finished, unclaimed work behind? The job is a small review sheet: read four lesson notes (a local tool with a delay), have the model squeeze each note into one sentence, then assemble the sentences into a sheet. The lesson refers to other lessons by slug, never by a lesson number that changes with the curriculum. Three of the scenarios need a real model connection; the `dependency` scenario does not call a model.
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
+
 ## How it works
 
 The whole mechanism is split into four files, each doing one thing:
@@ -56,7 +58,7 @@ A real run needs a model configured first (environment variables or `local_confi
 .\.venv\Scripts\python.exe scripts/run_live.py async-concurrency concurrency-limit --url http://127.0.0.1:8765 [--locale en]
 ```
 
-A real run uses model quota: the limits scenario sends 12 summary requests, the timeouts scenario at most 11 and the failure scenario 3. The lesson is still a planned draft: it has been verified offline only, never with a real model.
+A real run uses model quota: the limits scenario sends 12 summary requests, the timeouts scenario at most 11 and the failure scenario 3.
 
 ## What this proves and what it does not
 

@@ -2,7 +2,7 @@
 
 [English](README.md) · 简体中文
 
-课程仍为 `planned`：实现、离线测试和中英双语内容已完成，还没有做真实模型验收。
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
 
 ## 本课的问题
 
@@ -55,7 +55,7 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_agentic_rag.test_lesson -v
 ```
 
-真实运行（课程开放后；会产生模型用量）：
+真实运行（会产生模型用量）：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py agentic-rag agentic --url http://127.0.0.1:8765

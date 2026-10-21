@@ -2,9 +2,9 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Lesson numbers follow the curriculum order and appear only on the web page; files refer to other lessons by course ID. This lesson is still `planned`: the implementation, offline tests and bilingual teaching content are written, and teaching acceptance has not been done yet.
+Lesson numbers follow the curriculum order and appear only on the web page; files refer to other lessons by course ID. **This lesson calls no model.** Every score is computed by local Python and the same input always gives the same result; offline tests and web runs execute the same code, with no fixtures.
 
-**This lesson calls no model.** Every score is computed by local Python and the same input always gives the same result; offline tests and web runs execute the same code, with no fixtures.
+**Status:** `available`. This lesson calls no model. Its exercises were run once in each run language through the real run path on 2026-10-21 ([verification record](../../docs/verification/live-runs-2026-10-21.md)); no real-model verification applies.
 
 ## The problem this lesson solves
 
@@ -62,7 +62,7 @@ Offline tests (no key needed; this lesson calls no model anyway):
 .\.venv\Scripts\python.exe -m unittest tests.test_rag_corpus -v   # design checks of the shared corpus, BM25 and query set
 ```
 
-Once the lesson is open it runs on the web page, or from a script that prints an event summary (no model usage):
+It runs on the web page, or from a script that prints an event summary (no model usage):
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py keyword-retrieval query-table --url http://127.0.0.1:8765

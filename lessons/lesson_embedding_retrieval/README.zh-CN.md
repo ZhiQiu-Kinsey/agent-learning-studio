@@ -2,13 +2,13 @@
 
 [English](README.md) · 简体中文
 
-课号按课程表顺序计算，只在网页上显示；文件里提到其他课一律写课程 ID。本课仍是 `planned`：实现、离线测试和教学内容已经写好，还没有用真实 Embedding 模型验收。
-
-## 本课要解决的问题
+课号按课程表顺序计算，只在网页上显示；文件里提到其他课一律写课程 ID。## 本课要解决的问题
 
 上一课 `keyword-retrieval` 的 BM25 只认字面：查询问“滞纳金”，资料只写“逾期费用”，就漏检。本课把每个片段交给 Embedding 模型变成向量，用余弦相似度按意思检索，再和 BM25 在同一查询集上逐条比较命中与漏检。向量要调用模型才能得到，所以本课还讲清楚：索引怎样保存、记下哪些来历，什么情况下旧索引不能再用。
 
 本课只发 Embedding 请求，不调用聊天模型，也不生成回答。
+
+**状态：**`available`，带一个已知限制。本课需要配置了 Embedding 接口的服务商。2026-10-21 没有配置这样的服务商（Anthropic 没有 Embedding 接口），平台在创建时拒绝了本课的所有运行，所以本课**没有用真实模型运行过**，只有离线测试覆盖（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。
 
 ## 文件导览
 
@@ -57,7 +57,7 @@ Embedding 请求计入 `lesson.json` 的调用上限（`max_rounds` 为 12）。
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_embedding_retrieval.test_lesson -v
 ```
 
-真实运行需要配置带 Embedding 模型的服务商（百炼默认 `text-embedding-v4`，其他服务商见模型设置）。课程开放后可以在网页运行，或：
+真实运行需要配置带 Embedding 模型的服务商（百炼默认 `text-embedding-v4`，其他服务商见模型设置）。可以在网页运行，或：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/run_live.py embedding-retrieval build-and-search --url http://127.0.0.1:8765

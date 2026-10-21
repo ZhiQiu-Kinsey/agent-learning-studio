@@ -2,13 +2,13 @@
 
 English · [简体中文](README.zh-CN.md)
 
-In the earlier lessons tools are functions, and MCP moved a function into a separate service. This lesson goes one step further and hands a **task that has state** to an agent in another process. The front-desk agent of the Bluestone Library (the delegating side, inside the runner) cannot read the service handbook; the handbook belongs to the reference checker (the remote agent, another process started by `worker.py`). The runner uses the official `a2a-sdk` to read its Agent Card (capability discovery), sends a message that creates a task, follows the task through `SUBMITTED → WORKING → COMPLETED`, collects the artifact and then accepts it itself. The four exercises are a normal delegation, a timeout followed by a cancel, a remote failure, and a remote agent that reports completion with an incomplete result. The lesson is still `planned` and has only been verified offline; it has not been run against a real model.
-
-## An important trade-off: the remote agent is a deterministic program
+In the earlier lessons tools are functions, and MCP moved a function into a separate service. This lesson goes one step further and hands a **task that has state** to an agent in another process. The front-desk agent of the Bluestone Library (the delegating side, inside the runner) cannot read the service handbook; the handbook belongs to the reference checker (the remote agent, another process started by `worker.py`). The runner uses the official `a2a-sdk` to read its Agent Card (capability discovery), sends a message that creates a task, follows the task through `SUBMITTED → WORKING → COMPLETED`, collects the artifact and then accepts it itself. The four exercises are a normal delegation, a timeout followed by a cancel, a remote failure, and a remote agent that reports completion with an incomplete result. ## An important trade-off: the remote agent is a deterministic program
 
 The remote agent is another process and cannot reach this run's `RunContext`. If it called a model, its requests would not be recorded and the key would have to be handed to the child process, which breaks two red lines: keys stay in the backend, and run data comes only from real events. So the reference checker **calls no model**. It uses BM25 search (reusing `lessons.lesson_keyword_retrieval.bm25` and the Bluestone handbook corpus of `lessons.lesson_document_loading`, imported and unchanged) plus one version rule: the current version replaces an old one and the replacement is noted in `superseded`. The delegating side's model is called through `RunContext.complete` as usual, so its requests and responses are recorded.
 
 This is a teaching trade-off, not an A2A requirement: the protocol sees only the Agent Card, the task states and the artifact, and does not care whether the other side holds a model or rules. Section seven of the lesson text and the deep dive on keeping observation and credentials apart when the remote side has a model explain what was traded away. The platform has no capability yet for a child process to send model requests back through the parent, and this lesson does not build a channel around `RunContext`.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Files
 
@@ -57,7 +57,7 @@ The offline fixture (`fixtures.py`) serves automated tests only: in the first ro
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_a2a_delegation.test_lesson -v
 # Start the remote agent on its own to see what it looks like (it prints its port first; Ctrl+C quits)
 .\.venv\Scripts\python.exe -m lessons.lesson_a2a_delegation.worker --locale en --fault none
-# Real runs once the lesson is open (they use model quota); --locale en runs in English
+# Real runs (they use model quota); --locale en runs in English
 .\.venv\Scripts\python.exe scripts/run_live.py a2a-delegation delegate --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py a2a-delegation timeout --url http://127.0.0.1:8765
 ```

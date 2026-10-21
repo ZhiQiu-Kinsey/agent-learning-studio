@@ -2,6 +2,8 @@
 
 English · [简体中文](README.zh-CN.md)
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. The stop and disconnect arms of `long-stream` were not run for real; they need a person at the web page.
+
 ## The question of this lesson
 
 A model answer can arrive in pieces. The program receives and records them as they come, and then three things that look alike have to be told apart: the **user presses Stop**, the **client disconnects** (only the connection that reads events closes) and the **backend really ends**. The lesson answers five questions:

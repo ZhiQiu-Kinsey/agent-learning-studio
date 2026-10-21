@@ -4,7 +4,7 @@
 
 Lesson ID: `observability-cost`. Lesson numbers follow catalog order and appear only on the web page; files refer to lessons by title or ID.
 
-Status: `planned`. The implementation, offline tests and the Chinese and English content are written; the lesson has not been accepted with a real model yet, so it stays greyed out on the web page.
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## The problem this lesson solves
 
@@ -38,14 +38,14 @@ Offline tests (no model key; the tools really run, model replies and usage come 
 .venv/bin/python -m unittest lessons.lesson_observability_cost.test_lesson -v
 ```
 
-Real runs: once the lesson is open, run it from the lab on the web page, or start the server and use the script (this uses model quota):
+Real runs: run it from the lab on the web page, or start the server and use the script (this uses model quota):
 
 ```bash
 .venv/bin/python scripts/run_live.py observability-cost baseline --url http://127.0.0.1:8765
 .venv/bin/python scripts/run_live.py observability-cost batched-compare --url http://127.0.0.1:8765 --locale en
 ```
 
-No real run has been made yet; the commands above are part of the acceptance still to do.
+The commands above were run once per exercise and language on 2026-10-21 (see the verification record).
 
 ## Exercises
 

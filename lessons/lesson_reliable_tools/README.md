@@ -4,6 +4,8 @@ English · [简体中文](README.zh-CN.md)
 
 Tools time out, run into someone else's lock, and sometimes succeed at a write whose result never comes back. This lesson answers three questions: which failures are worth retrying, how far retries may go, and how to make sure a retry never makes one write take effect twice. This lesson calls no model.
 
+**Status:** `available`. This lesson calls no model. Its exercises were run once in each run language through the real run path on 2026-10-21 ([verification record](../../docs/verification/live-runs-2026-10-21.md)); no real-model verification applies.
+
 ## The tools and the faults
 
 Every run creates a practice-submission store (SQLite) and an outbox folder in a throwaway temporary directory. Real runs and offline test mode run the same code from the same starting point: learner `learner-a` has 3 grading credits, `learner-b` has 0.
@@ -60,6 +62,6 @@ Offline tests (real tools, real locks, backoff waits through an injectable clock
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_reliable_tools.test_lesson -v
 ```
 
-The lesson is still `planned`. Once it opens, run it in the web lab or with `scripts/run_live.py reliable-tools <exercise>` (it calls no model and uses no model quota).
+Run it in the web lab or with `scripts/run_live.py reliable-tools <exercise>` (it calls no model and uses no model quota).
 
 References: *Understanding AI Agents in Depth* (深入理解 AI Agent), chapter 4, idempotency and cancellation semantics under "execution tools", and chapter 5, "faults and error recovery"; Microsoft AI Agents for Beginners `04-tool-use` and `06-building-trustworthy-agents`; the backoff retries in Learn Claude Code `s15_integrated_harness`; the SRE incident response agent in Claude Cookbooks (separate constraints for read and write tools). The code and experiments were written for this project.

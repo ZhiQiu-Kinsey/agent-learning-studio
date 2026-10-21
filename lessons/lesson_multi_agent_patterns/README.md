@@ -2,7 +2,9 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Before splitting work across several agents, measure with one acceptance set. This lesson runs the same course-assistant task (write quiz questions from a document pack) four ways: a single agent, a fixed workflow, role switching and independent agents. Every mode hands its final questions to the same program verifier, and the report compares pass or fail, model calls, the usage the provider reported and wall-clock time side by side. The lesson needs a real model connection; it is still `planned` and has only been verified offline.
+Before splitting work across several agents, measure with one acceptance set. This lesson runs the same course-assistant task (write quiz questions from a document pack) four ways: a single agent, a fixed workflow, role switching and independent agents. Every mode hands its final questions to the same program verifier, and the report compares pass or fail, model calls, the usage the provider reported and wall-clock time side by side. The lesson needs a real model connection.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
 
 ## Task and acceptance set
 
@@ -47,7 +49,7 @@ The offline fixture (`fixtures.py`) only serves automated tests: a researcher sk
 ```powershell
 # Offline tests (deterministic model data; the verifier really runs)
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_multi_agent_patterns.test_lesson -v
-# Once the lesson is open, run one exercise against a real model (uses model quota); --locale en runs in English
+# Run one exercise against a real model (uses model quota); --locale en runs in English
 .\.venv\Scripts\python.exe scripts/run_live.py multi-agent-patterns multi --url http://127.0.0.1:8765
 ```
 

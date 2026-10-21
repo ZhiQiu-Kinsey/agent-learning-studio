@@ -4,6 +4,8 @@
 
 编码 Agent 用 `bash -c "sed -i ..."` 改文件，事后只能猜：这条命令改了哪个文件，改成了什么，有没有越出工作区？本课用专门的文件工具替代 Bash，回答三个问题：模型告诉工具“改这里”有哪几种办法（整文件重写、精确替换、行号替换），怎样用哈希和统一 diff 证明一次修改，怎样拒绝基于已经变了的文件做出的写入。让模型改文件的练习会调用模型；“五道防护”不调用模型，也不运行任何命令。
 
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。
+
 ## 工具
 
 每次运行都在 `fixture_repo/` 的一次性副本里进行（一个小商店库：`shop/pricing.py`、`shop/report.py`，7 个测试，其中 2 个失败）。所有路径都经 `course/sandbox.py` 的 `Workspace.resolve`。
@@ -76,6 +78,6 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_file_edit_evidence.test_lesson -v
 ```
 
-本课仍是 `planned`，只做过离线验证，没有真实模型运行过。开放后在网页实验台运行，或用 `scripts/run_live.py file-edit-evidence <练习> --ask-approvals`（模型练习会产生模型用量，`guards` 练习不会）。
+在网页实验台运行，或用 `scripts/run_live.py file-edit-evidence <练习> --ask-approvals`（模型练习会产生模型用量，`guards` 练习不会）。
 
 参考：《深入理解 AI Agent》第 4 章（专用工具与通用执行器的取舍、参数传递的保真性、执行工具的安全层次）和第 5 章“Coding Agent 中的文件编辑工具”及其配套的 `tools/edit_tool.py`、`read_tool.py`、`write_tool.py`；Learn Claude Code 的 `s02_tool_use`；Mini-SWE-agent 文档（只用 Bash 的路线，作对照）。代码与实验为本项目编写。

@@ -4,7 +4,7 @@
 
 Lesson ID: `local-delivery`. Lesson numbers follow catalog order and appear only on the web page; files refer to lessons by title or ID.
 
-Status: `planned`. The implementation, offline tests and the Chinese and English content are written; the offline tests really start child processes, but the lesson has not been through an acceptance run on the web page yet, so it stays greyed out there.
+**Status:** `available`. This lesson calls no model. Its exercises were run once in each run language through the real run path on 2026-10-21 ([verification record](../../docs/verification/live-runs-2026-10-21.md)); no real-model verification applies.
 
 ## The problem this lesson solves
 
@@ -44,7 +44,7 @@ Offline tests (no key, no network; they really start child processes and take ab
 .venv/bin/python -m unittest lessons.lesson_local_delivery.test_lesson -v
 ```
 
-Once the lesson is open, pick an exercise in the lab on the web page; no model has to be configured first. Each exercise starts and stops a few child processes in a temporary directory and removes both the directory and the processes when it ends.
+pick an exercise in the lab on the web page; no model has to be configured first. Each exercise starts and stops a few child processes in a temporary directory and removes both the directory and the processes when it ends.
 
 The "key" in this lesson's exercises is a fake key made up for each run (`sk-demo-` plus random characters). The lesson never reads your real key, and the fake one appears in no event, no log excerpt and no answer.
 

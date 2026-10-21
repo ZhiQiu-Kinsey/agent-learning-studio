@@ -4,6 +4,8 @@ English · [简体中文](README.zh-CN.md)
 
 A coding agent that edits files through `bash -c "sed -i ..."` leaves you guessing afterwards: which file did that command touch, what did it become, did it leave the workspace? This lesson replaces Bash with dedicated file tools and answers three questions: how to compare the ways a model can say "change this" (whole-file rewrite, exact replace, line replace), how to prove a change with hashes and a unified diff, and how to refuse a write that rests on a file that has since changed. The model-driven exercises call a model; the "five guards" exercise calls none and runs no command.
 
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models.
+
 ## The tools
 
 Each run works in a throwaway copy of `fixture_repo/` (a small shop library: `shop/pricing.py`, `shop/report.py`, and 7 tests of which 2 fail). Every path goes through `Workspace.resolve` from `course/sandbox.py`.
@@ -76,6 +78,6 @@ Offline tests (real tools, real hashes, real test runs; the model is scripted te
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_file_edit_evidence.test_lesson -v
 ```
 
-The lesson is still `planned` and has only been verified offline; no real model has run it. Once it opens, run it in the web lab, or with `scripts/run_live.py file-edit-evidence <exercise> --ask-approvals` (the model exercises use model quota; the `guards` exercise does not).
+Run it in the web lab, or with `scripts/run_live.py file-edit-evidence <exercise> --ask-approvals` (the model exercises use model quota; the `guards` exercise does not).
 
 References: *Understanding AI Agents in Depth* (深入理解 AI Agent), chapter 4 (dedicated tools against general executors, fidelity of argument passing, security layers of execution tools) and chapter 5 ("file editing tools in a coding agent", with its companion `tools/edit_tool.py`, `read_tool.py` and `write_tool.py`); Learn Claude Code `s02_tool_use`; the Mini-SWE-agent documentation (the Bash-only route, for contrast). The code and experiments were written for this project.
