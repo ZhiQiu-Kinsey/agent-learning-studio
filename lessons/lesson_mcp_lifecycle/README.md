@@ -2,9 +2,7 @@
 
 English · [简体中文](README.zh-CN.md)
 
-The previous lesson (`mcp-basics`) connected one MCP service. Here the host keeps two separate service processes connected at once: a catalog (`catalog`) and a loan desk (`loans`), and both have a tool called `search`. The runner connects to them with the official Python SDK (`mcp` 2.x) in `legacy` mode and you watch the five stages of a connection (start, the `initialize` handshake, `tools/list` discovery, calls, close). It gives tools a service prefix, registers only the tools it means to offer, and lets a tool with side effects through only when the run explicitly allows it. Then it really kills the loan desk's process, and you see how calls fail, how reconnecting is limited, what the returning service has lost, what happens when a tool definition changed, and finally that no server process is left at exit. The three local exercises call no model; the agent exercise needs a real model connection. The lesson is still `planned` and has been verified offline only; no real-model run has been made.
-
-## The two services
+The previous lesson (`mcp-basics`) connected one MCP service. Here the host keeps two separate service processes connected at once: a catalog (`catalog`) and a loan desk (`loans`), and both have a tool called `search`. The runner connects to them with the official Python SDK (`mcp` 2.x) in `legacy` mode and you watch the five stages of a connection (start, the `initialize` handshake, `tools/list` discovery, calls, close). It gives tools a service prefix, registers only the tools it means to offer, and lets a tool with side effects through only when the run explicitly allows it. Then it really kills the loan desk's process, and you see how calls fail, how reconnecting is limited, what the returning service has lost, what happens when a tool definition changed, and finally that no server process is left at exit. The three local exercises call no model; the agent exercise needs a real model connection. ## The two services
 
 Both services are stdio processes written with `MCPServer`, started by the runner as `python -m lessons.lesson_mcp_lifecycle.<module> --locale <language>`; tool descriptions and business errors come from `locales/servers/`.
 
@@ -17,6 +15,8 @@ Both services are stdio processes written with `MCPServer`, started by the runne
 - `--variant v2`: `register_loan` gains a required `due_days` argument (7–30) and a `renew_loan` tool appears; this shows a returning service whose definitions changed.
 - `--fault exit-on-start | hang-on-start`: fault injection, used for restarts only. The process really starts and then exits at once, or stays alive without reading standard input.
 - `service_info` reports the process id, the number of loans and the **names** (not values) of the environment variables the process received. The host uses it to confirm a connection, check process reaping and verify that no key reached a child.
+
+**Status:** `available`. Every exercise was run once in each run language against a real model on 2026-10-21 (`claude-haiku-5-5`, one sample each; [verification record](../../docs/verification/live-runs-2026-10-21.md)). That is a dated record for one model, not a guarantee for other models. In the model arm the run ended at the 4-round limit after one retried read, so the model's own account of the disconnect was not seen.
 
 ## Four exercises
 
@@ -53,7 +53,7 @@ Inputs (`lab.inputs`): `task`, `allow_writes` (off by default), `restart_fault`,
 2. **Disconnect: the write's outcome is unknown, and the data is gone after the reconnect** (three arms: the second reconnect works, both fail and the host gives up, a model borrows through two services): `stopped` → `lost` (-32000) → `ConnectionLost` → a failed reconnect → `count` of 0 after the reconnect → no resend; the give-up path; the disconnect result the model sees.
 3. **The returning service has changed its definition** (two arms: v2, still v1): the read timeout -32001; the new Schema of `register_loan` in `tools/list` after the reconnect; the recheck result; the held write never sent to the server.
 
-The offline fixture (`fixtures.py`) serves automated tests only: in the agent exercise the model always searches first, registers the first book, looks up the loans, and finally writes an answer that honestly mentions the disconnect. The server processes, the protocol messages, the process kill, the reconnects and the process reaping really happen; only the model's decisions are scripted. Whether a real model handles a disconnect honestly as the system prompt asks cannot be verified offline.
+The offline fixture (`fixtures.py`) serves automated tests only: in the agent exercise the model always searches first, registers the first book, looks up the loans, and finally writes an answer that honestly mentions the disconnect. The server processes, the protocol messages, the process kill, the reconnects and the process reaping really happen; only the model's decisions are scripted. Whether a real model handles a disconnect honestly as the system prompt asks cannot be verified offline; in the real runs of 2026-10-21 the agent arm ended at the 4-round limit before the model gave its own account.
 
 ## Files
 
@@ -71,7 +71,7 @@ The offline fixture (`fixtures.py`) serves automated tests only: in the agent ex
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_mcp_lifecycle.test_lesson -v
 # Start one server on its own to see what it is like (it only reads standard input; Ctrl+C exits)
 .\.venv\Scripts\python.exe -m lessons.lesson_mcp_lifecycle.loans_server --locale en --variant v2
-# Real runs once the lesson is open; --locale en runs in English
+# Real runs; --locale en runs in English
 .\.venv\Scripts\python.exe scripts/run_live.py mcp-lifecycle lifecycle --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py mcp-lifecycle agent --url http://127.0.0.1:8765
 ```
@@ -82,7 +82,7 @@ The offline fixture (`fixtures.py`) serves automated tests only: in the agent ex
 
 ## What was not done
 
-- No real-model run: the agent exercise was verified only with the offline script, and the lesson stays `planned`.
+- Real-model runs: two (zh-CN and en, 2026-10-21); after the disconnect the model retried one read and the 4-round limit ended the run, so the model's own wording of the disconnect was not seen.
 - Only the stdio transport was exercised; sessions, resumption and authentication of Streamable HTTP are described in the lesson text from the 2025-11-25 specification and were not run.
 - The SDK's `ClientSessionGroup` and `listen(tools_list_changed=True)` in the newer protocol mode were only read as interfaces and not run against this lesson's services.
 - A process whose handshake failed has no process id, so the process-reaping check does not cover it.

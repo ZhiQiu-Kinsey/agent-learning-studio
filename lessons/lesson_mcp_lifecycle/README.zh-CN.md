@@ -2,9 +2,7 @@
 
 [English](README.md) · 简体中文
 
-上一课（`mcp-basics`）只连一个 MCP 服务。本课的宿主同时连着两个独立的服务进程：馆藏（`catalog`）和借阅（`loans`），两个服务都有一个叫 `search` 的工具。运行器用官方 Python SDK（`mcp` 2.x）的 `legacy` 模式连接它们，看清连接的五个阶段（启动、`initialize` 握手、`tools/list` 发现、调用、关闭）；给工具加服务前缀，只登记该给的工具，有副作用的工具要本次运行显式允许；然后真的杀掉借阅服务的进程，看调用怎么失败、重连怎么受限、回来的服务丢了什么、工具定义变了怎么办，最后核对退出时没有留下服务进程。三个本地练习不调用模型；Agent 练习需要真实模型连接。课程目前仍是 `planned`，只做过离线验证，没有做过真实模型运行。
-
-## 两个服务
+上一课（`mcp-basics`）只连一个 MCP 服务。本课的宿主同时连着两个独立的服务进程：馆藏（`catalog`）和借阅（`loans`），两个服务都有一个叫 `search` 的工具。运行器用官方 Python SDK（`mcp` 2.x）的 `legacy` 模式连接它们，看清连接的五个阶段（启动、`initialize` 握手、`tools/list` 发现、调用、关闭）；给工具加服务前缀，只登记该给的工具，有副作用的工具要本次运行显式允许；然后真的杀掉借阅服务的进程，看调用怎么失败、重连怎么受限、回来的服务丢了什么、工具定义变了怎么办，最后核对退出时没有留下服务进程。三个本地练习不调用模型；Agent 练习需要真实模型连接。## 两个服务
 
 两个服务都是 `MCPServer` 写的 stdio 进程，由运行器以 `python -m lessons.lesson_mcp_lifecycle.<模块> --locale <语言>` 启动，工具描述与业务错误来自 `locales/servers/`。
 
@@ -17,6 +15,8 @@
 - `--variant v2`：`register_loan` 多一个必填参数 `due_days`（7–30），另有 `renew_loan`；用来演示重启后回来的服务换了定义。
 - `--fault exit-on-start | hang-on-start`：故障注入，只给重启用——进程真的启动，然后立刻退出，或者活着却不读标准输入。
 - `service_info` 报告进程号、借阅条数和进程收到的环境变量**名**（不含取值），宿主靠它确认连接、核对进程回收、检查没有密钥进入子进程。
+
+**状态：**`available`。2026-10-21 用 `claude-haiku-5-5` 对每个练习在每种运行语言下各做了一次真实运行，样本各一份（[验证记录](../../docs/verification/live-runs-2026-10-21.md)）。这是对一个模型的带日期记录，不保证其他模型。模型组在 4 轮上限处结束（中间重试了一次读调用），没有看到模型自己对断连的说法。
 
 ## 四个练习
 
@@ -71,7 +71,7 @@
 .\.venv\Scripts\python.exe -m unittest lessons.lesson_mcp_lifecycle.test_lesson -v
 # 单独启动一个服务端看它的样子（只读标准输入，Ctrl+C 退出）
 .\.venv\Scripts\python.exe -m lessons.lesson_mcp_lifecycle.loans_server --locale zh-CN --variant v2
-# 课程开放后真实运行；--locale en 用英文运行
+# 真实运行；--locale en 用英文运行
 .\.venv\Scripts\python.exe scripts/run_live.py mcp-lifecycle lifecycle --url http://127.0.0.1:8765
 .\.venv\Scripts\python.exe scripts/run_live.py mcp-lifecycle agent --url http://127.0.0.1:8765
 ```
@@ -82,7 +82,7 @@
 
 ## 没做的事
 
-- 没有真实模型运行：Agent 练习只在离线脚本下验证过，课程保持 `planned`。
+- 真实模型运行两次（2026-10-21，中英文各一次）：断连后模型重试了一次读调用，4 轮用完运行结束，没有看到模型自己对断连的说法。
 - 只实测了 stdio 传输；Streamable HTTP 的会话、续传与身份认证只在讲解里按规范 2025-11-25 概述，没有运行。
 - SDK 的 `ClientSessionGroup`、新协议模式下的 `listen(tools_list_changed=True)` 只读过接口，没有在本课的服务上运行。
 - 握手失败的进程没有进程号，进程回收检查不覆盖它们。
