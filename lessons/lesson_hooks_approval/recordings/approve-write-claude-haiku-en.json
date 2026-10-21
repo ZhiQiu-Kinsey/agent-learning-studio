@@ -1,0 +1,2088 @@
+{
+  "metadata": {
+    "schema_version": 2,
+    "lesson": "hooks-approval",
+    "exercise_id": "approve-write",
+    "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+    "status": "completed",
+    "model": "claude-haiku-5-5",
+    "provider_id": "anthropic",
+    "provider_label": "Anthropic",
+    "representation": "sdk_standardized",
+    "sdk": {
+      "name": "litellm",
+      "version": "1.103.0"
+    },
+    "recorded_at": "2026-10-21T09:25:56.540054+00:00",
+    "platform_version": "0.1.0+g8ddd627d61ac",
+    "source_hash": "sha256:03aeeff4284211d1a5c085b3d488b9fc6c67dffd5e7615791ede17443d786c96",
+    "integrity_hash": "sha256:d1cc87b5a56b5b5bcd69f34766e86c3ff14678aaeb97002d752acc9dc5f767e8",
+    "event_count": 32,
+    "locale": "en"
+  },
+  "events": [
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 1,
+      "type": "run_start",
+      "round": null,
+      "timestamp": "2026-10-21T09:25:56.541531+00:00",
+      "span_id": "run-1",
+      "parent_span_id": null,
+      "span_kind": "run",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "lesson_id": "hooks-approval",
+        "mode": "live",
+        "model": "claude-haiku-5-5",
+        "question": "Look at and update TKT-102, then notify its owner: read calls run at once, and each of the two writes waits for your approval.",
+        "inputs": {
+          "task": "approve_write",
+          "approval_timeout_s": 60,
+          "allow_edit": false,
+          "late_rewrite": false
+        },
+        "runtime_kind": "custom",
+        "provider_id": "anthropic",
+        "provider_label": "Anthropic",
+        "trace_representation": "sdk_standardized",
+        "locale": "en"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 2,
+      "type": "lesson.report",
+      "round": null,
+      "timestamp": "2026-10-21T09:25:56.546485+00:00",
+      "span_id": "run-1",
+      "parent_span_id": null,
+      "span_kind": "run",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "title": "Hooks and approval settings",
+        "summary": "Hooks check a call before a writing tool runs, and a write is allowed to run only after a person approves it; hooks after the tool process the result. Recipients must be under corp.example.",
+        "checks": [],
+        "metrics": [
+          {
+            "id": "pre-hooks",
+            "label": "Hooks before the tool",
+            "value": 5
+          },
+          {
+            "id": "post-hooks",
+            "label": "Hooks after the tool",
+            "value": 3
+          },
+          {
+            "id": "approval-timeout",
+            "label": "Approval wait limit (seconds)",
+            "value": 60
+          },
+          {
+            "id": "editable",
+            "label": "Approval card allows edits",
+            "value": "no"
+          },
+          {
+            "id": "late-rewrite",
+            "label": "Rewrite after approval (teaching fault)",
+            "value": "no"
+          }
+        ],
+        "table": {
+          "columns": [
+            "Phase",
+            "Hook",
+            "Role",
+            "Rule"
+          ],
+          "rows": [
+            [
+              "Before the tool",
+              "normalize_arguments",
+              "rewrite",
+              "Upper-case the ticket id, lower-case the recipient and the status value, and trim surrounding whitespace."
+            ],
+            [
+              "Before the tool",
+              "record_scope",
+              "deny",
+              "Deny a ticket id that is not TKT- followed by three digits."
+            ],
+            [
+              "Before the tool",
+              "recipient_domain",
+              "deny",
+              "Deny a recipient that is not a mailbox under the company domain."
+            ],
+            [
+              "Before the tool",
+              "field_allowlist",
+              "deny",
+              "Deny a field outside status, owner and note, or an invalid status value."
+            ],
+            [
+              "Before the tool",
+              "risk_level",
+              "ask",
+              "Let read tools through; a write tool asks for approval and states a risk level; an unclassified tool is denied."
+            ],
+            [
+              "After the tool",
+              "redact_customer_data",
+              "mask",
+              "Mask the customer's phone and email when a ticket is read, so the model never gets the originals."
+            ],
+            [
+              "After the tool",
+              "verify_effect",
+              "verify",
+              "Read the write back from the file and check that what was written is what was meant to be written."
+            ],
+            [
+              "After the tool",
+              "audit_trail",
+              "record",
+              "Compute a digest of the result sent back to the model and put it in the ledger."
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 3,
+      "type": "request",
+      "round": 1,
+      "timestamp": "2026-10-21T09:25:56.548487+00:00",
+      "span_id": "llm-1",
+      "parent_span_id": "step-1",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "model": "claude-haiku-5-5",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an assistant for a ticket desk and you handle tickets with the tools provided. The tools come in two kinds:\n- list_records and read_record are read-only and run directly.\n- update_record and send_notice change what is in the desk. The runtime first checks the call with hooks and then asks a person to approve it; it runs only after approval.\nRules:\n1. `executed` in a tool result says whether the call really ran; if it is false, nothing was changed.\n2. When a call is stopped, rejected or its approval times out, read `error_type` and `error` in the result. Do not resend the same call unchanged: either take a different approach that does not hit the reason it was refused, or tell the user honestly that this part was not done.\n3. Finish with one or two sentences on what was actually done, what was not, and why."
+            },
+            {
+              "role": "user",
+              "content": "The problem in TKT-102 has been dealt with. First look at the ticket's current status, change its status to resolved, then notify its owner alice@corp.example that the ticket is done."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "list_records",
+                "description": "List the id, title, status and owner of every ticket on the desk. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_record",
+                "description": "Read the details of one ticket. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "update_record",
+                "description": "Change one field of a ticket: status, owner or note. It writes the ticket file and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id",
+                    "field",
+                    "value"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    },
+                    "field": {
+                      "type": "string",
+                      "description": "The field to change: status, owner or note."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "The new value. status must be one of open, in_progress, resolved, closed."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "send_notice",
+                "description": "Send a notice to an internal mailbox by writing it to the outbox. It cannot be taken back and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "recipient",
+                    "subject",
+                    "body"
+                  ],
+                  "properties": {
+                    "recipient": {
+                      "type": "string",
+                      "description": "Recipient mailbox; only addresses under the company domain corp.example are allowed."
+                    },
+                    "subject": {
+                      "type": "string",
+                      "description": "Notice subject, at most 80 characters."
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Notice body, at most 400 characters."
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "representation": "sdk_standardized",
+        "omitted_params": {
+          "values": {
+            "temperature": 0
+          },
+          "reason": "unsupported_by_model"
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 4,
+      "type": "response",
+      "round": 1,
+      "timestamp": "2026-10-21T09:25:57.701074+00:00",
+      "span_id": "llm-1",
+      "parent_span_id": "step-1",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "id": "chatcmpl-916a6178-08d0-4a0d-8f8d-8ea5a39ee290",
+          "created": 1792574757,
+          "model": "claude-haiku-5-5",
+          "object": "chat.completion",
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "index": 1,
+                    "caller": {
+                      "type": "direct"
+                    },
+                    "function": {
+                      "arguments": "{\"record_id\": \"TKT-102\"}",
+                      "name": "read_record"
+                    },
+                    "id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+                    "type": "function"
+                  }
+                ],
+                "reasoning_content": "",
+                "thinking_blocks": [
+                  {
+                    "type": "thinking",
+                    "thinking": "",
+                    "signature": "CAQSjQUKEAgTGAI4AUIIdGhpbmtpbmcSDBOm20kbWLWu5zHhVBoMMxhIpM6RUdu4iptIIjBTX+cO7G3IMIN56SFHsJpDOjHe3t9jzjRHXtKpYMGN00q3uSLcTAHronbul3POI+kqqgQQCKY2HmEmFCO2dGlniFlWtYknKT3908no8Kq+raZpYJ1wzLhX6mh9KTDEBATMrdA+CkWWar6V511N2RQ+6QiiDfaV6um8RQeiJ7GNpgHV97LQbWWz2HOZLw2rw/eAIYZ2MdVqKye+J4DWiat61+dZPmCWk428Q/jFQ3ADTTYHUyyjzQ8QjS3EJ0fhDIbVC7zSsNF4I9T5pjT9eVFzJlapiAYIQjtney2Hmw+EKWsyxj/IuJ9DDHuAiJF64+UEddXth2Yz2e4UZeB31AB99K9RnvCFS+iWfoxeOM93TyxWBxTzFhfE4IS/UiJAIYHCt3hmUQmtygudU9KaA+rJZyUPFa5CqvqyR4KGtGsdRGPlIthp3RUcJR4Z5F1MsyMFhOiJdN+5CgXgEjDAIt0IBv/OqDAZZghR7w3TSZotSyXHPTeMhjfZCTTtHZw5Nz4YtEipPlFMzWMjcIHgsBX1wgMgFBzhbVde7AVgGyG42HhQ/2oq40H26tj+I5DNygdmGtkuAafCOnoaD5yf6wmz1i2nB8bDB31//cPKwppFhGiLC5X8am8cR62PQLnem8cAK+azZR365izDb4/xfdskuX3ZAoh9xwFHytfZMq2CePT5QYwqaRcQeH771YDg6xbiY0EKPsR9lc3mF+6dwdy82VELWckHyejBDd6lcAOnZ3qabuEe2gzn2abIMcTPbJ94w8sMPZJbMVdWN+1bHTJH1MJOSaKHXWX4tTM/xhgB"
+                  }
+                ],
+                "provider_specific_fields": {
+                  "citations": null,
+                  "thinking_blocks": [
+                    {
+                      "type": "thinking",
+                      "thinking": "",
+                      "signature": "CAQSjQUKEAgTGAI4AUIIdGhpbmtpbmcSDBOm20kbWLWu5zHhVBoMMxhIpM6RUdu4iptIIjBTX+cO7G3IMIN56SFHsJpDOjHe3t9jzjRHXtKpYMGN00q3uSLcTAHronbul3POI+kqqgQQCKY2HmEmFCO2dGlniFlWtYknKT3908no8Kq+raZpYJ1wzLhX6mh9KTDEBATMrdA+CkWWar6V511N2RQ+6QiiDfaV6um8RQeiJ7GNpgHV97LQbWWz2HOZLw2rw/eAIYZ2MdVqKye+J4DWiat61+dZPmCWk428Q/jFQ3ADTTYHUyyjzQ8QjS3EJ0fhDIbVC7zSsNF4I9T5pjT9eVFzJlapiAYIQjtney2Hmw+EKWsyxj/IuJ9DDHuAiJF64+UEddXth2Yz2e4UZeB31AB99K9RnvCFS+iWfoxeOM93TyxWBxTzFhfE4IS/UiJAIYHCt3hmUQmtygudU9KaA+rJZyUPFa5CqvqyR4KGtGsdRGPlIthp3RUcJR4Z5F1MsyMFhOiJdN+5CgXgEjDAIt0IBv/OqDAZZghR7w3TSZotSyXHPTeMhjfZCTTtHZw5Nz4YtEipPlFMzWMjcIHgsBX1wgMgFBzhbVde7AVgGyG42HhQ/2oq40H26tj+I5DNygdmGtkuAafCOnoaD5yf6wmz1i2nB8bDB31//cPKwppFhGiLC5X8am8cR62PQLnem8cAK+azZR365izDb4/xfdskuX3ZAoh9xwFHytfZMq2CePT5QYwqaRcQeH771YDg6xbiY0EKPsR9lc3mF+6dwdy82VELWckHyejBDd6lcAOnZ3qabuEe2gzn2abIMcTPbJ94w8sMPZJbMVdWN+1bHTJH1MJOSaKHXWX4tTM/xhgB"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "usage": {
+            "completion_tokens": 92,
+            "prompt_tokens": 1217,
+            "total_tokens": 1309,
+            "completion_tokens_details": {
+              "reasoning_tokens": 38,
+              "text_tokens": 54
+            },
+            "prompt_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0,
+              "text_tokens": 1217,
+              "cache_creation_tokens": 0,
+              "cache_creation_token_details": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 0
+              }
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "inference_geo": "global",
+            "speed": "standard",
+            "service_tier": "standard"
+          }
+        },
+        "representation": "sdk_standardized",
+        "duration_ms": 1152
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 5,
+      "type": "tool_call",
+      "round": 1,
+      "timestamp": "2026-10-21T09:25:57.703671+00:00",
+      "span_id": "tool-1",
+      "parent_span_id": "step-1",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "index": 1,
+        "caller": {
+          "type": "direct"
+        },
+        "function": {
+          "arguments": "{\"record_id\": \"TKT-102\"}",
+          "name": "read_record"
+        },
+        "id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+        "type": "function"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 6,
+      "type": "lesson.hook_pre",
+      "round": null,
+      "timestamp": "2026-10-21T09:25:57.706033+00:00",
+      "span_id": "tool-1",
+      "parent_span_id": "step-1",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "read_record",
+        "call_id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+        "steps": [
+          {
+            "id": "normalize_arguments",
+            "verdict": "allow"
+          },
+          {
+            "id": "record_scope",
+            "verdict": "allow"
+          },
+          {
+            "id": "recipient_domain",
+            "verdict": "allow"
+          },
+          {
+            "id": "field_allowlist",
+            "verdict": "allow"
+          },
+          {
+            "id": "risk_level",
+            "verdict": "allow"
+          }
+        ],
+        "verdict": "allow",
+        "arguments": {
+          "record_id": "TKT-102"
+        },
+        "state_digest": "sha256:5444e00a746673c67f51bb148aff2a8442f8b689dc9d189bb441da648df1ff3e"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 7,
+      "type": "lesson.hook_post",
+      "round": null,
+      "timestamp": "2026-10-21T09:25:57.708013+00:00",
+      "span_id": "tool-1",
+      "parent_span_id": "step-1",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "read_record",
+        "call_id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+        "steps": [
+          {
+            "id": "redact_customer_data",
+            "applied": true,
+            "detail": {
+              "redacted": [
+                "customer_email",
+                "customer_phone"
+              ]
+            }
+          },
+          {
+            "id": "verify_effect",
+            "applied": false
+          },
+          {
+            "id": "audit_trail",
+            "applied": true,
+            "detail": {
+              "result_digest": "sha256:6b919132701aa28d4122991c71cb0188d3234d8c0b4d13e5d0e5599c15ebf5a6"
+            }
+          }
+        ],
+        "result_digest": "sha256:6b919132701aa28d4122991c71cb0188d3234d8c0b4d13e5d0e5599c15ebf5a6",
+        "state_digest": "sha256:5444e00a746673c67f51bb148aff2a8442f8b689dc9d189bb441da648df1ff3e",
+        "redacted": [
+          "customer_email",
+          "customer_phone"
+        ]
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 8,
+      "type": "tool_result",
+      "round": 1,
+      "timestamp": "2026-10-21T09:25:57.708944+00:00",
+      "span_id": "tool-1",
+      "parent_span_id": "step-1",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool_call_id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+        "name": "read_record",
+        "result": {
+          "ok": true,
+          "result": {
+            "ok": true,
+            "executed": true,
+            "tool": "read_record",
+            "data": {
+              "id": "TKT-102",
+              "title": "Monthly report export times out",
+              "status": "in_progress",
+              "owner": "alice",
+              "note": "",
+              "customer_phone": "138****2222",
+              "customer_email": "w***@customer.example",
+              "owner_email": "alice@corp.example"
+            },
+            "approval": {
+              "outcome": "not_required"
+            }
+          }
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 9,
+      "type": "request",
+      "round": 2,
+      "timestamp": "2026-10-21T09:25:57.710047+00:00",
+      "span_id": "llm-2",
+      "parent_span_id": "step-2",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "model": "claude-haiku-5-5",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an assistant for a ticket desk and you handle tickets with the tools provided. The tools come in two kinds:\n- list_records and read_record are read-only and run directly.\n- update_record and send_notice change what is in the desk. The runtime first checks the call with hooks and then asks a person to approve it; it runs only after approval.\nRules:\n1. `executed` in a tool result says whether the call really ran; if it is false, nothing was changed.\n2. When a call is stopped, rejected or its approval times out, read `error_type` and `error` in the result. Do not resend the same call unchanged: either take a different approach that does not hit the reason it was refused, or tell the user honestly that this part was not done.\n3. Finish with one or two sentences on what was actually done, what was not, and why."
+            },
+            {
+              "role": "user",
+              "content": "The problem in TKT-102 has been dealt with. First look at the ticket's current status, change its status to resolved, then notify its owner alice@corp.example that the ticket is done."
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "index": 1,
+                  "caller": {
+                    "type": "direct"
+                  },
+                  "function": {
+                    "arguments": "{\"record_id\": \"TKT-102\"}",
+                    "name": "read_record"
+                  },
+                  "id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+              "content": "{\"ok\": true, \"result\": {\"ok\": true, \"executed\": true, \"tool\": \"read_record\", \"data\": {\"id\": \"TKT-102\", \"title\": \"Monthly report export times out\", \"status\": \"in_progress\", \"owner\": \"alice\", \"note\": \"\", \"customer_phone\": \"138****2222\", \"customer_email\": \"w***@customer.example\", \"owner_email\": \"alice@corp.example\"}, \"approval\": {\"outcome\": \"not_required\"}}}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "list_records",
+                "description": "List the id, title, status and owner of every ticket on the desk. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_record",
+                "description": "Read the details of one ticket. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "update_record",
+                "description": "Change one field of a ticket: status, owner or note. It writes the ticket file and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id",
+                    "field",
+                    "value"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    },
+                    "field": {
+                      "type": "string",
+                      "description": "The field to change: status, owner or note."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "The new value. status must be one of open, in_progress, resolved, closed."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "send_notice",
+                "description": "Send a notice to an internal mailbox by writing it to the outbox. It cannot be taken back and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "recipient",
+                    "subject",
+                    "body"
+                  ],
+                  "properties": {
+                    "recipient": {
+                      "type": "string",
+                      "description": "Recipient mailbox; only addresses under the company domain corp.example are allowed."
+                    },
+                    "subject": {
+                      "type": "string",
+                      "description": "Notice subject, at most 80 characters."
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Notice body, at most 400 characters."
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "representation": "sdk_standardized",
+        "omitted_params": {
+          "values": {
+            "temperature": 0
+          },
+          "reason": "unsupported_by_model"
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 10,
+      "type": "response",
+      "round": 2,
+      "timestamp": "2026-10-21T09:26:00.253273+00:00",
+      "span_id": "llm-2",
+      "parent_span_id": "step-2",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "id": "chatcmpl-970336f9-fa29-4508-b0fe-d0763762a848",
+          "created": 1792574760,
+          "model": "claude-haiku-5-5",
+          "object": "chat.completion",
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "index": 0,
+              "message": {
+                "content": "The ticket is currently `in_progress`, owned by alice. I'll change the status to resolved now.",
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "index": 2,
+                    "caller": {
+                      "type": "direct"
+                    },
+                    "function": {
+                      "arguments": "{\"record_id\": \"TKT-102\", \"field\": \"status\", \"value\": \"resolved\"}",
+                      "name": "update_record"
+                    },
+                    "id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+                    "type": "function"
+                  }
+                ],
+                "reasoning_content": "",
+                "thinking_blocks": [
+                  {
+                    "type": "thinking",
+                    "thinking": "",
+                    "signature": "CAQS/AUKEAgTGAI4AUIIdGhpbmtpbmcSDBcviGLKgC8rgCzakRoMmfYRC2M1XIyWeLztIjCQnc210VXap598bJ40zPpShl8LH6sqxuMhM/8vF8Ztgc37/QTRLpoHvGtTNa9JhsUqmQXdmMfSa6AqyjSjiH3dPdMsXtIFMk2MiHZ21U1eUrF89lOEAYLKRvlAxPTHsaiCUivK60YUdOgh6slh34KAmzERidMBvWapSt6jiL5RHHJKIDWLWo+R/QJHF0Kbxul8ji5qzApwRfDupLwR2WfYvSOt8W8MlB+NJ/SN3zTBrKm8fXE+j2B/tmxY6oGz1z/rt8YPQvZPa+y62oadxy3s7EvSxVhqCcMMTG8m5KQaz+VEsGwUQstr/jbDrYfbCwB7WaUAKJxjC4CYuLleB+1XKTBWsHY4bo1uCFujffKoBJg4s2ERMqgZ9vyDDATSp0kG51O+5HbrrXUNRYQGzyB3WcEXnVFNu+bJyx4K1HpNt+0G0izzUO/htBqZTj0ssMxfk4wZZ3dySwPU38WboyrkqQfch4D9Sm1DnocEI+KAR7HZmZHMDo9G6w9s1/NkGzwxmZHb7T6phQsRS0IJ7GGgeV+t5kcSd50HBOdgvKti3YfI5bB9HfE928LqxpZNMTMvDLKlqYYAO1tEAcx755hj5G0G4tnDcwFnxu4+qNz96nAyt+Jj7Mv56hD1opce6xT3qKq6EbrhZ2Lp58OPfx8L7/8Varbv2n+8BDU0KMD28+nkZTinQ4yrSzRtXaIfgCAG11Q85zEMxUdxaqtYHt10bLkgPz1UhFz3dSg33gEkpPvCBSiSsOFFa54OEzSTJICSZYz+LKbcMVzsguJRpzQHnrLMHIaPT/2PNf5eT3dHwE04n+iN/qhygnlM1HJ7nP+h7QE2Wj3SJHQihNUEx8KmNgzK8M1hIdDDZozP+eRAAoxv1TXPOr05mJEJUUcc74k9/FbjrgnewbYK5ZAyPJLGKHYq4YeJ+HVyOphVyYx+Y5xQDsq71eTdIlaKZxgB"
+                  }
+                ],
+                "provider_specific_fields": {
+                  "citations": null,
+                  "thinking_blocks": [
+                    {
+                      "type": "thinking",
+                      "thinking": "",
+                      "signature": "CAQS/AUKEAgTGAI4AUIIdGhpbmtpbmcSDBcviGLKgC8rgCzakRoMmfYRC2M1XIyWeLztIjCQnc210VXap598bJ40zPpShl8LH6sqxuMhM/8vF8Ztgc37/QTRLpoHvGtTNa9JhsUqmQXdmMfSa6AqyjSjiH3dPdMsXtIFMk2MiHZ21U1eUrF89lOEAYLKRvlAxPTHsaiCUivK60YUdOgh6slh34KAmzERidMBvWapSt6jiL5RHHJKIDWLWo+R/QJHF0Kbxul8ji5qzApwRfDupLwR2WfYvSOt8W8MlB+NJ/SN3zTBrKm8fXE+j2B/tmxY6oGz1z/rt8YPQvZPa+y62oadxy3s7EvSxVhqCcMMTG8m5KQaz+VEsGwUQstr/jbDrYfbCwB7WaUAKJxjC4CYuLleB+1XKTBWsHY4bo1uCFujffKoBJg4s2ERMqgZ9vyDDATSp0kG51O+5HbrrXUNRYQGzyB3WcEXnVFNu+bJyx4K1HpNt+0G0izzUO/htBqZTj0ssMxfk4wZZ3dySwPU38WboyrkqQfch4D9Sm1DnocEI+KAR7HZmZHMDo9G6w9s1/NkGzwxmZHb7T6phQsRS0IJ7GGgeV+t5kcSd50HBOdgvKti3YfI5bB9HfE928LqxpZNMTMvDLKlqYYAO1tEAcx755hj5G0G4tnDcwFnxu4+qNz96nAyt+Jj7Mv56hD1opce6xT3qKq6EbrhZ2Lp58OPfx8L7/8Varbv2n+8BDU0KMD28+nkZTinQ4yrSzRtXaIfgCAG11Q85zEMxUdxaqtYHt10bLkgPz1UhFz3dSg33gEkpPvCBSiSsOFFa54OEzSTJICSZYz+LKbcMVzsguJRpzQHnrLMHIaPT/2PNf5eT3dHwE04n+iN/qhygnlM1HJ7nP+h7QE2Wj3SJHQihNUEx8KmNgzK8M1hIdDDZozP+eRAAoxv1TXPOr05mJEJUUcc74k9/FbjrgnewbYK5ZAyPJLGKHYq4YeJ+HVyOphVyYx+Y5xQDsq71eTdIlaKZxgB"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "usage": {
+            "completion_tokens": 198,
+            "prompt_tokens": 1419,
+            "total_tokens": 1617,
+            "completion_tokens_details": {
+              "reasoning_tokens": 68,
+              "text_tokens": 130
+            },
+            "prompt_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0,
+              "text_tokens": 1419,
+              "cache_creation_tokens": 0,
+              "cache_creation_token_details": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 0
+              }
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "inference_geo": "global",
+            "speed": "standard",
+            "service_tier": "standard"
+          }
+        },
+        "representation": "sdk_standardized",
+        "duration_ms": 2542
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 11,
+      "type": "tool_call",
+      "round": 2,
+      "timestamp": "2026-10-21T09:26:00.269446+00:00",
+      "span_id": "tool-2",
+      "parent_span_id": "step-2",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "index": 2,
+        "caller": {
+          "type": "direct"
+        },
+        "function": {
+          "arguments": "{\"record_id\": \"TKT-102\", \"field\": \"status\", \"value\": \"resolved\"}",
+          "name": "update_record"
+        },
+        "id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+        "type": "function"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 12,
+      "type": "lesson.hook_pre",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:00.272253+00:00",
+      "span_id": "tool-2",
+      "parent_span_id": "step-2",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "update_record",
+        "call_id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+        "steps": [
+          {
+            "id": "normalize_arguments",
+            "verdict": "allow"
+          },
+          {
+            "id": "record_scope",
+            "verdict": "allow"
+          },
+          {
+            "id": "recipient_domain",
+            "verdict": "allow"
+          },
+          {
+            "id": "field_allowlist",
+            "verdict": "allow"
+          },
+          {
+            "id": "risk_level",
+            "verdict": "ask",
+            "reason": "write_needs_approval"
+          }
+        ],
+        "verdict": "ask",
+        "arguments": {
+          "record_id": "TKT-102",
+          "field": "status",
+          "value": "resolved"
+        },
+        "state_digest": "sha256:5444e00a746673c67f51bb148aff2a8442f8b689dc9d189bb441da648df1ff3e",
+        "risk": "medium"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 13,
+      "type": "approval_requested",
+      "round": 2,
+      "timestamp": "2026-10-21T09:26:00.274247+00:00",
+      "span_id": "approval-1",
+      "parent_span_id": "step-2",
+      "span_kind": "approval",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "approval_id": "approval-1",
+        "kind": "tool.update_record",
+        "summary": "Set status of TKT-102 to \"resolved\"",
+        "payload": {
+          "tool": "update_record",
+          "arguments": {
+            "record_id": "TKT-102",
+            "field": "status",
+            "value": "resolved"
+          }
+        },
+        "payload_digest": "sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683",
+        "editable": false,
+        "timeout_s": 60,
+        "expires_at": "2026-10-21T09:27:00.274194+00:00",
+        "risk": "medium"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 14,
+      "type": "approval_resolved",
+      "round": 2,
+      "timestamp": "2026-10-21T09:26:00.303695+00:00",
+      "span_id": "approval-1",
+      "parent_span_id": "step-2",
+      "span_kind": "approval",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "approval_id": "approval-1",
+        "outcome": "approved",
+        "decided_by": "learner",
+        "payload_digest": "sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683",
+        "requested_digest": "sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683",
+        "edited": false,
+        "waited_ms": 29
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 15,
+      "type": "lesson.guard",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:00.305367+00:00",
+      "span_id": "tool-2",
+      "parent_span_id": "step-2",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "update_record",
+        "call_id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+        "approved_digest": "sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683",
+        "attempted_digest": "sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683",
+        "match": true,
+        "state_digest": "sha256:5444e00a746673c67f51bb148aff2a8442f8b689dc9d189bb441da648df1ff3e"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 16,
+      "type": "lesson.hook_post",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:00.307096+00:00",
+      "span_id": "tool-2",
+      "parent_span_id": "step-2",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "update_record",
+        "call_id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+        "steps": [
+          {
+            "id": "redact_customer_data",
+            "applied": false
+          },
+          {
+            "id": "verify_effect",
+            "applied": true,
+            "detail": {
+              "verified": true
+            }
+          },
+          {
+            "id": "audit_trail",
+            "applied": true,
+            "detail": {
+              "result_digest": "sha256:a2fffcbba1ac5c5e206abca1802729dccb8b1a7c59b9544ebf5b04e87820c3b5"
+            }
+          }
+        ],
+        "result_digest": "sha256:a2fffcbba1ac5c5e206abca1802729dccb8b1a7c59b9544ebf5b04e87820c3b5",
+        "state_digest": "sha256:b1e03e91987a29e7823c3be4c4a2be659aa2191102c2762c50272f687e16dc6a",
+        "verified": true
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 17,
+      "type": "tool_result",
+      "round": 2,
+      "timestamp": "2026-10-21T09:26:00.307810+00:00",
+      "span_id": "tool-2",
+      "parent_span_id": "step-2",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool_call_id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+        "name": "update_record",
+        "result": {
+          "ok": true,
+          "result": {
+            "ok": true,
+            "executed": true,
+            "tool": "update_record",
+            "data": {
+              "record_id": "TKT-102",
+              "field": "status",
+              "before": "in_progress",
+              "after": "resolved"
+            },
+            "approval": {
+              "outcome": "approved",
+              "approval_id": "approval-1",
+              "payload_digest": "sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683"
+            },
+            "verified": true
+          }
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 18,
+      "type": "request",
+      "round": 3,
+      "timestamp": "2026-10-21T09:26:00.310095+00:00",
+      "span_id": "llm-3",
+      "parent_span_id": "step-3",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "model": "claude-haiku-5-5",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an assistant for a ticket desk and you handle tickets with the tools provided. The tools come in two kinds:\n- list_records and read_record are read-only and run directly.\n- update_record and send_notice change what is in the desk. The runtime first checks the call with hooks and then asks a person to approve it; it runs only after approval.\nRules:\n1. `executed` in a tool result says whether the call really ran; if it is false, nothing was changed.\n2. When a call is stopped, rejected or its approval times out, read `error_type` and `error` in the result. Do not resend the same call unchanged: either take a different approach that does not hit the reason it was refused, or tell the user honestly that this part was not done.\n3. Finish with one or two sentences on what was actually done, what was not, and why."
+            },
+            {
+              "role": "user",
+              "content": "The problem in TKT-102 has been dealt with. First look at the ticket's current status, change its status to resolved, then notify its owner alice@corp.example that the ticket is done."
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "index": 1,
+                  "caller": {
+                    "type": "direct"
+                  },
+                  "function": {
+                    "arguments": "{\"record_id\": \"TKT-102\"}",
+                    "name": "read_record"
+                  },
+                  "id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+              "content": "{\"ok\": true, \"result\": {\"ok\": true, \"executed\": true, \"tool\": \"read_record\", \"data\": {\"id\": \"TKT-102\", \"title\": \"Monthly report export times out\", \"status\": \"in_progress\", \"owner\": \"alice\", \"note\": \"\", \"customer_phone\": \"138****2222\", \"customer_email\": \"w***@customer.example\", \"owner_email\": \"alice@corp.example\"}, \"approval\": {\"outcome\": \"not_required\"}}}"
+            },
+            {
+              "role": "assistant",
+              "content": "The ticket is currently `in_progress`, owned by alice. I'll change the status to resolved now.",
+              "tool_calls": [
+                {
+                  "index": 2,
+                  "caller": {
+                    "type": "direct"
+                  },
+                  "function": {
+                    "arguments": "{\"record_id\": \"TKT-102\", \"field\": \"status\", \"value\": \"resolved\"}",
+                    "name": "update_record"
+                  },
+                  "id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+              "content": "{\"ok\": true, \"result\": {\"ok\": true, \"executed\": true, \"tool\": \"update_record\", \"data\": {\"record_id\": \"TKT-102\", \"field\": \"status\", \"before\": \"in_progress\", \"after\": \"resolved\"}, \"approval\": {\"outcome\": \"approved\", \"approval_id\": \"approval-1\", \"payload_digest\": \"sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683\"}, \"verified\": true}}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "list_records",
+                "description": "List the id, title, status and owner of every ticket on the desk. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_record",
+                "description": "Read the details of one ticket. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "update_record",
+                "description": "Change one field of a ticket: status, owner or note. It writes the ticket file and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id",
+                    "field",
+                    "value"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    },
+                    "field": {
+                      "type": "string",
+                      "description": "The field to change: status, owner or note."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "The new value. status must be one of open, in_progress, resolved, closed."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "send_notice",
+                "description": "Send a notice to an internal mailbox by writing it to the outbox. It cannot be taken back and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "recipient",
+                    "subject",
+                    "body"
+                  ],
+                  "properties": {
+                    "recipient": {
+                      "type": "string",
+                      "description": "Recipient mailbox; only addresses under the company domain corp.example are allowed."
+                    },
+                    "subject": {
+                      "type": "string",
+                      "description": "Notice subject, at most 80 characters."
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Notice body, at most 400 characters."
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "representation": "sdk_standardized",
+        "omitted_params": {
+          "values": {
+            "temperature": 0
+          },
+          "reason": "unsupported_by_model"
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 19,
+      "type": "response",
+      "round": 3,
+      "timestamp": "2026-10-21T09:26:01.507652+00:00",
+      "span_id": "llm-3",
+      "parent_span_id": "step-3",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "id": "chatcmpl-91e142bc-769a-47de-99c4-d7794739c5ac",
+          "created": 1792574761,
+          "model": "claude-haiku-5-5",
+          "object": "chat.completion",
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "caller": {
+                      "type": "direct"
+                    },
+                    "function": {
+                      "arguments": "{\"recipient\": \"alice@corp.example\", \"subject\": \"TKT-102 is resolved\", \"body\": \"Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it.\"}",
+                      "name": "send_notice"
+                    },
+                    "id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+                    "type": "function"
+                  }
+                ],
+                "provider_specific_fields": {
+                  "citations": null,
+                  "thinking_blocks": null
+                }
+              }
+            }
+          ],
+          "usage": {
+            "completion_tokens": 164,
+            "prompt_tokens": 1717,
+            "total_tokens": 1881,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "text_tokens": 164
+            },
+            "prompt_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0,
+              "text_tokens": 1717,
+              "cache_creation_tokens": 0,
+              "cache_creation_token_details": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 0
+              }
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "inference_geo": "global",
+            "speed": "standard",
+            "service_tier": "standard"
+          }
+        },
+        "representation": "sdk_standardized",
+        "duration_ms": 1197
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 20,
+      "type": "tool_call",
+      "round": 3,
+      "timestamp": "2026-10-21T09:26:01.509406+00:00",
+      "span_id": "tool-3",
+      "parent_span_id": "step-3",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "index": 0,
+        "caller": {
+          "type": "direct"
+        },
+        "function": {
+          "arguments": "{\"recipient\": \"alice@corp.example\", \"subject\": \"TKT-102 is resolved\", \"body\": \"Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it.\"}",
+          "name": "send_notice"
+        },
+        "id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+        "type": "function"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 21,
+      "type": "lesson.hook_pre",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:01.511130+00:00",
+      "span_id": "tool-3",
+      "parent_span_id": "step-3",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "send_notice",
+        "call_id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+        "steps": [
+          {
+            "id": "normalize_arguments",
+            "verdict": "allow"
+          },
+          {
+            "id": "record_scope",
+            "verdict": "allow"
+          },
+          {
+            "id": "recipient_domain",
+            "verdict": "allow"
+          },
+          {
+            "id": "field_allowlist",
+            "verdict": "allow"
+          },
+          {
+            "id": "risk_level",
+            "verdict": "ask",
+            "reason": "write_needs_approval"
+          }
+        ],
+        "verdict": "ask",
+        "arguments": {
+          "recipient": "alice@corp.example",
+          "subject": "TKT-102 is resolved",
+          "body": "Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it."
+        },
+        "state_digest": "sha256:b1e03e91987a29e7823c3be4c4a2be659aa2191102c2762c50272f687e16dc6a",
+        "risk": "high"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 22,
+      "type": "approval_requested",
+      "round": 3,
+      "timestamp": "2026-10-21T09:26:01.512269+00:00",
+      "span_id": "approval-2",
+      "parent_span_id": "step-3",
+      "span_kind": "approval",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "approval_id": "approval-2",
+        "kind": "tool.send_notice",
+        "summary": "Send a notice to alice@corp.example titled \"TKT-102 is resolved\", body 154 characters",
+        "payload": {
+          "tool": "send_notice",
+          "arguments": {
+            "recipient": "alice@corp.example",
+            "subject": "TKT-102 is resolved",
+            "body": "Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it."
+          }
+        },
+        "payload_digest": "sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f",
+        "editable": false,
+        "timeout_s": 60,
+        "expires_at": "2026-10-21T09:27:01.512230+00:00",
+        "risk": "high"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 23,
+      "type": "approval_resolved",
+      "round": 3,
+      "timestamp": "2026-10-21T09:26:01.556228+00:00",
+      "span_id": "approval-2",
+      "parent_span_id": "step-3",
+      "span_kind": "approval",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "approval_id": "approval-2",
+        "outcome": "approved",
+        "decided_by": "learner",
+        "payload_digest": "sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f",
+        "requested_digest": "sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f",
+        "edited": false,
+        "waited_ms": 43
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 24,
+      "type": "lesson.guard",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:01.557594+00:00",
+      "span_id": "tool-3",
+      "parent_span_id": "step-3",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "send_notice",
+        "call_id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+        "approved_digest": "sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f",
+        "attempted_digest": "sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f",
+        "match": true,
+        "state_digest": "sha256:b1e03e91987a29e7823c3be4c4a2be659aa2191102c2762c50272f687e16dc6a"
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 25,
+      "type": "lesson.hook_post",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:01.558893+00:00",
+      "span_id": "tool-3",
+      "parent_span_id": "step-3",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool": "send_notice",
+        "call_id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+        "steps": [
+          {
+            "id": "redact_customer_data",
+            "applied": false
+          },
+          {
+            "id": "verify_effect",
+            "applied": true,
+            "detail": {
+              "verified": true
+            }
+          },
+          {
+            "id": "audit_trail",
+            "applied": true,
+            "detail": {
+              "result_digest": "sha256:c6bc536b421ade0f49f9aa607876d99daba4d6f16f2a5befc4b5724c19b2eaa9"
+            }
+          }
+        ],
+        "result_digest": "sha256:c6bc536b421ade0f49f9aa607876d99daba4d6f16f2a5befc4b5724c19b2eaa9",
+        "state_digest": "sha256:f86aca038440ea1939734cdd0c8a498fbbcec40cb3f73765dc0b10bc3bb68927",
+        "verified": true
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 26,
+      "type": "tool_result",
+      "round": 3,
+      "timestamp": "2026-10-21T09:26:01.559533+00:00",
+      "span_id": "tool-3",
+      "parent_span_id": "step-3",
+      "span_kind": "tool",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "tool_call_id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+        "name": "send_notice",
+        "result": {
+          "ok": true,
+          "result": {
+            "ok": true,
+            "executed": true,
+            "tool": "send_notice",
+            "data": {
+              "notice_id": "N-001",
+              "recipient": "alice@corp.example",
+              "subject": "TKT-102 is resolved",
+              "body": "Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it."
+            },
+            "approval": {
+              "outcome": "approved",
+              "approval_id": "approval-2",
+              "payload_digest": "sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f"
+            },
+            "verified": true
+          }
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 27,
+      "type": "request",
+      "round": 4,
+      "timestamp": "2026-10-21T09:26:01.560237+00:00",
+      "span_id": "llm-4",
+      "parent_span_id": "step-4",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "model": "claude-haiku-5-5",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an assistant for a ticket desk and you handle tickets with the tools provided. The tools come in two kinds:\n- list_records and read_record are read-only and run directly.\n- update_record and send_notice change what is in the desk. The runtime first checks the call with hooks and then asks a person to approve it; it runs only after approval.\nRules:\n1. `executed` in a tool result says whether the call really ran; if it is false, nothing was changed.\n2. When a call is stopped, rejected or its approval times out, read `error_type` and `error` in the result. Do not resend the same call unchanged: either take a different approach that does not hit the reason it was refused, or tell the user honestly that this part was not done.\n3. Finish with one or two sentences on what was actually done, what was not, and why."
+            },
+            {
+              "role": "user",
+              "content": "The problem in TKT-102 has been dealt with. First look at the ticket's current status, change its status to resolved, then notify its owner alice@corp.example that the ticket is done."
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "index": 1,
+                  "caller": {
+                    "type": "direct"
+                  },
+                  "function": {
+                    "arguments": "{\"record_id\": \"TKT-102\"}",
+                    "name": "read_record"
+                  },
+                  "id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "toolu_01JZbDczohXgdWMjdkJn85ye",
+              "content": "{\"ok\": true, \"result\": {\"ok\": true, \"executed\": true, \"tool\": \"read_record\", \"data\": {\"id\": \"TKT-102\", \"title\": \"Monthly report export times out\", \"status\": \"in_progress\", \"owner\": \"alice\", \"note\": \"\", \"customer_phone\": \"138****2222\", \"customer_email\": \"w***@customer.example\", \"owner_email\": \"alice@corp.example\"}, \"approval\": {\"outcome\": \"not_required\"}}}"
+            },
+            {
+              "role": "assistant",
+              "content": "The ticket is currently `in_progress`, owned by alice. I'll change the status to resolved now.",
+              "tool_calls": [
+                {
+                  "index": 2,
+                  "caller": {
+                    "type": "direct"
+                  },
+                  "function": {
+                    "arguments": "{\"record_id\": \"TKT-102\", \"field\": \"status\", \"value\": \"resolved\"}",
+                    "name": "update_record"
+                  },
+                  "id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "toolu_019GyEDqQxsQDgezFHi3zRYL",
+              "content": "{\"ok\": true, \"result\": {\"ok\": true, \"executed\": true, \"tool\": \"update_record\", \"data\": {\"record_id\": \"TKT-102\", \"field\": \"status\", \"before\": \"in_progress\", \"after\": \"resolved\"}, \"approval\": {\"outcome\": \"approved\", \"approval_id\": \"approval-1\", \"payload_digest\": \"sha256:40e3cc5c7abceb0ebd1513fe85dab58eec610852510d7498340b2f4cf1e08683\"}, \"verified\": true}}"
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "index": 0,
+                  "caller": {
+                    "type": "direct"
+                  },
+                  "function": {
+                    "arguments": "{\"recipient\": \"alice@corp.example\", \"subject\": \"TKT-102 is resolved\", \"body\": \"Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it.\"}",
+                    "name": "send_notice"
+                  },
+                  "id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+                  "type": "function"
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "toolu_019gz3rY6ePMLiracCZTRpLU",
+              "content": "{\"ok\": true, \"result\": {\"ok\": true, \"executed\": true, \"tool\": \"send_notice\", \"data\": {\"notice_id\": \"N-001\", \"recipient\": \"alice@corp.example\", \"subject\": \"TKT-102 is resolved\", \"body\": \"Hi Alice, the problem in TKT-102 (Monthly report export times out) has been dealt with, and the ticket is now marked resolved. Thanks for your work on it.\"}, \"approval\": {\"outcome\": \"approved\", \"approval_id\": \"approval-2\", \"payload_digest\": \"sha256:0e92740fa81dfa2635448afdf47bbb04faaf5d4f0f027e7ade85c389b4baf66f\"}, \"verified\": true}}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "list_records",
+                "description": "List the id, title, status and owner of every ticket on the desk. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {}
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_record",
+                "description": "Read the details of one ticket. Read-only.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "update_record",
+                "description": "Change one field of a ticket: status, owner or note. It writes the ticket file and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "record_id",
+                    "field",
+                    "value"
+                  ],
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "description": "Ticket id, for example TKT-102."
+                    },
+                    "field": {
+                      "type": "string",
+                      "description": "The field to change: status, owner or note."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "The new value. status must be one of open, in_progress, resolved, closed."
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "send_notice",
+                "description": "Send a notice to an internal mailbox by writing it to the outbox. It cannot be taken back and needs a person's approval first.",
+                "parameters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "recipient",
+                    "subject",
+                    "body"
+                  ],
+                  "properties": {
+                    "recipient": {
+                      "type": "string",
+                      "description": "Recipient mailbox; only addresses under the company domain corp.example are allowed."
+                    },
+                    "subject": {
+                      "type": "string",
+                      "description": "Notice subject, at most 80 characters."
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Notice body, at most 400 characters."
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "representation": "sdk_standardized",
+        "omitted_params": {
+          "values": {
+            "temperature": 0
+          },
+          "reason": "unsupported_by_model"
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 28,
+      "type": "response",
+      "round": 4,
+      "timestamp": "2026-10-21T09:26:02.543494+00:00",
+      "span_id": "llm-4",
+      "parent_span_id": "step-4",
+      "span_kind": "llm",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": "sdk_standardized",
+      "sdk": {
+        "name": "litellm",
+        "version": "1.103.0"
+      },
+      "data": {
+        "body": {
+          "id": "chatcmpl-0fe54ed6-5a89-4620-9934-d7ebce295e7f",
+          "created": 1792574762,
+          "model": "claude-haiku-5-5",
+          "object": "chat.completion",
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "TKT-102 is now resolved; it was `in_progress` before the change, and the update was verified. I also sent notice N-001 to alice@corp.example telling her the ticket is done.",
+                "role": "assistant",
+                "provider_specific_fields": {
+                  "citations": null,
+                  "thinking_blocks": null
+                }
+              }
+            }
+          ],
+          "usage": {
+            "completion_tokens": 61,
+            "prompt_tokens": 2119,
+            "total_tokens": 2180,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "text_tokens": 61
+            },
+            "prompt_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0,
+              "text_tokens": 2119,
+              "cache_creation_tokens": 0,
+              "cache_creation_token_details": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 0
+              }
+            },
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "inference_geo": "global",
+            "speed": "standard",
+            "service_tier": "standard"
+          }
+        },
+        "representation": "sdk_standardized",
+        "duration_ms": 983
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 29,
+      "type": "lesson.report",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:02.546244+00:00",
+      "span_id": "run-1",
+      "parent_span_id": null,
+      "span_kind": "run",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "title": "Call ledger",
+        "summary": "Which gates each call went through: hook verdict, approval, and the digests of what was approved and what ran. The runner and the platform record these; none of it comes from the model's account.",
+        "checks": [
+          {
+            "id": "no-early-effect",
+            "label": "The desk did not change while approvals were pending",
+            "passed": true,
+            "detail": "Approvals checked: 2. In each one the digest of the whole desk is identical when the approval was requested and when the decision came back, so the tool had not run before approval."
+          },
+          {
+            "id": "args-match-approval",
+            "label": "Executed arguments equal the approved arguments",
+            "passed": true,
+            "detail": "Approved calls that ran: 2. In each one the digest of the arguments at execution equals the approved digest."
+          },
+          {
+            "id": "refused-not-executed",
+            "label": "Refused calls left the desk unchanged",
+            "detail": "No call was refused, so this check has no verdict."
+          },
+          {
+            "id": "summary-covers-args",
+            "label": "The approval summary states the key arguments",
+            "passed": true,
+            "detail": "Approval cards checked: 2. Each summary states the ticket id, the field and new value, or the recipient, the subject and the body length; the full arguments are in the card's payload."
+          },
+          {
+            "id": "customer-data-redacted",
+            "label": "Results sent to the model contain no raw customer contact details",
+            "passed": true,
+            "detail": "Ticket reads: 1. The customer's raw phone number and email appear nowhere in what was sent back to the model."
+          }
+        ],
+        "metrics": [
+          {
+            "id": "tool-calls",
+            "label": "Tool calls",
+            "value": 3
+          },
+          {
+            "id": "ran-without-approval",
+            "label": "Allowed and run directly",
+            "value": 1
+          },
+          {
+            "id": "approved",
+            "label": "Approved",
+            "value": 2
+          },
+          {
+            "id": "rejected",
+            "label": "Approval rejected",
+            "value": 0
+          },
+          {
+            "id": "timeouts",
+            "label": "Approval timed out",
+            "value": 0
+          },
+          {
+            "id": "hook-denied",
+            "label": "Denied by a hook",
+            "value": 0
+          },
+          {
+            "id": "guard-blocked",
+            "label": "Stopped by the digest check",
+            "value": 0
+          },
+          {
+            "id": "edited",
+            "label": "Edited during approval",
+            "value": 0
+          }
+        ],
+        "table": {
+          "columns": [
+            "#",
+            "Tool",
+            "Risk",
+            "Hook verdict",
+            "Approval",
+            "Outcome",
+            "Approved args digest",
+            "Executed args digest",
+            "Result digest sent to the model"
+          ],
+          "rows": [
+            [
+              1,
+              "read_record",
+              "—",
+              "allow",
+              "not needed",
+              "executed",
+              "—",
+              "—",
+              "sha256:6b919132701a..."
+            ],
+            [
+              2,
+              "update_record",
+              "medium",
+              "needs approval",
+              "approved",
+              "executed",
+              "sha256:40e3cc5c7abc...",
+              "sha256:40e3cc5c7abc...",
+              "sha256:a2fffcbba1ac..."
+            ],
+            [
+              3,
+              "send_notice",
+              "high",
+              "needs approval",
+              "approved",
+              "executed",
+              "sha256:0e92740fa81d...",
+              "sha256:0e92740fa81d...",
+              "sha256:c6bc536b421a..."
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 30,
+      "type": "lesson.report",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:02.547607+00:00",
+      "span_id": "run-1",
+      "parent_span_id": null,
+      "span_kind": "run",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "title": "What really changed on the desk",
+        "summary": "Changes read from the files after the run, set against the ledger.",
+        "checks": [
+          {
+            "id": "effects-match-ledger",
+            "label": "Changes in the files match the ledger",
+            "passed": true,
+            "detail": "Successful edits in the ledger: 1; successful sends: 1. The files hold exactly that many changes."
+          }
+        ],
+        "metrics": [
+          {
+            "id": "records-changed",
+            "label": "Ticket changes",
+            "value": 1
+          },
+          {
+            "id": "notices-written",
+            "label": "Notices in the outbox",
+            "value": 1
+          },
+          {
+            "id": "agent-claim",
+            "label": "The model's last sentence",
+            "value": "TKT-102 is now resolved; it was `in_progress` before the change, and the update was verified. I also sent notice N-001 to alice@corp.example telling her the ticket is done."
+          }
+        ],
+        "table": {
+          "columns": [
+            "Kind",
+            "Object",
+            "Old value or recipient",
+            "New value or subject"
+          ],
+          "rows": [
+            [
+              "ticket",
+              "TKT-102.status",
+              "in_progress",
+              "resolved"
+            ],
+            [
+              "notice",
+              "N-001",
+              "alice@corp.example",
+              "TKT-102 is resolved"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 31,
+      "type": "answer",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:02.548994+00:00",
+      "span_id": "run-1",
+      "parent_span_id": null,
+      "span_kind": "run",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "content": "Run finished. Tool calls: 3. Run directly: 1. Run after approval: 2. Not executed: 0.\nActual changes on the desk: ticket changes 1, notices 1.\n\nThe model's last sentence (its own account; the records above decide):\nTKT-102 is now resolved; it was `in_progress` before the change, and the update was verified. I also sent notice N-001 to alice@corp.example telling her the ticket is done."
+      }
+    },
+    {
+      "schema_version": 2,
+      "run_id": "65f25c8fc49f4775b87bb63898ec27ce",
+      "seq": 32,
+      "type": "done",
+      "round": null,
+      "timestamp": "2026-10-21T09:26:02.549390+00:00",
+      "span_id": "run-1",
+      "parent_span_id": null,
+      "span_kind": "run",
+      "actor": "agent",
+      "role": null,
+      "provenance": "recorded_run",
+      "representation": null,
+      "sdk": null,
+      "data": {
+        "status": "completed",
+        "duration_ms": 6008
+      }
+    }
+  ]
+}
