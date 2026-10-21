@@ -31,6 +31,7 @@ import { useLessonRecordings } from "./lab/useLessonRecordings";
 import { useRunEndToast } from "./lab/useRunEndToast";
 import { useRunFollow } from "./lab/useRunFollow";
 import { observeStatus } from "../content/guide";
+import { isLocale, locales } from "../i18n/locales";
 import type { SceneProps } from "./types";
 
 // The masked tour (React Joyride) loads only when a learner starts a guide.
@@ -165,6 +166,10 @@ export function LabScene({ studio, active, onConfigure }: SceneProps) {
                       item.metadata!.recorded_at,
                       i18n.language,
                     ),
+                    // Recordings of one exercise in two run languages share model and date.
+                    language: isLocale(item.metadata!.locale)
+                      ? locales[item.metadata!.locale].label
+                      : (item.metadata!.locale ?? ""),
                   }),
                 })),
               ]}
