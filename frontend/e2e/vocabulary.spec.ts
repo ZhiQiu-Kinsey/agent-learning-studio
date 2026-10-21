@@ -5,6 +5,9 @@ test("lesson prose separates new, review and background terms and explains code 
   page,
   request,
 }) => {
+  // This checks term and code-name marks, not motion. Scroll reveals can still move the
+  // layout after a hover on a slow CI runner, leaving the pointer outside the trigger.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
@@ -31,10 +34,13 @@ test("lesson prose separates new, review and background terms and explains code 
     .getByTestId("code-note-trigger")
     .filter({ hasText: /^evidence$/ })
     .first();
-  await evidence.scrollIntoViewIfNeeded();
-  await evidence.hover();
   const card = page.getByTestId("code-note-card");
-  await expect(card).toBeVisible();
+  // Hover again if the layout moved under the pointer before the card opened.
+  await expect(async () => {
+    await evidence.scrollIntoViewIfNeeded();
+    await evidence.hover();
+    await expect(card).toBeVisible({ timeout: 1000 });
+  }).toPass();
   await expect(card).toContainText("evidence");
 
   // Context budget: sampling temperature was introduced by sampling-variance, so it is a review here.
