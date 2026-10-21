@@ -1,0 +1,1392 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "delegation-budget",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "orchestration",
+    "context",
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "DELEGATION / BUDGET",
+          "headline": "活交出去之前写清契约，",
+          "highlight": "结果收回来之后验过再合并。",
+          "takeaway": "协调者把关于期末项目的四个问题交给五个子 Agent，每个只看分给它的资料，全体共用一份调用、Token 和时间预算。交回的结论要带逐字原文，冲突原样列出，超时和没轮到的子任务写进最终结论。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-contract",
+              "label": "01 / CONTRACT",
+              "title": "写清楚再交出去",
+              "description": "每个子任务拿到一份契约：一个问题、分给它的资料、交回的 JSON 格式、要不要逐字原文、找不到时怎么办、多久必须交。",
+              "token": "Contract"
+            },
+            {
+              "id": "02-merge",
+              "label": "02 / MERGE",
+              "title": "验过再合并",
+              "description": "交回的每个结论都按同一份条款核对：原文要逐字出自分给它的资料。同一问题出现不同的值，列成冲突，不替谁挑。",
+              "token": "merge_check"
+            },
+            {
+              "id": "03-budget",
+              "label": "03 / BUDGET",
+              "title": "一份预算大家用",
+              "description": "模型调用数、已报告的 Token 和全程时间放进一个账本，子任务按优先级申请；用完就停止派工，没开始的写进报告。",
+              "token": "grant"
+            },
+            {
+              "id": "04-cancel",
+              "label": "04 / CANCEL",
+              "title": "取消往下传",
+              "description": "协调者取消根范围，所有子任务都看得到。已经发出的请求收不回，只能不再等它，用量照样记账。",
+              "token": "Scope"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "子任务契约",
+          "paragraphs": [
+            "交出去的任务要写清输入、输出、证据和停止条件，这几样合起来就是委派契约（Delegation Contract）。{{lesson:multi-agent-patterns}}比较了几种组织方式，看到交接包漏掉一条规则，错误就能一路传到验证器。本课换一个角度：协调者已经决定要拆，怎么把活交出去、怎么把结果收回来，才能让每一步都查得清。本课的协调者就是运行器，它替学习者回答关于期末项目的四个问题，每个问题交给一个子 Agent。",
+            "先看一句话的委派会坏在哪。假设协调者只说“查一下期末项目什么时候截止”。子 Agent 可能回一句“12 月 12 日”，也可能回一大段解释，还可能顺手去翻别的资料。协调者拿到以后，不知道它看了哪份资料，判断不了这句话能不能信，也不知道它为什么用了三倍的时间。人和人之间也一样：交代任务时没说交什么、什么时候交、怎样算做完，返工几乎是一定的。",
+            "本课的契约写在 contracts.py 的 Contract 和 render 里，共四项。输入：一个问题，加上分给它的资料编号 docs，它的上下文里只有这些。输出：一个 JSON 对象，status 只能是 answered 或 not_found，value 不超过 40 字。证据：evidence 列出资料编号和逐字原文。停止条件：只调用一次模型；资料里找不到就写 not_found，不许猜；超过期限 deadline_ms 就不再等它。每份契约还带一个 priority，预算不够时决定谁先做。",
+            "契约约束的是子 Agent 能看到什么、该交回什么，不保证它照做。模型可能编一句原文，也可能把 value 写成一大段话，所以契约的另一半在协调者手里：交回来的东西要按同一份条款逐项检查。还有一条容易漏：子任务不能再委派。本课的子 Agent 没有任何工具，派不出下一层；真实系统里这一条要写进契约，否则任务树可以无限长下去。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "证据和来源",
+          "paragraphs": [
+            "子任务交回的每个结论，都要带上协调者能自己核对的来源。协调者不在子 Agent 的上下文里，看不到它读了什么、怎么推的，手里只有交回来的那个 JSON。要相信一个结论，唯一的办法是拿着它写的来源回到原始资料里对一遍。本课的 evidence 就是这个来源：哪份资料、哪一句原文。它和{{lesson:rag-citations}}的来源引用是一回事，只是引用范围限定在分给这个子 Agent 的资料里。",
+            "检查由合并校验（Merge Check）完成。check_reply 对每个结果查四件事：status 合法；说找到了就得有 value，而且不超过 40 字；evidence 不能为空；每条原文都逐字出现在它标的资料里，而那份资料必须分给了这个子任务。最后一条防的是借来的上下文：deadline-notice 只拿到 d2，它的证据如果写 d1，说明结论不是从自己的资料里得出的，可能是猜的，也可能是上下文漏进了别的东西，一律不收。",
+            "上下文隔离在这里有两面。一面是干净：每个子 Agent 的请求里只有契约和一份资料，lesson.delegate 里的 docs_seen 是从实际发出的消息里查出来的，可以逐个核对。另一面是要求必须写全：子 Agent 不知道协调者合并时要查证据，契约没写，它就不会给。“契约缺证据要求”这一组只删掉了证据那一条，五个子任务照样交回了结论，合并校验一个都不收，因为每个结论都无从核对。",
+            "逐字核对能证明原文确实出自那份资料，不能证明 value 是从这句原文里正确读出来的：子 Agent 完全可以引一句对的原文，再写一个错的值。要堵这个口子，可以再派一个独立的子 Agent 只看原文和结论做复核，或者对日期、数字这类值用程序比对。本课只做逐字核对，所以实验报告里的“通过”只表示证据可核对，不表示答案一定对。"
+          ]
+        },
+        {
+          "id": "deep-dive-contracts",
+          "type": "deep-dive",
+          "title": "契约写多细：几份参考资料的做法",
+          "summary": "从一句话的任务描述，到带格式、带验收、限制层级的交接，参考资料走的是同一个方向。",
+          "paragraphs": [
+            "Claude Cookbooks 的编排者-工人示例里，工人拿到三样东西：原始任务、自己负责的风格和一段具体说明，交回一段文字；程序只检查回复是不是空的。示例在局限里自己写明了：工人可能交回空的或格式不对的内容，拆分也未必合理。这是契约最松的一端，适合交回来给人看的创作任务。要把结果交给程序合并，就得往前走几步：规定输出格式，写明怎样算合格。",
+            "Learn Claude Code 教程的子 Agent 示例走了第二步：子 Agent 从空的消息列表开始，跑完自己的工具循环，只把最后一段文字交回父 Agent；子 Agent 的工具里没有派任务的那个工具，所以只有一层委派。教程特意说明这是消息隔离，父子仍共用同一个工作目录。《深入理解 AI Agent》把子 Agent 交回的结构化摘要比作进程的退出码：父进程不读子进程的内存，只看它交回的结果。",
+            "书里还给了一段并行管理者的伪代码，要点是结算点：管理者认的是“第一个已验证的成功”，不是“第一个声称成功”。结果到达后先用对方看不到的检查去验，通过了才结算，结算要加锁、只做一次，然后通知其他子 Agent 停下；没通过的只记一笔失败。本课的合并校验就是这样一个结算点，只是它等齐所有结果再判，而不是有一个成功就收工。Claude Code 的工作流工具也把这一点做进了接口：每个子 Agent 按一份格式约定只交回结构化结论，而不是完整轨迹，具体以官方文档为准。"
+          ]
+        },
+        {
+          "id": "misconception-returned",
+          "type": "misconception",
+          "claim": "子任务都交回了结果，任务就完成了。",
+          "correction": "交回只说明流程走完了。结果还要过合并校验：证据能不能核对、来源对不对。通过以后还要看有没有冲突、有没有子任务超时或没轮到。“契约缺证据要求”那组五个子任务全部交回，一个都没通过，任务结论是未完成。"
+        },
+        {
+          "id": "predict-requests",
+          "type": "predict",
+          "prompt": "运行“共享预算很紧”之前先猜：五个子任务、3 次调用的共享预算，这次运行会出现几个 request 事件？",
+          "experiment": "shared-budget",
+          "arm": "tight",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-evidence",
+          "type": "micro-quiz",
+          "question": {
+            "id": "evidence-gap",
+            "prompt": "“契约缺证据要求”这一组，五个子任务都交回了结论，合并校验一个都没收。最主要的原因是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "契约没要求证据，子任务就没给；协调者合并时仍要证据，结论无从核对",
+                "feedback": "对。契约里没写的要求，子 Agent 无从知道。"
+              },
+              {
+                "id": "b",
+                "text": "子任务交回的值都是错的",
+                "feedback": "不对。离线测试模式下的值和契约齐全那组一样，问题出在没有证据。"
+              },
+              {
+                "id": "c",
+                "text": "合并校验在这一组被关掉了",
+                "feedback": "不对。两组用的是同一个合并校验，只有契约不同。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "协调者验收时要查的东西，必须先写进契约。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "结果合并与冲突",
+          "paragraphs": [
+            "多个子任务的结果合并时，冲突要列出来，而不是随便选一个。本课把最要紧的问题问了两遍：截止时间分别交给 deadline-syllabus 和 deadline-notice，前者只看 9 月的课程大纲 d1，后者只看 11 月的教务通知 d2。一份资料写 12 月 12 日，一份写推迟到 12 月 19 日。两个子任务各自都对，证据也都逐字可查，合在一起却互相矛盾。",
+            "这时最省事的做法是挑一个：取后到的、取优先级高的、取看上去更新的。每一种都把一条规则悄悄写进了合并代码。“取日期更新的资料”听上去合理，可要是教务通知后来又撤回了呢？合并时程序手里只有两条带来源的值，没有资格替学习者裁决。merge_check 只做三件事：判每个结果收不收；把收下的值按问题归在一起；同一问题出现不同的值，就连同每一方的资料和原文记进 conflicts。",
+            "比较之前先做最小的归一：same_value 去掉空格、统一大小写、去掉句末的句号，免得“12 月 12 日”和“12月12日”被当成两个值；归一之后仍然不同，才算冲突。lesson.merge 里，conflicts 按问题列出；最终回答把这一条写成“资料不一致，需要确认”，后面跟着两方各自的说法。整次任务的结论因此是“必需问题已答，有冲突待确认”，而不是“全部完成”。",
+            "归一只处理格式差异，同一个日期换个写法仍会被记成冲突：宁可多报，不能漏报。反过来，两个子任务要是从同一份错误资料里抄了同一个值，合并时完全一致，冲突检测也看不出来；交叉核对要有用，两个来源得真正独立。用模型写一段总结来合并更危险，流畅的文字很容易把冲突抹平，所以本课的最终回答由程序从合并结果直接拼出来。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "共享预算",
+          "paragraphs": [
+            "全局预算分给子任务，任何一个超支都要能停下。子任务一多，花费就不再是一次调用的事；让每个子 Agent 自己掂量，谁都觉得自己那一次很便宜。共享预算（Shared Budget）把三样东西放进一个账本，全体子任务一起用：模型调用数、服务商报告的 Token、全程时间。SharedBudget 在每次派出子任务之前先批一次调用，grant 要么批准，要么说出拒绝的原因：calls、tokens 或 time。",
+            "手算“共享预算很紧”这一组。预算 3 次调用，最多同时跑 3 个。队列按优先级排：deadline-syllabus、team-size、weight 都是 1，deadline-notice 是 2，late-policy 是 3。前三个各批一次，余额变成 0；第一个结果回来、空出一个位置时，deadline-notice 申请被拒，原因是 calls。运行器记一条 lesson.budget_stop，列出没开始的 deadline-notice 和 late-policy，此后不再派新的子任务。",
+            "三项预算的扣法不同。调用数在发请求之前扣，能事先拦住。Token 只能事后扣：一次请求用了多少，要等响应里的用量才知道，而且 charge 只扣服务商报告的 total_tokens；没报告就记一次未报告，不估算，也不当成 0。所以 Token 预算的意思是“已报告的用量到了上限，就不再派新任务”，挡不住已经在跑的那几次。时间从运行开始算，每个子任务的期限取它自己的 deadline_ms 和全程剩余时间中较早的那个。",
+            "优先级决定预算不够时先保谁。这一组的结论是“必需问题已答，有子任务没做”：三个必需问题都有答案，看上去比“契约齐全”那组还干净，原因是负责交叉核对的 deadline-notice 没轮到，冲突根本没被发现。预算紧的时候，最先被省掉的往往是核对；报告里必须写出没做的那几项，否则读者会把“没查”当成“没问题”。"
+          ]
+        },
+        {
+          "id": "deep-dive-budget",
+          "type": "deep-dive",
+          "title": "预算怎么分：先扣、后扣和预算意识",
+          "summary": "调用数可以先扣，Token 只能后扣；给了预算还要让执行者知道它，预算才起作用。",
+          "paragraphs": [
+            "先扣和后扣各有代价，举个编的例子。Token 预算 1000，每次请求的回答上限是 400 Token。若按最坏情况先扣，每派一个子任务就预留 400，第三个子任务派不出去，哪怕前两个实际只用了 150；若像本课这样事后扣已报告的数，三个都能派出，可万一三个都写满，合计 1200，超出 20%。真实系统常把两种办法合起来：调用数和并行数先扣，Token 事后扣，再给单次请求设回答长度上限，把超支压在一次请求之内。",
+            "《深入理解 AI Agent》引用的一项研究发现，只给 Agent 更多步数不一定带来更好的结果：没有预算意识的 Agent 即使有几百步，也很快停在浅层搜索上。要让多出来的步数有用，执行者得看得见剩下多少，前期多探索，后期集中在最有希望的方向。书里因此建议管理者按子任务的难度分预算，而不是平均分。本课的子任务各只调用一次，预算意识体现在协调者这一层：它按优先级先保必需问题。",
+            "Claude Cookbooks 的延迟示例给出了一个具体做法：整个团队共用一个计时器，每次调用模型之前，把“已经过去多少秒、总共多少秒”写进最新那条消息的末尾。晚派出的子 Agent 第一次看到的也是团队的时间，而不是从零开始，因为预算属于团队。书里还提醒了相反的风险：失控的 Agent 可能一口气派出成千上万个子 Agent，所以自主性强的系统最好单独配一个 API 密钥，从账户层面兜住总花费。"
+          ]
+        },
+        {
+          "id": "mq-priority",
+          "type": "micro-quiz",
+          "question": {
+            "id": "priority-cut",
+            "prompt": "五个子任务、3 次调用的共享预算、最多同时跑 3 个。按本课的优先级，哪两个子任务不会开始？",
+            "options": [
+              {
+                "id": "a",
+                "text": "deadline-notice 和 late-policy",
+                "feedback": "对。它们的优先级是 2 和 3，排在三个必需问题后面。"
+              },
+              {
+                "id": "b",
+                "text": "最后返回结果的两个",
+                "feedback": "不对。没开始的子任务根本不会发请求，也就没有结果。"
+              },
+              {
+                "id": "c",
+                "text": "每次运行随机两个",
+                "feedback": "不对。队列按优先级排好，同一优先级保持计划里的顺序，结果是确定的。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "预算不够时，优先级决定先保谁；没开始的子任务要写进报告。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "取消传播",
+          "paragraphs": [
+            "主任务取消时，子任务要一起停下。三种情况会让子任务停下：它自己超过期限；协调者的全程时间用完；学习者在页面上点了停止。Scope 是本课的取消范围：协调者持有根范围，每派出一个子任务就给它一个子范围；子范围先看自己有没有被取消，没有就看父范围。root.cancel 一次，所有子范围的 reason 都变成 run_deadline，取消顺着创建关系往下传，这就是取消传播（Cancellation Propagation）。",
+            "看“一个子任务超时”这一组。weight 的期限只有 50 毫秒，它的请求已经发出去了。50 毫秒一到，协调者不再等它：取消它的范围，记一条 lesson.subtask，状态是 timed_out，timed_out_after_ms 是 50。其余子任务照常进行，空出来的位置交给队列里的下一个。weight 是必需问题“占总评比例”唯一的来源，它一超时，这个问题就没有答案了。",
+            "取消有一个绕不开的事实：已经发出去的请求收不回。服务商那边照样生成，生成完照样计量。weight 的响应最后还是回来了，平台照常记下 response 事件；运行器收尾时等它返回，把它报告的 Token 记进账本，再记一条 lesson.late_response，discarded 为真，这个结果不参与合并。还没发出的请求则拦得住：ask 发请求之前先查一次范围，被取消的子任务不会再发。",
+            "协作式取消只在代码主动查看取消状态的地方生效。子 Agent 正在等一次很慢的模型响应时，外面没法把它打断，只能不再等它；本课每个子任务只调用一次模型，这样的位置就只有发请求之前这一个。点停止时，平台在下一个这样的位置抛出取消，整次运行以“已停止”结束，后面的报告不会再写。要停得更快，得把长任务拆成更多会查看取消状态的小步，或者用能中途断开的流式请求，{{lesson:streaming-cancel}}讲这件事。"
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "部分结果与最终结论",
+          "paragraphs": [
+            "全部子任务都交回了，不等于任务完成；最终结论要把没做完的和有冲突的都算进去。运行器用 finalize 定结论，按顺序判：有必需问题没有通过校验的答案，是“未完成”；必需问题都有答案、但有冲突，是“待确认”；没有冲突、但有子任务没做，是“必需问题已答，有子任务没做”；五个子任务全部通过、也没有冲突，才是“全部完成”。必需问题是截止时间、每组人数和占总评比例，迟交规则是可选的。",
+            "四个练习正好落在不同的结论上。“契约齐全”五个都通过，截止时间有冲突，结论是待确认。“契约缺证据要求”五个都交回、一个没通过，结论是未完成，这就是“交回了”和“完成了”的区别。“共享预算很紧”少做了两个，必需问题都有答案。“一个子任务超时”丢了 weight，结论是未完成，但其余结果照样交付：截止时间的冲突、每组人数和迟交规则都在回答里。",
+            "部分结果值得交付，前提是写清缺了什么、为什么缺。本课的最终回答由程序从合并结果拼出来：每个问题要么给出值和原文，要么写明资料不一致，要么写明没有通过校验的答案；末尾列出没完成的子任务和原因。实验报告里，没交回结果的子任务不带“通过”标记，因为合并校验根本没查过它，只写明是超时、出错还是没轮到。",
+            "这套结论规则是本课为这个任务定的，换个任务要重新定：有的任务一个关键子任务失败就该整体放弃，有的少一块也能用。要紧的是规则写在程序和契约里，而不是由最后写总结的模型临场发挥。{{lesson:observability-cost}}讲过怎样把每次调用记进账本，本课把账本变成一组子任务共用的预算；{{lesson:long-running-tasks}}接着处理跑得更久、要放到后台的任务。"
+          ]
+        },
+        {
+          "id": "deep-dive-cancel",
+          "type": "deep-dive",
+          "title": "取消在真实系统里怎么传",
+          "summary": "取消沿创建关系向下传，先礼后兵；已经发出的工作只能不再等待。",
+          "paragraphs": [
+            "《深入理解 AI Agent》借用 Go 语言的 context 来讲取消：每个 Agent 从父级拿到一个上下文对象，取消父级，它派生的所有子 Agent 随之取消，从根上杜绝没人认领的孤儿 Agent；子 Agent 在安全点检查终止信号，对应 Go 里对 ctx.Done() 的轮询。确实要一个脱离主 Agent、长期运行的后台 Agent，就让它从一棵新的生命周期树起步，显式声明不随父级终止。本课的 Scope 是这套做法的最小版本，只有两层。",
+            "终止有两种强度，正好对应操作系统的 SIGTERM 和 SIGKILL。优雅终止是首选：发出停止信号，子 Agent 在当前步骤的安全点响应，关掉浏览器、写完半截的文件、释放锁，回一个确认再退出。强制终止是兜底，只在对方不响应时用，代价是可能留下悬挂的资源。书中的并行搜索实验要求：一个子 Agent 找到目标后，管理者加锁结算一次，向其他还在跑的子 Agent 广播停止，等齐确认或等到超时再汇总；某个网站超时只算它失败，不影响其他子 Agent。",
+            "落到 Python 上，限制更具体。线程没法从外部杀掉；线程池的 cancel 只对还没开始的任务有效。asyncio 的任务取消会在下一个等待点抛出取消异常，比线程灵活，但已经交给服务商的请求，断开连接后对方是否停止生成、是否计费，要看服务商文档。所以本课对已发出的请求只做两件事：不再等它，以及等它回来以后把用量记进账本。{{lesson:async-concurrency}}讲过超时和部分结果的基本写法，本课把它放进了多 Agent 协作里。"
+          ]
+        },
+        {
+          "id": "misconception-cancel",
+          "type": "misconception",
+          "claim": "超时的子任务被取消了，就不花钱了。",
+          "correction": "取消只能拦住还没发出的请求。weight 超时的时候，它的请求早已发给服务商，服务商照样生成、照样计量。本课收尾时等它的响应回来，把报告的 Token 记进账本，再标明这个结果没有参与合并。"
+        },
+        {
+          "id": "mq-late",
+          "type": "micro-quiz",
+          "question": {
+            "id": "late-response",
+            "prompt": "“一个子任务超时”这一组，weight 超时以后，下面哪句话对？",
+            "options": [
+              {
+                "id": "a",
+                "text": "它的请求已经发出，响应回来后用量照样记进账本，但结果不参与合并",
+                "feedback": "对。lesson.late_response 记下了这一点，discarded 为真。"
+              },
+              {
+                "id": "b",
+                "text": "取消以后服务商就不会计量这次请求",
+                "feedback": "不对。已发出的请求收不回，生成完照样计量。"
+              },
+              {
+                "id": "c",
+                "text": "协调者用其他子任务的结果替它估一个值",
+                "feedback": "不对。协调者不替子任务作答，这个问题在回答里写明没有通过校验的答案。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "取消停止的是等待和后续动作，停不住已经在路上的请求。"
+          }
+        },
+        {
+          "id": "compare-exercises",
+          "type": "compare",
+          "title": "四个练习",
+          "paragraphs": [
+            "下表是离线测试模式下的确定性结果，回答由固定脚本给出；真实运行的结果可能不同，以你自己的实验报告为准。"
+          ],
+          "columns": [
+            "练习",
+            "和基线差在哪",
+            "模型调用数",
+            "合并校验",
+            "任务结论"
+          ],
+          "rows": [
+            [
+              "契约齐全",
+              "无，这是基线",
+              "5",
+              "5 个通过；截止时间两个值冲突",
+              "必需问题已答，有冲突待确认"
+            ],
+            [
+              "契约缺证据要求",
+              "契约里删掉证据要求",
+              "5",
+              "0 个通过，都缺证据",
+              "未完成"
+            ],
+            [
+              "共享预算很紧",
+              "调用预算 3 次",
+              "3",
+              "3 个通过，2 个没开始",
+              "必需问题已答，有子任务没做"
+            ],
+            [
+              "一个子任务超时",
+              "weight 的期限 50 毫秒",
+              "5",
+              "4 个通过，weight 超时",
+              "未完成"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次委派从派出到结论",
+          "description": "按步骤说明“契约齐全”的一次运行，代码是简化的示意；这次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "写契约",
+              "actor": "协调者",
+              "title": "每个子任务一份契约",
+              "body": "问题、资料、输出格式、证据要求、期限和优先级都写进契约，任务卡给出总的约定。",
+              "code": "contracts = build_contracts(evidence=True)",
+              "language": "python",
+              "evidence": "lesson.task_card"
+            },
+            {
+              "id": "step-2",
+              "label": "派工",
+              "actor": "协调者",
+              "title": "按优先级申请预算，再派出",
+              "body": "每派一个先批一次调用；请求带子任务自己的 branch，上下文里只有它的资料。",
+              "code": "refusal = budget.grant()",
+              "language": "python",
+              "evidence": "lesson.delegate"
+            },
+            {
+              "id": "step-3",
+              "label": "收结果",
+              "actor": "子 Agent",
+              "title": "按期交回 JSON",
+              "body": "每个子 Agent 交回 status、value 和 evidence；协调者扣掉报告的用量。",
+              "code": "tokens = budget.charge(response)",
+              "language": "python",
+              "evidence": "lesson.subtask"
+            },
+            {
+              "id": "step-4",
+              "label": "合并",
+              "actor": "协调者",
+              "title": "合并校验，冲突原样列出",
+              "body": "原文逐字核对；截止时间出现两个值，记进 conflicts，不替谁挑。",
+              "code": "context.call_tool(\"merge_check\", arguments, tools, round_number=2)",
+              "language": "python",
+              "evidence": "lesson.merge"
+            },
+            {
+              "id": "step-5",
+              "label": "结论",
+              "actor": "协调者",
+              "title": "把冲突和没做完的算进结论",
+              "body": "必需问题都有答案、截止时间有冲突，结论是待确认；回答由程序从合并结果拼出。",
+              "code": "final = finalize(contracts, outcomes, merged)",
+              "language": "python",
+              "evidence": "lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch10",
+              "title": "不共享上下文的多 Agent 协作、执行终止与资源调度、失败模式（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter10.md"
+            },
+            {
+              "id": "book-parallel-research",
+              "title": "并行检索：超时、错误隔离与级联终止（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter10/parallel-web-research/README.md"
+            },
+            {
+              "id": "cookbook-orchestrator",
+              "title": "编排者-工人：动态拆分与工人的输入（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/patterns/agents/orchestrator_workers.ipynb"
+            },
+            {
+              "id": "cookbook-latency",
+              "title": "延迟压力下的多 Agent 团队：共享计时与预算（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/patterns/agents/latency_multi_agent.ipynb"
+            },
+            {
+              "id": "lcc-subagent",
+              "title": "子 Agent：独立的消息列表与一层委派（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s06_subagent/README.zh.md"
+            },
+            {
+              "id": "lcc-task-system",
+              "title": "任务系统：任务状态、依赖与认领（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s10_task_system/README.zh.md"
+            },
+            {
+              "id": "ms-multi-agent",
+              "title": "多 Agent 设计模式：协调机制与交互可见性（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/08-multi-agent/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "multi-agent-patterns"
+        },
+        {
+          "id": "code-contract",
+          "type": "annotated-source",
+          "path": "lessons/lesson_delegation_budget/contracts.py",
+          "start": 44,
+          "end": 92,
+          "notes": [
+            {
+              "id": "n-render",
+              "line": 44,
+              "anchor": "def render(t, contract: Contract) -> list[dict]:",
+              "text": "render 生成子任务的全部上下文：一个全新的消息列表，只装契约和分给它的资料。"
+            },
+            {
+              "id": "n-output",
+              "line": 47,
+              "anchor": "output = t.output_with_evidence if contract.evidence",
+              "text": "契约要不要证据，只差这一行：两种输出格式二选一。“契约缺证据要求”那组走后一种。"
+            },
+            {
+              "id": "n-messages",
+              "line": 50,
+              "anchor": "return [{\"role\": \"system\", \"content\": t.subtask_system},",
+              "text": "只有两条消息：系统提示词和这一条任务。协调者的任务卡、其他子任务的资料都不在里面。"
+            },
+            {
+              "id": "n-check",
+              "line": 66,
+              "anchor": "def check_reply(docs: dict, contract: dict, reply) -> list[str]:",
+              "text": "合并校验对单个结果的检查，返回问题代码；空列表表示通过。"
+            },
+            {
+              "id": "n-not-found",
+              "line": 73,
+              "anchor": "if status == \"not_found\":",
+              "text": "如实说没找到是合格的回复，但它不回答问题：必需问题仍然算缺。"
+            },
+            {
+              "id": "n-too-long",
+              "line": 78,
+              "anchor": "problems = [\"too_long\"]",
+              "text": "value 超过 40 字就记一个问题，不替它截短。"
+            },
+            {
+              "id": "n-evidence",
+              "line": 81,
+              "anchor": "if not isinstance(evidence, list) or not evidence:",
+              "text": "协调者总要证据，不管契约写没写。“契约缺证据要求”那组就在这里被拒。"
+            },
+            {
+              "id": "n-scope",
+              "line": 87,
+              "anchor": "if doc not in contract[\"docs\"]:",
+              "text": "来源必须是分给这个子任务的资料，引用别的资料一律不收。"
+            },
+            {
+              "id": "n-quote",
+              "line": 90,
+              "anchor": "quote.strip() not in docs[doc]",
+              "text": "原文要逐字出现在它标的资料里。这里只查出处，不查值读得对不对。"
+            },
+            {
+              "id": "n-problems",
+              "line": 92,
+              "anchor": "return list(dict.fromkeys(problems))",
+              "text": "去掉重复的问题代码，保持出现的顺序。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-parse",
+              "start": 54,
+              "end": 63,
+              "label": "解析回复：取第一个 JSON 对象，不做修补"
+            }
+          ]
+        },
+        {
+          "id": "code-dispatch",
+          "type": "annotated-source",
+          "path": "lessons/lesson_delegation_budget/runtime.py",
+          "start": 48,
+          "end": 93,
+          "notes": [
+            {
+              "id": "n-dispatch",
+              "line": 48,
+              "anchor": "def dispatch(context: RunContext, t: Texts",
+              "text": "协调者的调度：按优先级派出子任务，全体共用一个预算。"
+            },
+            {
+              "id": "n-queue",
+              "line": 51,
+              "anchor": "queue = sorted(contracts, key=lambda item: item.priority)",
+              "text": "队列按优先级排；排序是稳定的，同一优先级保持计划里的顺序，所以派工顺序是确定的。"
+            },
+            {
+              "id": "n-pool",
+              "line": 53,
+              "anchor": "pool = ThreadPoolExecutor(max_workers=len(contracts))",
+              "text": "线程数等于子任务数，免得超时的请求占着线程挡住后面的；同时跑几个由 max_parallel 控制。"
+            },
+            {
+              "id": "n-stop-button",
+              "line": 56,
+              "anchor": "context.check_cancelled()",
+              "text": "每一轮先查学习者有没有点停止。"
+            },
+            {
+              "id": "n-grant",
+              "line": 59,
+              "anchor": "refusal = \"time\" if root.reason else budget.grant()",
+              "text": "派之前先向共享预算申请一次调用；被拒就停止派工，排在后面的全部记为没开始。"
+            },
+            {
+              "id": "n-child",
+              "line": 63,
+              "anchor": "contract, scope = queue.pop(0), root.child()",
+              "text": "每个子任务拿到根范围下的一个子范围。"
+            },
+            {
+              "id": "n-deadline",
+              "line": 65,
+              "anchor": "deadline = min(started + contract.deadline_ms / 1000, budget.ends_at)",
+              "text": "期限取子任务自己的期限和全程结束时刻中较早的那个。"
+            },
+            {
+              "id": "n-submit",
+              "line": 67,
+              "anchor": "running[pool.submit(ask, context, contract, scope, messages)]",
+              "text": "交给线程池执行 ask：请求带子任务自己的 branch，时间线据此配对请求和响应。"
+            },
+            {
+              "id": "n-wait",
+              "line": 72,
+              "anchor": "wait(running, timeout=max(nearest - time.perf_counter(), 0)",
+              "text": "等第一个结果，或者等到最近的期限，先到为准。"
+            },
+            {
+              "id": "n-root-cancel",
+              "line": 74,
+              "anchor": "root.cancel(\"run_deadline\")",
+              "text": "全程时间用完：取消根范围，正在跑的子任务一起被取消。"
+            },
+            {
+              "id": "n-in-time",
+              "line": 79,
+              "anchor": "if done and finished <= deadline:",
+              "text": "按期返回的：扣掉报告的用量、解析回复，留给后面的合并校验判。"
+            },
+            {
+              "id": "n-late",
+              "line": 82,
+              "anchor": "elif done or scope.reason or now >= deadline:",
+              "text": "迟到、被上层取消或已过期限：不再等它，记为超时，放进 late 留到收尾处理。"
+            },
+            {
+              "id": "n-record",
+              "line": 89,
+              "anchor": "del running[future]",
+              "text": "有了结局的子任务移出运行表，记一条 lesson.subtask。"
+            },
+            {
+              "id": "n-shutdown",
+              "line": 92,
+              "anchor": "pool.shutdown(wait=True)",
+              "text": "收尾时等齐已发出的请求：收不回，但要把它们的用量记进账本。"
+            }
+          ]
+        },
+        {
+          "id": "code-budget",
+          "type": "annotated-source",
+          "path": "lessons/lesson_delegation_budget/budget.py",
+          "start": 14,
+          "end": 52,
+          "notes": [
+            {
+              "id": "n-scope-class",
+              "line": 14,
+              "anchor": "class Scope:",
+              "text": "取消范围：自己没被取消时，报告父范围的原因。"
+            },
+            {
+              "id": "n-scope-fields",
+              "line": 18,
+              "anchor": "self.parent, self.own = parent, None",
+              "text": "只记父范围和自己的原因，不保存子范围列表：取消靠子范围向上查询传下去。"
+            },
+            {
+              "id": "n-cancel",
+              "line": 23,
+              "anchor": "def cancel(self, reason: str):",
+              "text": "第一个原因生效，之后的不改写。weight 先因期限被取消，原因就一直是 deadline。"
+            },
+            {
+              "id": "n-reason",
+              "line": 27,
+              "anchor": "def reason(self) -> str | None:",
+              "text": "先看自己，再看父范围；根范围取消一次，所有子范围都看得到。"
+            },
+            {
+              "id": "n-scope-check",
+              "line": 30,
+              "anchor": "def check(self):",
+              "text": "ask 发请求之前调用它：被取消的子任务不会再发请求。"
+            },
+            {
+              "id": "n-budget-class",
+              "line": 35,
+              "anchor": "class SharedBudget:",
+              "text": "全体子任务共用的账本：模型调用数、已报告的 Token、全程时间。"
+            },
+            {
+              "id": "n-clock",
+              "line": 38,
+              "anchor": "def __init__(self, calls: int, tokens: int, run_ms: int",
+              "text": "时钟可以替换，测试用它模拟时间流逝，不必真的等。"
+            },
+            {
+              "id": "n-unreported",
+              "line": 41,
+              "anchor": "self.calls_used, self.tokens_used, self.unreported = 0, 0, 0",
+              "text": "unreported 记没有报告用量的调用次数，不估算。"
+            },
+            {
+              "id": "n-grant-def",
+              "line": 43,
+              "anchor": "def grant(self) -> str | None:",
+              "text": "每派一个子任务申请一次调用：批准返回 None，拒绝时返回原因。"
+            },
+            {
+              "id": "n-time",
+              "line": 45,
+              "anchor": "if self.remaining_ms() <= 0:",
+              "text": "先查时间：全程时间用完，什么都不再派。"
+            },
+            {
+              "id": "n-calls",
+              "line": 47,
+              "anchor": "if self.calls_used >= self.calls:",
+              "text": "调用数在发请求之前扣，能事先拦住。"
+            },
+            {
+              "id": "n-tokens",
+              "line": 49,
+              "anchor": "if self.tokens_used >= self.tokens:",
+              "text": "Token 只能事后扣：已报告的用量到了上限才拒绝，挡不住已经在跑的请求。"
+            },
+            {
+              "id": "n-reserve",
+              "line": 51,
+              "anchor": "self.calls_used += 1",
+              "text": "批准就扣一次；请求没发出时由 refund 退回。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "程序当协调者，契约固定，合并只列冲突，预算按优先级批",
+          "chosen": "拆法和契约写在程序里，每个子任务一次模型调用、只看分给它的资料；合并校验由运行器作为工具调用，只核对证据、列出冲突，不裁决；调用、Token 和时间三项预算全体共享，按优先级批，拒绝时写明原因；超时的请求收尾时等回来记账，结果不合并；最终回答由程序从合并结果拼出。",
+          "alternatives": [
+            {
+              "id": "model-coordinator",
+              "title": "让模型当协调者，自己写契约、自己合并",
+              "why_not": "动态拆分在{{lesson:orchestrator-evaluator}}讲过。本课要看清契约、校验和预算各管什么，协调者由程序担任，每一步都能从事件里核对。"
+            },
+            {
+              "id": "newest-wins",
+              "title": "合并时按资料日期取较新的值",
+              "why_not": "那样一条业务规则就藏进了合并代码，冲突也从报告里消失了。本课只列冲突，裁决留给人。"
+            },
+            {
+              "id": "per-agent-budget",
+              "title": "每个子任务各给一份固定预算",
+              "why_not": "各管各的，总花费就是份数乘单价，谁都不会为整体让路；共享预算加优先级，才能在不够时先保必需问题。"
+            },
+            {
+              "id": "kill-thread",
+              "title": "超时就强行结束线程，不等响应",
+              "why_not": "Python 线程无法从外部结束，已发出的请求也收不回；不等它回来，这次调用的用量就漏记了。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "contract-evidence",
+          "title": "契约缺了证据要求",
+          "hypothesis": "契约里删掉证据要求，其他都不变，子任务照样交回结论，但交回的结论没有原文；协调者的合并校验仍然要求证据，于是一个都不收，任务结论是未完成。",
+          "arms": [
+            {
+              "id": "full",
+              "exercise": "full-contract",
+              "label": "契约齐全"
+            },
+            {
+              "id": "no-evidence",
+              "exercise": "no-evidence",
+              "label": "契约缺证据要求"
+            }
+          ],
+          "observe": [
+            {
+              "id": "card",
+              "text": "任务卡上的证据要求：两组只差这一项。",
+              "selector": {
+                "event": "lesson.task_card",
+                "path": "data.evidence"
+              }
+            },
+            {
+              "id": "isolation",
+              "text": "子任务的上下文里实际有哪些资料，从发出的消息里查出来。",
+              "selector": {
+                "event": "lesson.delegate",
+                "path": "data.context.docs_seen"
+              }
+            },
+            {
+              "id": "branch",
+              "text": "每个子任务的请求带自己的 branch。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.branch"
+              }
+            },
+            {
+              "id": "reply",
+              "text": "子任务交回的 JSON：有没有 evidence。",
+              "selector": {
+                "event": "lesson.subtask",
+                "path": "data.reply"
+              }
+            },
+            {
+              "id": "verdict-item",
+              "text": "合并校验对 deadline-syllabus 的判定和问题代码。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.verdicts[id=deadline-syllabus]"
+              }
+            },
+            {
+              "id": "accepted",
+              "text": "通过合并校验的子任务有几个。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=accepted]"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "整次任务的结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=verdict]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组的资料、预算和调度完全相同，只差契约里有没有证据要求。"
+            },
+            {
+              "text": "先看任务卡：契约齐全那组写明要逐字原文，另一组写着这一版契约没要求证据。",
+              "observe": "card",
+              "stage": "runtime"
+            },
+            {
+              "text": "每个子任务只看到分给它的一份资料，其他资料不在它的上下文里。",
+              "observe": "isolation"
+            },
+            {
+              "text": "五个请求各带自己的 branch 发出，最多三个同时在跑。",
+              "observe": "branch",
+              "stage": "model"
+            },
+            {
+              "text": "看交回的 JSON：缺证据要求那组只有 status 和 value。",
+              "observe": "reply"
+            },
+            {
+              "text": "合并校验由运行器调用；缺证据的结果被判为拒绝，问题代码是 no_evidence。",
+              "observe": "verdict-item",
+              "stage": "tool"
+            },
+            {
+              "text": "通过合并校验的数量：一组 5 个，一组 0 个。",
+              "observe": "accepted"
+            },
+            {
+              "text": "结论：契约齐全那组因为截止时间冲突是待确认，缺证据那组是未完成。",
+              "observe": "verdict"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里契约写了什么、每个子任务的上下文里有哪些资料、交回的 JSON 长什么样，以及合并校验对每个结果的判定。"
+            ],
+            "does_not_prove": [
+              "证据逐字可查不等于值读得对：合并校验只查原文出处。",
+              "离线测试模式下，没有证据要求时脚本固定只给值；真实模型可能主动附上原文，也可能不附。"
+            ]
+          }
+        },
+        {
+          "id": "shared-budget",
+          "title": "共享预算与优先级",
+          "hypothesis": "五个子任务共用 3 次调用的预算时，协调者按优先级先派三个必需问题；预算用完就停止派工，交叉核对和可选问题不会开始，截止时间的冲突也就不会被发现。",
+          "predict": "predict-requests",
+          "arms": [
+            {
+              "id": "full",
+              "exercise": "full-contract",
+              "label": "契约齐全"
+            },
+            {
+              "id": "tight",
+              "exercise": "tight-budget",
+              "label": "共享预算很紧"
+            }
+          ],
+          "observe": [
+            {
+              "id": "grant",
+              "text": "每次派出子任务时，共享预算还剩多少。",
+              "selector": {
+                "event": "lesson.delegate",
+                "path": "data.budget"
+              }
+            },
+            {
+              "id": "stop",
+              "text": "预算拒绝时，哪些子任务没有开始、原因是什么。",
+              "selector": {
+                "event": "lesson.budget_stop",
+                "path": "data.not_started"
+              }
+            },
+            {
+              "id": "conflict",
+              "text": "合并时记下的截止时间冲突：两个值和各自的来源。",
+              "selector": {
+                "event": "lesson.merge",
+                "path": "data.conflicts[id=deadline]"
+              }
+            },
+            {
+              "id": "calls",
+              "text": "调用预算用了多少。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=budget_calls]"
+              }
+            },
+            {
+              "id": "tokens",
+              "text": "累计 total_tokens，只取服务商报告的数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=total_tokens]"
+              }
+            },
+            {
+              "id": "unfinished",
+              "text": "没完成的子任务。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=unfinished]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组只差调用预算：5 次和 3 次。先看派工时预算怎么减少。"
+            },
+            {
+              "text": "每派一个子任务，calls_left 少 1；预算紧的那组派完三个就到 0。",
+              "observe": "grant",
+              "stage": "runtime"
+            },
+            {
+              "text": "空出位置时 deadline-notice 申请被拒，它和 late-policy 都没有开始。",
+              "observe": "stop"
+            },
+            {
+              "text": "契约齐全那组跑了交叉核对，才发现截止时间有两个值；预算紧的那组没有这条。",
+              "observe": "conflict"
+            },
+            {
+              "text": "调用预算：一组用了 5 次，一组用了 3 次。",
+              "observe": "calls",
+              "stage": "model"
+            },
+            {
+              "text": "Token 只累加报告的数，没报告的不估算。",
+              "observe": "tokens"
+            },
+            {
+              "text": "没完成的子任务写进报告，读者才不会把没查当成没问题。",
+              "observe": "unfinished"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "调用预算用完时，协调者按优先级停止派工，没开始的子任务和原因都有事件可查；少做的交叉核对使这次运行没有发现冲突。"
+            ],
+            "does_not_prove": [
+              "这里的优先级是本课写死的，不代表别的任务也该这样排。",
+              "Token 预算只扣报告的用量，服务商不报告时它拦不住任何请求；本组没有演示 Token 先用完的情形，测试里有。"
+            ]
+          }
+        },
+        {
+          "id": "timeout-partial",
+          "title": "一个子任务超时",
+          "hypothesis": "weight 的期限只有 50 毫秒，它会超时并被取消；它的请求已经发出，响应回来后用量照样记账，但结果不参与合并。其余结果照常合并，因为必需问题缺了一个，任务结论是未完成。",
+          "arms": [
+            {
+              "id": "full",
+              "exercise": "full-contract",
+              "label": "契约齐全"
+            },
+            {
+              "id": "timeout",
+              "exercise": "subtask-timeout",
+              "label": "一个子任务超时"
+            }
+          ],
+          "observe": [
+            {
+              "id": "timed-out",
+              "text": "超时的子任务：等了多少毫秒、被取消的原因。",
+              "selector": {
+                "event": "lesson.subtask",
+                "path": "data.timed_out_after_ms"
+              }
+            },
+            {
+              "id": "late",
+              "text": "超时以后才回来的响应：用量记账，结果丢弃。",
+              "selector": {
+                "event": "lesson.late_response",
+                "path": "data.discarded"
+              }
+            },
+            {
+              "id": "merged",
+              "text": "合并校验收到了哪几个结果。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.verdicts"
+              }
+            },
+            {
+              "id": "missing",
+              "text": "没有通过校验答案的必需问题。",
+              "selector": {
+                "event": "lesson.merge",
+                "path": "data.required_missing"
+              }
+            },
+            {
+              "id": "weight-check",
+              "text": "报告里 weight 这一项：没有通过与否的标记，只写明原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=weight]"
+              }
+            },
+            {
+              "id": "model-calls",
+              "text": "模型调用数：超时的那次也算在内。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_calls]"
+              }
+            },
+            {
+              "id": "verdict",
+              "text": "整次任务的结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=verdict]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组只差 weight 的期限：30000 毫秒和 50 毫秒。"
+            },
+            {
+              "text": "50 毫秒一到，协调者取消 weight 的范围，不再等它。",
+              "observe": "timed-out",
+              "stage": "runtime"
+            },
+            {
+              "text": "它的请求早已发出，响应后来还是回来了：用量记进账本，结果标明丢弃。",
+              "observe": "late",
+              "stage": "model"
+            },
+            {
+              "text": "合并校验只收到按期返回的四个结果，weight 不在其中。",
+              "observe": "merged",
+              "stage": "tool"
+            },
+            {
+              "text": "占总评比例只有 weight 一个来源，于是成了缺失的必需问题。",
+              "observe": "missing"
+            },
+            {
+              "text": "合并校验没查过 weight，所以报告里它没有通过与否的标记。",
+              "observe": "weight-check"
+            },
+            {
+              "text": "超时的那次请求同样算一次模型调用，两组都是 5 次。",
+              "observe": "model-calls"
+            },
+            {
+              "text": "最终结论是未完成，但截止时间、每组人数和迟交规则照样交付。",
+              "observe": "verdict"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "子任务超时后，协调者停止等待并记下原因；迟到的响应有用量、没有被合并；缺失的必需问题决定了任务结论。"
+            ],
+            "does_not_prove": [
+              "离线测试模式下每次回答固定延迟 150 毫秒，所以 50 毫秒必然超时；真实运行的延迟取决于服务商和网络。",
+              "取消没有让服务商停止生成，也没有省下这次调用的用量。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "contract",
+          "label": "契约",
+          "help": "缺证据要求时，契约不要求原文；协调者合并时仍然要求。",
+          "options": [
+            {
+              "value": "full",
+              "label": "契约齐全"
+            },
+            {
+              "value": "no_evidence",
+              "label": "缺证据要求"
+            }
+          ]
+        },
+        {
+          "name": "budget_calls",
+          "label": "调用预算（次）",
+          "help": "全体子任务共用的模型调用数，1 到 5。"
+        },
+        {
+          "name": "budget_tokens",
+          "label": "Token 预算",
+          "help": "已报告的 total_tokens 累计到这个数，就不再派新的子任务。"
+        },
+        {
+          "name": "run_deadline_ms",
+          "label": "全程时间（毫秒）",
+          "help": "从运行开始算；用完后取消正在跑的子任务，没开始的不再派。"
+        },
+        {
+          "name": "max_parallel",
+          "label": "最多同时运行",
+          "help": "同一时刻最多有几个子任务在等模型响应。"
+        },
+        {
+          "name": "tight_subtask",
+          "label": "期限很短的子任务",
+          "help": "选中的子任务改用下面的短期限，其他子任务的期限是 30000 毫秒。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "deadline-syllabus",
+              "label": "deadline-syllabus（截止时间，课程大纲）"
+            },
+            {
+              "value": "team-size",
+              "label": "team-size（每组人数）"
+            },
+            {
+              "value": "weight",
+              "label": "weight（占总评比例）"
+            },
+            {
+              "value": "deadline-notice",
+              "label": "deadline-notice（截止时间，教务通知）"
+            },
+            {
+              "value": "late-policy",
+              "label": "late-policy（迟交规则）"
+            }
+          ]
+        },
+        {
+          "name": "tight_deadline_ms",
+          "label": "短期限（毫秒）",
+          "help": "只对上面选中的子任务生效。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "本课的委派契约规定了哪几项？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "输入范围、输出格式、证据要求和停止条件",
+                  "feedback": "对。还带一个优先级，预算不够时决定谁先做。"
+                },
+                {
+                  "id": "b",
+                  "text": "子 Agent 的名字和角色",
+                  "feedback": "不对。名字和角色说明不了该交回什么、怎样算合格。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型的名字和采样温度",
+                  "feedback": "不对。这些是请求参数，不是交给子任务的约定。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "契约写清交什么、凭什么信、什么时候停；协调者按同一份条款检查交回的结果。"
+            },
+            {
+              "id": "q2",
+              "prompt": "deadline-notice 只拿到 d2，交回的 evidence 却引用了 d1 的原文。合并校验会怎么判？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "拒绝，问题代码是 doc_out_of_scope",
+                  "feedback": "对。来源必须是分给它的资料。"
+                },
+                {
+                  "id": "b",
+                  "text": "通过，因为原文确实出自 d1",
+                  "feedback": "不对。原文真实，但不是从它自己的资料里得出的，说明上下文出了问题或者是猜的。"
+                },
+                {
+                  "id": "c",
+                  "text": "当成冲突列出",
+                  "feedback": "不对。冲突只在两个通过校验的结果值不同时才列。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "限定来源范围，才能发现借来的上下文。"
+            },
+            {
+              "id": "q3",
+              "prompt": "两个子任务对截止时间交回了不同的值，证据都逐字可查。本课怎么处理？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "两个值连同来源都列进 conflicts，结论是待确认",
+                  "feedback": "对。合并只记录，不裁决。"
+                },
+                {
+                  "id": "b",
+                  "text": "取日期较新的那份资料的值",
+                  "feedback": "不对。这是一条业务规则，写进合并代码就把冲突藏起来了。"
+                },
+                {
+                  "id": "c",
+                  "text": "让模型写一段总结，挑一个更合理的",
+                  "feedback": "不对。流畅的总结很容易把冲突抹平。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "冲突交给有权裁决的人，并附上每一方的原文。"
+            },
+            {
+              "id": "q4",
+              "prompt": "为什么本课的 Token 预算挡不住已经在跑的请求？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "一次请求用了多少 Token，要等响应报告才知道，只能事后扣",
+                  "feedback": "对。调用数可以先扣，Token 只能后扣。"
+                },
+                {
+                  "id": "b",
+                  "text": "Token 预算只在离线测试模式下生效",
+                  "feedback": "不对。两种模式用同一份代码。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务商总是不报告用量",
+                  "feedback": "不对。多数服务商会报告；不报告时本课记为未报告，不估算。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "要把超支压住，还得给单次请求设回答长度上限，并把调用数和并行数先扣。"
+            },
+            {
+              "id": "q5",
+              "prompt": "下面哪种情况，本课的结论会是“全部完成”？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "五个子任务全部通过合并校验，而且没有冲突",
+                  "feedback": "对。少一个、或者有冲突，都不是全部完成。"
+                },
+                {
+                  "id": "b",
+                  "text": "五个子任务全部交回了结果",
+                  "feedback": "不对。交回不等于通过，“契约缺证据要求”那组就是反例。"
+                },
+                {
+                  "id": "c",
+                  "text": "三个必需问题都有答案",
+                  "feedback": "不对。还要看冲突和没做的子任务。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "结论把校验、冲突和没完成的子任务都算进去。"
+            },
+            {
+              "id": "q6",
+              "prompt": "全程时间用完时，协调者调用 root.cancel。会发生什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "所有子范围都变成已取消：正在跑的不再等，没开始的不再派",
+                  "feedback": "对。这就是取消传播。"
+                },
+                {
+                  "id": "b",
+                  "text": "已经发出的请求被服务商撤回",
+                  "feedback": "不对。已发出的请求收不回。"
+                },
+                {
+                  "id": "c",
+                  "text": "只有最后派出的那个子任务被取消",
+                  "feedback": "不对。子范围都会向上查到根范围的原因。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "取消沿创建关系往下传，停住的是等待和后续动作。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“共享预算很紧”，找出预算拒绝派工、列出没开始的子任务的那条证据。",
+          "target": {
+            "event": "lesson.budget_stop",
+            "path": "data.not_started"
+          },
+          "explanation": "lesson.budget_stop 是第一个结果回来、空出位置时记下的：deadline-notice 申请调用被拒，原因是 calls，not_started 列出 deadline-notice 和 late-policy，budget 里的 calls_left 是 0。此后协调者不再派新的子任务，整次运行只有 3 个 request 事件。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我把四个练习都跑了一遍，能说出每组的任务结论为什么不同。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在 lesson.delegate 里核对过每个子任务的上下文只有分给它的资料。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在“契约齐全”那组找到了截止时间的冲突和两方的原文。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在“一个子任务超时”那组找到了迟到的响应，确认它的用量记了账、结果没有合并。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "lesson.delegate",
+      "note": "派出子任务时的记录：契约、本次批准后剩余的预算、上下文里实际有哪些资料。"
+    },
+    {
+      "name": "lesson.subtask",
+      "note": "派出的子任务的结局：按期交回、超时或出错；超时才有 timed_out_after_ms。"
+    },
+    {
+      "name": "lesson.budget_stop",
+      "note": "预算拒绝派工时的记录：原因和没有开始的子任务。"
+    },
+    {
+      "name": "lesson.late_response",
+      "note": "超时后才回来的响应：用量已记账，discarded 为真，结果不合并。"
+    },
+    {
+      "name": "lesson.merge",
+      "note": "合并后的结果：按问题归并的值、冲突、缺失的必需问题和没完成的子任务。"
+    },
+    {
+      "name": "merge_check",
+      "note": "合并校验，由运行器作为工具调用：逐个判结果收不收，同一问题不同的值列成冲突。"
+    },
+    {
+      "name": "check_reply",
+      "note": "合并校验对单个结果的检查，返回问题代码，空列表表示通过。"
+    },
+    {
+      "name": "same_value",
+      "note": "比较值之前的归一：去掉空格、统一大小写、去掉句末句号。"
+    },
+    {
+      "name": "grant",
+      "note": "向共享预算申请一次调用：批准返回 None，拒绝时返回原因 calls、tokens 或 time。"
+    },
+    {
+      "name": "charge",
+      "note": "按服务商报告的 total_tokens 扣 Token 预算；没报告就记一次未报告。"
+    },
+    {
+      "name": "Scope",
+      "note": "取消范围：子范围自己没被取消时，沿父范围查原因。"
+    },
+    {
+      "name": "finalize",
+      "note": "给整次任务定结论：未完成、待确认、有子任务没做或全部完成。"
+    },
+    {
+      "name": "docs_seen",
+      "note": "从实际发出的消息里查出的资料编号，用来核对上下文隔离。"
+    },
+    {
+      "name": "deadline-notice",
+      "note": "交叉核对截止时间的子任务，只看 11 月的教务通知 d2，优先级 2。"
+    },
+    {
+      "name": "weight",
+      "note": "子任务：占总评比例，只看评分细则 d4，是这个必需问题唯一的来源。"
+    },
+    {
+      "name": "not_found",
+      "note": "子任务如实说资料里没有答案时的 status；合格，但不回答问题。"
+    },
+    {
+      "name": "evidence",
+      "note": "结论的来源：资料编号 doc 和逐字原文 quote。"
+    },
+    {
+      "name": "timed_out_after_ms",
+      "note": "lesson.subtask 字段：子任务超时时才出现，写明协调者等了多少毫秒。"
+    },
+    {
+      "name": "discarded",
+      "note": "lesson.late_response 字段：为真表示结果没有参与合并。"
+    },
+    {
+      "name": "branch",
+      "note": "并行请求的配对标签；本课取子任务的编号，如 weight。"
+    }
+  ]
+}
