@@ -793,38 +793,22 @@
             {
               "id": "naive",
               "exercise": "online-backup",
-              "label": "边写边复制文件",
-              "inputs": {
-                "scenario": "online_backup",
-                "method": "naive_copy"
-              }
+              "label": "边写边复制文件"
             },
             {
               "id": "backup-api",
-              "exercise": "online-backup",
-              "label": "SQLite 备份接口",
-              "inputs": {
-                "scenario": "online_backup",
-                "method": "backup_api"
-              }
+              "exercise": "online-backup-api",
+              "label": "SQLite 备份接口"
             },
             {
               "id": "vacuum-into",
-              "exercise": "online-backup",
-              "label": "VACUUM INTO",
-              "inputs": {
-                "scenario": "online_backup",
-                "method": "vacuum_into"
-              }
+              "exercise": "online-vacuum-into",
+              "label": "VACUUM INTO"
             },
             {
               "id": "cold-copy",
-              "exercise": "online-backup",
-              "label": "停机后复制文件",
-              "inputs": {
-                "scenario": "online_backup",
-                "method": "cold_copy"
-              }
+              "exercise": "online-cold-copy",
+              "label": "停机后复制文件"
             }
           ],
           "observe": [
@@ -950,50 +934,32 @@
             {
               "id": "clean",
               "exercise": "restore-drill",
-              "label": "完整备份，核对后恢复",
-              "inputs": {
-                "scenario": "restore_drill"
-              }
+              "label": "完整备份，核对后恢复"
             },
             {
               "id": "flip-verified",
-              "exercise": "restore-drill",
-              "label": "改一个字节，恢复前核对清单",
-              "inputs": {
-                "scenario": "restore_drill",
-                "damage": "bit_flip",
-                "verify_manifest": true
-              }
+              "exercise": "restore-bit-flip-verified",
+              "label": "改一个字节，恢复前核对清单"
             },
             {
               "id": "flip-skipped",
-              "exercise": "restore-drill",
-              "label": "改一个字节，跳过核对",
-              "inputs": {
-                "scenario": "restore_drill",
-                "damage": "bit_flip",
-                "verify_manifest": false
-              }
+              "exercise": "restore-bit-flip-skipped",
+              "label": "改一个字节，跳过核对"
             },
             {
               "id": "whole-directory",
-              "exercise": "restore-drill",
-              "label": "备份整个目录，含配置文件",
-              "inputs": {
-                "scenario": "restore_drill",
-                "scope": "whole_directory"
-              }
+              "exercise": "restore-whole-directory",
+              "label": "备份整个目录，含配置文件"
             },
             {
               "id": "keep-newest",
+              "exercise": "retention-newest-only",
+              "label": "留最新 2 份，最新两份已损坏"
+            },
+            {
+              "id": "keep-verified",
               "exercise": "retention",
-              "label": "留最新 2 份，最新两份已损坏",
-              "inputs": {
-                "scenario": "retention",
-                "keep": 2,
-                "corrupt_newest": 2,
-                "policy": "newest_n"
-              }
+              "label": "留最新 2 份，再加最新一份通过核对的"
             }
           ],
           "observe": [
@@ -1133,14 +1099,14 @@
               "observe": "check-secrets"
             },
             {
-              "text": "最后一组是清理：最新两份损坏，只留最新两份，清理之后无法恢复。",
+              "text": "最后两组是清理：最新两份损坏，只留最新两份，清理之后无法恢复；再多留一份通过核对的，就能恢复。",
               "observe": "retention-check"
             }
           ],
           "conclusion": {
             "proves": [
               "恢复前的清单核对会拒绝被改动的备份；跳过它，结构检查和召回都发现不了被改的字节，只有内容摘要发现。",
-              "扫描备份目录能发现随备份带出去的配置文件；只留最新 N 份在最新几份损坏时，可能一份能恢复的都不剩。"
+              "扫描备份目录能发现随备份带出去的配置文件；只留最新 N 份在最新几份损坏时，可能一份能恢复的都不剩，多留一份通过核对的就能恢复。"
             ],
             "does_not_prove": [
               "损坏由程序故意制造，只做了翻转一个字节和截断两种；真实的磁盘故障形态更多，也没有测试介质本身出错的情况。",
@@ -1155,53 +1121,28 @@
           "arms": [
             {
               "id": "none-second",
-              "exercise": "upgrade-rollback",
-              "label": "无保护：runs.sqlite3 迁移中断",
-              "inputs": {
-                "scenario": "upgrade_rollback",
-                "failure": "fail_second_file",
-                "safeguard": "none"
-              }
+              "exercise": "upgrade-no-safeguard",
+              "label": "无保护：runs.sqlite3 迁移中断"
             },
             {
               "id": "tx-first",
-              "exercise": "upgrade-rollback",
-              "label": "事务：memory.sqlite3 迁移中断",
-              "inputs": {
-                "scenario": "upgrade_rollback",
-                "failure": "fail_first_file",
-                "safeguard": "transaction"
-              }
+              "exercise": "upgrade-transaction-first-file",
+              "label": "事务：memory.sqlite3 迁移中断"
             },
             {
               "id": "tx-second",
-              "exercise": "upgrade-rollback",
-              "label": "事务：runs.sqlite3 迁移中断",
-              "inputs": {
-                "scenario": "upgrade_rollback",
-                "failure": "fail_second_file",
-                "safeguard": "transaction"
-              }
+              "exercise": "upgrade-transaction-second-file",
+              "label": "事务：runs.sqlite3 迁移中断"
             },
             {
               "id": "tx-bad-result",
-              "exercise": "upgrade-rollback",
-              "label": "事务：迁移程序写错了却提交了",
-              "inputs": {
-                "scenario": "upgrade_rollback",
-                "failure": "bad_result",
-                "safeguard": "transaction"
-              }
+              "exercise": "upgrade-transaction-bad-result",
+              "label": "事务：迁移程序写错了却提交了"
             },
             {
               "id": "backup-second",
               "exercise": "upgrade-rollback",
-              "label": "备份加事务：runs.sqlite3 迁移中断",
-              "inputs": {
-                "scenario": "upgrade_rollback",
-                "failure": "fail_second_file",
-                "safeguard": "backup"
-              }
+              "label": "备份加事务：runs.sqlite3 迁移中断"
             }
           ],
           "observe": [
@@ -1340,7 +1281,7 @@
         {
           "name": "scenario",
           "label": "练习",
-          "help": "四个练习：在线备份、恢复演练、升级与回退、保留最近 N 份。下面的参数各用于其中几个。",
+          "help": "四类练习：在线备份、恢复演练、升级与回退、保留最近 N 份；每类有几个预设练习，对应实验里的对照组。下面的参数各用于其中几类。",
           "options": [
             {
               "value": "online_backup",

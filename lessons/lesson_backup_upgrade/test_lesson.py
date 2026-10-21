@@ -28,7 +28,13 @@ from server.run_store import RunStore
 
 ZH, EN = "zh-CN", "en"
 CJK = re.compile(r"[　-〿一-鿿＀-￯]")
-EXPECTED_EXERCISES = {"online-backup", "restore-drill", "upgrade-rollback", "retention"}
+EXPECTED_EXERCISES = {
+    "online-backup", "online-backup-api", "online-vacuum-into", "online-cold-copy",
+    "restore-drill", "restore-bit-flip-verified", "restore-bit-flip-skipped", "restore-whole-directory",
+    "upgrade-rollback", "upgrade-no-safeguard", "upgrade-transaction-first-file",
+    "upgrade-transaction-second-file", "upgrade-transaction-bad-result",
+    "retention", "retention-newest-only",
+}
 
 
 def make_context(inputs, locale=ZH, cancelled=lambda: False, on_event=None):
@@ -556,12 +562,19 @@ class InputTests(unittest.TestCase):
                 runtime.Inputs.model_validate(bad)
         self.assertEqual(runtime.Inputs.model_validate({}).scenario, "online_backup")
 
-    def test_lesson_manifest_lists_the_four_exercises(self):
+    def test_lesson_manifest_lists_the_presets_of_the_four_scenarios(self):
         manifest = json.loads((Path(runtime.__file__).parent / "lesson.json").read_text(encoding="utf-8"))
         self.assertEqual({item["id"] for item in manifest["exercises"]}, EXPECTED_EXERCISES)
         self.assertFalse(manifest["runtime"]["requires_model"])
         for item in manifest["exercises"]:
             runtime.Inputs.model_validate(item["inputs"])
+        # Every experiment arm runs a preset exercise of its own: offline mode only accepts preset inputs.
+        content = json.loads((Path(runtime.__file__).parent / "content.json").read_text(encoding="utf-8"))
+        presets = {item["id"]: item["inputs"] for item in manifest["exercises"]}
+        for experiment in content["scenes"]["lab"]["experiments"]:
+            for arm in experiment["arms"]:
+                self.assertIn(arm["exercise"], presets, arm["id"])
+                self.assertNotIn("inputs", arm, arm["id"])
 
 
 if __name__ == "__main__":

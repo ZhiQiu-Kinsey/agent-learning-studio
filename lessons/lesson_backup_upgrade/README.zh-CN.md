@@ -29,6 +29,8 @@
 | 升级与回退 | 迁移 `memory.sqlite3`，再迁移 `runs.sqlite3`；程序按所选方式制造失败；按所选保护措施回退；最后检查服务和数据 | `lesson.fault`（来源 `fault_injection`）、`lesson.migration`、`lesson.rollback`、报告里的 `service_available`、`data_unchanged` |
 | 保留最近 N 份 | 做 6 份备份，损坏最新的几份，按策略清理，再从留下的备份里恢复 | `lesson.retention`、报告里的 `restorable_after_prune`、`runs_lost` |
 
+上表每个练习在 `lesson.json` 里有几个预设变体，对应实验里的各个对照组（离线模式只接受该练习自己预设的结构化输入）：在线备份有 `online-backup`（边写边复制文件）、`online-backup-api`、`online-vacuum-into`、`online-cold-copy`；恢复演练有 `restore-drill`（完整备份）、`restore-bit-flip-verified`、`restore-bit-flip-skipped`、`restore-whole-directory`；升级与回退有 `upgrade-rollback`（备份加事务，第二个文件失败）、`upgrade-no-safeguard`、`upgrade-transaction-first-file`、`upgrade-transaction-second-file`、`upgrade-transaction-bad-result`；保留最近 N 份有 `retention`（最新 N 份加最新一份通过核对的）和 `retention-newest-only`。保留策略这一对在恢复演练的实验里对比。
+
 怎样读结果：
 
 - 在线备份“边写边复制文件”：`runs.sqlite3` 的副本 `integrity_check` 是 ok，却缺 6 个备份开始前已提交的运行（它们还在 `-wal` 里）；`memory.sqlite3` 的副本被撕裂，两张表对不上。备份接口、`VACUUM INTO` 和停机复制的副本两项都通过。
