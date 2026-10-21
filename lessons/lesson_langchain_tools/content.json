@@ -132,7 +132,7 @@
             "with_structured_output 让框架替你解析模型输出，但它报告失败的方式不止一种，有两种失败根本不抛异常。在{{lesson:structured-output}}里，JSON 解析失败和 Schema 不符都会抛错，程序都能接住。换成框架以后，你拿到的是一个结果字典，要自己看清里面是什么；只写一个异常处理分支，等于默认另外两种失败不会发生。",
             "输出解析器是把模型的原始输出变成程序对象的组件。with_structured_output 由两半拼成：先用 bind_tools 把 TaskCard 登记成唯一的工具，并强制模型调用它；再接一个解析器，从 AIMessage 的第一个工具调用里取实参，用 TaskCard 校验。适配层把框架的强制选项翻译成请求里的 `\"tool_choice\": \"required\"`，第 2 轮 request 事件里能看到。传 include_raw=True 时，结果有三个键：raw 是原始 AIMessage，parsed 是 TaskCard 或 None，parsing_error 是解析时抛出的异常。",
             "手算三种失败。模型漏了 prerequisite：实参是合法 JSON，Pydantic 抛出缺字段错误，parsing_error 里能读到 `prerequisite: missing`。模型写出 `{broken`：这是一次无效调用，适配层把它放进 invalid_tool_calls，解析器在有效调用里什么也没找到，parsed 和 parsing_error 都是 None。模型没调用工具、只写了一段文字：结果同样是两个 None。不传 include_raw 时，第一种直接抛异常，后两种安静地返回 None。classify 给这几种情况分别命名，程序检查 parsed 是不是 None，而不是只等异常。",
-            "解析成功也只说明形状对。“Schema 合法，事实写错”这一组里，模型把 prerequisite 写成 dependent-calls，类型和长度都合格，框架照样交回一个 TaskCard 对象。business_checks 拿它和可信事实逐字段比，发现不一致，判为未通过。框架替掉的是{{lesson:structured-output}}三层检查里的前两层，第三层业务校验仍由程序做，而且只在拿到对象之后才执行；没拿到对象时这一项写“未执行”，既不算失败，也不算通过。"
+            "解析成功也只说明形状对。“Schema 合法，事实写错”这一组里，如果模型把 prerequisite 写成 dependent-calls，类型和长度都合格，框架照样交回一个 TaskCard 对象。business_checks 拿它和可信事实逐字段比，发现不一致，判为未通过。框架替掉的是{{lesson:structured-output}}三层检查里的前两层，第三层业务校验仍由程序做，而且只在拿到对象之后才执行；没拿到对象时这一项写“未执行”，既不算失败，也不算通过。"
           ]
         },
         {
@@ -675,7 +675,7 @@
         {
           "id": "structured-adapter",
           "title": "结构化学习任务工具适配",
-          "hypothesis": "同一个 TaskCard 契约交给框架后：正常时框架解析出课程卡并通过业务校验；缺字段时框架在 parsing_error 里报告校验错误，业务校验不执行，修复 1 次后通过；事实写错时框架照样解析成功，只有业务校验能拦住。",
+          "hypothesis": "同一个 TaskCard 契约交给框架后：框架在 parsing_error 里报告 Schema 校验错误（缺字段、字段超长），这时业务校验不执行，修复 1 次后可通过；卡片 Schema 合法但事实写错时，框架照样解析成功，只有业务校验能拦住。模型不一定照注入写，也可能自己写出超长字段，以你的运行为准。",
           "predict": "predict-requests",
           "arms": [
             {
@@ -776,7 +776,7 @@
           ],
           "guide": [
             {
-              "text": "三组都为同一门课生成课程卡，只差第一次生成时的注入。"
+              "text": "三组都为同一门课生成课程卡，设计上只差第一次生成时的注入；模型自己的写法也会改变路径。"
             },
             {
               "text": "先看工具定义：装饰器从类型注解生成的结果，和手写的那份一字不差。",
@@ -801,20 +801,20 @@
               "observe": "framework-args"
             },
             {
-              "text": "对照三组的框架结果：缺字段那组是 schema_error，事实写错那组却是 parsed。",
+              "text": "对照三组的框架结果：缺字段那组是 schema_error。事实写错那组，只有模型照注入写了、卡片又合 Schema 时才是 parsed。",
               "observe": "first-outcome",
               "stage": "runtime"
             },
             {
-              "text": "业务校验只在拿到课程卡后执行。事实写错那组在这里被拦下，缺字段那组是未执行。",
+              "text": "业务校验只在拿到课程卡后执行。框架没给出课程卡的运行（缺字段，或字段超长）这里是未执行；事实写错且通过 Schema 的卡片会在这里被拦下。",
               "observe": "first-business"
             },
             {
-              "text": "失败的两组多了一轮请求。最后这条工具消息由运行器写，回答的是失败的 TaskCard 调用。",
+              "text": "走了修复的运行多一轮请求。最后这条工具消息由运行器写，回答的是失败的 TaskCard 调用；没有修复的运行里找不到它。",
               "observe": "feedback"
             },
             {
-              "text": "最后数一数：正常那组生成 1 次，另外两组用掉了唯一的一次修复。",
+              "text": "最后数一数：第一次就通过的生成 1 次，用掉那唯一一次修复的生成 2 次。哪几组走了修复，以你的运行为准。",
               "observe": "attempts"
             }
           ],
@@ -1205,7 +1205,7 @@
             },
             {
               "id": "item-3",
-              "text": "我看到“Schema 合法，事实写错”那组的框架结果是 parsed，业务校验却未通过。"
+              "text": "我弄清了“Schema 合法，事实写错”那组里框架结果和业务校验各是什么：卡片合 Schema 时框架是 parsed、业务校验未通过；模型没照注入写时，两项都可能通过。"
             },
             {
               "id": "item-4",
