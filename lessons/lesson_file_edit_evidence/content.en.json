@@ -1,0 +1,1434 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "TOOLS / FILE EDITING",
+      "source": "394732ae42cf"
+    },
+    "hero.headline": {
+      "text": "Don't let the command line edit your files:",
+      "source": "ac2a75a3b0cb"
+    },
+    "hero.highlight": {
+      "text": "every write should leave evidence.",
+      "source": "3c35a26b2d41"
+    },
+    "hero.takeaway": {
+      "text": "Dedicated read and write tools can check paths, remember what the model has read, refuse stale writes, and leave a before and after hash and a diff for every write. In this lesson the model fixes the same small repository with three edit strategies, then the platform reruns the tests itself, so you can see whether the evidence and the conclusion are the same thing. A real run lets the model edit files and run tests; without container isolation, you approve before the tests run.",
+      "source": "3e44e83b90a8"
+    },
+    "concepts.01-tools.label": {
+      "text": "01 / TOOLS",
+      "source": "95de69c756a0"
+    },
+    "concepts.01-tools.title": {
+      "text": "Dedicated file tools, not Bash",
+      "source": "9bacc1e9f8c3"
+    },
+    "concepts.01-tools.description": {
+      "text": "read_file, write_file, edit_file and edit_lines each do one thing: code decides about paths, permissions and the reason for a failure, instead of the model composing a command.",
+      "source": "04413cef9583"
+    },
+    "concepts.02-strategy.label": {
+      "text": "02 / STRATEGY",
+      "source": "3ddd9fd28de0"
+    },
+    "concepts.02-strategy.title": {
+      "text": "Edit strategy",
+      "source": "072377fbb0a3"
+    },
+    "concepts.02-strategy.description": {
+      "text": "An edit strategy is the way the model tells the tool where and how to change a file: a whole-file rewrite sends the full text, an exact replace sends the old text and the new text, a line replace sends line numbers and the new text. The more it sends, the more it costs, and the easier it is to get the untouched parts wrong.",
+      "source": "5d15bf457c7c"
+    },
+    "concepts.03-evidence.label": {
+      "text": "03 / EVIDENCE",
+      "source": "397613c2939a"
+    },
+    "concepts.03-evidence.title": {
+      "text": "Change evidence",
+      "source": "2c2a677c3d9e"
+    },
+    "concepts.03-evidence.description": {
+      "text": "Change evidence is a record that does not depend on what the model says: the hash before and after every write, the unified diff, and a hash chain whose links meet end to end. The platform then reruns the tests itself to accept or reject the result.",
+      "source": "c1988471bf60"
+    },
+    "concepts.04-guards.label": {
+      "text": "04 / GUARDS",
+      "source": "9d4494086d77"
+    },
+    "concepts.04-guards.title": {
+      "text": "Read before write and stale writes",
+      "source": "6c75d56b9493"
+    },
+    "concepts.04-guards.description": {
+      "text": "Read before write requires that the file was read before it is written. A stale write is a write based on a version of the file that has changed since it was read; the tool refuses it instead of overwriting.",
+      "source": "8495b16baf43"
+    },
+    "section-1.title": {
+      "text": "Why not edit files with Bash",
+      "source": "245e16e8399e"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Dedicated read and write tools can check the path before a file changes, record the content before and after, and make a failure easier to locate. {{lesson:bash-coding-agent}} gives the model a single Bash tool: it reads with `cat` and edits with `sed` or a redirect. A command can do so much that the tool cannot tell what the model meant to change: which file did this command touch, what did it become, did it leave the workspace? All of that has to be reconstructed afterwards.",
+      "source": "0a4e7f4837fd"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Dedicated tools move those decisions into code. `read_file` returns content with line numbers; `write_file`, `edit_file` and `edit_lines` are three ways to write, each doing one thing. Every path goes through `Workspace.resolve`, and a path that escapes is refused; before a write the tool checks that the file was read and that nobody changed it after the read; right after the write it leaves one record. These rules live in Python, so they do not stop working when the model phrases a command differently.",
+      "source": "af2c1f08758c"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The price is that each tool has to be designed and tested, and each tool definition takes up some of the model's context. The book's judgment is that general tools come first unless there is a clear reason of security, permissions or performance; editing files has the first two, and it is the most frequent and most accident-prone operation, so it earns its own tools. For listing directories and running commands, the route in {{lesson:bash-coding-agent}} is still simpler.",
+      "source": "3d65361c368f"
+    },
+    "section-1.paragraphs.3": {
+      "text": "This lesson calls a model. In a real run the model fixes code in a small repository with two failing tests, using only the tools you give it, and when the run ends the platform reruns the tests itself to accept or reject the result. The tests run as a subprocess on your machine: without container isolation you approve every test run first, and the page and the events say “not isolated”. The “five guards” group calls no model and runs no command.",
+      "source": "eea126f8a5f5"
+    },
+    "section-2.title": {
+      "text": "Paths, read before write and protected files",
+      "source": "3a01ce1411f7"
+    },
+    "section-2.paragraphs.0": {
+      "text": "A path from the model is just a string; it cannot be passed straight to the file system. Path checking is done by `Workspace.resolve`: an empty path, an absolute path, a path starting with `~`, a path that climbs out with `..`, and a path that lands outside the workspace after symbolic links are followed all return PathOutsideWorkspace. For example `shop/../../x` resolves to the level above the workspace and is refused, rather than being quietly rewritten into some file inside the workspace. A bad path fails fast; the tool does not “smartly correct” it for the model.",
+      "source": "519e6eaa0c07"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Read before write: before an existing file is written, this run must have read it. When `read_file` runs, the tool records the version it showed the model, which is the hash of the file content. Writing without reading returns NotReadYet; rewriting a whole file with `write_file` also requires having read all of it, and reading only the first 10 lines returns PartialRead. Several partial reads of the same version add up, and once everything has been read it counts as read in full.",
+      "source": "cae6e56a35f6"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Protected files: the task is to change the code, not the tests that check it. Files under `tests/` can be read, and every write returns ProtectedPath. This is hard to do with Bash: which file `sed -i` changes can only be known by understanding the command, while a dedicated tool only looks at the path argument. At acceptance the platform checks again whether `tests/` changed, so the two layers confirm each other. The book's companion Edit tool only says “read before editing” in its documentation and the code does not check it; this lesson makes it a rule of the tool.",
+      "source": "b1ab82324253"
+    },
+    "section-2.paragraphs.3": {
+      "text": "Why enforce it in code instead of writing “read first, then edit” in the prompt? A sentence in a prompt is a request: in a long task the model may forget it, and forgetting has no consequence; a check in the tool is a rule, and forgetting it means the call is refused. The system prompt still states the rule so that the model understands a refusal, but what holds it is `_check_view`.",
+      "source": "0fec10a6b2bd"
+    },
+    "predict-tool-calls.prompt": {
+      "text": "Before you run “Exact replace: edit_file” in the lab, guess: how many tool calls (tool_call events) will the model make in total?",
+      "source": "364a33087906"
+    },
+    "mq-path.path-escape.prompt": {
+      "text": "The path the model gives edit_file is `../notes.txt`. What does the tool do?",
+      "source": "8487f19f4d2d"
+    },
+    "mq-path.path-escape.a.text": {
+      "text": "It resolves the path outside the workspace, returns PathOutsideWorkspace and writes no file",
+      "source": "b867777e012b"
+    },
+    "mq-path.path-escape.a.feedback": {
+      "text": "Right. A path that escapes is refused first, and nothing happens on the file system.",
+      "source": "e86ffc37019d"
+    },
+    "mq-path.path-escape.b.text": {
+      "text": "It treats it as notes.txt in the level above the workspace and writes it",
+      "source": "434579eaa385"
+    },
+    "mq-path.path-escape.b.feedback": {
+      "text": "No. Files outside the workspace are not within the tool's reach.",
+      "source": "b9ff78568211"
+    },
+    "mq-path.path-escape.c.text": {
+      "text": "It strips `../` and rewrites it to notes.txt inside the workspace",
+      "source": "526ebc1ba51f"
+    },
+    "mq-path.path-escape.c.feedback": {
+      "text": "No. The tool does not “smartly correct” paths for the model, and the corrected file may not be the one the model meant.",
+      "source": "ec5ea50709ed"
+    },
+    "mq-path.path-escape.explanation": {
+      "text": "Path checking has only two outcomes: inside the workspace, or refused.",
+      "source": "adf0bd79a5ce"
+    },
+    "section-3.title": {
+      "text": "Whole-file writes and local replacement",
+      "source": "b1779a64aca3"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Whole-file writes and local replacement differ in how often they succeed on large files and in what can go wrong; which to choose depends on how large the file is and how small the change is. An edit strategy is exactly that choice: the way the model tells the tool where and how to change a file. This lesson compares three; start with the first two.",
+      "source": "7efdc353961f"
+    },
+    "section-3.paragraphs.1": {
+      "text": "A whole-file rewrite uses `write_file`: the model writes the complete file again. The benefit is the simplest tool, with no “not found” or “found in several places”. The cost is twofold: changing two lines still sends the whole file, and the larger the file the more it costs; the unchanged lines have to be copied back as they were, and if a line is dropped or altered in the copy, the tool cannot tell by itself.",
+      "source": "4cb551f4f67e"
+    },
+    "section-3.paragraphs.2": {
+      "text": "An exact replace uses `edit_file`: the model gives a piece of the file's text, old, and the replacement, new. The tool has one rule: old must be identical to the file text and must occur exactly once. No match returns OldStringNotFound, two or more matches return OldStringNotUnique together with the line of each match, and the file stays untouched in both cases. It sends few characters, and the scope of the change is exactly old; the cost is that the original text must be copied letter for letter, indentation and blank lines included.",
+      "source": "0d1450edd210"
+    },
+    "section-3.paragraphs.3": {
+      "text": "In this lesson's fixture, `shop/pricing.py` has two `return 0.0` lines, at lines 22 and 33. With old set to `return 0.0` you get OldStringNotUnique and “lines 22, 33”. If you write old as the two lines `if amount > FREE_SHIPPING_FROM:` and the `return 0.0` after it, it occurs only once and can be replaced.",
+      "source": "727abd4cd52a"
+    },
+    "section-3.paragraphs.4": {
+      "text": "“Success rate” has two layers. At the tool layer: the share of write calls that are accepted; a whole-file rewrite is almost always accepted, because the tool has no reason to refuse it, while an exact replace is refused when there is no match or the match is not unique. At the task layer: whether the tests the platform reruns after the edit pass. A refusal at the tool layer is good: it stops the mistake before the write. The risk of a whole-file rewrite does not disappear, it moves to the task layer, where only tests and the scope check can find it.",
+      "source": "214e4e1ae8e2"
+    },
+    "deep-dive-rewrite.title": {
+      "text": "How big is the gap on a large file: a hand calculation",
+      "source": "9a54f29a3266"
+    },
+    "deep-dive-rewrite.summary": {
+      "text": "Count the characters of a whole-file rewrite and an exact replace on a 600-line file, then look at copy fidelity.",
+      "source": "4ed810d39bf5"
+    },
+    "deep-dive-rewrite.paragraphs.0": {
+      "text": "Suppose a file has 600 lines of 40 characters on average: a whole-file rewrite sends about 24000 characters. To change two places, each with 3 old lines and 4 new lines, an exact replace sends 2 × (3 × 40 + 4 × 40) = 560 characters, about 2% of that. Characters are not tokens, but for the same text the two numbers move roughly together, so the ratio is a fair way to compare the relative cost of the two approaches. The fixture's `shop/pricing.py` has only 45 lines, so the gap there is smaller; the larger the file, the wider the gap.",
+      "source": "5fd2fa127b88"
+    },
+    "deep-dive-rewrite.paragraphs.1": {
+      "text": "Beyond cost there is fidelity. A whole-file rewrite requires the model to copy the 597 unchanged lines back letter for letter. Models sometimes cut corners, writing a placeholder such as “rest of the code unchanged”, or quietly changing a function that looks redundant; on a very large file such silent mistakes become more likely. An exact replace does not copy the untouched part; it only needs old to be right.",
+      "source": "0e55f88ce0ad"
+    },
+    "deep-dive-rewrite.paragraphs.2": {
+      "text": "In the other direction, when a file has a lot of repeated structure an exact replace runs into OldStringNotUnique more easily, and needs a few more lines of context to pin down the position. Which is cheaper has to be measured on your own model and your own files; the lab report's “Argument characters of write calls” exists for that comparison, and it counts the arguments actually sent to the tool, including the refused ones.",
+      "source": "828605f55d01"
+    },
+    "deep-dive-rewrite.paragraphs.3": {
+      "text": "One more reminder: a single run is a single sample. With the same task and the same input the model's output differs from run to run, and {{lesson:sampling-variance}} measured that variation. To compare strategies, run each one several times on the same task and look at the spread of argument characters and refusals; with one run it is easy to mistake luck for a pattern.",
+      "source": "52321c33164b"
+    },
+    "section-4.title": {
+      "text": "Line replacement and line drift",
+      "source": "38b4a8a2298d"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A line replace uses `edit_lines`: the model gives a first line, a last line and the new text, and those lines are replaced as a block. The benefit is that deleting a large block takes two numbers and no copying; the risk is that line numbers drift. The numbers come from what `read_file` showed, so they are only right while the file has not changed.",
+      "source": "0e45347e3691"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Line drift means a previous write changed the number of lines, so every line number below it moves. Example: `read_file` shows `if amount > FREE_SHIPPING_FROM:` at line 32. The model first replaces lines 17 to 19 with 5 lines, which pushes everything below down by 2 lines; if it now edits line 32 with the old number, it hits `def shipping(amount):`. If the tool simply obeyed, the function definition would be replaced by a condition.",
+      "source": "35afe73367d3"
+    },
+    "section-4.paragraphs.2": {
+      "text": "This lesson's `edit_lines` does not guess. After any write, the line-number view of that file is void, and using an old number returns LineNumbersStale and asks for a fresh `read_file` first. The cost is one more read and one more model call. Another approach the book mentions is to hand the tool several edits in one call, all using the initial line numbers, and let it apply them from the bottom up; this lesson does not implement it.",
+      "source": "ad5e3ba49a3a"
+    },
+    "section-4.paragraphs.3": {
+      "text": "There is one more small trap: the “line number|” in front of each line of `read_file` is for display and is not part of the file. If the model copies it into old together with the number, it gets OldStringNotFound. Output with line numbers lets the model say “line 42” precisely and reduces ambiguity, so it is worth keeping; the tool description and the error messages must keep saying that the line-number prefix is not file content.",
+      "source": "8736f98b2005"
+    },
+    "mq-unique.not-unique.prompt": {
+      "text": "The old text of edit_file occurs 2 times in the file. What does the tool do?",
+      "source": "47f65ef73eb5"
+    },
+    "mq-unique.not-unique.a.text": {
+      "text": "It changes the first one",
+      "source": "0ab2384adafa"
+    },
+    "mq-unique.not-unique.a.feedback": {
+      "text": "No. The tool does not know which one the model meant, and a wrong guess is a silent wrong edit.",
+      "source": "6a83937c2e58"
+    },
+    "mq-unique.not-unique.b.text": {
+      "text": "It changes both",
+      "source": "1bb0c0f9be9a"
+    },
+    "mq-unique.not-unique.b.feedback": {
+      "text": "No. This lesson's edit_file has no “replace all” option.",
+      "source": "bf5e0f02045c"
+    },
+    "mq-unique.not-unique.c.text": {
+      "text": "It returns OldStringNotUnique with the line of each match, leaves the file as it was, and the model adds context and tries again",
+      "source": "07c8c9f43c19"
+    },
+    "mq-unique.not-unique.c.feedback": {
+      "text": "Right. Refusing is cheaper than guessing: the model spends one more call and gets certainty about where the change lands.",
+      "source": "acb8b22510e1"
+    },
+    "mq-unique.not-unique.explanation": {
+      "text": "An exact replace has one rule: change only when there is exactly one match.",
+      "source": "2d015ce97e84"
+    },
+    "deep-dive-schemes.title": {
+      "text": "The five edit schemes the book compares",
+      "source": "58c3d4435814"
+    },
+    "deep-dive-schemes.summary": {
+      "text": "Diff description plus an apply model, old string to new string, line numbers, Vim-like commands and start-and-end matching, and the trade-off of each.",
+      "source": "2f96ae46c816"
+    },
+    "deep-dive-schemes.paragraphs.0": {
+      "text": "The book (深入理解 AI Agent) compares five ways for a model to say where to change a file. Diff description plus an apply model: the main model writes a change description similar to a diff, and a smaller model merges it into the file; the merge step is fragile and may land in the wrong place when several pieces of code look alike, and the book says Cursor stopped taking this route because base models got stronger. Old string to new string: used by Claude Code, Codex and today's Cursor; behavior is predictable, and the drawback is that deleting a large block means writing out all of the old text.",
+      "source": "0adff4973502"
+    },
+    "deep-dive-schemes.paragraphs.1": {
+      "text": "Line-number editing needs only two numbers to delete a large block, but line numbers change after every edit, and when a model emits several edits in one thought they must all use the initial numbers. Vim-like commands are efficient for reorganizing code but have a heavy syntax to learn, and since both content and line numbers change after every edit they do not suit a batch of edits either; Vim was designed for people who keep seeing the current state, while a model works by thinking for a long time and then acting in batches.",
+      "source": "0eed5d92099a"
+    },
+    "deep-dive-schemes.paragraphs.2": {
+      "text": "Start-and-end string matching improves on old-string replacement: give only the first few lines and the last few lines of the text to replace, and the framework locates it by that pair. It combines the reliability of content matching with the economy of line numbers. This lesson implements the two simplest of these plus whole-file rewriting, and not the apply model, Vim commands or start-and-end matching; after the lesson, try working out which rules start-and-end matching would add to `edit_file`.",
+      "source": "d7346ff1c14f"
+    },
+    "deep-dive-schemes.paragraphs.3": {
+      "text": "No choice fits everything; start with a rule of thumb: for a small file and a big change a whole-file rewrite is easy; for a large file and a small change an exact replace costs less; when the part to delete is one large contiguous block and this round changes only one place, a line replace is shortest. Whether the rule holds is for the lab report to test on your own model.",
+      "source": "9d2d9b3b5587"
+    },
+    "section-5.title": {
+      "text": "Hashes before and after, and the diff",
+      "source": "7ba94faeb0ee"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A hash can prove that the file really changed, and a diff can show what changed. A hash (this lesson uses `sha256`) turns the whole file into a fixed-length fingerprint: one byte of difference gives a completely different fingerprint, and identical content always gives the same one. A unified diff lists which lines were removed and which were added, with a few unchanged lines of context around each change, in the same format as `git diff`.",
+      "source": "a49689db3f27"
+    },
+    "section-5.paragraphs.1": {
+      "text": "For every write, `FileTools` records one row in `_journal`: the tool name, the path, the hash before, the hash after, the number of lines added and removed, and the diff. A refused call also leaves a row, with `ok` false and the two hashes equal. The same row goes out as a `lesson.file_change` event, so on replay you can see every write without taking the model's word for it.",
+      "source": "d9faec8ece12"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Hashes can also be chained. The hash after the first write should equal the hash before the second, and the hash after the last one equals the file's hash now. `verify_chain` checks them row by row: a mismatch in the middle means someone changed the file behind the tool's back; a mismatch at the end means a row is missing; a file that changed with no row at all is a change without a record. Together these records are the change evidence: they come from the file itself and from what the tool executed, not from the model's description.",
+      "source": "bdb186cab2cf"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Beyond evidence, the platform also accepts or rejects the result itself. When the run ends it reruns the tests, checks that `tests/` was not touched, and uses `symbol_changes` to compare the two versions of the Python file and list which top-level functions were changed, added or removed, to see whether the change went beyond the `discount_rate` and `shipping` that the task names. All of this goes into the lab report, and the model's closing “fixed” is only quoted as it was.",
+      "source": "aef5ee9825d0"
+    },
+    "section-5.paragraphs.4": {
+      "text": "Learning to read a unified diff lets you check every write. In the lab report the diff carries 3 lines of context around each change. A section that begins with `@@ -14,7 +14,9 @@` means: the 7 lines starting at line 14 of the old file are the 9 lines starting at line 14 in the new file. In this lesson's fixture, replacing the docstring at line 17 with new text and inserting two lines for the 20% tier gives 1 line removed and 3 added: 7 + 3 - 1 = 9. A line starting with `-` was removed, a line starting with `+` was added, and a line with neither is context. Which line was deleted is obvious in the diff; when a whole-file rewrite drops a function, a screen full of `-` is the evidence.",
+      "source": "47f7d983ad4e"
+    },
+    "mq-hash.same-hash.prompt": {
+      "text": "For one write record, before_sha256 and after_sha256 are equal. What is the most likely case?",
+      "source": "20ac65eec56d"
+    },
+    "mq-hash.same-hash.a.text": {
+      "text": "The write took effect, the change was just small",
+      "source": "7bc39d50fda8"
+    },
+    "mq-hash.same-hash.a.feedback": {
+      "text": "No. Even a one-byte change gives a completely different hash.",
+      "source": "30b1650aa4c7"
+    },
+    "mq-hash.same-hash.b.text": {
+      "text": "The row is a refused call, or the content written is identical to what was there",
+      "source": "5611bc737064"
+    },
+    "mq-hash.same-hash.b.feedback": {
+      "text": "Right. In both cases the file did not change; ok and changed tell the two apart.",
+      "source": "75e9f4e10f1d"
+    },
+    "mq-hash.same-hash.c.text": {
+      "text": "The hash was computed wrongly",
+      "source": "d56e47dcfc31"
+    },
+    "mq-hash.same-hash.c.feedback": {
+      "text": "No. A hash is computed from the bytes of the file; the same bytes always give the same hash.",
+      "source": "16f0da4452e0"
+    },
+    "mq-hash.same-hash.explanation": {
+      "text": "Equal hashes only say the bytes of the file did not change; the reason is in ok, changed and error_type of the row.",
+      "source": "a573fa4fac9a"
+    },
+    "misconception-chain.claim": {
+      "text": "If the hash chain closes and the tests pass, the change must be right.",
+      "source": "91f0a7af54bf"
+    },
+    "misconception-chain.correction": {
+      "text": "The hash chain only proves what happened: every write has a record and the records link up. It does not judge whether the change is correct. When a whole-file rewrite quietly drops the `tax` function, every write still has a record and the chain is closed; the platform's scope check then reports the removed function, and the rerun tests usually fail. Conversely, passing tests only mean those tests found no problem, and whether the change stayed within the task is for the scope check. “The tool returned success”, “the write took effect”, “the tests pass” and “the task is accepted” are four different things, and this lesson's report lists them separately: the write records, the hash chain, the tests the platform reruns, and the scope check each get their own row.",
+      "source": "d9cfb376aacf"
+    },
+    "section-6.title": {
+      "text": "Conflicts and stale-write detection",
+      "source": "953909eb22e9"
+    },
+    "section-6.paragraphs.0": {
+      "text": "If a file was changed by someone else after the model read it, the edit should be refused, not overwrite it. Between reading and writing the model goes through one round of reasoning, which takes from a few seconds to a few minutes; in that time an editor, a formatter or another agent may already have changed the same file.",
+      "source": "4b989a3acee0"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Stale-write detection is plain: `read_file` records the file's hash at that moment; at write time the tool computes it again, and if it differs it returns StaleRead, writes nothing and asks the model to read again. It is the same idea as the optimistic concurrency control in {{lesson:memory-lifecycle}}: write with the version you read, and refuse if the version has changed. What is refused is the stale write, a write resting on a stale read.",
+      "source": "abf6850ed96a"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The order of the checks matters: first whether the file was read, then whether the hash changed, and only last the conditions of this particular write, namely that a whole-file rewrite needs a full read and a line replace needs valid line numbers. Once the file has changed, the later conditions need not be looked at. After a refusal the model reads again and edits from the new content, and the line someone else added is kept.",
+      "source": "8728ea60f657"
+    },
+    "section-6.paragraphs.3": {
+      "text": "The check has a gap: a few milliseconds still separate comparing the hash from writing the file, and if the file is changed again in that gap the tool cannot notice; closing it takes a file lock or an atomic compare-and-swap, which this single-user local teaching setup does not have. The write itself goes to a temporary file first and is then renamed over the target, so a crash leaves either the old file or the new one, never a half-written file.",
+      "source": "0cf851ea4821"
+    },
+    "section-6.paragraphs.4": {
+      "text": "The model's own writes do not make it stale: after every successful write the tool updates the recorded version to the one just written, so the model can make several `edit_file` calls in a row without reading again each time. Only changes made outside the tool trigger StaleRead. The way out of a refusal is fixed: one `read_file` and one edit; the extra cost is exactly those two calls.",
+      "source": "b47ba591d1df"
+    },
+    "deep-dive-references.title": {
+      "text": "How three reference implementations make the trade-off",
+      "source": "a3626827cf2a"
+    },
+    "deep-dive-references.summary": {
+      "text": "The book's Edit tool, the five tools of Learn Claude Code, and Mini-SWE-agent with Bash only.",
+      "source": "96a704afda72"
+    },
+    "deep-dive-references.paragraphs.0": {
+      "text": "In the book's companion code, the Edit tool requires old to occur uniquely in the file and fails otherwise; after Write and Edit finish they run a syntax check on Python and JavaScript files and put the result in the return value. This lesson's write tools keep both ideas: unique matching and a syntax check after writing. The difference is that in the book “read before editing” appears only in the tool's description and no code guarantees it; this lesson records the versions that were read in `views`, and whether a file was read, read in full, and unchanged since the read are all checked by code.",
+      "source": "ebd1e277966c"
+    },
+    "deep-dive-references.paragraphs.1": {
+      "text": "In its second step Learn Claude Code grows a single Bash tool into five tools, and its `run_edit` for editing files is only a few lines: it fails when old is not found, replaces the first match when it is found, has no uniqueness check, and limits paths to the working directory with `resolve` and `is_relative_to`. It is the smallest possible starting point; what this lesson adds to it is unique matching, read before write, stale-write detection and evidence records.",
+      "source": "e447d0f5fd8d"
+    },
+    "deep-dive-references.paragraphs.2": {
+      "text": "Mini-SWE-agent takes the opposite route: no tool other than Bash, every command runs independently, and the history is completely linear. The project's documentation says it scores above 74% on SWE-bench Verified, which shows that a strong model can edit files with Bash alone. The two routes do not contradict each other: Bash only buys simplicity and portability; dedicated tools buy permissions, evidence and clearer failures. This lesson is about the latter; compare it with the result of {{lesson:bash-coding-agent}} to choose.",
+      "source": "4867c10611ba"
+    },
+    "deep-dive-references.paragraphs.3": {
+      "text": "Taken together, the three implementations leave this lesson with three choices. The write tools only express “change” and never run commands; running is left to another tool that needs approval. Every reason for a refusal is a structured error class name that the model and the runner can both read, not a free-form sentence. The evidence is produced by the same code that does the write, one row per write, instead of being reconstructed afterwards from command output.",
+      "source": "0a05e170de35"
+    },
+    "walkthrough.title": {
+      "text": "One exact replace, from proposal to evidence",
+      "source": "10c5961ed5f5"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, one successful write of edit_file. The code is a simplified illustration, not a run record; for the actual values, see the tool_call, lesson.file_change and lesson.report events.",
+      "source": "bd2412527431"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Proposes a call",
+      "source": "1d092865750f"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The model gives a path, a piece of the old text and the replacement; the tool has not touched the file yet.",
+      "source": "cd6876cb01dd"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "tool_call event",
+      "source": "75edc2ee73a0"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Checks the path and protected files",
+      "source": "95e7942ae7e7"
+    },
+    "walkthrough.step-2.body": {
+      "text": "It continues only for a relative path inside the workspace and not under tests/.",
+      "source": "773da1c091a0"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "tool_result and lesson.file_change when refused",
+      "source": "510950db0d8a"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Checks the file was read and is not stale",
+      "source": "2a23c1c1d914"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The file exists, so it must have been read; its hash now must equal the one that was read.",
+      "source": "b4dbbb115b55"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "NotReadYet, StaleRead",
+      "source": "cd7f04996462"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Replaces only if old matches exactly once",
+      "source": "922ce6682bab"
+    },
+    "walkthrough.step-4.body": {
+      "text": "It counts how often old occurs: 0 or several is refused, exactly 1 produces the new text.",
+      "source": "5598ce7697a5"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "OldStringNotFound, OldStringNotUnique",
+      "source": "3ad89faef473"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Writes atomically and records a row",
+      "source": "81d39d08ac8b"
+    },
+    "walkthrough.step-5.body": {
+      "text": "It writes a temporary file and renames it, then records the hashes before and after, the diff and the lines added and removed.",
+      "source": "1bd51b11ed39"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.file_change",
+      "source": "50e7e8d933e4"
+    },
+    "walkthrough.step-6.label": {
+      "text": "06",
+      "source": "aacd834b5cdc"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Platform",
+      "source": "910887705c7a"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Acceptance: rerun the tests, check the hash chain",
+      "source": "c492efe52563"
+    },
+    "walkthrough.step-6.body": {
+      "text": "When the run ends the platform runs the tests itself, checks whether tests/ changed, compares the changed functions and verifies the hash chain.",
+      "source": "8ca101a14e8d"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "the checks in lesson.report",
+      "source": "4872333d486e"
+    },
+    "mq-stale.stale-write.prompt": {
+      "text": "The model read `shop/report.py`, then another process appended a line to the end of the file. The model now calls edit_file. What should the tool do?",
+      "source": "ece080d76aaf"
+    },
+    "mq-stale.stale-write.a.text": {
+      "text": "Write as usual and keep the model's version",
+      "source": "e4a333492280"
+    },
+    "mq-stale.stale-write.a.feedback": {
+      "text": "No. That would silently overwrite the line someone else just added.",
+      "source": "945f78575367"
+    },
+    "mq-stale.stale-write.b.text": {
+      "text": "Return StaleRead, leave the file as the other party changed it, and ask the model to read again",
+      "source": "2278f1a12170"
+    },
+    "mq-stale.stale-write.b.feedback": {
+      "text": "Right. A refusal makes the conflict visible; after reading again the model edits, and the other party's line is kept.",
+      "source": "017ecc4ee991"
+    },
+    "mq-stale.stale-write.c.text": {
+      "text": "Merge the two changes automatically",
+      "source": "e68b5ab3f30d"
+    },
+    "mq-stale.stale-write.c.feedback": {
+      "text": "No. Merging needs the intent of both sides; the tool only has hashes, not that information.",
+      "source": "d130647aa029"
+    },
+    "mq-stale.stale-write.explanation": {
+      "text": "The conclusion of stale-write detection is to refuse: not to overwrite, and not to merge for someone else.",
+      "source": "3ae4ffd3d169"
+    },
+    "wrap-up.paragraphs.0": {
+      "text": "Looking back, the lesson has three threads. Dedicated tools put rules about paths, read before write and protected files into code. The three edit strategies each have their own cost and their own way to fail: a whole-file rewrite sends a lot, an exact replace can run into a match that is not unique, a line replace drifts. Every write leaves a hash before and after and a diff, a stale write is refused, and the platform reruns the tests itself to accept or reject the result. They share one point: the conclusion rests on the real results of files and commands, not on the model's “fixed”. Compared with {{lesson:bash-coding-agent}}, dedicated tools make permissions, evidence and failures easier to control, at the cost of designing every operation; tests still run through the restricted runner, with per-command approval when there is no container. The next lesson, {{lesson:evaluation-sets}}, treats the independent validator more systematically: how to keep the program that judges whether a task is done separate from the program being judged.",
+      "source": "45c7173dcc4d"
+    },
+    "references.book-ch4.title": {
+      "text": "Tools: trade-off between dedicated tools and general executors, fidelity of argument passing, security layers of execution tools (深入理解 AI Agent)",
+      "source": "b09cb8e9b0a7"
+    },
+    "references.book-ch5.title": {
+      "text": "Coding Agent: five schemes for file editing tools, line-number annotation and syntax feedback after writing (深入理解 AI Agent)",
+      "source": "f7f7a7a89f50"
+    },
+    "references.book-edit.title": {
+      "text": "Companion code: the unique-match rule and the syntax check after writing in the Edit tool (深入理解 AI Agent)",
+      "source": "f22c15496f01"
+    },
+    "references.book-read.title": {
+      "text": "Companion code: numbered output, range reading and binary detection in the Read tool (深入理解 AI Agent)",
+      "source": "859aaf9ce372"
+    },
+    "references.lcc-s02.title": {
+      "text": "Learn Claude Code: growing one Bash tool into five tools, with the path restriction only on the file tools",
+      "source": "3d8d2557c25f"
+    },
+    "references.mini-index.title": {
+      "text": "Mini-SWE-agent: the route of Bash only with every command run independently (for contrast)",
+      "source": "60e9dafbae35"
+    },
+    "code-strategies.n-edit-file.text": {
+      "text": "All the parameters of an exact replace: the path, the old text old and the new text new.",
+      "source": "dc38c25f1c3b"
+    },
+    "code-strategies.n-build.text": {
+      "text": "build only works out the new text; the guards and the write are handled by _write.",
+      "source": "85c9a16d9357"
+    },
+    "code-strategies.n-missing.text": {
+      "text": "Editing a file that does not exist fails right away; it does not create one on the side.",
+      "source": "5a30bc01f767"
+    },
+    "code-strategies.n-find-loop.text": {
+      "text": "Find every place where old occurs in the file, each time continuing after the previous match.",
+      "source": "5fbe47c92b92"
+    },
+    "code-strategies.n-line-of-match.text": {
+      "text": "Note the line of each match so the error can tell the model.",
+      "source": "590aafc7857b"
+    },
+    "code-strategies.n-not-found.text": {
+      "text": "No match at all: OldStringNotFound, the file is untouched.",
+      "source": "8ad5beb430ae"
+    },
+    "code-strategies.n-not-unique.text": {
+      "text": "More than one match: OldStringNotUnique; the tool does not guess which one.",
+      "source": "7c02aa22149c"
+    },
+    "code-strategies.n-no-op.text": {
+      "text": "An edit that changes nothing: NoOpEdit, also refused.",
+      "source": "c2c5fb50c9bc"
+    },
+    "code-strategies.n-replace.text": {
+      "text": "Replace only when there is exactly one match; this is the only place in edit_file that produces new content.",
+      "source": "6502be2911ec"
+    },
+    "code-strategies.n-hand-over.text": {
+      "text": "Hand over to the frame shared by the three write tools.",
+      "source": "011aa3467a9c"
+    },
+    "code-strategies.n-edit-lines.text": {
+      "text": "Line replace: a first line, a last line and the new text.",
+      "source": "718c4789f86f"
+    },
+    "code-strategies.n-split.text": {
+      "text": "Split lines only on the newline character, so numbers match what read_file shows.",
+      "source": "e3ae71d7e2a8"
+    },
+    "code-strategies.n-range.text": {
+      "text": "The numbers must be integers with 1 <= start_line <= end_line <= total lines.",
+      "source": "f3495f31de5c"
+    },
+    "code-strategies.n-replaced.text": {
+      "text": "Take out the lines being replaced exactly as they are, to check below whether they end with a newline.",
+      "source": "2dc0662a9312"
+    },
+    "code-strategies.n-block.text": {
+      "text": "Keep the line structure: if the replaced lines end with a newline and the new text does not, add one.",
+      "source": "8a5509db10fd"
+    },
+    "code-strategies.n-assemble.text": {
+      "text": "The lines before, the new text and the lines after make the new file.",
+      "source": "0abeacc439e9"
+    },
+    "code-strategies.n-need-numbers.text": {
+      "text": "need_numbers: the line-number view must be valid, otherwise LineNumbersStale.",
+      "source": "04984df65aac"
+    },
+    "code-strategies.fold-types.label": {
+      "text": "Check that old and new are strings and old is not empty",
+      "source": "3ed7522d7176"
+    },
+    "code-strategies.fold-text-type.label": {
+      "text": "Check that new_text is a string",
+      "source": "d91a227c2808"
+    },
+    "code-frame.f-write.text": {
+      "text": "The frame the three write tools share: guards, work out the new text, write atomically, leave a record.",
+      "source": "f7bfdfc5b9b8"
+    },
+    "code-frame.f-path.text": {
+      "text": "Path check: a path that escapes is refused with PathOutsideWorkspace.",
+      "source": "b2444c7f2ac1"
+    },
+    "code-frame.f-protected.text": {
+      "text": "A protected path cannot be written even after reading: ProtectedPath.",
+      "source": "5bb4cb833641"
+    },
+    "code-frame.f-load.text": {
+      "text": "The file exists: read its content and the hash before the write.",
+      "source": "ef3def112d0d"
+    },
+    "code-frame.f-check.text": {
+      "text": "Read before write and stale-write detection both happen here.",
+      "source": "68bd41a8c36b"
+    },
+    "code-frame.f-build.text": {
+      "text": "Each tool's own rules: unique match, line range and so on.",
+      "source": "c7dc4608c3fa"
+    },
+    "code-frame.f-refused.text": {
+      "text": "A refused call also leaves a row: ok is false and the two hashes are equal.",
+      "source": "749bf6f1ad19"
+    },
+    "code-frame.f-after.text": {
+      "text": "The hash after the write can be computed before writing.",
+      "source": "4f413d8d9933"
+    },
+    "code-frame.f-changed.text": {
+      "text": "If the content did not change, the file is not touched.",
+      "source": "d96ed4d6a8ea"
+    },
+    "code-frame.f-diff.text": {
+      "text": "The unified diff and the lines added and removed.",
+      "source": "4992306dd453"
+    },
+    "code-frame.f-syntax.text": {
+      "text": "Python files are syntax-checked right after writing: compiled only, never run.",
+      "source": "96b6d36bc569"
+    },
+    "code-frame.f-view.text": {
+      "text": "The version the tool remembers becomes the one just written; the line-number view is void.",
+      "source": "db90a2a63499"
+    },
+    "code-frame.f-journal.text": {
+      "text": "Leave the row: hashes before and after, diff, lines added and removed, and emit lesson.file_change at the same time.",
+      "source": "53fa04bc5fd5"
+    },
+    "code-frame.f-result.text": {
+      "text": "The result for the model is short: the version prefix and counts; the full hashes and the diff are in the events.",
+      "source": "e107b3bcf857"
+    },
+    "code-guards.g-check.text": {
+      "text": "The checks before a write, in a fixed order.",
+      "source": "269a9c916825"
+    },
+    "code-guards.g-views.text": {
+      "text": "views holds every file the model has read: which version, whether all of it, whether the line numbers still hold.",
+      "source": "b2e42cebc3ce"
+    },
+    "code-guards.g-never.text": {
+      "text": "Never read: NotReadYet.",
+      "source": "4431bd1ea263"
+    },
+    "code-guards.g-stale.text": {
+      "text": "The file's hash is no longer the one the model read: StaleRead.",
+      "source": "0aeb20fb5636"
+    },
+    "code-guards.g-partial.text": {
+      "text": "write_file overwrites everything, so reading only part is not enough: PartialRead.",
+      "source": "2a659a4beeed"
+    },
+    "code-guards.g-numbers.text": {
+      "text": "Written since the last read: the line numbers are void, LineNumbersStale.",
+      "source": "6ef94f5a161c"
+    },
+    "code-guards.g-read.text": {
+      "text": "The reading tool, which also records what the model has seen.",
+      "source": "523b58ffe9a1"
+    },
+    "code-guards.g-load.text": {
+      "text": "Read the text and the hash; a missing, binary or oversized file is refused here.",
+      "source": "6999e01214e3"
+    },
+    "code-guards.g-null.text": {
+      "text": "Models often send null for an optional argument; treat it as the default.",
+      "source": "c35955c7023d"
+    },
+    "code-guards.g-limit.text": {
+      "text": "By default at most 400 lines are read; a longer file is marked truncated.",
+      "source": "545fa0b9738e"
+    },
+    "code-guards.g-numbered.text": {
+      "text": "Put a line number in front of each line; the number is for display and not part of the file.",
+      "source": "d7b2d5e978ac"
+    },
+    "code-guards.g-covered.text": {
+      "text": "Reads of the same version in several parts are joined together.",
+      "source": "41f28eee65de"
+    },
+    "code-guards.g-record.text": {
+      "text": "Record the version hash, whether it was read in full, and that the line numbers are valid.",
+      "source": "39ca379dfbe0"
+    },
+    "code-guards.g-version.text": {
+      "text": "version is the first 12 characters of the hash; the model and the learner use it to refer to the same version.",
+      "source": "2aaf34e83dc4"
+    },
+    "code-decision.title": {
+      "text": "The tools know only paths and versions, writes leave records, acceptance belongs to the platform",
+      "source": "fec3dcbaab57"
+    },
+    "code-decision.chosen": {
+      "text": "The three write tools share one frame: paths go through Workspace.resolve, tests/ is read-only, an existing file must have been read, read in full for a whole-file rewrite, unchanged since the read, and have valid line numbers; a write goes to a temporary file that is then renamed, and the hashes before and after and the diff are recorded; when the run ends the platform reruns the tests and checks the records with verify_chain.",
+      "source": "c3c80916fb0f"
+    },
+    "code-decision.bash-only.title": {
+      "text": "Only Bash, with the model editing files from the command line",
+      "source": "951d91ae6f7c"
+    },
+    "code-decision.bash-only.why_not": {
+      "text": "A command can do so much that the tool cannot tell which file is meant to change or what it becomes; permissions, protected files and the hashes before and after would all have to be guessed afterwards from the command text.",
+      "source": "77745f4c890d"
+    },
+    "code-decision.write-only.title": {
+      "text": "Offer only whole-file rewriting as the way to write",
+      "source": "482bfb5d008a"
+    },
+    "code-decision.write-only.why_not": {
+      "text": "It is the simplest tool, but every call sends the whole text, which is costly on a large file and easy to get wrong in the parts that did not change; this lesson compares the three strategies on the same task so your own runs can do the comparing.",
+      "source": "3e27057a8417"
+    },
+    "code-decision.blind-lines.title": {
+      "text": "Apply line replacements directly, without detecting line drift",
+      "source": "5ed278a445d5"
+    },
+    "code-decision.blind-lines.why_not": {
+      "text": "After a previous write changes the number of lines, an old line number silently edits another line; refusing and asking for a fresh read costs only one more read.",
+      "source": "9a63c04fc431"
+    },
+    "code-decision.mtime.title": {
+      "text": "Use the modification time to tell whether the file changed",
+      "source": "437f6f938c5c"
+    },
+    "code-decision.mtime.why_not": {
+      "text": "The resolution of modification times, clocks and the way files are copied make it unreliable: the content may be the same and the time different, or the content different and the time the same; a hash looks only at the content.",
+      "source": "e1e399dabe56"
+    },
+    "code-decision.trust-claim.title": {
+      "text": "Take the model's closing “fixed” at its word",
+      "source": "8a19415102f8"
+    },
+    "code-decision.trust-claim.why_not": {
+      "text": "It is only a sentence. Acceptance looks at the tests the platform reruns, the scope check and the hash chain, and the model's words are only quoted as they were.",
+      "source": "6cfdcb66813d"
+    },
+    "edit-strategies.title": {
+      "text": "One task, three edit strategies",
+      "source": "d0e0b792d9b2"
+    },
+    "edit-strategies.hypothesis": {
+      "text": "On the same change task, a whole-file rewrite sends the most characters to the tool, and an exact replace and a line replace send far fewer; a line replace must read again after a previous write changed the number of lines, and an exact replace may be refused because old is not unique. Whichever strategy is used, the hashes before and after every write should link up, while whether the task is done is decided only by the tests the platform reruns and the scope check.",
+      "source": "776441540959"
+    },
+    "edit-strategies.rewrite.label": {
+      "text": "Whole-file rewrite: write_file",
+      "source": "59f7de376ac5"
+    },
+    "edit-strategies.replace.label": {
+      "text": "Exact replace: edit_file",
+      "source": "7b9034ff5a1f"
+    },
+    "edit-strategies.lines.label": {
+      "text": "Line replace: edit_lines",
+      "source": "24ec54c21b01"
+    },
+    "edit-strategies.sandbox-label.text": {
+      "text": "The execution environment: whether it is isolated and whether every command is approved.",
+      "source": "1ab7036a52be"
+    },
+    "edit-strategies.offered-tools.text": {
+      "text": "The write tool this group offers the model: besides reading, only this one.",
+      "source": "5c9c961946aa"
+    },
+    "edit-strategies.write-tool.text": {
+      "text": "Which tool made the first write.",
+      "source": "2c0314f1b0c4"
+    },
+    "edit-strategies.journal-hash.text": {
+      "text": "The hash after this write; it should equal the hash before the next write.",
+      "source": "675e7d3ff40a"
+    },
+    "edit-strategies.diff.text": {
+      "text": "The unified diff: which lines were removed and which were added.",
+      "source": "d8d345ff0e52"
+    },
+    "edit-strategies.refused.text": {
+      "text": "A call the tool refused: error_type gives the reason and the file did not change.",
+      "source": "802055f5d76e"
+    },
+    "edit-strategies.approval-card.text": {
+      "text": "The approval card before the tests run: the command that will be executed and the files already changed.",
+      "source": "f275b75701cb"
+    },
+    "edit-strategies.write-chars.text": {
+      "text": "Argument characters of write calls: the characters actually sent to the tool, including the refused calls.",
+      "source": "219c747d2e9d"
+    },
+    "edit-strategies.final-hash.text": {
+      "text": "The final hash of `shop/pricing.py`; if several groups match, the final file bytes are identical.",
+      "source": "72474cb7fc89"
+    },
+    "edit-strategies.check-scope.text": {
+      "text": "The scope check: which files and functions the change touched, and whether it went beyond the task.",
+      "source": "0662e48dc3e8"
+    },
+    "edit-strategies.check-tests.text": {
+      "text": "The result of the tests the platform reruns: this row says whether the task is done.",
+      "source": "dc542dbddd82"
+    },
+    "edit-strategies.guide.0.text": {
+      "text": "The three groups have the same task: make the two failing tests under `tests/` pass, changing only `shop/pricing.py`. Only one thing differs: which write tool the model gets.",
+      "source": "c168e1e741ad"
+    },
+    "edit-strategies.guide.1.text": {
+      "text": "Without container isolation, running the tests means executing a subprocess on your machine, and the events say so first.",
+      "source": "14febe116599"
+    },
+    "edit-strategies.guide.2.text": {
+      "text": "The tool list in the request: reading, this group's write tool, and running the tests.",
+      "source": "ad59cb0fbad9"
+    },
+    "edit-strategies.guide.3.text": {
+      "text": "Every write leaves a row; look first at which tool wrote.",
+      "source": "299a1dae5530"
+    },
+    "edit-strategies.guide.4.text": {
+      "text": "The hash after the write; with several writes it becomes the hash before the next one.",
+      "source": "5ad697d34e94"
+    },
+    "edit-strategies.guide.5.text": {
+      "text": "The diff shows which lines this write really changed, instead of the model's paraphrase.",
+      "source": "bf2f8cd91ef1"
+    },
+    "edit-strategies.guide.6.text": {
+      "text": "Some calls are refused, and error_type gives the reason; a refused call does not change the file and still counts in the argument characters.",
+      "source": "6112aad34d18"
+    },
+    "edit-strategies.guide.7.text": {
+      "text": "Approval comes before the tests run, and the card shows the command to execute and the files already changed.",
+      "source": "f239318868b6"
+    },
+    "edit-strategies.guide.8.text": {
+      "text": "Compare the argument characters of the three groups: a whole-file rewrite is usually larger, but check your own run.",
+      "source": "3cd4a02126b1"
+    },
+    "edit-strategies.guide.9.text": {
+      "text": "Is the final hash of `shop/pricing.py` the same in the three groups? Equal means identical bytes; if not, use the diff to find the difference.",
+      "source": "da37928fb8b7"
+    },
+    "edit-strategies.guide.10.text": {
+      "text": "The scope check looks at whether the change went beyond the functions the task names; a function silently deleted shows up here.",
+      "source": "0c14cfd9c0bb"
+    },
+    "edit-strategies.guide.11.text": {
+      "text": "The platform reruns the tests itself, and this row decides whether the task is done.",
+      "source": "7d782fdc1fb9"
+    },
+    "edit-strategies.conclusion.proves.0": {
+      "text": "Every write of the three strategies has a hash before and after and a diff, refused calls are recorded too, and the write records can be matched with the file's real hashes.",
+      "source": "0fff47d5c602"
+    },
+    "edit-strategies.conclusion.proves.1": {
+      "text": "Whether the task is done comes from the tests the platform reruns and does not depend on the model's closing statement.",
+      "source": "397b78e6df8c"
+    },
+    "edit-strategies.conclusion.proves.2": {
+      "text": "From your own runs you can count how many characters each strategy sent, how many calls were refused and how many extra reads there were.",
+      "source": "01e3262e95f9"
+    },
+    "edit-strategies.conclusion.does_not_prove.0": {
+      "text": "It does not prove that one strategy is always better: one run is one sample, and the model, the file size and the task all change the result; characters are not tokens either, and usage is only what the provider reports.",
+      "source": "21ae9d4cbce6"
+    },
+    "edit-strategies.conclusion.does_not_prove.1": {
+      "text": "A closed hash chain only says the records match the file, not that the change is right; whether it is right is for the tests and the scope check, and those cover only this lesson's two tests and two functions.",
+      "source": "7e4f5153ef58"
+    },
+    "edit-strategies.conclusion.does_not_prove.2": {
+      "text": "This lesson's repository has only 45 lines, so it does not show the gap on a large file.",
+      "source": "061a68198289"
+    },
+    "five-guards.title": {
+      "text": "Five guards: how the tools refuse",
+      "source": "6d3bbd84e2df"
+    },
+    "five-guards.hypothesis": {
+      "text": "When the runner submits flawed calls, the tools refuse them by rule and a refused call changes no file; the hash chain of successful writes links up, and only when the runner changes a file directly, past the tools, does the chain break at that spot.",
+      "source": "a793a63fe107"
+    },
+    "five-guards.guards.label": {
+      "text": "Five guards (no model call)",
+      "source": "23ce3a3fa92e"
+    },
+    "five-guards.not-read.text": {
+      "text": "Write without reading: NotReadYet.",
+      "source": "8b1723d526f8"
+    },
+    "five-guards.partial.text": {
+      "text": "Rewrite the whole file after reading only the first 10 lines: PartialRead.",
+      "source": "e512faf47207"
+    },
+    "five-guards.escape.text": {
+      "text": "Read `../outside.txt`, outside the workspace: PathOutsideWorkspace.",
+      "source": "065d9676a155"
+    },
+    "five-guards.protected.text": {
+      "text": "Change an expected value under `tests/`: ProtectedPath.",
+      "source": "cb3650eb4375"
+    },
+    "five-guards.not-unique.text": {
+      "text": "old occurs twice: OldStringNotUnique, with the lines.",
+      "source": "e3b748b7feee"
+    },
+    "five-guards.drift.text": {
+      "text": "Edit with an old line number after a previous write: LineNumbersStale.",
+      "source": "e06ed77d0731"
+    },
+    "five-guards.external.text": {
+      "text": "The external change simulated by the runner: simulated is true, past the tools.",
+      "source": "50a86f88ddd3"
+    },
+    "five-guards.stale.text": {
+      "text": "Write after an external change since the read: StaleRead.",
+      "source": "b8834c348df5"
+    },
+    "five-guards.case-checks.text": {
+      "text": "The checks of the five groups in the report: did every step's declared outcome match the actual one.",
+      "source": "10e2ce3ac0db"
+    },
+    "five-guards.guide.0.text": {
+      "text": "This group calls no model and runs no command. The runner submits calls the way a careless model might, declares the expected outcome first, then looks at what the tool really returns.",
+      "source": "f89c2f911072"
+    },
+    "five-guards.guide.1.text": {
+      "text": "Case 1: a file that was never read is written, the tool refuses, the file stays as it was.",
+      "source": "8032134bcddc"
+    },
+    "five-guards.guide.2.text": {
+      "text": "Trying to rewrite the whole file after reading only the first 10 lines is refused too.",
+      "source": "82928185b7c7"
+    },
+    "five-guards.guide.3.text": {
+      "text": "Case 2: a path that escapes the workspace.",
+      "source": "485edd37ba8c"
+    },
+    "five-guards.guide.4.text": {
+      "text": "Changing the expected value of a test is another kind of escape: the path is inside the workspace but protected.",
+      "source": "ab9f7fff52a7"
+    },
+    "five-guards.guide.5.text": {
+      "text": "Case 3: when old is not unique, the tool reports the lines of the matches so that the model can add context.",
+      "source": "7544bf33d6fe"
+    },
+    "five-guards.guide.6.text": {
+      "text": "Case 4: the first edit changes the number of lines, so the old line numbers are void.",
+      "source": "b4b86ee4aaa4"
+    },
+    "five-guards.guide.7.text": {
+      "text": "Case 5 starts with the runner changing the file directly, past the tools, and the event says it is simulated.",
+      "source": "29fff457f2c9"
+    },
+    "five-guards.guide.8.text": {
+      "text": "The model then writes on top of the old version, and the tool sees that the file has changed.",
+      "source": "54ebcc784a58"
+    },
+    "five-guards.guide.9.text": {
+      "text": "The report lists the declared outcome, the actual outcome and “files unchanged” for every step, and the checks of all five cases are here.",
+      "source": "671b72260949"
+    },
+    "five-guards.conclusion.proves.0": {
+      "text": "The tools refuse by rule a path that escapes, a write without a read, a whole-file rewrite after a partial read, a write to a protected file, a non-unique old, void line numbers and a write after an outside change, and the file stays as it was when they refuse.",
+      "source": "ca8f711f6436"
+    },
+    "five-guards.conclusion.proves.1": {
+      "text": "A change made past the tools makes the hash chain break at that spot; changes outside the tools are not swallowed silently.",
+      "source": "53491bc593c2"
+    },
+    "five-guards.conclusion.does_not_prove.0": {
+      "text": "The five groups are submitted by the runner from a script and cover the rules this lesson implements; they do not show which problems a model will meet in a real run.",
+      "source": "03e340c7b002"
+    },
+    "five-guards.conclusion.does_not_prove.1": {
+      "text": "Stale-write detection still has a gap between comparing the hash and writing the file; this lesson has no file lock, so it cannot prove that concurrent writes are safe.",
+      "source": "55dabae9c55a"
+    },
+    "five-guards.conclusion.does_not_prove.2": {
+      "text": "The tools here handle only text files inside the workspace; symbolic links, binary files and very large files are only refused, with nothing more done.",
+      "source": "95dcc28058ea"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.options.edit.label": {
+      "text": "Fix the repository: the model edits files with one write tool",
+      "source": "0f74527e141a"
+    },
+    "inputs.scenario.options.guards.label": {
+      "text": "Five guards: the runner submits flawed calls",
+      "source": "be771338fc20"
+    },
+    "inputs.strategy.label": {
+      "text": "Edit strategy",
+      "source": "072377fbb0a3"
+    },
+    "inputs.strategy.help": {
+      "text": "Only used by “fix the repository”: which write tool the model gets this time.",
+      "source": "a95c9da738e0"
+    },
+    "inputs.strategy.options.rewrite.label": {
+      "text": "Whole-file rewrite: write_file",
+      "source": "59f7de376ac5"
+    },
+    "inputs.strategy.options.replace.label": {
+      "text": "Exact replace: edit_file",
+      "source": "7b9034ff5a1f"
+    },
+    "inputs.strategy.options.lines.label": {
+      "text": "Line replace: edit_lines",
+      "source": "24ec54c21b01"
+    },
+    "inputs.case.label": {
+      "text": "Guard case",
+      "source": "069fa6c86fa3"
+    },
+    "inputs.case.help": {
+      "text": "Only used by “five guards”: run one case, or all five in a row.",
+      "source": "eacbb62c7b7f"
+    },
+    "inputs.case.options.all.label": {
+      "text": "All five in a row",
+      "source": "417a8e5135e9"
+    },
+    "inputs.case.options.read_first.label": {
+      "text": "Read before write: unread, partly read",
+      "source": "8825b7cf3524"
+    },
+    "inputs.case.options.path_scope.label": {
+      "text": "Path and scope: escaping, editing tests",
+      "source": "fb1fd2acfe43"
+    },
+    "inputs.case.options.not_unique.label": {
+      "text": "Unique match: not found, found several times",
+      "source": "3074aaba1da3"
+    },
+    "inputs.case.options.line_drift.label": {
+      "text": "Line drift: old numbers die after a write",
+      "source": "61383c5a669d"
+    },
+    "inputs.case.options.stale.label": {
+      "text": "Stale detection: changed by someone else after the read",
+      "source": "51bedc1827ad"
+    },
+    "quiz.why-not-bash.prompt": {
+      "text": "What do you mainly get from editing files with dedicated tools instead of Bash?",
+      "source": "15ed89f4774c"
+    },
+    "quiz.why-not-bash.a.text": {
+      "text": "Code decides about permissions, evidence and the reason for a failure, instead of guessing afterwards from the command text",
+      "source": "fd2033ab1353"
+    },
+    "quiz.why-not-bash.a.feedback": {
+      "text": "Right. Paths, protected files, read before write and the hashes before and after are things the tool can do directly.",
+      "source": "cb5d40bd6123"
+    },
+    "quiz.why-not-bash.b.text": {
+      "text": "The model is less likely to make mistakes when writing commands",
+      "source": "3424911b9409"
+    },
+    "quiz.why-not-bash.b.feedback": {
+      "text": "No. The mistakes are different, not fewer: the model can still send a non-unique old or a stale line number.",
+      "source": "d3255af996e2"
+    },
+    "quiz.why-not-bash.c.text": {
+      "text": "The tests no longer need to be run",
+      "source": "256874e48998"
+    },
+    "quiz.why-not-bash.c.feedback": {
+      "text": "No. The tests still have to run, and the platform has to rerun them itself.",
+      "source": "0268d2297c20"
+    },
+    "quiz.why-not-bash.explanation": {
+      "text": "The value of dedicated tools is that the rules move into code, not that the model gets smarter.",
+      "source": "517998596cbd"
+    },
+    "quiz.not-read-vs-stale.prompt": {
+      "text": "What is the difference between NotReadYet and StaleRead?",
+      "source": "2d36620b43bc"
+    },
+    "quiz.not-read-vs-stale.a.text": {
+      "text": "NotReadYet means the file was never read in this run; StaleRead means it was read, but someone else changed it after the read",
+      "source": "6e8f71f54e98"
+    },
+    "quiz.not-read-vs-stale.a.feedback": {
+      "text": "Right. The first looks at whether it was read, the second compares the hash that was read with the file's hash now.",
+      "source": "f59c976e603f"
+    },
+    "quiz.not-read-vs-stale.b.text": {
+      "text": "NotReadYet is for new files and StaleRead is for existing files",
+      "source": "a8fe0066a46a"
+    },
+    "quiz.not-read-vs-stale.b.feedback": {
+      "text": "No. A new file can be created without reading; both errors are about existing files.",
+      "source": "b7c8e1290459"
+    },
+    "quiz.not-read-vs-stale.c.text": {
+      "text": "They are the same, only the name differs",
+      "source": "db308ac31eb1"
+    },
+    "quiz.not-read-vs-stale.c.feedback": {
+      "text": "No. They are handled differently: the first needs a read, the second needs a new read.",
+      "source": "215709403d25"
+    },
+    "quiz.not-read-vs-stale.explanation": {
+      "text": "First check whether it was read, then whether the version changed.",
+      "source": "2d4810655bf5"
+    },
+    "quiz.partial-rewrite.prompt": {
+      "text": "The model read only the first 10 lines of a file and then rewrites the whole file with write_file. What does the tool do?",
+      "source": "51488961537b"
+    },
+    "quiz.partial-rewrite.a.text": {
+      "text": "It returns PartialRead and the file does not change",
+      "source": "3e90b533c477"
+    },
+    "quiz.partial-rewrite.a.feedback": {
+      "text": "Right. A whole-file rewrite would overwrite what was not seen, so all of it must be read.",
+      "source": "189521321d69"
+    },
+    "quiz.partial-rewrite.b.text": {
+      "text": "It writes anyway, because the model has read the file",
+      "source": "10214a22d305"
+    },
+    "quiz.partial-rewrite.b.feedback": {
+      "text": "No. Having read a part is not having seen all of it.",
+      "source": "647447ad296f"
+    },
+    "quiz.partial-rewrite.c.text": {
+      "text": "It replaces only the first 10 lines",
+      "source": "c3e2356ff790"
+    },
+    "quiz.partial-rewrite.c.feedback": {
+      "text": "No. write_file means the whole file, and the tool does not change that.",
+      "source": "2c05e09befd6"
+    },
+    "quiz.partial-rewrite.explanation": {
+      "text": "A whole-file rewrite requires a full read; a local edit only requires a read.",
+      "source": "46f432c8c437"
+    },
+    "quiz.line-drift.prompt": {
+      "text": "Why does edit_lines require a fresh read_file after any write?",
+      "source": "c20c1d136900"
+    },
+    "quiz.line-drift.a.text": {
+      "text": "A write may change the number of lines, so an old number can point at another line; the tool does not guess which numbers are still valid",
+      "source": "02580d5296b7"
+    },
+    "quiz.line-drift.a.feedback": {
+      "text": "Right. Refuse and read again; it costs one more read.",
+      "source": "13d35104ded2"
+    },
+    "quiz.line-drift.b.text": {
+      "text": "Because the line numbers read_file returns are random",
+      "source": "a587b4165a6a"
+    },
+    "quiz.line-drift.b.feedback": {
+      "text": "No. The numbers are deterministic; what changes is the file.",
+      "source": "4b70a9f72ff8"
+    },
+    "quiz.line-drift.c.text": {
+      "text": "Because edit_lines can only be used once",
+      "source": "066af593464a"
+    },
+    "quiz.line-drift.c.feedback": {
+      "text": "No. After reading again it can be used again.",
+      "source": "b1fa9cd38011"
+    },
+    "quiz.line-drift.explanation": {
+      "text": "A line replace pays one more read to avoid editing the wrong line.",
+      "source": "fbe3bf98cc0b"
+    },
+    "quiz.chain-not-correct.prompt": {
+      "text": "In the platform report evidence_chain passes and tests_pass does not. How should you read that?",
+      "source": "8a1a1a72a3cf"
+    },
+    "quiz.chain-not-correct.a.text": {
+      "text": "The write records match the file, but the change did not make the tests pass; the two are separate matters",
+      "source": "573f5c3eb8d1"
+    },
+    "quiz.chain-not-correct.a.feedback": {
+      "text": "Right. Evidence says what happened, acceptance says whether the change is right.",
+      "source": "0484f49beedd"
+    },
+    "quiz.chain-not-correct.b.text": {
+      "text": "The evidence chain passes, so the task is done",
+      "source": "c5ef9c1e690c"
+    },
+    "quiz.chain-not-correct.b.feedback": {
+      "text": "No. Whether the task is done depends on the tests the platform reruns.",
+      "source": "670f963beee3"
+    },
+    "quiz.chain-not-correct.c.text": {
+      "text": "The report contradicts itself, so one of the items must be wrong",
+      "source": "ac3b79bad921"
+    },
+    "quiz.chain-not-correct.c.feedback": {
+      "text": "No. The two checks look at different things, and it is quite normal for both to appear.",
+      "source": "50c45007936c"
+    },
+    "quiz.chain-not-correct.explanation": {
+      "text": "Change evidence does not replace acceptance.",
+      "source": "05c7b6084e9f"
+    },
+    "quiz.approval-why.prompt": {
+      "text": "Without container isolation, why does the platform's own rerun of the tests also need a human's approval first?",
+      "source": "ed5172130078"
+    },
+    "quiz.approval-why.a.text": {
+      "text": "It also executes code the model changed, and the restricted runner is not an isolation boundary",
+      "source": "5969294ca1fe"
+    },
+    "quiz.approval-why.a.feedback": {
+      "text": "Right. What is approved is “execute this changed code on your machine”.",
+      "source": "71b456be7f94"
+    },
+    "quiz.approval-why.b.text": {
+      "text": "Because the model wrote the test command",
+      "source": "37a05e37e4f3"
+    },
+    "quiz.approval-why.b.feedback": {
+      "text": "No. The command is fixed and not written by the model; the risk is that the code being executed was changed by the model.",
+      "source": "b469438a8fdc"
+    },
+    "quiz.approval-why.c.text": {
+      "text": "Because approval makes the tests run faster",
+      "source": "b33c279ba71a"
+    },
+    "quiz.approval-why.c.feedback": {
+      "text": "No. Approval only lets a person take a look before the execution.",
+      "source": "eb8f0d33b405"
+    },
+    "quiz.approval-why.explanation": {
+      "text": "Without a container, safety comes from a person having looked before each execution.",
+      "source": "b22c7482b13f"
+    },
+    "quiz.unchanged-write.prompt": {
+      "text": "write_file writes content identical to what the file has now. What does that row of the journal look like?",
+      "source": "0ed3ee2bef7f"
+    },
+    "quiz.unchanged-write.a.text": {
+      "text": "ok is true, changed is false, the hashes before and after are equal and the diff is empty",
+      "source": "0c53845262c7"
+    },
+    "quiz.unchanged-write.a.feedback": {
+      "text": "Right. The write did not fail, it just changed nothing.",
+      "source": "eadc9c5c2abf"
+    },
+    "quiz.unchanged-write.b.text": {
+      "text": "ok is false and error_type is NoOpEdit",
+      "source": "980a69f7c697"
+    },
+    "quiz.unchanged-write.b.feedback": {
+      "text": "No. NoOpEdit is how edit_file and edit_lines refuse an edit that changes nothing; write_file accepts identical content.",
+      "source": "f0511a23216d"
+    },
+    "quiz.unchanged-write.c.text": {
+      "text": "No row is recorded",
+      "source": "ace40a04f90c"
+    },
+    "quiz.unchanged-write.c.feedback": {
+      "text": "No. Every write-type call leaves a row.",
+      "source": "3af44c4a714c"
+    },
+    "quiz.unchanged-write.explanation": {
+      "text": "The record is of the call and of the file's real change, and if nothing changed it says so.",
+      "source": "c19976972b24"
+    },
+    "check-hunt.prompt": {
+      "text": "Run “five guards” and find the tool result of the write that was refused after the file was changed externally following the read.",
+      "source": "b2a1e5787cc0"
+    },
+    "check-hunt.explanation": {
+      "text": "Case 5 is stale-write detection. The runner calls read_file, then changes the file directly past the tools, and the event lesson.external_change has simulated true; the edit_file that follows returns StaleRead, that write does not take effect, and the hashes before and after in lesson.file_change are equal. After reading again the write succeeds, and the hash before in that row is the hash after the external change, so the hash chain in the report breaks right there, which is exactly what is expected.",
+      "source": "843443a69cfb"
+    },
+    "check-points.title": {
+      "text": "Check by hand",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own run and this lesson's source, and tick an item only when you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran “five guards”, counted the refused calls in the report table, and confirmed that “Files unchanged” is “yes” on every row.",
+      "source": "989e98c04266"
+    },
+    "check-points.item-2.text": {
+      "text": "I can state the one rule `edit_file` has for old, and what it returns when there is no match and when there are several.",
+      "source": "a7acbfb7e381"
+    },
+    "check-points.item-3.text": {
+      "text": "I ran the three edit strategies and compared their argument characters, refused calls and model calls.",
+      "source": "da099e85da8c"
+    },
+    "check-points.item-4.text": {
+      "text": "In `lesson.file_change` I found the hashes before and after one write, and confirmed that the hash after equals the hash before the next write.",
+      "source": "65972c396c2e"
+    },
+    "check-points.item-5.text": {
+      "text": "On the approval card I saw the command that would be executed and the files already changed, and I understand why it needs my approval first.",
+      "source": "19111967e16c"
+    },
+    "check-points.item-6.text": {
+      "text": "I can explain why a closed hash chain and passing tests are still not the same as the task being accepted.",
+      "source": "245f667b4fc7"
+    },
+    "code_notes.PathOutsideWorkspace.note": {
+      "text": "Path empty, absolute, containing .. or ~, or outside the workspace once resolved: refused.",
+      "source": "1a97e4e03261"
+    },
+    "code_notes.NotReadYet.note": {
+      "text": "A write to a file never read in this run: refused, the file is unchanged.",
+      "source": "c38e2495554e"
+    },
+    "code_notes.PartialRead.note": {
+      "text": "write_file overwrites everything but only part was read: refused.",
+      "source": "33a4f945f763"
+    },
+    "code_notes.StaleRead.note": {
+      "text": "The file's hash changed after the read: the write is refused and a new read is required.",
+      "source": "f6034758bfcd"
+    },
+    "code_notes.LineNumbersStale.note": {
+      "text": "A write happened after the last read, so old line numbers are void: edit_lines refuses.",
+      "source": "edab9ee87878"
+    },
+    "code_notes.OldStringNotFound.note": {
+      "text": "The old text of edit_file is not in the file: refused.",
+      "source": "e8f62147daa2"
+    },
+    "code_notes.OldStringNotUnique.note": {
+      "text": "The old text of edit_file occurs more than once: refused, with the lines.",
+      "source": "c85d4b872026"
+    },
+    "code_notes.ProtectedPath.note": {
+      "text": "A write to a file under tests/: refused, read-only.",
+      "source": "782f8319ae4f"
+    },
+    "code_notes.lesson.file_change.note": {
+      "text": "Lesson event: one row per write-type call, with the hashes before and after, the diff and the result.",
+      "source": "6bee9ef9169f"
+    },
+    "code_notes.lesson.external_change.note": {
+      "text": "Lesson event: an external change simulated by the runner, writing the file past the tools.",
+      "source": "0dc7ce3aaedb"
+    },
+    "code_notes.verify_chain.note": {
+      "text": "Checks that the hashes of the write records link end to end and match the file's hash now.",
+      "source": "15501ab2e23c"
+    },
+    "code_notes.symbol_changes.note": {
+      "text": "Compares two versions of a Python file and lists the changed, added and removed top-level names.",
+      "source": "d8e9f3866283"
+    },
+    "code_notes.before_sha256.note": {
+      "text": "The sha256 of the file content before the write; empty when the file did not exist.",
+      "source": "175391fbfbc1"
+    },
+    "code_notes.Workspace.resolve.note": {
+      "text": "Resolves the path the model gave into the workspace and refuses what escapes.",
+      "source": "d2c6e8806cfe"
+    }
+  }
+}

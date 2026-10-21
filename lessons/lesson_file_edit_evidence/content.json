@@ -1,0 +1,1422 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "file-edit-evidence",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "TOOLS / FILE EDITING",
+          "headline": "改文件，别让命令行代劳：",
+          "highlight": "每一次写入都要留下证据。",
+          "takeaway": "专用的读写工具能校验路径、记住模型读过什么、拒绝过期的写入，并在每次写入时留下前后哈希和 diff。本课让模型用三种编辑策略修同一个小仓库，再由平台自己重新运行测试，看证据和结论是不是一回事。真实运行会让模型改文件并运行测试；没有容器隔离时，运行测试之前要先经你批准。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-tools",
+              "label": "01 / TOOLS",
+              "title": "专用文件工具，不是 Bash",
+              "description": "read_file、write_file、edit_file 和 edit_lines 各管一件事：路径、权限、失败原因都由代码判断，不靠模型拼出一条命令。",
+              "token": "read_file · edit_file"
+            },
+            {
+              "id": "02-strategy",
+              "label": "02 / STRATEGY",
+              "title": "编辑策略",
+              "description": "编辑策略是模型告诉工具“改哪里、怎么改”的方式：整文件重写发全文，精确替换发原文和新文本，行号替换发行号和新文本。发得越多越贵，没改的地方也越容易出错。",
+              "token": "write_file · edit_file · edit_lines"
+            },
+            {
+              "id": "03-evidence",
+              "label": "03 / EVIDENCE",
+              "title": "变更证据",
+              "description": "变更证据（Change Evidence）是不靠模型自述的记录：每次写入前后的哈希、统一 diff，以及首尾相接的哈希链。平台再自己重新运行测试验收。",
+              "token": "before_sha256 · diff"
+            },
+            {
+              "id": "04-guards",
+              "label": "04 / GUARDS",
+              "title": "读后才写与过期写入",
+              "description": "读后才写要求写入前读过这个文件。过期写入（Stale Write）指基于读取之后已被改动的版本做的写入，工具检查出来就拒绝，而不是覆盖。",
+              "token": "NotReadYet · StaleRead"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "为什么不用 Bash 改文件",
+          "paragraphs": [
+            "专用的读写工具能在改文件之前校验路径，改文件时记录前后内容，出了错也更容易定位。{{lesson:bash-coding-agent}}只给模型一个 Bash 工具，读文件靠 `cat`，改文件靠 `sed` 或重定向。命令能做的事太多，工具看不出模型到底想改什么：这条命令改了哪个文件，改成了什么，有没有越出工作区，都要事后再去比对。",
+            "专用工具把这些判断提前到代码里。`read_file` 返回带行号的内容；`write_file`、`edit_file` 和 `edit_lines` 是三种写入方式，每个只做一件事。路径一律交给 `Workspace.resolve` 解析，越界直接拒绝；写入前先查有没有读过这个文件、读完之后有没有被别人改动；写入之后立刻留下一行记录。这些规则写在 Python 里，不会因为模型换了一种写法就失效。",
+            "代价是工具要一个个设计和测试，每个工具的定义还要占去模型的上下文。书里的判断是通用工具优先，除非有明确的安全、权限或性能理由；改文件占了前两条，又是最常用、最容易出事故的操作，所以值得单独做。读目录、跑命令这类事，{{lesson:bash-coding-agent}}那条路仍然更省事。",
+            "本课调用模型。真实运行里，模型在一个带两个失败测试的小仓库里修代码，只能用你给它的工具，运行结束后平台自己重新运行测试验收。测试是在你的机器上启动的子进程：没有容器隔离时，每次运行测试之前都要经你批准，页面和事件都标着“未隔离”。“五道防护”那一组不调用模型，也不运行任何命令。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "路径、读后才写与受保护文件",
+          "paragraphs": [
+            "模型给的路径只是一段字符串，不能直接拿去打开文件。路径校验由 `Workspace.resolve` 完成：空路径、绝对路径、以 `~` 开头的路径、用 `..` 爬出去的路径，以及跟随符号链接之后落在工作区外的路径，一律返回 PathOutsideWorkspace。例如 `shop/../../x` 解析出来是工作区的上一级，会被拒绝，而不是悄悄改写成工作区内的某个文件。出错就快速失败，不替模型“智能修正”。",
+            "读后才写：写一个已有的文件之前，这次运行里必须读过它。工具在 `read_file` 时记下它给模型看的版本，也就是文件内容的哈希。没读过就写，返回 NotReadYet；用 `write_file` 整个重写，还要求读过全部内容，只读了前 10 行就返回 PartialRead。分几次读同一个版本，读到的行会并在一起，读全了就算读全。",
+            "受保护文件：任务要改的是代码，不是验收它的测试。`tests/` 下的文件可以读，写入一律返回 ProtectedPath。这是 Bash 很难做到的：`sed -i` 改的是哪个文件，要先读懂命令才知道，专用工具只看路径参数。平台验收时还会再查一遍 `tests/` 有没有变化，两层互相印证。书里配套的 Edit 工具只在文档里写了“先读后改”，代码并不检查；本课把它做成工具的规则。",
+            "为什么要靠代码，而不是在提示词里写一句“先读后改”？提示词里的话是请求，模型在长任务里可能忘记，忘了也没有后果；工具里的检查是规则，忘了就被拒绝。系统提示词里照样写这条规则，让模型知道被拒绝是怎么回事，但守住它的是 `_check_view`。"
+          ]
+        },
+        {
+          "id": "predict-tool-calls",
+          "type": "predict",
+          "prompt": "去实验台运行“精确替换：edit_file”之前先猜：模型一共会提出几次工具调用（tool_call 事件）？",
+          "experiment": "edit-strategies",
+          "arm": "replace",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
+        },
+        {
+          "id": "mq-path",
+          "type": "micro-quiz",
+          "question": {
+            "id": "path-escape",
+            "prompt": "模型给 edit_file 的路径是 `../notes.txt`。工具会怎么做？",
+            "options": [
+              {
+                "id": "a",
+                "text": "解析出路径落在工作区外，返回 PathOutsideWorkspace，不写任何文件",
+                "feedback": "对。越界先拒绝，文件系统上什么也没发生。"
+              },
+              {
+                "id": "b",
+                "text": "把它当成工作区上一级的 notes.txt 照写",
+                "feedback": "不对。工作区外的文件不在工具的范围里。"
+              },
+              {
+                "id": "c",
+                "text": "去掉 `../`，改写成工作区里的 notes.txt",
+                "feedback": "不对。工具不替模型“智能修正”路径，修正后的文件可能根本不是模型想改的那个。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "路径校验的结论只有两种：在工作区内，或者拒绝。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "整文件写入与局部替换",
+          "paragraphs": [
+            "整文件写入与局部替换在大文件上的成功率与风险各不相同，选哪一种要看文件有多大、改动有多小。编辑策略就是这个选择：模型用什么方式告诉工具“改哪里、怎么改”。本课比较三种，先看前两种。",
+            "整文件重写用 `write_file`：模型把文件完整写一遍。好处是工具最简单，没有“找不到”“找到好几处”的问题。代价有两个：改两行也要发整个文件，文件越大越贵；没改的行也要原样抄回，哪一行抄丢了、抄走样了，工具自己看不出来。",
+            "精确替换用 `edit_file`：模型给出文件里的一段原文 old 和替换后的 new。工具只有一条规则：old 必须与文件逐字相同，并且恰好出现一次。找不到返回 OldStringNotFound，出现两次以上返回 OldStringNotUnique，并报出各处的行号，文件都不动。发的字符少，改动范围就是 old 本身；代价是原文要抄得一字不差，缩进和空行也算。",
+            "本课夹具里的 `shop/pricing.py` 有两处 `return 0.0`，分别在第 22 行和第 33 行。只写 old 为 `return 0.0`，得到 OldStringNotUnique 和“第 22、33 行”。把 old 写成 `if amount > FREE_SHIPPING_FROM:` 和下一行 `return 0.0` 两行，就只出现一次，可以替换。",
+            "“成功率”要分两层看。工具层：写入调用被接受的比例，整文件重写几乎总是被接受，因为工具没有拒绝它的理由；精确替换则会因为找不到、不唯一而被拒绝。任务层：改完之后平台重新运行的测试通不通过。工具层的拒绝是好事，它把错误挡在写入之前；整文件重写的风险没有消失，只是挪到了任务层，要靠测试和范围检查才能发现。"
+          ]
+        },
+        {
+          "id": "deep-dive-rewrite",
+          "type": "deep-dive",
+          "title": "大文件上差多少：手算一遍",
+          "summary": "用 600 行的文件算整文件重写与精确替换的字符数，再说说抄写保真度。",
+          "paragraphs": [
+            "假设一个文件有 600 行，每行平均 40 个字符，整文件重写要发约 24000 个字符。要改两处，每处原文 3 行、新文本 4 行：精确替换发 2 × (3 × 40 + 4 × 40) = 560 个字符，约为前者的 2%。字符数不等于 Token，但同一段文本的两个数大致同向变化，所以这个比例可以用来比较两种做法的相对成本。本课夹具的 `shop/pricing.py` 只有 45 行，差距没有这么大，文件越大差距越明显。",
+            "成本之外还有保真度。整文件重写要求模型把没改的 597 行逐字抄回来。模型偶尔会偷懒，写成“其余代码不变”这样的省略标记，或者顺手改掉一个看起来多余的函数；文件很大时，这类静默的错误更容易出现。精确替换不用抄没改的部分，只要 old 抄对。",
+            "反过来，文件里有大量重复结构时，精确替换更容易撞上 OldStringNotUnique，要多带几行上下文才能钉住位置。哪种更省，要在你自己的模型和你自己的文件上量；实验报告里的“写入类调用的参数字符数”就是为这个比较准备的，它数的是实际发给工具的参数，包括被拒绝的那几次。",
+            "还要提醒一句：一次运行只是一个样本。同样的任务、同样的输入，模型每次的输出也不一样，{{lesson:sampling-variance}}量过这种波动。想比较策略，就在同一个任务上每种策略多跑几次，再看参数字符数和被拒绝次数的分布；只看一次，很容易把运气当成规律。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "行号替换与行号漂移",
+          "paragraphs": [
+            "行号替换用 `edit_lines`：模型给出起止行号和新文本，把这几行整体换掉。好处是大段删除只要两个数字，不用抄原文；风险是行号会漂移。行号来自 `read_file` 的显示，所以它只在文件没有变化的时候才是对的。",
+            "行号漂移指前一次写入改变了行数，后面的行号全部移位。例子：`read_file` 显示 `if amount > FREE_SHIPPING_FROM:` 在第 32 行。模型先把第 17 到 19 行换成 5 行，下面的行都向下移了 2 行；这时再按旧行号改第 32 行，改到的是 `def shipping(amount):`。工具要是照做，函数定义就被换成了一条判断。",
+            "本课的 `edit_lines` 不去猜。任何写入之后，这个文件的行号视图就作废，再用旧行号返回 LineNumbersStale，要求先重新 `read_file`。代价是多一次读取、多一轮模型调用。书里提到的另一种办法，是在一次调用里把多处修改都按初始行号交给工具，由工具从下往上应用；本课没有实现它。",
+            "还有一个小坑：`read_file` 每行前面的“行号|”只是显示，不属于文件。模型把它连同行号一起抄进 old，就会得到 OldStringNotFound。带行号的输出让模型能精确地说“第 42 行”，减少歧义，所以值得保留；工具描述和错误信息都要反复说明，行号前缀不是文件内容。"
+          ]
+        },
+        {
+          "id": "mq-unique",
+          "type": "micro-quiz",
+          "question": {
+            "id": "not-unique",
+            "prompt": "edit_file 的 old 在文件里出现了 2 次。工具会怎么做？",
+            "options": [
+              {
+                "id": "a",
+                "text": "改第一处",
+                "feedback": "不对。工具不知道模型想改的是哪一处，猜错了就是一次静默的错误修改。"
+              },
+              {
+                "id": "b",
+                "text": "两处都改",
+                "feedback": "不对。本课的 edit_file 没有“全部替换”的选项。"
+              },
+              {
+                "id": "c",
+                "text": "返回 OldStringNotUnique 和各处的行号，文件保持原样，由模型补上下文再来",
+                "feedback": "对。拒绝比猜测便宜：模型多花一次调用，换来一定改对地方。"
+              }
+            ],
+            "correct": "c",
+            "explanation": "精确替换只有一条规则：恰好一处才改。"
+          }
+        },
+        {
+          "id": "deep-dive-schemes",
+          "type": "deep-dive",
+          "title": "书里对比的五种编辑方案",
+          "summary": "差异描述加应用模型、旧串换新串、行号、类 Vim 命令、首尾匹配，各自的取舍。",
+          "paragraphs": [
+            "《深入理解 AI Agent》对比了五种让模型表达“改哪里”的方案。差异描述加应用模型：主模型写一份类似 diff 的变更描述，另一个更小的模型把它合并进文件；合并环节脆弱，存在多处相似代码时可能合到错的地方，书里说 Cursor 因为基础模型变强，已经不再走这条路。旧字符串换新字符串：Claude Code、Codex 和今天的 Cursor 采用，行为可预测，缺点是删大段代码要把原文全写出来。",
+            "行号定位只需要两个数字就能删大段代码，但每次编辑之后行号都会变，模型一次思考输出多处编辑时必须都用初始行号。类 Vim 命令对重组代码很高效，但语法学习负担大，每次编辑后行号和内容都变，也不适合一次批量输出；Vim 是为需要不断看到当前状态的人设计的，模型的工作方式是长时间思考后批量操作。",
+            "字符串首尾匹配是旧串替换的改进：只给要替换内容的开头几行和结尾几行，框架按这对首尾定位。它兼得内容匹配的可靠和行号方案的省字。本课实现了其中三种里最简单的两种加整文件重写，没有做应用模型、Vim 命令和首尾匹配；读完本课，可以自己想想首尾匹配要在 `edit_file` 里加哪几条规则。",
+            "没有放之四海而皆准的选择，可以先用一条经验规则试：文件小、改动大，整文件重写省事；文件大、改动小，精确替换更省；要删的是连续的大段，而且这一轮只改一处，行号替换最短。规则是否成立，用本课的实验报告在你自己的模型上检验。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "前后哈希与 diff",
+          "paragraphs": [
+            "哈希能证明文件确实变了，diff 能说明改了什么。哈希（本课用 `sha256`）把整个文件算成一串固定长度的指纹：内容差一个字节，指纹就完全不同，内容相同，指纹一定相同。统一 diff 则列出删了哪几行、加了哪几行，每处改动前后带几行不变的上下文，和 `git diff` 的格式一样。",
+            "每次写入，`FileTools` 都在 `_journal` 里记一行：工具名、路径、写入前哈希、写入后哈希、增删行数和 diff。被拒绝的调用也记一行，`ok` 为 false，两个哈希相同。这一行同时作为 `lesson.file_change` 事件发出，所以回放时能看到每一次写入，不用相信模型怎么说。",
+            "哈希还能串成链。第 1 次写入的写入后哈希应该等于第 2 次的写入前哈希，最后一次的写入后哈希等于文件现在的哈希。`verify_chain` 逐条核对：中间对不上，说明有人在工具背后改过文件；最后对不上，说明记录缺了一条；文件变了却一条记录也没有，就是无记录的改动。这些记录合起来就是变更证据：它们来自文件本身和工具的执行，不来自模型的描述。",
+            "证据之外，平台还要自己验收。运行结束后它重新运行测试，核对 `tests/` 没有被改，用 `symbol_changes` 比较前后两个版本的 Python 文件，列出改动、新增、删除了哪些顶层函数，看有没有越出任务点名的 `discount_rate` 和 `shipping`。这几项都写进实验报告，模型最后那句“已修好”只被原样引用。",
+            "学会读统一 diff，就能核对每一次写入。实验报告里的 diff，每处改动前后各带 3 行上下文。以 `@@ -14,7 +14,9 @@` 开头的一段表示：原文件从第 14 行起的 7 行，在新文件里是从第 14 行起的 9 行。本课夹具里把第 17 行的文档字符串换成新文本、再插入两行 20% 档位，这一段就是删 1 行、加 3 行，7 + 3 - 1 = 9。以 `-` 开头的行是删掉的，以 `+` 开头的是新增的，没有符号的是上下文。哪一行被删了，在 diff 里一目了然；整文件重写丢掉函数时，满屏的 `-` 就是证据。"
+          ]
+        },
+        {
+          "id": "mq-hash",
+          "type": "micro-quiz",
+          "question": {
+            "id": "same-hash",
+            "prompt": "某次写入记录的 before_sha256 和 after_sha256 相同。最可能是什么情况？",
+            "options": [
+              {
+                "id": "a",
+                "text": "写入生效了，只是改动很小",
+                "feedback": "不对。哪怕只改一个字节，哈希也完全不同。"
+              },
+              {
+                "id": "b",
+                "text": "这一行是被拒绝的调用，或者写入的内容与原来完全一样",
+                "feedback": "对。两种情况文件都没变，再看 ok 和 changed 就能分辨。"
+              },
+              {
+                "id": "c",
+                "text": "哈希算错了",
+                "feedback": "不对。哈希由文件字节算出，同样的字节一定得到同样的哈希。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "哈希相同只说明文件字节没变，原因要看这一行的 ok、changed 和 error_type。"
+          }
+        },
+        {
+          "id": "misconception-chain",
+          "type": "misconception",
+          "claim": "哈希链闭合、测试也通过，就说明这次修改改对了。",
+          "correction": "哈希链只证明“发生了什么”：每次写入都有记录，记录接得上。它不判断改得对不对。整文件重写时模型悄悄丢掉了 `tax` 函数，每次写入照样有记录，链是闭合的；这时平台的范围检查会报出被删的函数，重新运行的测试通常也会失败。反过来，测试全部通过只说明这些测试没发现问题，改动有没有越出任务，要看范围检查。“工具成功返回”“写入生效”“测试通过”“任务验收通过”是四件事，本课的报告把它们分开列：写入记录、哈希链、平台重新运行的测试、范围检查各占一行。"
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "冲突与过期检测",
+          "paragraphs": [
+            "文件在模型读取之后被别人改过，编辑要拒绝，而不是覆盖。模型读文件和写文件之间隔着一次推理，短则几秒，长则几分钟；这段时间里，编辑器、格式化工具或另一个 Agent 可能已经改了同一个文件。",
+            "过期检测的做法很朴素：`read_file` 记下文件当时的哈希；写入时重新算一次，不相同就返回 StaleRead，不写，要求模型重读。这和{{lesson:memory-lifecycle}}里的乐观并发控制是同一个思路：带着读到的版本去写，版本变了就拒绝。那里叫过时写入，这里基于过期的读取，叫过期写入。",
+            "检查的顺序有讲究：先看读没读过，再看哈希变没变，最后才看这次写入各自的条件，也就是整文件重写要读全文、行号替换要行号有效。文件已经变了，后面的条件都不必再看。被拒绝之后，模型重新读取、基于新内容再改，别人加的那一行会被保留下来。",
+            "这个检查有一道缝：比较哈希和写文件之间还隔着几毫秒，这时文件再被改，工具察觉不到；堵上它要文件锁，或者原子的“比较并交换”，单人本地的教学场景没有做。写入本身是先写临时文件再改名，保证崩溃时留下的要么是旧文件、要么是新文件，不会是写了一半的文件。",
+            "模型自己的写入不会让自己过期：每次写入成功，工具就把记下的版本更新成刚写的那一版，所以模型可以连续做几处 `edit_file`，不必每次先重读。只有工具之外的改动才会触发 StaleRead。被拒绝之后的恢复路径是固定的：一次 `read_file`，一次编辑；多花的就是这两次调用。"
+          ]
+        },
+        {
+          "id": "deep-dive-references",
+          "type": "deep-dive",
+          "title": "三个参考实现怎么取舍",
+          "summary": "书里的 Edit 工具、Learn Claude Code 的五个工具、Mini-SWE-agent 的只用 Bash。",
+          "paragraphs": [
+            "书的配套代码里，Edit 工具要求 old 在文件里唯一出现，否则报错；Write 和 Edit 写完后会对 Python 和 JavaScript 文件做语法检查，把结果放进返回值。本课的写入工具沿用了这两点：唯一匹配和写后语法检查。不同的是，书里“先读后改”只写在工具说明里，没有代码保证；本课用 `views` 记下读过的版本，没读过、读全了没有、读后文件变没变，都由代码检查。",
+            "Learn Claude Code 的第二步把单个 Bash 工具扩成五个工具，改文件的 `run_edit` 只有几行：找不到 old 就报错，找到了就替换第一处，没有唯一性检查，路径用 `resolve` 加 `is_relative_to` 限制在工作目录内。它是最小的起点；本课在这个起点上补的是唯一匹配、读后才写、过期检测和证据记录。",
+            "Mini-SWE-agent 走相反的路线：除了 Bash 没有别的工具，每条命令独立执行，历史完全线性。项目文档称它在 SWE-bench Verified 上得分超过 74%，说明强模型靠 Bash 也能改文件。两种路线并不矛盾：只用 Bash 换来的是简单和可移植；专用工具换来的是权限、证据和更清楚的失败。本课关心的是后者，对照{{lesson:bash-coding-agent}}的结果来选。",
+            "把三个实现放在一起看，本课的取舍有三条。写入工具只表达“改”，不执行命令，执行留给另一个要审批的工具；每个拒绝的理由都是结构化的错误类名，模型和运行器都读得懂，不是一句自由文本；证据由写入的同一段代码产生，写一次记一行，而不是事后再从命令输出里去还原。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次精确替换，从提议到证据",
+          "description": "按步骤说明 edit_file 的一次成功写入。代码是简化的示意，不是运行记录；实际的值看 tool_call、lesson.file_change 和 lesson.report 事件。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "01",
+              "actor": "模型",
+              "title": "提出一次调用",
+              "body": "模型给出路径、一段原文和替换后的文本，工具还没有动文件。",
+              "code": "edit_file(path=\"shop/pricing.py\", old=\"if amount > FREE_SHIPPING_FROM:\",\n          new=\"if amount >= FREE_SHIPPING_FROM:\")",
+              "language": "python",
+              "evidence": "tool_call 事件"
+            },
+            {
+              "id": "step-2",
+              "label": "02",
+              "actor": "工具",
+              "title": "校验路径，查受保护文件",
+              "body": "相对路径、落在工作区内、不在 tests/ 下，才继续。",
+              "code": "resolved, rel = self._path(path)   # raises PathOutsideWorkspace\nfnmatch.fnmatch(rel, \"tests/*\")    # raises ProtectedPath",
+              "language": "python",
+              "evidence": "被拒绝时的 tool_result 和 lesson.file_change"
+            },
+            {
+              "id": "step-3",
+              "label": "03",
+              "actor": "工具",
+              "title": "核对读过且没有过期",
+              "body": "文件已存在，所以要读过；文件现在的哈希必须等于读到的那个。",
+              "code": "view = self.views.get(rel)            # None -> NotReadYet\nview.digest != current                # -> StaleRead",
+              "language": "python",
+              "evidence": "NotReadYet、StaleRead"
+            },
+            {
+              "id": "step-4",
+              "label": "04",
+              "actor": "工具",
+              "title": "old 恰好一处，才替换",
+              "body": "数 old 出现几次：0 次、多次都拒绝，恰好 1 次才算出新文本。",
+              "code": "text.replace(old, new, 1)",
+              "language": "python",
+              "evidence": "OldStringNotFound、OldStringNotUnique"
+            },
+            {
+              "id": "step-5",
+              "label": "05",
+              "actor": "工具",
+              "title": "原子写入，记一行",
+              "body": "先写临时文件再改名，然后记下前后哈希、diff 和增删行数。",
+              "code": "_atomic_write(resolved, data)\nself._journal(tool, rel, ok=True, before=before, after=after, diff=diff)",
+              "language": "python",
+              "evidence": "lesson.file_change"
+            },
+            {
+              "id": "step-6",
+              "label": "06",
+              "actor": "平台",
+              "title": "验收：重新运行测试，核对哈希链",
+              "body": "运行结束后平台自己运行测试、查 tests/ 有没有变、比较改动的函数，并校验哈希链。",
+              "code": "verify_chain(journal, baseline, final)",
+              "language": "python",
+              "evidence": "lesson.report 的检查"
+            }
+          ]
+        },
+        {
+          "id": "mq-stale",
+          "type": "micro-quiz",
+          "question": {
+            "id": "stale-write",
+            "prompt": "模型读了 `shop/report.py`，随后另一个进程在文件末尾加了一行。模型接着调用 edit_file。工具应该怎么做？",
+            "options": [
+              {
+                "id": "a",
+                "text": "照常写入，保留模型的版本",
+                "feedback": "不对。这会把别人刚加的那一行静默地覆盖掉。"
+              },
+              {
+                "id": "b",
+                "text": "返回 StaleRead，文件保持别人改过的样子，要求模型重读",
+                "feedback": "对。拒绝让冲突显露出来，模型重读后再改，别人的那一行也会保留。"
+              },
+              {
+                "id": "c",
+                "text": "自动把两边的改动合并",
+                "feedback": "不对。合并需要知道两边的意图，工具只有哈希，没有这个信息。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "过期检测的结论是拒绝，不是覆盖，也不是替人合并。"
+          }
+        },
+        {
+          "id": "wrap-up",
+          "type": "prose",
+          "paragraphs": [
+            "回头看本课的三条线：专用工具把路径、读后才写、受保护文件这些规则放进代码；三种编辑策略各有各的成本和失败方式，整文件重写发得多，精确替换会撞上不唯一，行号替换会漂移；每次写入都留下前后哈希和 diff，过期的写入被拒绝，平台再自己重新运行测试验收。它们有一个共同点：结论落在文件和命令的真实结果上，而不是模型的一句“已修好”。和{{lesson:bash-coding-agent}}对照，专用工具让权限、证据和失败更可控，代价是每种操作都要设计；测试照旧经受限执行器运行，没有容器时逐条审批。下一课{{lesson:evaluation-sets}}把“独立验证器”这件事讲得更系统：怎样让判断任务有没有完成的程序，和被判断的程序分开。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch4",
+              "title": "工具：专用工具与通用执行器的取舍、参数传递的保真性、执行工具的安全层次（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-ch5",
+              "title": "Coding Agent：文件编辑工具的五种方案、行号标注与写后语法反馈（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter5.md"
+            },
+            {
+              "id": "book-edit",
+              "title": "配套代码：Edit 工具的唯一匹配规则与写后语法检查（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter5/coding-agent/tools/edit_tool.py"
+            },
+            {
+              "id": "book-read",
+              "title": "配套代码：Read 工具的带行号输出、范围读取与二进制判断（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter5/coding-agent/tools/read_tool.py"
+            },
+            {
+              "id": "lcc-s02",
+              "title": "Learn Claude Code：从一个 Bash 工具扩成五个工具，路径限制只用在文件工具上",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s02_tool_use/README.md"
+            },
+            {
+              "id": "mini-index",
+              "title": "Mini-SWE-agent：只给 Bash、每条命令独立执行的路线（对照）",
+              "url": "https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/docs/index.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "bash-coding-agent"
+        },
+        {
+          "id": "code-strategies",
+          "type": "annotated-source",
+          "path": "lessons/lesson_file_edit_evidence/file_tools.py",
+          "start": 223,
+          "end": 263,
+          "notes": [
+            {
+              "id": "n-edit-file",
+              "line": 223,
+              "anchor": "def edit_file(self, path, old, new)",
+              "text": "精确替换的全部参数：路径、原文 old、新文本 new。"
+            },
+            {
+              "id": "n-build",
+              "line": 224,
+              "anchor": "def build(rel, text, exists):",
+              "text": "build 只负责算出新文本；守卫和写入由 _write 统一处理。"
+            },
+            {
+              "id": "n-missing",
+              "line": 226,
+              "anchor": "raise FileNotFound(self.t.file_not_found.format(path=rel))",
+              "text": "编辑一个不存在的文件：直接失败，不顺手新建。"
+            },
+            {
+              "id": "n-find-loop",
+              "line": 232,
+              "anchor": "while (index := text.find(old, start)) >= 0:",
+              "text": "找出 old 在文件里的每一处，每次从上一处之后继续找。"
+            },
+            {
+              "id": "n-line-of-match",
+              "line": 233,
+              "anchor": "lines.append(text.count(",
+              "text": "记下每一处所在的行号，报错时告诉模型。"
+            },
+            {
+              "id": "n-not-found",
+              "line": 236,
+              "anchor": "if not lines:",
+              "text": "一处也没有：OldStringNotFound，文件不动。"
+            },
+            {
+              "id": "n-not-unique",
+              "line": 238,
+              "anchor": "if len(lines) > 1:",
+              "text": "不止一处：OldStringNotUnique，不猜是哪一处。"
+            },
+            {
+              "id": "n-no-op",
+              "line": 241,
+              "anchor": "if old == new:",
+              "text": "改了等于没改：NoOpEdit，也拒绝。"
+            },
+            {
+              "id": "n-replace",
+              "line": 243,
+              "anchor": "return text.replace(old, new, 1)",
+              "text": "恰好一处才替换；这是整个 edit_file 里唯一产生新内容的地方。"
+            },
+            {
+              "id": "n-hand-over",
+              "line": 244,
+              "anchor": "return self._write(\"edit_file\"",
+              "text": "交给三个写入工具共用的框架。"
+            },
+            {
+              "id": "n-edit-lines",
+              "line": 246,
+              "anchor": "def edit_lines(self, path, start_line, end_line, new_text)",
+              "text": "行号替换：起止行号加新文本。"
+            },
+            {
+              "id": "n-split",
+              "line": 250,
+              "anchor": "lines = split_lines(text)",
+              "text": "只按换行符分行，行号和 read_file 显示的一致。"
+            },
+            {
+              "id": "n-range",
+              "line": 251,
+              "anchor": "if (type(start_line) is not int",
+              "text": "行号必须是整数，并且 1 <= start_line <= end_line <= 总行数。"
+            },
+            {
+              "id": "n-replaced",
+              "line": 256,
+              "anchor": "replaced = \"\".join(lines[start_line - 1:end_line])",
+              "text": "被换掉的那几行，原样取出来，后面判断它是否以换行结尾。"
+            },
+            {
+              "id": "n-block",
+              "line": 258,
+              "anchor": "block = new_text + ",
+              "text": "保持行结构：被换的行以换行结尾，新文本没写换行就补上。"
+            },
+            {
+              "id": "n-assemble",
+              "line": 259,
+              "anchor": "result = \"\".join(lines[:start_line - 1]) + block",
+              "text": "前面的行、新文本、后面的行，拼成新文件。"
+            },
+            {
+              "id": "n-need-numbers",
+              "line": 263,
+              "anchor": "return self._write(\"edit_lines\"",
+              "text": "need_numbers：行号视图必须有效，否则 LineNumbersStale。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-types",
+              "start": 227,
+              "end": 230,
+              "label": "检查 old、new 是字符串，old 不能为空"
+            },
+            {
+              "id": "fold-text-type",
+              "start": 254,
+              "end": 255,
+              "label": "检查 new_text 是字符串"
+            }
+          ]
+        },
+        {
+          "id": "code-frame",
+          "type": "annotated-source",
+          "path": "lessons/lesson_file_edit_evidence/file_tools.py",
+          "start": 265,
+          "end": 301,
+          "notes": [
+            {
+              "id": "f-write",
+              "line": 265,
+              "anchor": "def _write(self, tool: str, path, build",
+              "text": "三个写入工具共用的框架：守卫、算新文本、原子写入、留记录。"
+            },
+            {
+              "id": "f-path",
+              "line": 269,
+              "anchor": "resolved, rel = self._path(path)",
+              "text": "路径校验：越界直接 PathOutsideWorkspace。"
+            },
+            {
+              "id": "f-protected",
+              "line": 270,
+              "anchor": "if any(fnmatch.fnmatch(rel, pattern)",
+              "text": "受保护的路径，读过也不许写：ProtectedPath。"
+            },
+            {
+              "id": "f-load",
+              "line": 275,
+              "anchor": "old_text, before = self._load(resolved, rel)",
+              "text": "文件已存在：读出内容和写入前哈希。"
+            },
+            {
+              "id": "f-check",
+              "line": 276,
+              "anchor": "self._check_view(rel, before,",
+              "text": "读后才写和过期检测都在这里。"
+            },
+            {
+              "id": "f-build",
+              "line": 277,
+              "anchor": "new_text = build(rel, old_text, exists)",
+              "text": "各个工具自己的规则：唯一匹配、行号范围等。"
+            },
+            {
+              "id": "f-refused",
+              "line": 278,
+              "anchor": "except ToolFailure as error:",
+              "text": "被拒绝的调用也留一行：ok 为 false，前后哈希相同。"
+            },
+            {
+              "id": "f-after",
+              "line": 283,
+              "anchor": "after = sha256_bytes(data)",
+              "text": "写入后哈希，写之前就能算出来。"
+            },
+            {
+              "id": "f-changed",
+              "line": 284,
+              "anchor": "if changed:",
+              "text": "内容没有变化就不碰文件。"
+            },
+            {
+              "id": "f-diff",
+              "line": 290,
+              "anchor": "diff, added, removed = unified_diff(",
+              "text": "统一 diff 和增删行数。"
+            },
+            {
+              "id": "f-syntax",
+              "line": 291,
+              "anchor": "syntax = syntax_report(rel, new_text)",
+              "text": "Python 文件写完马上检查语法：只编译，不运行。"
+            },
+            {
+              "id": "f-view",
+              "line": 295,
+              "anchor": "self.views[rel] = View(after, full, numbered=False)",
+              "text": "工具记住的版本更新为刚写的这一版；行号视图作废。"
+            },
+            {
+              "id": "f-journal",
+              "line": 296,
+              "anchor": "self._journal(tool, rel, ok=True",
+              "text": "留下这一行：前后哈希、diff、增删行数，同时发出 lesson.file_change。"
+            },
+            {
+              "id": "f-result",
+              "line": 299,
+              "anchor": "return {\"path\": rel, \"changed\": changed",
+              "text": "给模型的结果很短：版本前缀和计数；完整哈希和 diff 在事件里。"
+            }
+          ]
+        },
+        {
+          "id": "code-guards",
+          "type": "annotated-source",
+          "path": "lessons/lesson_file_edit_evidence/file_tools.py",
+          "start": 180,
+          "end": 213,
+          "notes": [
+            {
+              "id": "g-check",
+              "line": 180,
+              "anchor": "def _check_view(self, rel: str, current: str",
+              "text": "写入前的几道检查，顺序固定。"
+            },
+            {
+              "id": "g-views",
+              "line": 181,
+              "anchor": "view = self.views.get(rel)",
+              "text": "views 记着模型读过的每个文件：哪个版本，读全没有，行号还有效吗。"
+            },
+            {
+              "id": "g-never",
+              "line": 183,
+              "anchor": "if view is None:",
+              "text": "从没读过：NotReadYet。"
+            },
+            {
+              "id": "g-stale",
+              "line": 186,
+              "anchor": "if view.digest != current:",
+              "text": "文件的哈希已经不是模型读到的那个：StaleRead。"
+            },
+            {
+              "id": "g-partial",
+              "line": 188,
+              "anchor": "if need_full and not view.full:",
+              "text": "write_file 要覆盖全文，只读了一部分不行：PartialRead。"
+            },
+            {
+              "id": "g-numbers",
+              "line": 191,
+              "anchor": "if need_numbers and not view.numbered:",
+              "text": "上次读取之后又写过：行号作废，LineNumbersStale。"
+            },
+            {
+              "id": "g-read",
+              "line": 195,
+              "anchor": "def read_file(self, path, start_line=1, end_line=None)",
+              "text": "读取工具，同时登记模型看到了什么。"
+            },
+            {
+              "id": "g-load",
+              "line": 197,
+              "anchor": "text, digest = self._load(resolved, rel)",
+              "text": "读出文本和哈希；不存在、二进制、过大的文件在这里拒绝。"
+            },
+            {
+              "id": "g-null",
+              "line": 201,
+              "anchor": "start_line = 1 if start_line is None",
+              "text": "模型常把可选参数传成 null，按默认值处理。"
+            },
+            {
+              "id": "g-limit",
+              "line": 204,
+              "anchor": "end = min(total, start_line + READ_LIMIT_LINES - 1)",
+              "text": "默认最多读 400 行，文件更长会标 truncated。"
+            },
+            {
+              "id": "g-numbered",
+              "line": 207,
+              "anchor": "shown = [f\"{number:>4}| ",
+              "text": "每行前加行号；行号只是显示，不属于文件内容。"
+            },
+            {
+              "id": "g-covered",
+              "line": 210,
+              "anchor": "covered = (previous.covered if same",
+              "text": "同一个版本分几次读，读到的行并在一起。"
+            },
+            {
+              "id": "g-record",
+              "line": 211,
+              "anchor": "self.views[rel] = View(digest,",
+              "text": "记下版本哈希、是否读全、行号有效。"
+            },
+            {
+              "id": "g-version",
+              "line": 212,
+              "anchor": "return {\"path\": rel, \"version\": digest[:12]",
+              "text": "version 是哈希的前 12 位，模型和学习者靠它对上同一个版本。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "工具只认路径与版本，写入留记录，验收交给平台",
+          "chosen": "三个写入工具共用一个框架：路径经 Workspace.resolve，tests/ 只读，已有文件要读过、读全（整文件重写）、版本没变、行号有效；写入先写临时文件再改名，同时记下前后哈希和 diff；运行结束后由平台重新运行测试，并用 verify_chain 校验记录。",
+          "alternatives": [
+            {
+              "id": "bash-only",
+              "title": "只给 Bash，让模型用命令行改文件",
+              "why_not": "命令能做的事太多，工具不知道要改哪个文件、改成什么；权限、保护文件和前后哈希都要事后从命令文本里猜。"
+            },
+            {
+              "id": "write-only",
+              "title": "只提供整文件重写这一种写入",
+              "why_not": "工具最简单，但每次都发全文，大文件上又贵又容易在没改的地方抄错；本课让三种策略在同一个任务上对照，由你的运行来比。"
+            },
+            {
+              "id": "blind-lines",
+              "title": "行号替换直接应用，不检测行号漂移",
+              "why_not": "前一次写入改变行数之后，旧行号会静默地改到别的行；拒绝并要求重读，只多花一次读取。"
+            },
+            {
+              "id": "mtime",
+              "title": "用修改时间判断文件有没有被改过",
+              "why_not": "修改时间的精度、时钟和复制方式都会让它不可靠，内容相同也可能变，内容不同也可能不变；哈希只看内容。"
+            },
+            {
+              "id": "trust-claim",
+              "title": "采信模型最后说的“已修好”",
+              "why_not": "那只是一句话。验收要看平台重新运行的测试、范围检查和哈希链，模型的话只被原样引用。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "edit-strategies",
+          "title": "同一个任务，三种编辑策略",
+          "hypothesis": "同一个修改任务，整文件重写发给工具的字符最多，精确替换和行号替换少得多；行号替换在前一次写入改变行数之后必须重新读取，精确替换可能因为 old 不唯一被拒绝。无论哪种策略，写入的前后哈希都应首尾相接，而任务有没有完成，只看平台重新运行的测试和范围检查。",
+          "predict": "predict-tool-calls",
+          "arms": [
+            {
+              "id": "rewrite",
+              "exercise": "rewrite",
+              "label": "整文件重写：write_file"
+            },
+            {
+              "id": "replace",
+              "exercise": "replace",
+              "label": "精确替换：edit_file"
+            },
+            {
+              "id": "lines",
+              "exercise": "lines",
+              "label": "行号替换：edit_lines"
+            }
+          ],
+          "observe": [
+            {
+              "id": "sandbox-label",
+              "text": "执行环境：写明是否隔离、是否逐条审批。",
+              "selector": {
+                "event": "lesson.sandbox",
+                "path": "data.label"
+              }
+            },
+            {
+              "id": "offered-tools",
+              "text": "这一组给模型的写入工具：读取之外只有这一种。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools[1].function.name"
+              }
+            },
+            {
+              "id": "write-tool",
+              "text": "第一次写入用的是哪个工具。",
+              "selector": {
+                "event": "lesson.file_change",
+                "path": "data.tool"
+              }
+            },
+            {
+              "id": "journal-hash",
+              "text": "这次写入后的哈希；它应该等于下一次写入的写入前哈希。",
+              "selector": {
+                "event": "lesson.file_change",
+                "path": "data.after_sha256"
+              }
+            },
+            {
+              "id": "diff",
+              "text": "统一 diff：删了哪几行，加了哪几行。",
+              "selector": {
+                "event": "lesson.file_change",
+                "path": "data.diff"
+              }
+            },
+            {
+              "id": "refused",
+              "text": "被工具拒绝的调用：error_type 说明原因，文件没有变。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "approval-card",
+              "text": "运行测试之前的审批卡：将要执行的命令，以及已经改动的文件。",
+              "selector": {
+                "event": "approval_requested",
+                "path": "data.payload.command"
+              }
+            },
+            {
+              "id": "write-chars",
+              "text": "写入类调用的参数字符数：实际发给工具的字符，包括被拒绝的那几次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=write_arg_chars]"
+              }
+            },
+            {
+              "id": "final-hash",
+              "text": "`shop/pricing.py` 的最终哈希；几组相同，说明最后的文件字节一致。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=final_sha256]"
+              }
+            },
+            {
+              "id": "check-scope",
+              "text": "范围检查：改动落在哪些文件、哪些函数，有没有越出任务。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=scope]"
+              }
+            },
+            {
+              "id": "check-tests",
+              "text": "平台重新运行测试的结果：任务有没有完成，看这一行。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=tests_pass]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三组的任务相同：让 `tests/` 下两个失败的测试通过，只许改 `shop/pricing.py`。区别只有一个：模型拿到哪一种写入工具。"
+            },
+            {
+              "text": "没有容器隔离时，运行测试就是在你的机器上执行子进程，事件里先写明这一点。",
+              "observe": "sandbox-label",
+              "stage": "runtime"
+            },
+            {
+              "text": "请求里的工具列表：读取、这一组的写入工具、运行测试。",
+              "observe": "offered-tools",
+              "stage": "model"
+            },
+            {
+              "text": "每次写入都留下一行记录，先看是哪个工具写的。",
+              "observe": "write-tool",
+              "stage": "tool"
+            },
+            {
+              "text": "写入后的哈希；多次写入时，它会是下一次的写入前哈希。",
+              "observe": "journal-hash"
+            },
+            {
+              "text": "diff 说明这次写入到底改了哪几行，不是模型的转述。",
+              "observe": "diff"
+            },
+            {
+              "text": "有的调用会被拒绝，error_type 写着原因；被拒绝的调用不改文件，也算进参数字符数。",
+              "observe": "refused"
+            },
+            {
+              "text": "运行测试前先审批，卡片上写着要执行的命令和已经改动的文件。",
+              "observe": "approval-card"
+            },
+            {
+              "text": "比较三组的参数字符数：整文件重写通常更大，要看自己的运行。",
+              "observe": "write-chars",
+              "stage": "runtime"
+            },
+            {
+              "text": "三组最后的 `shop/pricing.py` 哈希相同吗？相同就是字节一致，不同就用 diff 找差别。",
+              "observe": "final-hash"
+            },
+            {
+              "text": "范围检查看改动有没有越出任务点名的函数；被悄悄删掉的函数会在这里露出来。",
+              "observe": "check-scope"
+            },
+            {
+              "text": "平台自己重新运行测试，任务是否完成以这一行为准。",
+              "observe": "check-tests"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "三种策略的每次写入都有前后哈希和 diff，被拒绝的调用也有记录；写入记录能和文件的真实哈希对上。",
+              "任务有没有完成由平台重新运行测试得出，不依赖模型最后的自述。",
+              "你能从自己的运行里数出三种策略各发了多少字符、被拒绝了几次、多读了几次。"
+            ],
+            "does_not_prove": [
+              "不能证明哪种策略总是更好：一次运行只有一个样本，模型、文件大小和任务都会改变结果；字符数也不是 Token，用量只看服务商报告的数。",
+              "哈希链闭合只说明记录和文件对得上，不说明改对了；改得对不对看测试和范围检查，而这两项也只覆盖本课这两个测试和两个函数。",
+              "本课的仓库只有 45 行，没有展示大文件上的差距。"
+            ]
+          }
+        },
+        {
+          "id": "five-guards",
+          "title": "五道防护：工具怎样拒绝",
+          "hypothesis": "运行器提交有问题的调用时，工具按规则拒绝，被拒绝的调用不改任何文件；成功写入的哈希链首尾相接，只有运行器绕过工具直接改文件时，哈希链才会在那里对不上。",
+          "arms": [
+            {
+              "id": "guards",
+              "exercise": "guards",
+              "label": "五道防护（不调用模型）"
+            }
+          ],
+          "observe": [
+            {
+              "id": "not-read",
+              "text": "没读过就写：NotReadYet。",
+              "selector": {
+                "event": "tool_result",
+                "round": 1,
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "partial",
+              "text": "只读了前 10 行就整文件重写：PartialRead。",
+              "selector": {
+                "event": "tool_result",
+                "round": 1,
+                "path": "data.result.error_type",
+                "nth": 3
+              }
+            },
+            {
+              "id": "escape",
+              "text": "读 `../outside.txt` 越出工作区：PathOutsideWorkspace。",
+              "selector": {
+                "event": "tool_result",
+                "round": 2,
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "protected",
+              "text": "改 `tests/` 下的期望值：ProtectedPath。",
+              "selector": {
+                "event": "tool_result",
+                "round": 2,
+                "path": "data.result.error_type",
+                "nth": 4
+              }
+            },
+            {
+              "id": "not-unique",
+              "text": "old 出现两次：OldStringNotUnique，报出行号。",
+              "selector": {
+                "event": "tool_result",
+                "round": 3,
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "drift",
+              "text": "前一次写入之后再按旧行号改：LineNumbersStale。",
+              "selector": {
+                "event": "tool_result",
+                "round": 4,
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "external",
+              "text": "运行器模拟的外部修改：simulated 为 true，绕过了工具。",
+              "selector": {
+                "event": "lesson.external_change",
+                "path": "data.simulated"
+              }
+            },
+            {
+              "id": "stale",
+              "text": "读后被外部改动，再写：StaleRead。",
+              "selector": {
+                "event": "tool_result",
+                "round": 5,
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "case-checks",
+              "text": "报告里五组的检查：每一步的预期都和实际对上了吗。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这一组不调用模型，也不运行命令。运行器像一个粗心的模型那样提交调用，先写明预期，再看工具真实返回什么。"
+            },
+            {
+              "text": "第 1 段：没读过的文件被写，工具拒绝，文件原样。",
+              "observe": "not-read",
+              "stage": "tool"
+            },
+            {
+              "text": "只读了前 10 行就想整文件重写，工具也拒绝。",
+              "observe": "partial"
+            },
+            {
+              "text": "第 2 段：越出工作区的路径。",
+              "observe": "escape"
+            },
+            {
+              "text": "改测试的期望值是另一种越界：路径在工作区内，但受保护。",
+              "observe": "protected"
+            },
+            {
+              "text": "第 3 段：old 不唯一时，工具报出各处的行号，让模型补上下文。",
+              "observe": "not-unique"
+            },
+            {
+              "text": "第 4 段：第一处改动让行数变了，旧行号作废。",
+              "observe": "drift"
+            },
+            {
+              "text": "第 5 段先由运行器直接改文件，它绕过了工具，事件里标明是模拟的。",
+              "observe": "external",
+              "stage": "runtime"
+            },
+            {
+              "text": "模型随后基于旧版本写入，工具看出文件已经变了。",
+              "observe": "stale"
+            },
+            {
+              "text": "报告把每一步的预期、实际和“文件是否未变”列出来，五组的检查都在这里。",
+              "observe": "case-checks"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "路径越界、没读就写、只读一部分就整文件重写、改受保护文件、old 不唯一、行号作废、读后被改，工具都按规则拒绝，并且拒绝时文件保持原样。",
+              "绕过工具的修改会让哈希链在那一处对不上，工具之外的变化不会被悄悄吞掉。"
+            ],
+            "does_not_prove": [
+              "这五组是运行器按剧本提交的，覆盖了本课实现的规则，不代表模型在真实运行里会遇到哪些问题。",
+              "过期检测在比较哈希和写文件之间仍有一道缝；本课没有文件锁，不能证明并发写入时万无一失。",
+              "本课的工具只管工作区内的文本文件；符号链接、二进制和很大的文件只做了拒绝，没有更多处理。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "场景",
+          "options": [
+            {
+              "value": "edit",
+              "label": "修复仓库：模型用一种写入工具改文件"
+            },
+            {
+              "value": "guards",
+              "label": "五道防护：运行器提交有问题的调用"
+            }
+          ]
+        },
+        {
+          "name": "strategy",
+          "label": "编辑策略",
+          "help": "只用于“修复仓库”：这一次给模型哪一种写入工具。",
+          "options": [
+            {
+              "value": "rewrite",
+              "label": "整文件重写：write_file"
+            },
+            {
+              "value": "replace",
+              "label": "精确替换：edit_file"
+            },
+            {
+              "value": "lines",
+              "label": "行号替换：edit_lines"
+            }
+          ]
+        },
+        {
+          "name": "case",
+          "label": "防护场景",
+          "help": "只用于“五道防护”：运行一组，或者五组依次运行。",
+          "options": [
+            {
+              "value": "all",
+              "label": "五组依次运行"
+            },
+            {
+              "value": "read_first",
+              "label": "读后才写：没读过、只读一部分"
+            },
+            {
+              "value": "path_scope",
+              "label": "路径与范围：越界、改测试"
+            },
+            {
+              "value": "not_unique",
+              "label": "唯一匹配：找不到、出现多次"
+            },
+            {
+              "value": "line_drift",
+              "label": "行号漂移：写入后旧行号作废"
+            },
+            {
+              "value": "stale",
+              "label": "过期检测：读后被别人改了"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "why-not-bash",
+              "prompt": "改文件用专用工具而不是 Bash，主要换来什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "权限、证据和失败原因由代码判断，而不是事后从命令文本里猜",
+                  "feedback": "对。路径、受保护文件、读后才写和前后哈希都是工具能直接做的事。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型写命令更不容易出错",
+                  "feedback": "不对。出错的方式不同了，不是变少了：模型仍然会给出不唯一的 old 或过期的行号。"
+                },
+                {
+                  "id": "c",
+                  "text": "不再需要运行测试",
+                  "feedback": "不对。测试照旧要运行，而且要由平台自己重新运行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "专用工具的价值在于把规则放进代码，而不是让模型更聪明。"
+            },
+            {
+              "id": "not-read-vs-stale",
+              "prompt": "NotReadYet 和 StaleRead 的区别是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "NotReadYet 是这次运行里从没读过这个文件；StaleRead 是读过，但读之后文件被别人改动了",
+                  "feedback": "对。前者看有没有读，后者比较读到的哈希和文件现在的哈希。"
+                },
+                {
+                  "id": "b",
+                  "text": "NotReadYet 针对新文件，StaleRead 针对已有文件",
+                  "feedback": "不对。新文件不用读就能创建；两个错误都针对已有文件。"
+                },
+                {
+                  "id": "c",
+                  "text": "两者一样，只是名字不同",
+                  "feedback": "不对。它们的处理不同：前者要读，后者要重读。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "先看读没读过，再看版本变没变。"
+            },
+            {
+              "id": "partial-rewrite",
+              "prompt": "模型只读了文件的前 10 行，就用 write_file 重写整个文件。工具会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "返回 PartialRead，文件不变",
+                  "feedback": "对。整文件重写会覆盖没读到的内容，所以必须读全。"
+                },
+                {
+                  "id": "b",
+                  "text": "照写，因为模型已经读过这个文件",
+                  "feedback": "不对。读过一部分不等于看过全部。"
+                },
+                {
+                  "id": "c",
+                  "text": "只替换前 10 行",
+                  "feedback": "不对。write_file 的语义是整个文件，工具不会改它。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "整文件重写要求读全文；局部编辑只要求读过。"
+            },
+            {
+              "id": "line-drift",
+              "prompt": "为什么 edit_lines 在任何写入之后都要求重新 read_file？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "写入可能改变行数，旧行号会指向别的行；工具不去猜哪些行号还有效",
+                  "feedback": "对。拒绝并重读，只多花一次读取。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为 read_file 返回的行号是随机的",
+                  "feedback": "不对。行号是确定的，会变的是文件。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为 edit_lines 只能用一次",
+                  "feedback": "不对。重读之后可以继续用。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "行号替换用多一次读取换来不改错行。"
+            },
+            {
+              "id": "chain-not-correct",
+              "prompt": "平台报告里 evidence_chain 通过、tests_pass 没通过。该怎么理解？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "写入记录和文件对得上，但改动没有让测试通过；两件事分开看",
+                  "feedback": "对。证据说明发生了什么，验收说明改得对不对。"
+                },
+                {
+                  "id": "b",
+                  "text": "证据链通过，所以任务已经完成",
+                  "feedback": "不对。任务是否完成看平台重新运行的测试。"
+                },
+                {
+                  "id": "c",
+                  "text": "报告自相矛盾，必有一项是错的",
+                  "feedback": "不对。两项检查的是不同的东西，同时出现很正常。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "变更证据不替代验收。"
+            },
+            {
+              "id": "approval-why",
+              "prompt": "没有容器隔离时，为什么平台自己重新运行测试也要先经人批准？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它同样会执行模型改过的代码，而受限执行器不是隔离边界",
+                  "feedback": "对。批准的是“在你的机器上执行这些已改动的代码”。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为测试命令是模型写的",
+                  "feedback": "不对。命令是固定的，不是模型写的；风险来自被执行的代码是模型改的。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为批准能让测试跑得更快",
+                  "feedback": "不对。批准只是让人在执行之前看一眼。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "没有容器时，安全来自每次执行前有人看过。"
+            },
+            {
+              "id": "unchanged-write",
+              "prompt": "write_file 写入的内容和文件现在的内容完全一样。journal 里这一行会是什么样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "ok 为 true，changed 为 false，前后哈希相同，diff 为空",
+                  "feedback": "对。写入没有失败，只是什么也没改。"
+                },
+                {
+                  "id": "b",
+                  "text": "ok 为 false，error_type 是 NoOpEdit",
+                  "feedback": "不对。NoOpEdit 是 edit_file 和 edit_lines 对“改了等于没改”的拒绝；write_file 允许相同内容。"
+                },
+                {
+                  "id": "c",
+                  "text": "不记录这一行",
+                  "feedback": "不对。每个写入类调用都有一行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "记录的是调用和文件的真实变化，没变化也如实记。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“五道防护”，找出读后被外部改动、模型再写时被拒绝的那次工具结果。",
+          "target": {
+            "event": "tool_result",
+            "round": 5,
+            "path": "data.result.error_type"
+          },
+          "explanation": "第 5 段是过期检测。运行器先 read_file，再绕过工具直接改文件，事件 lesson.external_change 的 simulated 为 true；随后的 edit_file 返回 StaleRead，这一次写入没有生效，lesson.file_change 里的前后哈希相同。再次读取后写入成功，那一行的写入前哈希就是外部改动之后的哈希，所以报告里的哈希链会在这里对不上，这正是预期。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我运行了“五道防护”，在报告表格里数出了被拒绝的调用，并确认每一行的“文件未变”都是“是”。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能说出 `edit_file` 对 old 的唯一规则，以及找不到和出现多次各返回什么。"
+            },
+            {
+              "id": "item-3",
+              "text": "我运行了三种编辑策略，比较了它们的参数字符数、被拒绝的调用数和模型调用数。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在 `lesson.file_change` 里找到了一次写入的前后哈希，并确认写入后哈希等于下一次的写入前哈希。"
+            },
+            {
+              "id": "item-5",
+              "text": "我在审批卡上看到了将要执行的命令和已经改动的文件，并明白它为什么要先经我批准。"
+            },
+            {
+              "id": "item-6",
+              "text": "我能解释为什么哈希链闭合、测试通过，仍然不等于任务验收通过。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "PathOutsideWorkspace",
+      "note": "路径为空、绝对、含 .. 或 ~，或解析后在工作区外：拒绝。"
+    },
+    {
+      "name": "NotReadYet",
+      "note": "这次运行里没读过这个文件就想写：拒绝，文件不变。"
+    },
+    {
+      "name": "PartialRead",
+      "note": "write_file 要覆盖全文，却只读过一部分：拒绝。"
+    },
+    {
+      "name": "StaleRead",
+      "note": "读过之后文件的哈希变了：拒绝写入，要求重新读取。"
+    },
+    {
+      "name": "LineNumbersStale",
+      "note": "上次读取之后又有写入，旧行号作废：edit_lines 拒绝。"
+    },
+    {
+      "name": "OldStringNotFound",
+      "note": "edit_file 的 old 在文件里找不到：拒绝。"
+    },
+    {
+      "name": "OldStringNotUnique",
+      "note": "edit_file 的 old 出现不止一次：拒绝并报出行号。"
+    },
+    {
+      "name": "ProtectedPath",
+      "note": "写 tests/ 下的文件：拒绝，只许读。"
+    },
+    {
+      "name": "lesson.file_change",
+      "note": "本课事件：每个写入类调用一行，含前后哈希、diff 和结果。"
+    },
+    {
+      "name": "lesson.external_change",
+      "note": "本课事件：运行器模拟的外部修改，绕过工具直接写文件。"
+    },
+    {
+      "name": "verify_chain",
+      "note": "核对写入记录的哈希能否首尾相接，并对上文件现在的哈希。"
+    },
+    {
+      "name": "symbol_changes",
+      "note": "比较两个版本的 Python 文件，列出改动、新增、删除的顶层名字。"
+    },
+    {
+      "name": "before_sha256",
+      "note": "写入前文件内容的 sha256；文件原本不存在时为空。"
+    },
+    {
+      "name": "Workspace.resolve",
+      "note": "把模型给的路径解析到工作区内，越界就拒绝。"
+    }
+  ]
+}
