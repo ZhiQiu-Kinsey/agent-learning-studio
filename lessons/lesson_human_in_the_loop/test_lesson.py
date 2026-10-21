@@ -587,5 +587,15 @@ class PlatformResumeTests(unittest.TestCase):
         self.assertEqual(self.rows(run_id), [])
 
 
+class DefaultTopicTests(unittest.TestCase):
+    def test_the_default_topic_cannot_be_read_as_removing_the_even_numbers(self):
+        # "Filter ... out" reads as "remove" in English, and the model's drafts then contradicted their own titles.
+        manifest = json.loads((Path(__file__).parent / "lesson.json").read_text(encoding="utf-8"))
+        topic = manifest["input_defaults"]["topic"]
+        self.assertNotRegex(topic["en"], r"(?i)\bfilter\b.*\bout\b")
+        self.assertIn("only", topic["en"].lower())
+        self.assertIn("只保留", topic["zh-CN"])
+
+
 if __name__ == "__main__":
     unittest.main()
