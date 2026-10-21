@@ -38,6 +38,14 @@ class CatalogOverlayTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.path = Path(temp.name) / "catalog.json"
         shutil.copy(ROOT / "curriculum" / "catalog.json", self.path)
+        # 目录里已没有 planned 课：把 document-loading 在这份临时副本里改回规划草稿（带小节），
+        # 用来检查规划课的小节译文槽位。
+        draft = read(self.path)
+        entry = next(item for item in draft["lessons"] if item["id"] == "document-loading")
+        entry.update(status="planned", calls_model=True, sections=[
+            {"title": "为什么要先加载和分块", "gist": "模型一次读不下整本资料，检索要以小片段为单位。"},
+            {"title": "加载与清洗", "gist": "把本地资料读成纯文本，记录来源路径、标题与版本。"}])
+        write(self.path, draft)
         patcher = patch("server.curriculum.CATALOG_PATH", self.path)
         patcher.start()
         self.addCleanup(patcher.stop)
