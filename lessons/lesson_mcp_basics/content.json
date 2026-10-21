@@ -1,0 +1,1428 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "mcp-basics",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "tools",
+    "trust",
+    "knowledge"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "MCP / DISCOVER · CALL · FAIL",
+          "headline": "把检索工具搬进独立进程，",
+          "highlight": "再按协议发现它、调用它。",
+          "takeaway": "前面各课的工具都写在 Agent 自己的代码里。这一课用官方 SDK 把手册检索做成 MCP 服务端：运行器连上它、列出工具、真实调用，再看四种出错方式各落在哪一层。最后把发现的工具交给模型，分清哪些事归协议，哪些事归 Agent。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-server",
+              "label": "01 / SERVER",
+              "title": "工具住进独立进程",
+              "description": "模型上下文协议（Model Context Protocol）简称 MCP。本课把手册检索做成一个 MCP 服务端（MCP Server）：一个独立的 Python 进程，只提供 search_handbook、read_chunk、service_status 三个工具，不知道模型的存在。",
+              "token": "server.py"
+            },
+            {
+              "id": "02-client",
+              "label": "02 / CLIENT",
+              "title": "客户端只管连接",
+              "description": "MCP 客户端（MCP Client）由运行器持有：启动服务进程，经标准输入输出收发 JSON-RPC 消息，列出工具、发出调用、带回结果。每条消息都记成一条 lesson.mcp_message。",
+              "token": "Client"
+            },
+            {
+              "id": "03-discovery",
+              "label": "03 / DISCOVERY",
+              "title": "先问有什么，再按 Schema 调",
+              "description": "工具发现（Tool Discovery）就是一次 `tools/list` 请求：服务端返回每个工具的名称、工具描述和输入 Schema。运行器把它原样转成模型的工具定义，代码里不再写死。",
+              "token": "tools/list"
+            },
+            {
+              "id": "04-layers",
+              "label": "04 / TWO LAYERS",
+              "title": "两层失败",
+              "description": "工具拒绝了调用，服务端照样回一个结果，只是标上 `isError: true`；连接断了，客户端什么结果也等不到，调用直接抛出 MCPError。两者出现在不同的地方，处理方式也不同。",
+              "token": "isError"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "MCP 解决什么问题",
+          "paragraphs": [
+            "MCP 把工具做成独立的服务，任何支持协议的客户端都能发现和调用它。到目前为止，工具都是 Agent 代码里的 Python 函数：{{lesson:tool-selection}} 用白名单按名字找函数，{{lesson:fail-safely}} 把异常变成结构化错误。这样写直接，可工具和 Agent 绑在同一个进程、同一份代码里。换一个 Agent 框架，或者想让编辑器里的助手也用这把检索，就得把工具定义和调用代码再抄一遍。",
+            "打个比方：直接调用函数像在自家厨房做饭，锅碗都在手边；经 MCP 调用像去餐馆点菜，你只看菜单、下单、等菜端上来，厨房怎么做与你无关。菜单是工具清单，下单是一次调用，上菜是结果。关键在于换一家餐馆，点菜的方式不变：协议统一的是点菜的格式，不是菜本身。",
+            "本课的服务端是 server.py。它复用 {{lesson:keyword-retrieval}} 的 BM25 检索和 {{lesson:document-loading}} 的手册语料，用官方 SDK 的 MCPServer 把检索函数登记成工具。运行器并不 import 这个模块，而是用 python_module_server 另起一个进程，通过管道和它说话。server.py 的 `main` 只做一件事：读出运行语言和故障参数，然后让服务端开始读标准输入。所以事件里看到的是一串 JSON-RPC 消息，而不是对一个函数的直接调用。",
+            "MCP 不让模型变聪明，也不替 Agent 做决定。它只规定三件事：怎么连上，怎么问有哪些工具，怎么发调用、回结果。用不用这个工具、参数怎么填、什么时候停，仍是 Agent 和程序的事，第四节会在同一次运行里把这几件事分开。MCP 还定义了资源和提示模板两类能力，本课只用工具这一类。本课的服务端只在本机运行，不涉及远程部署和身份认证。"
+          ]
+        },
+        {
+          "id": "compare-direct-mcp",
+          "type": "compare",
+          "title": "直接调用函数与经 MCP 调用",
+          "columns": [
+            "对比项",
+            "直接调用 Python 函数",
+            "经 MCP 调用"
+          ],
+          "rows": [
+            [
+              "工具定义从哪来",
+              "Agent 代码里的常量",
+              "连上后用 `tools/list` 现问"
+            ],
+            [
+              "参数由谁校验",
+              "Agent 进程里的函数签名",
+              "服务端按输入 Schema 校验"
+            ],
+            [
+              "调用怎么送达",
+              "在同一进程里直接调用函数",
+              "JSON-RPC 消息经标准输入输出"
+            ],
+            [
+              "失败长什么样",
+              "异常或结构化错误",
+              "带 `isError: true` 的结果，或者 MCPError"
+            ],
+            [
+              "谁能复用",
+              "只有这个 Agent",
+              "任何支持协议的客户端"
+            ],
+            [
+              "多出来的代价",
+              "没有",
+              "一个进程、一次连接协商、每次调用的序列化"
+            ]
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "客户端、服务端与传输",
+          "paragraphs": [
+            "本地服务端用标准输入输出通信：客户端把每条 JSON-RPC 消息写成一行，送进服务进程的标准输入；服务端把回复写到标准输出。MCP 规范把这种传输方式叫 `stdio`。三个角色要分清：服务端是那个独立进程；客户端是运行器里负责连接的对象，一个客户端只连一个服务端；持有客户端、决定把工具交给谁的应用叫宿主，本课的宿主就是运行器。",
+            "连上之后先对版本。选 2025-11-25 版本时，第一条请求是 `initialize`，带上客户端支持的协议版本和能力；服务端回复它选定的版本、自己的名字和能力；客户端再发一条没有 `id` 的通知 `notifications/initialized`，握手才算完成。握手失败时，比如双方没有共同支持的版本，后面的请求一条也不会发。之后的 `tools/list`、`tools/call` 每条都有 `id`，回复用同一个 `id` 配对，和 {{lesson:tool-selection}} 用调用 id 配对工具结果是同一个思路。",
+            "选 2026-07-28 版本时没有握手。第一条请求是 `server/discover`，问服务端支持哪些版本和能力；此后每个请求都在 `params._meta` 里自报协议版本和客户端信息，服务端不必记住这条连接是谁。回复里还多了 `ttlMs`、`cacheScope` 这类缓存提示，客户端可以据此缓存工具清单。实验台的“发现与调用”有两个练习，分别用这两个版本，可以把两次运行的前几条消息并排对照。",
+            "这些消息由平台的 recording_stdio 记成 lesson.mcp_message，`captured` 字段写着 sdk_session_message。意思是：这是 SDK 消息对象按协议字段名导出的内容。发出的消息正是由这个对象序列化成那一行 JSON；收到的消息是 SDK 从标准输出读一行再解析出来的，原来的键顺序和空白没有保留。所以它可以当协议证据看，但不是原始字节。服务进程的标准错误输出被丢弃，因为异常堆栈里可能有本机路径。"
+          ]
+        },
+        {
+          "id": "deep-dive-sdk2",
+          "type": "deep-dive",
+          "title": "网上的 1.x 教程与本课的 2.x SDK",
+          "summary": "多数教程按 mcp 1.x 写，照抄到 2.x 会在第一行就报错。",
+          "paragraphs": [
+            "本课锁定官方 Python SDK 的 2.x 版本。最常见的差别在第一行：1.x 教程写 `from mcp.server.fastmcp import FastMCP`，2.x 已经删除这个模块，导入时直接报 ModuleNotFoundError，提示信息指向迁移指南。新名字是 MCPServer，装饰器仍是 `@server.tool()`，函数的类型注解和文档字符串照样变成输入 Schema 和工具描述。迁移指南还提到默认服务名改了，传输相关的设置从构造函数挪到了 `run()`。",
+            "客户端也换了写法。1.x 教程通常自己组合 `stdio_client` 和 `ClientSession`，再手动调用 `initialize()`。2.x 有一个高层的 Client：传入服务参数或传输对象，进入 `async with` 时自动建立连接。它默认 `mode=\"auto\"`，先发 `server/discover` 协商 2026-07-28 版本，遇到只会握手的旧服务端再退回 `initialize`；`mode=\"legacy\"` 则强制走 2025-11-25 的握手。本课两种都用，方便对照。",
+            "还有两处行为变化会影响证据和错误处理。其一，2.x 客户端默认按服务端给的 `ttlMs` 缓存 `tools/list` 这类结果，本课传 `cache=None`，保证每次列工具都是真实请求。其二，在工具函数里抛出 MCPError，2.x 返回顶层的 JSON-RPC 错误，客户端调用时抛异常；1.x 则把它包成 `isError: true` 的结果。想让模型看到并改正的错误，2.x 建议抛 ToolError。读别人的代码时，先看它锁的是哪个大版本。",
+            "《深入理解 AI Agent》第 4 章的配套服务端也已经换成 MCPServer。书里的图 4-1 画的是 `server/discover`、`tools/list`、`tools/call` 三步，对应的正是新版本协议；同一章的实验客户端用的是 `ClientSession` 加 `stdio_client` 的低层写法。两种协议版本都是官方规范的一部分，讲解时要说清用的是哪一个，不要混在一起。"
+          ]
+        },
+        {
+          "id": "predict-messages",
+          "type": "predict",
+          "prompt": "运行“2025-11-25 握手”这一组（在实验“课程检索 MCP 服务：发现与调用”里）之前先猜：这次运行会记下几条 lesson.mcp_message？提示：一次握手，一次列工具，三次调用。",
+          "experiment": "discover-call",
+          "arm": "legacy",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.mcp_message"
+          }
+        },
+        {
+          "id": "mq-notification",
+          "type": "micro-quiz",
+          "question": {
+            "id": "notification",
+            "prompt": "2025-11-25 版本的连接里，下面哪条消息没有 `id`？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`notifications/initialized`",
+                "feedback": "对。通知不需要回复，所以不带 `id`。"
+              },
+              {
+                "id": "b",
+                "text": "`initialize`",
+                "feedback": "不对。它是请求，服务端要回复，回复用同一个 `id` 配对。"
+              },
+              {
+                "id": "c",
+                "text": "`tools/list`",
+                "feedback": "不对。列工具也是请求，有 `id`。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "请求带 `id` 并等回复，通知不带 `id` 也不等回复。数一数 lesson.mcp_message 里客户端发出的消息就能看到。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "工具发现与输入 Schema",
+          "paragraphs": [
+            "客户端先列出工具，再按 Schema 调用。`tools/list` 的回复里，每个工具都有 `name`、`description`、`inputSchema`，本课的 SDK 还附带 `outputSchema` 和 `annotations`。以 search_handbook 为例，`inputSchema` 写明 `query` 是必填的字符串，最长 200 个字符；`top_k` 是 1 到 5 的整数，默认 3。这些不是另写的配置，而是 SDK 从函数签名里的类型注解和 Field 读出来的。模型看到的参数说明，也正是这里的 Field 描述。",
+            "这和 {{lesson:tool-proposals}} 手写的工具定义是同一种东西，只是换了来源。以前工具定义是 Agent 代码里的常量，改了工具就要改 Agent；现在它在服务端的代码里，Agent 每次连上时问一遍。服务端把 `top_k` 的上限从 5 改成 10，所有客户端下次列工具时自然看到新上限，不用各自改代码。反过来，客户端拿到的也只是一份说明：服务端声明了什么，它就只能调用什么。",
+            "调用时客户端发 `tools/call`，参数是工具名和 `arguments` 对象。回复的 `result` 里有两份内容：`content` 是给人和模型读的文本块，`structuredContent` 是按 `outputSchema` 组织的对象。本课的检索返回 `query`、`count` 和 `hits`，每条命中带片段编号、标题、得分和原文。只有函数的返回类型注解写成 TypedDict 或 Pydantic 模型时，SDK 才生成 `outputSchema` 和结构化结果；写成普通 `dict` 就只有一段 JSON 文本。`content` 里那段 JSON 和 `structuredContent` 内容相同，是留给只认文本的旧客户端的。",
+            "“没有命中”和“出错”不是一回事。练习里第二次检索问的是“附近有停车场吗？”，手册里没有这些词，服务端照常返回 `count: 0`，`isError` 为假。检索成功执行、结果为空，这是业务上的答案，Agent 应该据此回答“手册里没有写”，而不是重试或报连接故障。实验报告把命中和未命中分成两项检查，两项都通过，才说明这两种情况都被当成了正常结果。"
+          ]
+        },
+        {
+          "id": "mq-schema-change",
+          "type": "micro-quiz",
+          "question": {
+            "id": "schema-change",
+            "prompt": "服务端把 search_handbook 的 `top_k` 上限从 5 改成 10。本课的运行器要改哪里，模型才能用上新上限？",
+            "options": [
+              {
+                "id": "a",
+                "text": "什么都不用改：运行器每次连上都重新 `tools/list`，转换出的工具定义自然带着新上限",
+                "feedback": "对。工具定义的来源在服务端，to_model_tool 只是照抄。"
+              },
+              {
+                "id": "b",
+                "text": "在 to_model_tool 里把上限改成 10",
+                "feedback": "不对。to_model_tool 不写任何上限，它原样复制 `inputSchema`。"
+              },
+              {
+                "id": "c",
+                "text": "在系统提示词里告诉模型可以要 10 条",
+                "feedback": "不对。提示词改不了服务端的校验，真正起作用的是服务端的 Schema。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "工具发现把“工具长什么样”交给服务端声明，客户端每次连接时读取。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "把发现的工具交给模型",
+          "paragraphs": [
+            "MCP 只负责发现和传输，选哪个工具、什么时候停仍由 Agent 决定。“模型按发现的工具选择调用”这个练习把几层叠在一起：运行器先用 `tools/list` 拿到三个工具，用 to_model_tool 把 MCP 工具定义原样转成模型的工具定义，名字、描述、`inputSchema` 一字不改，再经 `context.complete` 发给模型。模型提出的调用，由平台检查后交给 MCP 客户端发出。",
+            "转换之前还有一道筛选。运行器只把 search_handbook 和 read_chunk 交给模型，service_status 留给自己：它报告进程号和环境变量名，对回答图书馆的问题没有用处。这是宿主的决定，写在 MODEL_TOOLS 里，协议并不过问。服务端声明了几个工具，不等于模型都该看到；工具越多，选错的机会越多，《深入理解 AI Agent》第 4 章讲“工具太多怎么办”时专门讨论过。MCP 规范也建议应用在界面上标明哪些工具暴露给了模型，并让人能拒绝调用。",
+            "一次调用在事件里分两层。Agent 这一层是 tool_call 和 tool_result，和前面各课一样用调用 id 配对；协议这一层夹在它们中间，是一条 `tools/call` 请求和它的回复。两层各有各的编号：调用 id 来自模型，JSON-RPC 的 `id` 由客户端按请求顺序给出。call_over_mcp 是两层之间的桥：平台的 execute_proposal 在工作线程里调用它，它再把 `tools/call` 送回事件循环上的 MCP 客户端。服务端回复 `isError: true` 时，它抛出 McpToolError，平台照常把它变成 `ok: false` 的结构化错误交给模型。",
+            "停止条件也在运行器里。模型不再提出调用时，它写的文字就是回答；用完 3 次模型调用还没回答，运行器停下并如实说明；连接断开时，桥函数抛出 McpConnectionError，后面的调用都不会有回复，运行器不再询问模型，直接结束。报告里的表格把五个步骤和负责方列在一起：发现与传输归协议，筛选工具与停止归运行器，选择调用归模型。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次经 MCP 的工具调用",
+          "description": "按步骤说明“模型按发现的工具选择调用”的一次运行，代码是简化的示意；本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "发现",
+              "actor": "运行器",
+              "title": "列出工具",
+              "body": "MCP 客户端发出 `tools/list`，服务端返回三个工具的定义。",
+              "code": "listed = await client.list_tools()",
+              "language": "python",
+              "evidence": "lesson.mcp_message"
+            },
+            {
+              "id": "step-2",
+              "label": "筛选与转换",
+              "actor": "运行器",
+              "title": "只把两个工具交给模型",
+              "body": "按 MODEL_TOOLS 去掉 service_status，其余原样转成模型的工具定义。",
+              "code": "tools = [to_model_tool(tool) for tool in offered]",
+              "language": "python",
+              "evidence": "request.data.body.tools"
+            },
+            {
+              "id": "step-3",
+              "label": "决策",
+              "actor": "模型",
+              "title": "提出一次调用",
+              "body": "模型读问题和工具描述，提出调用 search_handbook，并写好检索词。",
+              "code": "response = context.complete(body, round_number)",
+              "language": "python",
+              "evidence": "response"
+            },
+            {
+              "id": "step-4",
+              "label": "传输",
+              "actor": "协议",
+              "title": "调用走 MCP",
+              "body": "平台检查调用提议后，call_over_mcp 发出 `tools/call`，服务端执行 BM25 检索并回复。",
+              "code": "anyio.from_thread.run(client.call_tool, name, arguments)",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-5",
+              "label": "停止",
+              "actor": "运行器",
+              "title": "回答或停下",
+              "body": "下一轮模型不再提出调用，它的文字就是回答；用完轮数上限或连接断开时，由运行器停下。",
+              "code": "if not calls: break",
+              "language": "python",
+              "evidence": "answer"
+            }
+          ]
+        },
+        {
+          "id": "mq-host-filter",
+          "type": "micro-quiz",
+          "question": {
+            "id": "host-filter",
+            "prompt": "Agent 练习的报告里，“交给模型”只有两个工具，而 `tools/list` 返回了三个。少掉的那个是谁拿掉的？",
+            "options": [
+              {
+                "id": "a",
+                "text": "运行器：MODEL_TOOLS 是宿主自己的白名单",
+                "feedback": "对。协议负责列出，交不交给模型由宿主决定。"
+              },
+              {
+                "id": "b",
+                "text": "服务端：它没有声明 service_status",
+                "feedback": "不对。`tools/list` 的回复里有它。"
+              },
+              {
+                "id": "c",
+                "text": "模型：它觉得这个工具没用，就忽略了",
+                "feedback": "不对。请求里的工具定义根本没有它，模型看不到。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "看第一次 request 的 `tools`，再对照 `tools/list` 的回复，就能看到筛选发生在宿主这一侧。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "协议错误与业务失败",
+          "paragraphs": [
+            "连接失败和工具返回错误是两回事，要分别记录。判断依据不是错误文字，而是失败出现在哪里：服务端回了结果，结果里标着 `isError: true`，说明协议是通的，是工具拒绝了或做不了；客户端没等到任何结果，调用直接抛出 MCPError，说明请求根本没被回答。本课把前一种叫工具错误，后一种叫协议错误，classify 就是按这个位置来分的。规范里这两类分别叫协议错误和工具执行错误。",
+            "“错误路径”练习依次走四条路。参数不符：`top_k` 传 50，SDK 按输入 Schema 校验失败，回一个 `isError: true` 的结果，文字是 Pydantic 的校验说明。未知工具：调用服务端从没列出的 `delete_handbook`，回复写着 `Unknown tool`。业务错误：read_chunk 收到 `../../local_config.py`，服务端只认自己索引里的编号，用 ToolError 回了一句说明。服务崩溃：第二个服务以 `--fault exit-on-search` 启动，一收到检索就退出进程，客户端抛出错误码 -32000 的 MCPError，之后连 `tools/list` 也同样失败。",
+            "分清两层，是为了决定下一步。工具错误带着可以改正的信息，应该交还给模型：规范也建议客户端把它交给模型，让模型换个参数再试，上面 `top_k` 那一条就是这种情况。协议错误说明连接或进程出了问题，换参数没有用，模型也修不好，这时该由程序处理：记录、停止，或者用 {{lesson:mcp-lifecycle}} 要讲的重连。本课的 Agent 遇到连接断开就不再询问模型，道理就在这里。",
+            "有一处要如实说明。规范把“未知工具”列为协议错误，示例是 JSON-RPC 错误码 -32602；本课锁定的 SDK 版本实测却把它作为 `isError: true` 的结果返回。所以报告里“未知工具”那一行写的是本课 SDK 版本下的实测分层，不是规范的唯一答案，客户端代码两种情况都要接得住。另外，服务进程启动了，也不代表工具可用：只有收到 `tools/list` 和 `tools/call` 的真实回复，才算连通的证据。"
+          ]
+        },
+        {
+          "id": "deep-dive-errors",
+          "type": "deep-dive",
+          "title": "错误在 SDK 里怎么分层（实测）",
+          "summary": "同一次调用可能以几种方式结束，客户端只需要看两个地方。",
+          "paragraphs": [
+            "下面是在本课锁定的 SDK 版本里实际跑出来的结果，两种协议版本结果相同。检索没有命中：正常结果，`isError` 为假。抛出 ToolError：`isError` 为真，文字是 `Error executing tool <name>: ` 加上你写的说明。工具函数里抛出其他异常，比如 ValueError：`isError` 也为真，但文字只剩 `Error executing tool <name>`，细节被 SDK 藏起来，只写进服务端的标准错误输出。",
+            "参数不符合输入 Schema：`isError` 为真，文字是 Pydantic 的完整校验说明，模型读得懂哪里错了。未知工具名：同样是 `isError` 为真，文字是 `Unknown tool: <name>`。读超时：客户端抛出 MCPError，错误码 -32001，消息说请求超时。服务进程中途退出：客户端抛出 MCPError，错误码 -32000，消息是 `Connection closed`，同一个客户端此后的每个请求都这样失败。",
+            "归纳起来，客户端只看两处：调用有没有抛 MCPError；没抛的话，结果的 `isError` 是真是假。前者交给程序处理，后者交给模型。这也解释了为什么本课把业务错误写成 ToolError，而不是随手抛 ValueError：同样是 `isError`，前一种模型能读到原因，后一种只知道工具失败了。本课的客户端还把读超时设成 20 秒（READ_TIMEOUT_SECONDS），任何一次等待都有上限。",
+            "SDK 藏起意外异常的细节是有意的：堆栈里可能有文件路径、内部变量，甚至凭证片段，原样回给客户端，就等于把服务端的内部信息交给了模型和日志。想让调用方知道原因，就主动写成 ToolError，只放对方需要的那一句。本课的 recording_stdio 也把服务端的标准错误输出丢掉，是同样的考虑。"
+          ]
+        },
+        {
+          "id": "misconception-process",
+          "type": "misconception",
+          "claim": "服务进程已经启动，说明工具已经接好了。",
+          "correction": "进程存在只说明命令跑起来了：它可能还在加载，可能握手失败，也可能马上退出。连通的证据是协议回复：`initialize` 或 `server/discover` 有结果，`tools/list` 列出了工具，一次 `tools/call` 拿回了结果。本课报告里的每项检查都来自这些回复。"
+        },
+        {
+          "id": "mq-after-crash",
+          "type": "micro-quiz",
+          "question": {
+            "id": "after-crash",
+            "prompt": "“错误路径”里服务崩溃之后，运行器又发了一次 `tools/list`。客户端看到什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "又一个错误码 -32000 的 MCPError：这条连接后面已经没有服务进程",
+                "feedback": "对。连接断了，之后每个请求都得不到回复。"
+              },
+              {
+                "id": "b",
+                "text": "一个 `isError: true` 的结果",
+                "feedback": "不对。`isError` 要服务端回复才会有，崩溃的进程回复不了。"
+              },
+              {
+                "id": "c",
+                "text": "工具列表照常返回，因为 SDK 会自动重启服务",
+                "feedback": "不对。SDK 不会自动重启；要重连得新建一个客户端。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "协议错误说明请求没被回答。同一个客户端不能复用，重连是 {{lesson:mcp-lifecycle}} 的内容。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "权限边界",
+          "paragraphs": [
+            "服务能做什么由服务端决定，客户端只能请求。read_chunk 收到 `../../local_config.py`，并没有去打开这个路径：它只在自己的索引里按编号查，查不到就报业务错误。客户端无论怎么拼参数，都超不出服务端代码写下的能力。同样，`readOnlyHint: true` 这类工具注解只是服务端的自我声明，规范要求客户端把它当作不可信信息，除非服务端本身可信；Learn Claude Code 教程的做法是由宿主自己维护一张权限表，不凭注解放行。",
+            "本地服务端仍是一个以你的权限运行的程序，所以启动它时要控制它拿到什么。python_module_server 只允许从 `lessons.` 包下的模块启动服务，命令不拼接字符串；子进程只继承 SDK 的一小份安全环境变量。“发现与调用”最后调用 service_status，让服务端自己报告看到了哪些环境变量名，通常只有 HOME、PATH 这一类，没有任何密钥。课程测试还在父进程里放了一个假密钥，确认它没有传过去。",
+            "可以对照参考教程看这件事。Hugging Face 课程接入 MCP 的示例把父进程的全部环境变量传给服务子进程，方便，但会把密钥一并交出去；《深入理解 AI Agent》配套的服务端要调用外部服务，就在部署说明里给每个服务配自己的密钥。本课的服务端不需要任何密钥，模型调用留在父进程，经 RunContext 记录。把需要模型的逻辑放进 MCP 服务端，等于在平台看不到的地方又开了一条模型通道。",
+            "最后，工具结果和工具描述都是外来文本。检索结果里每个片段都带 `trust: untrusted_data`，系统提示词也写明片段是资料、不是指令。这条规矩在 {{lesson:prompt-injection}} 讲过，换成 MCP 不会自动成立：协议只负责把文字送到，不检查文字里写了什么。接入第三方服务端之前，先读它的工具描述，锁定版本，只给最小的权限；书里把这叫作把进入上下文的内容当作不可信输入来审计。"
+          ]
+        },
+        {
+          "id": "deep-dive-risks",
+          "type": "deep-dive",
+          "title": "接入第三方服务端的三类风险",
+          "summary": "工具描述会原样进入模型上下文，这本身就是攻击面。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第 4 章把接入第三方 MCP 服务端的风险归成三类。第一类是工具描述投毒：工具描述随工具定义原样进入模型上下文，恶意服务端可以在里面夹带指令，比如要求先把某个私密文件的内容当参数传进来。本课的 to_model_tool 一字不改地转换描述，正好说明这条通道有多直接：服务端写什么，模型就读到什么。",
+            "第二类是服务端本身被替换或篡改：最初可信的服务端，后续更新可能引入恶意行为，远程服务端还可能被入侵后改掉返回结果。第三类是同名遮蔽：几个服务端提供同名或相似的工具，恶意的那个把本该发给可信服务端的调用连同参数一起截走。多个服务端同时接入时的命名问题，{{lesson:mcp-lifecycle}} 会用前缀和映射表来处理。",
+            "缓解办法和软件供应链安全一样：接入前把工具描述当成不可信输入来审读；锁定服务端版本，升级时重新审读；每个服务端只配它需要的最小权限。本课对应的做法是：服务端模块只能来自本仓库的 `lessons.` 包，子进程拿不到密钥，宿主用 MODEL_TOOLS 决定模型能看到哪些工具，工具结果一律按资料处理。",
+            "风险之外还有成本。协议本身不规定工具定义是全部放进上下文还是按需加载，书中提到仅仅接入 5 个服务端就可能带来数万 Token 的工具定义。全部放进去时，服务端越接越多，每次请求越来越长，工具多了还容易选错。本课只有两个工具交给模型，问题不明显，但 MODEL_TOOLS 这道筛选就是按需暴露最简单的形式。"
+          ]
+        },
+        {
+          "id": "mq-env",
+          "type": "micro-quiz",
+          "question": {
+            "id": "env",
+            "prompt": "service_status 报告的环境变量名里没有 DASHSCOPE_API_KEY，可父进程里设置了它。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "服务子进程没有拿到这个密钥：它只继承了 SDK 的安全变量列表",
+                "feedback": "对。python_module_server 不传父进程的环境，只传安全列表。"
+              },
+              {
+                "id": "b",
+                "text": "密钥被加密后传了过去，所以名字被隐藏了",
+                "feedback": "不对。service_status 列的是进程里全部变量的名字，没有隐藏。"
+              },
+              {
+                "id": "c",
+                "text": "服务端随时能从父进程内存里读到它",
+                "feedback": "不对。两个进程的内存互相隔离，子进程只能看到传给它的环境变量。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "权限边界从启动子进程那一刻就开始了：传什么环境变量，它就只有什么。"
+          }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch4",
+              "title": "工具生态：MCP 与 Skill Hub；工具太多怎么办（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-docker",
+              "title": "MCP 服务端的部署与各自的密钥（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter4/DOCKER_DEPLOYMENT.md"
+            },
+            {
+              "id": "book-perception",
+              "title": "用 MCPServer 写的感知工具服务端（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter4/perception-tools/src/main.py"
+            },
+            {
+              "id": "ms-protocols",
+              "title": "Agent 协议：MCP 的宿主、客户端与服务端（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/11-agentic-protocols/README.md"
+            },
+            {
+              "id": "hf-tools",
+              "title": "工具与 MCP：统一的工具接口（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit1/tools.mdx"
+            },
+            {
+              "id": "hf-smolagents",
+              "title": "从 MCP 服务端导入工具集合（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/smolagents/tools.mdx"
+            },
+            {
+              "id": "lcc-s14",
+              "title": "MCP 工具：发现、命名与宿主侧权限（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s14_mcp_plugin/README.zh.md"
+            },
+            {
+              "id": "spec-tools",
+              "title": "MCP 规范 2025-11-25：工具、两类错误与安全要求（Model Context Protocol）",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/server/tools"
+            },
+            {
+              "id": "sdk-migration",
+              "title": "Python SDK 从 1.x 迁移到 2.x（Model Context Protocol）",
+              "url": "https://py.sdk.modelcontextprotocol.io/v2/migration/"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "fail-safely"
+        },
+        {
+          "id": "code-server",
+          "type": "annotated-source",
+          "path": "lessons/lesson_mcp_basics/server.py",
+          "start": 59,
+          "end": 99,
+          "notes": [
+            {
+              "id": "n-build",
+              "line": 59,
+              "anchor": "def build_server(locale: str",
+              "text": "服务端在这里组装。同一份代码按启动参数里的运行语言给出工具描述，`fault` 只在错误练习里用到。"
+            },
+            {
+              "id": "n-reuse",
+              "line": 61,
+              "anchor": "chunks = {chunk.chunk_id: chunk",
+              "text": "复用资料加载课的分块和关键词检索课的 BM25，只 import，不改那两个模块。"
+            },
+            {
+              "id": "n-mcpserver",
+              "line": 63,
+              "anchor": "server = MCPServer(SERVER_NAME)",
+              "text": "mcp 2.x 的高层服务端类，1.x 教程里的 FastMCP 已改名为它。"
+            },
+            {
+              "id": "n-annotations",
+              "line": 65,
+              "anchor": "read_only = ToolAnnotations(",
+              "text": "工具注解是服务端对客户端的自我声明，不是强制：客户端不该凭它放行。"
+            },
+            {
+              "id": "n-register",
+              "line": 67,
+              "anchor": "@server.tool(name=\"search_handbook\"",
+              "text": "登记工具：名字和描述会出现在 `tools/list` 的回复里。"
+            },
+            {
+              "id": "n-query",
+              "line": 69,
+              "anchor": "query: Annotated[str, Field(",
+              "text": "类型注解和 Field 变成输入 Schema：必填的字符串，最长 200 个字符。"
+            },
+            {
+              "id": "n-topk",
+              "line": 70,
+              "anchor": "top_k: Annotated[int, Field(",
+              "text": "`top_k` 限 1 到 5，默认 3。越界的调用被 SDK 按 Schema 拒绝，函数体根本不会执行。"
+            },
+            {
+              "id": "n-output",
+              "line": 71,
+              "anchor": ") -> SearchResult:",
+              "text": "返回类型是 TypedDict，SDK 才生成 `outputSchema`，回复里才有 `structuredContent`。"
+            },
+            {
+              "id": "n-fault",
+              "line": 72,
+              "anchor": "if fault == \"exit-on-search\":",
+              "text": "故障注入：进程在调用中途直接退出，客户端等不到回复。只有错误练习的第二个服务这样启动。"
+            },
+            {
+              "id": "n-toolerror",
+              "line": 76,
+              "anchor": "raise ToolError(t.empty_query)",
+              "text": "预期的业务错误用 ToolError：说明文字随 `isError: true` 的结果回到客户端。"
+            },
+            {
+              "id": "n-search",
+              "line": 77,
+              "anchor": "hits = [{\"chunk_id\": hit.chunk_id",
+              "text": "真实执行 BM25 检索，每条命中带片段编号、得分和原文。"
+            },
+            {
+              "id": "n-nohits",
+              "line": 81,
+              "anchor": "return {\"query\": query, \"count\": len(hits)",
+              "text": "没有命中时 `count` 为 0，照常返回：这是业务答案，不是错误。"
+            },
+            {
+              "id": "n-read",
+              "line": 84,
+              "anchor": "def read_chunk(chunk_id:",
+              "text": "第二个工具只按片段编号读，参数里没有路径。"
+            },
+            {
+              "id": "n-lookup",
+              "line": 86,
+              "anchor": "chunk = chunks.get(chunk_id)",
+              "text": "只在自己的索引里查：`../../local_config.py` 也只是一个查不到的编号，文件不会被打开。"
+            },
+            {
+              "id": "n-status",
+              "line": 93,
+              "anchor": "def service_status() -> ServiceStatus:",
+              "text": "报告进程号和收到的环境变量名，用来检查密钥没有传进来。"
+            },
+            {
+              "id": "n-names",
+              "line": 95,
+              "anchor": "names = sorted(os.environ)",
+              "text": "只给名字不给值，事件里不会出现任何变量的内容。"
+            },
+            {
+              "id": "n-return",
+              "line": 99,
+              "anchor": "    return server",
+              "text": "返回组装好的服务端；`main` 用 `run()` 以标准输入输出方式运行它。"
+            }
+          ]
+        },
+        {
+          "id": "code-layers",
+          "type": "annotated-source",
+          "path": "lessons/lesson_mcp_basics/runtime.py",
+          "start": 63,
+          "end": 96,
+          "notes": [
+            {
+              "id": "n-attempt",
+              "line": 63,
+              "anchor": "async def attempt(",
+              "text": "错误练习用它发调用：服务端回了结果就交出结果，没有回复就交出 MCPError，两种都不吞掉。"
+            },
+            {
+              "id": "n-calltool",
+              "line": 66,
+              "anchor": "return await client.call_tool(name, arguments), None",
+              "text": "SDK 的 `call_tool` 发出一条 `tools/call`，等待同一个 `id` 的回复。"
+            },
+            {
+              "id": "n-mcperror",
+              "line": 67,
+              "anchor": "except MCPError as error:",
+              "text": "MCPError 表示请求没得到正常结果：连接断了、超时，或服务端回了 JSON-RPC 错误。"
+            },
+            {
+              "id": "n-classify",
+              "line": 71,
+              "anchor": "def classify(result, error) -> str:",
+              "text": "分层看失败出现的位置，不看错误文字。"
+            },
+            {
+              "id": "n-protocol",
+              "line": 73,
+              "anchor": "if error is not None:",
+              "text": "调用抛了异常，没有任何结果：协议错误。"
+            },
+            {
+              "id": "n-tool",
+              "line": 75,
+              "anchor": "if result.is_error:",
+              "text": "有结果但标了 `isError`：工具错误，协议本身是通的。"
+            },
+            {
+              "id": "n-count",
+              "line": 77,
+              "anchor": "count = (result.structured_content",
+              "text": "结果正常时再看业务：`count` 为 0 是没有命中，仍然是正常结果。"
+            },
+            {
+              "id": "n-convert",
+              "line": 81,
+              "anchor": "def to_model_tool(tool) -> dict:",
+              "text": "把发现到的 MCP 工具定义转成模型的工具定义。"
+            },
+            {
+              "id": "n-params",
+              "line": 84,
+              "anchor": "\"parameters\": tool.input_schema",
+              "text": "`inputSchema` 原样放进 `parameters`，描述也一字不改：服务端写什么，模型就读到什么。"
+            },
+            {
+              "id": "n-bridge",
+              "line": 87,
+              "anchor": "def call_over_mcp(",
+              "text": "平台执行调用提议时调用它。斜杠让模型给的参数只能按名字进 `arguments`，顶替不了前三个参数。"
+            },
+            {
+              "id": "n-ledger",
+              "line": 89,
+              "anchor": "ledger.append(name)",
+              "text": "记一笔：报告用它核对每个调用提议都经 MCP 发出。"
+            },
+            {
+              "id": "n-fromthread",
+              "line": 91,
+              "anchor": "result = anyio.from_thread.run(client.call_tool",
+              "text": "execute_proposal 是同步的，跑在工作线程里；这一行把调用送回事件循环上的 MCP 客户端。"
+            },
+            {
+              "id": "n-connection",
+              "line": 93,
+              "anchor": "raise McpConnectionError(",
+              "text": "没有回复：换成结构化错误，tool_result 照常记录，再由运行器决定停下。"
+            },
+            {
+              "id": "n-toolerr",
+              "line": 95,
+              "anchor": "raise McpToolError(text_of(result))",
+              "text": "工具错误：平台把它变成 `ok: false`，说明文字交给模型改正。"
+            },
+            {
+              "id": "n-success",
+              "line": 96,
+              "anchor": "return result.structured_content if",
+              "text": "成功时优先交出结构化结果，没有才退回文本。"
+            }
+          ]
+        },
+        {
+          "id": "code-agent",
+          "type": "annotated-source",
+          "path": "lessons/lesson_mcp_basics/runtime.py",
+          "start": 144,
+          "end": 178,
+          "notes": [
+            {
+              "id": "n-agent",
+              "line": 144,
+              "anchor": "async def run_agent_task(",
+              "text": "Agent 练习：发现、筛选、模型决策、经 MCP 执行，全在一个连接里。"
+            },
+            {
+              "id": "n-needs-model",
+              "line": 145,
+              "anchor": "if context.completion is None:",
+              "text": "这个任务要模型；本地练习没有模型连接，直接报出原因。"
+            },
+            {
+              "id": "n-connect",
+              "line": 147,
+              "anchor": "async with connect(context, inputs[\"protocol\"]) as client:",
+              "text": "连接活到循环结束；离开这一块，SDK 关闭标准输入并回收服务进程。"
+            },
+            {
+              "id": "n-list",
+              "line": 149,
+              "anchor": "listed = await client.list_tools()",
+              "text": "工具发现：一次真实的 `tools/list`。"
+            },
+            {
+              "id": "n-offered",
+              "line": 150,
+              "anchor": "offered = [tool for tool in listed.tools if tool.name in MODEL_TOOLS]",
+              "text": "宿主筛选：只有 MODEL_TOOLS 里的工具交给模型，service_status 留给运行器。"
+            },
+            {
+              "id": "n-tools",
+              "line": 151,
+              "anchor": "tools = [to_model_tool(tool) for tool in offered]",
+              "text": "转换成模型的工具定义，下面每次请求都带上它。"
+            },
+            {
+              "id": "n-bridge-map",
+              "line": 153,
+              "anchor": "bridge = {tool.name: partial(call_over_mcp",
+              "text": "这就是交给平台的白名单：名字对应一个经 MCP 调用的函数。"
+            },
+            {
+              "id": "n-messages",
+              "line": 154,
+              "anchor": "messages = [{\"role\": \"system\", \"content\": t.agent_system}",
+              "text": "消息历史从系统提示词和用户问题开始，和前面各课的工具循环一样。"
+            },
+            {
+              "id": "n-loop",
+              "line": 156,
+              "anchor": "for round_number in range(1, MAX_ROUNDS + 1):",
+              "text": "轮数上限由运行器定：最多 3 次模型调用。"
+            },
+            {
+              "id": "n-complete",
+              "line": 159,
+              "anchor": "response = await anyio.to_thread.run_sync(partial(context.complete",
+              "text": "模型调用经 RunContext 记录；放到线程里，事件循环才能继续收发 MCP 消息。"
+            },
+            {
+              "id": "n-answer",
+              "line": 162,
+              "anchor": "if not calls:",
+              "text": "没有调用提议：模型的文字就是回答，循环结束。"
+            },
+            {
+              "id": "n-history",
+              "line": 165,
+              "anchor": "messages.append(message)",
+              "text": "带调用提议的助手消息放回历史，下一轮的工具消息才配得上对。"
+            },
+            {
+              "id": "n-execute",
+              "line": 168,
+              "anchor": "result = await anyio.to_thread.run_sync(context.execute_proposal, call, bridge)",
+              "text": "平台先检查名字和参数格式，再调用桥函数；tool_call 与 tool_result 都由平台记录。"
+            },
+            {
+              "id": "n-toolmsg",
+              "line": 170,
+              "anchor": "messages.append({\"role\": \"tool\", \"tool_call_id\": call[\"id\"]",
+              "text": "结果按调用 id 回填，成功和失败都交给模型。"
+            },
+            {
+              "id": "n-lost",
+              "line": 172,
+              "anchor": "if result.get(\"error_type\") == McpConnectionError.__name__:",
+              "text": "连接断开不交给模型去修，记下停止原因。"
+            },
+            {
+              "id": "n-stop",
+              "line": 175,
+              "anchor": "if stop == \"connection_lost\":",
+              "text": "停止由程序决定：连接没了，就不再询问模型。"
+            },
+            {
+              "id": "n-return-agent",
+              "line": 178,
+              "anchor": "return answer if stop == \"answered\"",
+              "text": "只有模型真的回答了才返回它的文字，否则如实说明为什么停下。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-report",
+              "start": 177,
+              "end": 177,
+              "label": "平台：发布实验报告"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "为什么把工具放进子进程，而不是直接 import？",
+          "chosen": "server.py 由运行器用 python_module_server 另起进程，经标准输入输出对话。这样事件里有真实的协议消息，服务端拿不到密钥，崩溃也只影响那个进程。",
+          "alternatives": [
+            {
+              "id": "in-process",
+              "title": "进程内连接：把 MCPServer 对象直接交给 Client",
+              "why_not": "SDK 支持，本课测试也用它快速检查工具本身；但它跳过 JSON-RPC 编码和进程边界，看不到真实传输，也演示不了服务崩溃。"
+            },
+            {
+              "id": "hand-rolled",
+              "title": "自己写 JSON-RPC 读写",
+              "why_not": "每个字节都看得清，但握手、配对、关闭进程都要自己实现，容易和规范走样；本课锁定官方 SDK，只在传输上记录消息。"
+            },
+            {
+              "id": "http",
+              "title": "远程传输（Streamable HTTP）",
+              "why_not": "要起端口、处理身份认证，超出一课的范围；{{lesson:mcp-lifecycle}} 再对照两种传输。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "discover-call",
+          "title": "课程检索 MCP 服务：发现与调用",
+          "hypothesis": "运行器能和独立的服务进程建立真实连接，用 `tools/list` 拿到工具定义，再用 `tools/call` 拿回检索结果；没有命中时服务端照常返回 `count: 0`，不是错误。两个协议版本只在连接的开头不同：一个先握手，一个先 `server/discover`。",
+          "predict": "predict-messages",
+          "arms": [
+            {
+              "id": "legacy",
+              "exercise": "tour",
+              "label": "2025-11-25 握手"
+            },
+            {
+              "id": "discover",
+              "exercise": "tour-discover",
+              "label": "2026-07-28 discover"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-request",
+              "text": "连接的第一条请求：旧版本是 `initialize`，新版本是 `server/discover`。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.method"
+              }
+            },
+            {
+              "id": "tools-list",
+              "text": "`tools/list` 的回复：三个工具的名字、描述和输入 Schema。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.result.tools"
+              }
+            },
+            {
+              "id": "structured",
+              "text": "第一次检索的结构化结果：`count` 和命中的片段。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.result.structuredContent.hits"
+              }
+            },
+            {
+              "id": "miss",
+              "text": "没有命中的那次检索被当成正常结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=miss]"
+              }
+            },
+            {
+              "id": "no-secret",
+              "text": "服务进程看到的环境变量名，没有密钥。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_secret]"
+              }
+            },
+            {
+              "id": "version",
+              "text": "这次连接协商出的协议版本。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=protocol_version]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "运行器另起一个服务进程，所有往来都记成 lesson.mcp_message。先看连接怎么开始。"
+            },
+            {
+              "text": "第一条请求决定了协议版本的走法：握手版本是 `initialize`，新版本是 `server/discover`。",
+              "observe": "first-request",
+              "stage": "runtime"
+            },
+            {
+              "text": "工具发现：回复里每个工具都带 `inputSchema`，`top_k` 的上下限就写在这里。",
+              "observe": "tools-list"
+            },
+            {
+              "text": "第一次检索命中了，`structuredContent` 里是片段编号、得分和原文。",
+              "observe": "structured"
+            },
+            {
+              "text": "第二次检索没有命中，`isError` 仍为假，报告把它记为正常结果。",
+              "observe": "miss"
+            },
+            {
+              "text": "service_status 报告的变量名里没有任何密钥。",
+              "observe": "no-secret"
+            },
+            {
+              "text": "最后核对协商出的版本，两个练习在这里不同。",
+              "observe": "version"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，发现和调用都来自和独立进程的真实协议交互：每条请求和回复都有记录，检索结果由服务端真实执行 BM25 得出，没有命中被当作正常结果。",
+              "服务子进程这次看到的环境变量名里没有密钥。"
+            ],
+            "does_not_prove": [
+              "消息是 SDK 导出的消息对象，不是原始字节；键顺序和空白不能拿来对照。",
+              "本地 `stdio` 连接成功，不说明远程传输、身份认证或其他 SDK 版本也一样。"
+            ]
+          }
+        },
+        {
+          "id": "error-layers",
+          "title": "四条错误路径落在哪一层",
+          "hypothesis": "参数不符、未知工具和业务错误都会收到服务端的回复，只是结果标着 `isError: true`；服务进程中途退出时，客户端收不到任何回复，调用抛出 MCPError，此后同一个客户端的请求都失败。",
+          "arms": [
+            {
+              "id": "errors",
+              "exercise": "errors",
+              "label": "错误路径"
+            }
+          ],
+          "observe": [
+            {
+              "id": "invalid-reply",
+              "text": "参数不符的回复：`isError` 为真，文字是校验说明。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.result.isError"
+              }
+            },
+            {
+              "id": "unknown",
+              "text": "未知工具：本课 SDK 版本下也是工具错误。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=unknown_tool]"
+              }
+            },
+            {
+              "id": "business",
+              "text": "业务错误：服务端只认自己索引里的编号。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=business_error]"
+              }
+            },
+            {
+              "id": "crash",
+              "text": "服务崩溃：调用抛出 MCPError，没有结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=server_crash]"
+              }
+            },
+            {
+              "id": "after",
+              "text": "崩溃后再列工具，同样得不到回复。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=after_crash]"
+              }
+            },
+            {
+              "id": "fault",
+              "text": "故障注入的来源：第二个服务的启动参数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=fault]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "四条路径依次走一遍：前三条在第一个服务上，最后一条换一个故障注入的服务。"
+            },
+            {
+              "text": "参数不符的那条回复里，`isError` 为真，说明协议通了，是工具拒绝。",
+              "observe": "invalid-reply",
+              "stage": "runtime"
+            },
+            {
+              "text": "未知工具同样拿到了回复。规范把它算协议错误，这里如实记下 SDK 的做法。",
+              "observe": "unknown"
+            },
+            {
+              "text": "业务错误由服务端自己的规则产生，路径一样的参数也只是查不到的编号。",
+              "observe": "business"
+            },
+            {
+              "text": "服务进程退出后，客户端等不到回复，抛出错误码 -32000 的 MCPError。",
+              "observe": "crash"
+            },
+            {
+              "text": "同一个客户端再发 `tools/list`，结果相同：连接已经不在了。",
+              "observe": "after"
+            },
+            {
+              "text": "这次崩溃是故意造成的，报告写明了是哪个启动参数。",
+              "observe": "fault"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "在本课锁定的 SDK 版本下，前三条路径收到 `isError: true` 的结果，后两条抛出 MCPError；两层失败可以只凭“有没有结果”区分。"
+            ],
+            "does_not_prove": [
+              "别的 SDK 或服务端可能把未知工具作为 JSON-RPC 错误返回，客户端要两种都处理。",
+              "故障注入只演示了进程退出这一种协议错误，超时和网络中断没有在这里出现。"
+            ]
+          }
+        },
+        {
+          "id": "agent-over-mcp",
+          "title": "Agent 经 MCP 调用：谁负责什么",
+          "hypothesis": "模型只看得到宿主交给它的工具定义；它提出的调用经平台检查后由 MCP 客户端发出，结果按调用 id 回到消息历史；什么时候停由运行器决定。",
+          "arms": [
+            {
+              "id": "agent",
+              "exercise": "agent",
+              "label": "模型按发现的工具选择调用"
+            }
+          ],
+          "observe": [
+            {
+              "id": "offered",
+              "text": "第一次请求里的工具定义：只有两个，`parameters` 就是服务端的 `inputSchema`。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools"
+              }
+            },
+            {
+              "id": "proposal",
+              "text": "模型提出的调用：工具名和检索词。",
+              "selector": {
+                "event": "tool_call",
+                "path": "data.function.arguments"
+              }
+            },
+            {
+              "id": "mcp-call",
+              "text": "同一个调用在协议层的样子：一条 `tools/call` 请求。",
+              "selector": {
+                "event": "lesson.mcp_message",
+                "path": "data.message.params.arguments"
+              }
+            },
+            {
+              "id": "result",
+              "text": "工具结果按调用 id 回到 Agent 这一层。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result"
+              }
+            },
+            {
+              "id": "duties",
+              "text": "责任分层表：每一步由谁负责，本次的证据是什么。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            },
+            {
+              "id": "stop",
+              "text": "停止原因，由运行器记下。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=stop_reason]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这次运行把协议和 Agent 叠在一起。先看模型拿到了哪些工具。"
+            },
+            {
+              "text": "请求里只有两个工具，service_status 被宿主留下了；`parameters` 原样来自 `tools/list`。",
+              "observe": "offered",
+              "stage": "model"
+            },
+            {
+              "text": "模型决定调用哪个工具、传什么检索词。",
+              "observe": "proposal"
+            },
+            {
+              "text": "平台检查后，同样的参数变成一条 `tools/call` 发给服务端。",
+              "observe": "mcp-call",
+              "stage": "tool"
+            },
+            {
+              "text": "服务端的结果回到 tool_result，`tool_call_id` 和调用对得上。",
+              "observe": "result"
+            },
+            {
+              "text": "报告的表格把发现、筛选、决策、传输、停止五步的负责方列在一起。",
+              "observe": "duties",
+              "stage": "runtime"
+            },
+            {
+              "text": "停止原因由运行器写下，不是协议给的。",
+              "observe": "stop"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，模型请求中的工具定义来自真实的 `tools/list`，每次调用提议都经 MCP 发出，结果按调用 id 回到消息历史，停止原因由运行器记录。"
+            ],
+            "does_not_prove": [
+              "回答对不对要另外核对片段原文；离线测试模式下的决策和回答来自固定脚本，不代表任何真实模型。",
+              "一次运行说明不了模型会不会在别的问题上选错工具或填错参数。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "task",
+          "label": "任务",
+          "help": "每个练习已预设好；改成 agent 时需要模型连接。",
+          "options": [
+            {
+              "value": "tour",
+              "label": "发现与调用"
+            },
+            {
+              "value": "errors",
+              "label": "错误路径"
+            },
+            {
+              "value": "agent",
+              "label": "模型经 MCP 调用"
+            }
+          ]
+        },
+        {
+          "name": "protocol",
+          "label": "协议版本",
+          "help": "legacy 走 2025-11-25 的握手；auto 由 SDK 协商，本课的服务端会选 2026-07-28。",
+          "options": [
+            {
+              "value": "legacy",
+              "label": "2025-11-25（initialize 握手）"
+            },
+            {
+              "value": "auto",
+              "label": "自动协商（2026-07-28，server/discover）"
+            }
+          ]
+        },
+        {
+          "name": "query",
+          "label": "检索词",
+          "help": "发现与调用的第一次检索，也用在错误路径里。"
+        },
+        {
+          "name": "miss_query",
+          "label": "预期没有命中的检索词",
+          "help": "发现与调用的第二次检索。换成手册里有的词，报告里“没有命中”那项检查会如实标为不通过。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "MCP 在一次 Agent 运行里负责什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "连接服务、列出工具定义、传递调用和结果",
+                  "feedback": "对。发现和传输是协议的事。"
+                },
+                {
+                  "id": "b",
+                  "text": "决定调用哪个工具、什么时候停",
+                  "feedback": "不对。这些由模型和运行器决定。"
+                },
+                {
+                  "id": "c",
+                  "text": "检查工具结果里有没有伪装的指令",
+                  "feedback": "不对。协议只送文字，不检查内容。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "协议提供连接和工具契约，调度和决策留给 Agent。"
+            },
+            {
+              "id": "q2",
+              "prompt": "检索“附近有停车场吗？”返回 `count: 0`、`isError` 为假。Agent 该怎么处理？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "当作正常结果，回答手册里没有写",
+                  "feedback": "对。检索执行成功，只是没有命中。"
+                },
+                {
+                  "id": "b",
+                  "text": "当作连接故障，重启服务",
+                  "feedback": "不对。服务端回了结果，连接是好的。"
+                },
+                {
+                  "id": "c",
+                  "text": "当作工具错误，换参数一直重试",
+                  "feedback": "不对。没有错误要改正，重试只会浪费调用。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "没有命中是业务答案，不是失败。"
+            },
+            {
+              "id": "q3",
+              "prompt": "一次 `tools/call` 让客户端抛出了错误码 -32000 的 MCPError。下一步应该是？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "由程序处理：记录并停止，或新建客户端重连",
+                  "feedback": "对。连接没了，换参数没有用。"
+                },
+                {
+                  "id": "b",
+                  "text": "把错误交给模型，让它换参数再试",
+                  "feedback": "不对。同一个客户端后面的请求都会同样失败。"
+                },
+                {
+                  "id": "c",
+                  "text": "当作没有命中，继续回答",
+                  "feedback": "不对。这里根本没有结果，谈不上命中与否。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "协议错误交给程序，工具错误交给模型。"
+            },
+            {
+              "id": "q4",
+              "prompt": "下面哪项最能证明“工具已经接通”？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "`tools/list` 列出了工具，一次 `tools/call` 拿回了结果",
+                  "feedback": "对。协议回复才是连通的证据。"
+                },
+                {
+                  "id": "b",
+                  "text": "服务进程的进程号存在",
+                  "feedback": "不对。进程存在不代表能回答请求。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务端的代码里登记了这个工具",
+                  "feedback": "不对。代码写了，不等于这次连接拿得到。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "进程存在不能代替连通性证据。"
+            },
+            {
+              "id": "q5",
+              "prompt": "服务端给 read_chunk 标了 `readOnlyHint: true`。宿主能凭这一点自动放行它吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不能。注解是服务端的自我声明，放行规则应由宿主自己定",
+                  "feedback": "对。规范要求把注解当作不可信信息。"
+                },
+                {
+                  "id": "b",
+                  "text": "能。协议保证了注解是真的",
+                  "feedback": "不对。协议不验证注解。"
+                },
+                {
+                  "id": "c",
+                  "text": "能，只要工具名里有 `read`",
+                  "feedback": "不对。名字同样是服务端写的。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "服务端说自己只读，不等于它真的只读；能做什么看它的代码，放不放行看宿主的规则。"
+            },
+            {
+              "id": "q6",
+              "prompt": "1.x 教程的 `from mcp.server.fastmcp import FastMCP` 在本课的 SDK 里会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "导入失败，要改用 MCPServer",
+                  "feedback": "对。2.x 删除了这个模块，提示信息指向迁移指南。"
+                },
+                {
+                  "id": "b",
+                  "text": "照常工作，只是有警告",
+                  "feedback": "不对。2.x 里这个模块导入时直接报错。"
+                },
+                {
+                  "id": "c",
+                  "text": "会自动改走 `server/discover`",
+                  "feedback": "不对。协议版本是客户端协商的事，和这行导入无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "照抄教程前先看它锁的 SDK 大版本。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“模型按发现的工具选择调用”，找出协议层发给服务端的那条调用请求。",
+          "target": {
+            "event": "lesson.mcp_message",
+            "path": "data.message.params.arguments"
+          },
+          "explanation": "它是 tool_call 之后、tool_result 之前的一条 lesson.mcp_message，方向是 client_to_server，`method` 是 `tools/call`，`params.arguments` 和 tool_call 里模型写的参数一致。紧跟着的那条是服务端的回复，`id` 相同。Agent 层和协议层各记了一份，两份对得上，才说明这次调用确实经 MCP 执行。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我把两个协议版本的“发现与调用”各跑了一遍，能说出两次运行的第一条请求有什么不同。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在错误路径的报告里，把四条路径按“有没有收到结果”分成了两层，也看到了故障注入写在哪里。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在 Agent 练习里找到了同一次调用的 tool_call、`tools/call` 和 tool_result，并核对了参数和调用 id。"
+            },
+            {
+              "id": "item-4",
+              "text": "我能指出 MODEL_TOOLS 在哪里，并解释为什么 service_status 不交给模型。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "MODEL_TOOLS",
+      "note": "运行器交给模型的工具白名单；service_status 不在其中，只给运行器自己用。"
+    },
+    {
+      "name": "to_model_tool",
+      "note": "把一个 MCP 工具定义原样转成模型的工具定义：名字、描述和输入 Schema 都不改。"
+    },
+    {
+      "name": "call_over_mcp",
+      "note": "平台执行调用提议时用的桥：发出 tools/call，isError 时抛 McpToolError。"
+    },
+    {
+      "name": "classify",
+      "note": "按失败出现的位置分层：抛出 MCPError 是协议错误，结果带 isError 是工具错误。"
+    },
+    {
+      "name": "lesson.mcp_message",
+      "note": "平台记下的一条 JSON-RPC 消息：方向、服务名和 SDK 导出的消息内容，不是原始字节。"
+    },
+    {
+      "name": "sdk_session_message",
+      "note": "captured 字段的取值：消息来自 SDK 消息对象按协议字段名导出。"
+    },
+    {
+      "name": "service_status",
+      "note": "让服务端报告进程号和收到的环境变量名，用来检查密钥没有传进子进程。"
+    },
+    {
+      "name": "McpConnectionError",
+      "note": "调用没有任何回复（MCPError）时的结构化错误类型；运行器见到它就停止。"
+    },
+    {
+      "name": "McpToolError",
+      "note": "服务端回了 isError=true 的结果时的结构化错误类型，交给模型改正。"
+    },
+    {
+      "name": "ToolError",
+      "note": "SDK 的异常类：抛出它，说明文字会随 isError=true 的结果回到客户端。"
+    },
+    {
+      "name": "MCPServer",
+      "note": "mcp 2.x 的高层服务端类，1.x 里叫 FastMCP。"
+    },
+    {
+      "name": "python_module_server",
+      "note": "平台函数：只从 lessons. 包启动服务模块，子进程只拿安全环境变量。"
+    },
+    {
+      "name": "recording_stdio",
+      "note": "平台的传输包装：把双向的每条 JSON-RPC 消息记成 lesson.mcp_message。"
+    },
+    {
+      "name": "READ_TIMEOUT_SECONDS",
+      "note": "客户端等每个回复的上限（20 秒），超时会抛 MCPError。"
+    }
+  ]
+}
