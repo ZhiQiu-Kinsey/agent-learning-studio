@@ -2,6 +2,8 @@
 import json
 import re
 import unittest
+from datetime import datetime
+from unittest import mock
 
 from pydantic import ValidationError
 
@@ -17,6 +19,21 @@ LOCALES = ("zh-CN", "en")
 CJK = re.compile(r"[　-〿一-鿿＀-￯]")
 CASE = {case.id: case for case in CASES}
 ALLOWED = {"add_numbers", "get_current_time", "divide_numbers"}
+
+# The real clock tool still runs, on a pinned time: version A guesses 12 + 30 and 12 / 2, and at a
+# time such as 02:40 or 12:xx a guess would happen to be right, turning the failure cases into passes.
+# Naive on purpose: the tool calls astimezone(), which reads a naive time as local, so every machine
+# sees 09:05 whatever its time zone.
+FIXED_NOW = datetime(2026, 10, 21, 9, 5)
+_clock = mock.patch("lessons.lesson_01_tool_selection.tools.datetime", wraps=datetime)
+
+
+def setUpModule():
+    _clock.start().now.return_value = FIXED_NOW
+
+
+def tearDownModule():
+    _clock.stop()
 
 
 def run_case(exercise_id, inputs, completion=None, budget=80, cancelled=lambda: False, locale="zh-CN", question=""):
