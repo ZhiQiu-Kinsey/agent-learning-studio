@@ -26,6 +26,10 @@ const shared = [
   "ogl",
   "@hugeicons/react",
   "@hugeicons/core-free-icons",
+  // Imported by platform modules the replay pulls in (react-bits, api, i18n).
+  "@gsap/react",
+  "eventsource-parser",
+  "i18next-resources-to-backend",
 ];
 
 export default defineConfig({
