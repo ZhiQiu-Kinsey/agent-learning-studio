@@ -5,6 +5,7 @@ import { isRunCreation, runOffline } from "./runs";
 import { t } from "./i18n";
 import { openLessonById } from "./navigation";
 import { chapterView, lessonView } from "../src/content/view";
+import { routePlannedLesson, withPlannedLesson } from "./catalog";
 
 const capture = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -91,9 +92,10 @@ test("unimplemented navigation stays disabled and an onboarding request failure 
   page,
   request,
 }) => {
-  const curriculum: CurriculumData = await (
-    await request.get("/api/curriculum")
-  ).json();
+  await routePlannedLesson(page);
+  const curriculum: CurriculumData = withPlannedLesson(
+    await (await request.get("/api/curriculum")).json(),
+  );
   const plannedLesson = curriculum.lessons.find(
     (lesson) => lesson.status === "planned",
   )!;

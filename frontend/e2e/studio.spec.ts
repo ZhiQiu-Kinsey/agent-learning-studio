@@ -4,6 +4,7 @@ import { isRunCreation, mockRunStream, runOffline } from "./runs";
 import { t, tPattern } from "./i18n";
 import { chooseExercise, openLessonById } from "./navigation";
 import { lessonView } from "../src/content/view";
+import { routePlannedLesson, withPlannedLesson } from "./catalog";
 
 // 学生界面固定真实调用。自动化测试在网络边界改用后端测试适配器，
 // 检查真实 Python 工具与网页行为，不消耗凭据、不产生不稳定的模型费用。
@@ -422,9 +423,10 @@ test("the complete curriculum groups real plans and only starts implemented less
   page,
   request,
 }) => {
-  const curriculum: CurriculumData = await (
-    await request.get("/api/curriculum")
-  ).json();
+  await routePlannedLesson(page);
+  const curriculum: CurriculumData = withPlannedLesson(
+    await (await request.get("/api/curriculum")).json(),
+  );
   const firstLesson: Detail = await (
     await request.get("/api/lessons/chat-request")
   ).json();
