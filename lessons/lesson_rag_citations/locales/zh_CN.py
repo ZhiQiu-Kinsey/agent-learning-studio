@@ -10,7 +10,7 @@ TEXTS = Texts(
         "chunk_id 只能是某个 <source> 的 id；quote 是从这个片段原样复制的一段连续原文，不改写、不拼接。"
         "结论里的数字必须出现在它的摘录里。\n"
         "- insufficient_evidence：片段不足以回答问题时为 true，不要编造结论。\n"
-        "- missing：资料缺什么；资料足够时写空字符串。\n"
+        "- missing：资料缺什么，不超过 300 字；资料足够时写空字符串。\n"
         "- conflicts：片段之间说法不一致时，每处写 topic、sources（至少两条引用，格式同上）和 resolution"
         "（按片段的 version 与 supersedes 说明以哪份为准）；没有冲突写 []。"
     ),

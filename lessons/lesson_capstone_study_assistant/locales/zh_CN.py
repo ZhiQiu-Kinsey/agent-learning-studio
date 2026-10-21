@@ -16,7 +16,7 @@ TEXTS = Texts(
     format_ask=(
         "字段：claims（每条含 text 和 citations；citations 的每项含 chunk_id 和 quote：chunk_id 必须是某次 search_notes "
         "结果里的片段 id，quote 是从该片段原样复制的一段连续文字；结论里的每个数字都要出现在它的摘录里）；"
-        "insufficient_evidence（资料不足以回答时为 true，此时不要编造结论）；missing（缺少什么，资料足够时写空字符串）；"
+        "insufficient_evidence（资料不足以回答时为 true，此时不要编造结论）；missing（缺少什么，不超过 300 字，资料足够时写空字符串）；"
         "conflicts（片段之间有分歧时，每处写 topic、sources（至少两条引用）和 resolution（按各片段的 version 和 supersedes "
         "判断哪份适用），没有分歧写 []）。"
     ),

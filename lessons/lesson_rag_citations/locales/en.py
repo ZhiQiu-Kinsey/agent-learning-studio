@@ -13,7 +13,7 @@ TEXTS = Texts(
         "verbatim from that chunk, not reworded or stitched together. Every number in a claim must appear in its "
         "quotes.\n"
         "- insufficient_evidence: true when the chunks are not enough to answer; do not make up claims.\n"
-        "- missing: what the material lacks; an empty string when it is enough.\n"
+        "- missing: what the material lacks, in at most 300 characters; an empty string when it is enough.\n"
         "- conflicts: when chunks disagree, one entry per disagreement with topic, sources (at least two "
         "citations, same format) and resolution (which one applies, judged from each chunk's version and "
         "supersedes); [] when there is none."

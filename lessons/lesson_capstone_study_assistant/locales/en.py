@@ -21,7 +21,7 @@ TEXTS = Texts(
         "Fields: claims (each has text and citations; each citation has chunk_id and quote: chunk_id must be the id of a "
         "chunk returned by some search_notes call, and quote is one continuous passage copied verbatim from that chunk; "
         "every number in a claim must occur in its quote); insufficient_evidence (true when the chunks are not enough to "
-        "answer, in which case do not invent a claim); missing (what is lacking, an empty string when the material is "
+        "answer, in which case do not invent a claim); missing (what is lacking, in at most 300 characters, an empty string when the material is "
         "enough); conflicts (when chunks disagree, one entry per disagreement with topic, sources (at least two citations) "
         "and resolution (which one applies, judged from each chunk's version and supersedes); [] when there is none)."
     ),
