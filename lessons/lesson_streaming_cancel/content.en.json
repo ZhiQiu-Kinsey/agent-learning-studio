@@ -1,0 +1,1530 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "STREAMING / CANCEL",
+      "source": "81554605ae0e"
+    },
+    "hero.headline": {
+      "text": "Receiving as it is written is not faster, it is earlier; stopping is not undoing, it is no longer receiving.",
+      "source": "61ddac3cfe0b"
+    },
+    "hero.highlight": {
+      "text": "Stop, disconnect and finish are three different things, and the backend's record decides the final state.",
+      "source": "2aeb94b15d10"
+    },
+    "hero.takeaway": {
+      "text": "This lesson sends the same request streamed and not streamed to see how much earlier the first word arrives, then has the program stop mid-way, looks at what had been received, and checks how cut-off text should be handed to the next round.",
+      "source": "c90602dd3379"
+    },
+    "concepts.01-stream.label": {
+      "text": "01 / STREAM",
+      "source": "2fda98275149"
+    },
+    "concepts.01-stream.title": {
+      "text": "Streaming and time to first token",
+      "source": "3825d8a6d8a4"
+    },
+    "concepts.01-stream.description": {
+      "text": "The model sends as it writes, and the program receives and records chunk by chunk; the total time stays the same, the first word arrives earlier, and the user waits less.",
+      "source": "f570a1aec89d"
+    },
+    "concepts.02-cancel.label": {
+      "text": "02 / CANCEL",
+      "source": "4712140608cd"
+    },
+    "concepts.02-cancel.title": {
+      "text": "Cancel request",
+      "source": "6f88b3b88f3e"
+    },
+    "concepts.02-cancel.description": {
+      "text": "After the user presses stop, the backend records no more chunks and keeps what already arrived; the reason goes into the final state, and stopping is cooperative.",
+      "source": "b8dfa6494024"
+    },
+    "concepts.03-disconnect.label": {
+      "text": "03 / DISCONNECT",
+      "source": "f55ce52d4872"
+    },
+    "concepts.03-disconnect.title": {
+      "text": "Client disconnect",
+      "source": "03c4954dedae"
+    },
+    "concepts.03-disconnect.description": {
+      "text": "Only the connection that reads events drops, and the backend run carries on; the number of disconnects is written in done, and the backend decides the final state.",
+      "source": "c88c1e45fb21"
+    },
+    "concepts.04-partial.label": {
+      "text": "04 / PARTIAL",
+      "source": "8f4b6464ef5e"
+    },
+    "concepts.04-partial.title": {
+      "text": "Partial result",
+      "source": "b0fe6486db41"
+    },
+    "concepts.04-partial.description": {
+      "text": "The half-written text a cancel or an early stop leaves behind: no finish reason and usually no usage chunk; it has to be marked incomplete and checked before it is continued.",
+      "source": "c3f888d28d68"
+    },
+    "section-1.title": {
+      "text": "What streaming is",
+      "source": "1d547d339b90"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Streaming returns the model's output in chunks while it is still being generated, and how fast it feels depends on the time to first token, not on the total time. Without it, an answer that takes 20 seconds to write leaves the screen blank for 20 seconds, and the user cannot tell generating from hung. The requests in {{lesson:dependent-calls}} and {{lesson:application-state}} are all one question, one answer: send the request, wait for the whole response, then go on. This lesson receives differently: before the response is finished, what has been written arrives first.",
+      "source": "86f880729024"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Take a made-up example: the model writes 40 tokens a second, this answer has 400, so writing takes 10 seconds; 0.8 seconds after the request is sent, the model writes its first word. Not streamed, there is nothing to look at for 10.8 seconds. Streamed, text starts at 0.8 seconds and the last word still arrives at 10.8 seconds. The total time is the same for both; what differs is how long the user waits for the first word: 0.8 seconds against 10.8 seconds. That 0.8 seconds is the time to first token.",
+      "source": "906863266871"
+    },
+    "section-1.paragraphs.2": {
+      "text": "It is simple to do: one more field in the request body, `stream: true`, and the provider stops waiting for the whole text and sends a piece each time it has written a little. The Bailian and OpenAI-compatible APIs carry these pieces over SSE: each chunk is one `data:` line holding one JSON object, the text is in `choices[0].delta.content`, and the last line is `data: [DONE]`. The platform does this work for the lesson: `complete_stream` sends the request and receives chunk by chunk, and every chunk is recorded unchanged in a `response_delta` event. The first chunk gets an event of its own, so the moment it arrived is visible on the timeline. Lesson code does not write the `stream` field and does not touch the network.",
+      "source": "6101f8b11076"
+    },
+    "section-1.paragraphs.3": {
+      "text": "Streaming does not shorten the total time and does not make the model write faster. For an Agent loop nobody is watching, streaming gains almost nothing; it is useful because a person can start reading earlier and the program gets a chance to stop part-way. A chunk is not a word: it can be half a word, a few characters, or empty. Every number in this lesson comes from the platform's own clock in this process; nothing is estimated, nothing is typed out letter by letter, and the page shows only chunks that really arrived.",
+      "source": "7d26a82a8334"
+    },
+    "section-2.title": {
+      "text": "Assembling the final answer",
+      "source": "bace3d223cbb"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Once the chunks are assembled, the answer has to look like a non-streamed response, so downstream code does not need two versions. What the program reads afterwards is `choices[0].message.content`, `finish_reason` and `usage`, and it does not care whether they came in one piece or were gathered chunk by chunk. The platform assembles by the rule OpenAI-compatible clients share: each chunk's `delta.content` is joined in order, tool-call fragments are merged by `index`, the last non-empty `finish_reason` wins, and usage comes from the last usage chunk.",
+      "source": "5277fff9de41"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Take a made-up example: an answer arrives in four chunks. The first only names the role `assistant` and its text is empty; the second carries \"1. The program\", the third carries \"assembles the request.\"; the fourth has no text and only carries `finish_reason: stop`. Assembled, the text is \"1. The program assembles the request.\" and the finish reason is `stop`. The first chunk has no text, so the first chunk arrives earlier than the first token; this lesson measures both, as `first_chunk_ms` and `first_token_ms`.",
+      "source": "04fe74a895fd"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Usage needs extra care. The request body has to contain `stream_options: {include_usage: true}`, which the platform adds by default, before the provider sends one more chunk at the end: `choices` is an empty array and `usage` holds this request's token counts. Without that chunk the assembled response has no `usage`, and the interface and the report say \"not reported\", never 0 and never an estimate from the character count. A stream that is ended early usually misses this chunk too: OpenAI's documentation says plainly that an interrupted or cancelled stream may give no usage.",
+      "source": "2698db0925b3"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The assembled response is not the response body the provider sent. The platform computed it from the chunks, `stream.assembled_from_chunks` in the `response` event says so, and every original chunk stays in `response_delta`. An assembled response also lacks any field no chunk carried, such as the top-level `object` of a non-streamed response, and the report of the comparison experiment lists the top-level fields each side has on its own. What is checked is the message shape (`role`, `content`, `finish_reason`), not the words: the same request sent twice may well make the model write different words.",
+      "source": "d735425b1792"
+    },
+    "deep-dive-wire.title": {
+      "text": "What a streamed response looks like on the wire",
+      "source": "83da885e9580"
+    },
+    "deep-dive-wire.summary": {
+      "text": "The line format of SSE, the usage chunk and [DONE], and why the platform records JSON rather than the raw lines.",
+      "source": "6ed92ec7c148"
+    },
+    "deep-dive-wire.paragraphs.0": {
+      "text": "SSE is a plain format: the provider keeps the connection open and writes lines of text, chunk after chunk. Each chunk takes one line, `data: ` plus one JSON object, and a blank line separates chunks; a line that starts with a colon is a comment, often used as a keep-alive, and is not data. The last line, `data: [DONE]`, is not JSON and only says the provider has finished writing. The Bailian compatible API behaves like OpenAI here: the text is in `choices[0].delta.content`, and the usage is in the last JSON object once `include_usage` is set.",
+      "source": "f666860fa8dd"
+    },
+    "deep-dive-wire.paragraphs.1": {
+      "text": "Take a made-up example: a very short answer is these lines on the wire, each followed by a blank line (unrelated fields left out): `data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}`, `data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}`, `data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}`, `data: {\"choices\":[],\"usage\":{...}}`, and finally `data: [DONE]`. A program reading it only has to recognize three kinds of chunk: a chunk with text, a chunk with a finish reason, and a usage chunk whose `choices` is empty.",
+      "source": "0136c7ad960e"
+    },
+    "deep-dive-wire.paragraphs.2": {
+      "text": "The platform records the parsed JSON, not the raw lines: the SSE separators are gone, and `[DONE]` is recorded as `done_marker: true`. A provider reached through LiteLLM gives no such marker, so `done_marker` is empty, and each chunk is an object the SDK has standardized, which is why the event is labeled \"SDK standardized\" and not raw HTTP. Only the chunks of the native Bailian HTTP path are the JSON inside the `data:` lines. There is a second reason not to record the raw lines: replay and recordings need structured data, the `data: ` prefix and the blank lines tell a reader nothing, and replaying the same JSON is less error-prone than parsing text lines again.",
+      "source": "fa0581066fe8"
+    },
+    "deep-dive-wire.paragraphs.3": {
+      "text": "Providers do not share one stream format. Anthropic's stream uses typed events: start a content block, add a delta to it, stop it, stop the message; the deltas tell text from thinking. This lesson handles only the OpenAI-compatible shape, and an adapter converts any other format to it first. When you switch provider, first confirm three things: which field holds the text, which chunk holds the usage, and what marks the end; only then think about cancelling and assembling.",
+      "source": "9363be13a310"
+    },
+    "predict-requests.prompt": {
+      "text": "Before you run \"Streamed and not streamed, side by side\", guess: how many `request` events will the whole run record?",
+      "source": "fa7874766973"
+    },
+    "mq-latency.q-latency.prompt": {
+      "text": "A made-up example: the model writes 40 tokens a second, the answer has 400, and the first word is written 0.8 seconds after the request is sent. When does the user see the first word, streamed and not streamed?",
+      "source": "35ca36bd68a8"
+    },
+    "mq-latency.q-latency.a.text": {
+      "text": "Both at 10.8 seconds; streaming only delivers the same content in several pieces",
+      "source": "4ae2088db329"
+    },
+    "mq-latency.q-latency.a.feedback": {
+      "text": "No. Streaming does not wait for the whole text; the first word is sent as soon as it is written.",
+      "source": "6993b250d50e"
+    },
+    "mq-latency.q-latency.b.text": {
+      "text": "About 0.8 seconds streamed, about 10.8 seconds not streamed",
+      "source": "ab4a52b2b75a"
+    },
+    "mq-latency.q-latency.b.feedback": {
+      "text": "Right. The total is 10.8 seconds either way; only the wait for the first word differs.",
+      "source": "341d09931f32"
+    },
+    "mq-latency.q-latency.c.text": {
+      "text": "About 10.8 seconds streamed, about 0.8 seconds not streamed",
+      "source": "ffec107ee6a0"
+    },
+    "mq-latency.q-latency.c.feedback": {
+      "text": "No. That is reversed: a non-streamed request returns only after the whole text is written.",
+      "source": "aceba0e083a8"
+    },
+    "mq-latency.q-latency.explanation": {
+      "text": "Streaming shortens the time to first token, not the total time.",
+      "source": "7dc11601cab9"
+    },
+    "section-measure.title": {
+      "text": "How the time to first token is measured",
+      "source": "fc45cb76aaca"
+    },
+    "section-measure.paragraphs.0": {
+      "text": "The time to first token starts before the request is sent and stops when the first non-empty text reaches the program; the platform measures it in this process, and lesson code cannot change it. It starts after the `request` event is written and before the request goes out, and it ends when the reader thread receives the first non-empty text. It includes connecting, queueing at the provider, and the model reading the request before it writes the first word; each `response_delta` also records the `received_ms` of its own first and last chunk.",
+      "source": "c58d79b6fe0e"
+    },
+    "section-measure.paragraphs.1": {
+      "text": "To read these numbers, know what each one measures. `first_chunk_ms` is when the first chunk arrived, which often carries only the role; `first_token_ms` is when the first text arrived, and the two usually differ very little, though some providers send a few empty chunks first and then the gap is larger. Some reasoning models (they write their reasoning first and the answer after) stream reasoning text first, and the platform counts it as the first text, so the time to first token then measures the start of the reasoning text. The total `duration_ms` exists only once the stream ends. Take a made-up example: first chunk at 420 milliseconds, first token at 450 milliseconds, total 9800 milliseconds; the user stares at a blank screen for 450 milliseconds, not 9800.",
+      "source": "a962b4703a7f"
+    },
+    "section-measure.paragraphs.2": {
+      "text": "These times are when this process received the data, not when the provider produced it. A proxy, a gateway or a system buffer in between may collect several chunks and hand them over together, so their arrival times bunch up: `received_ms` then looks as if several chunks came at once, which does not mean the provider wrote them at once. The timeline merges several chunks into one `response_delta` only to have fewer events; no chunk is dropped and merging changes the content of none.",
+      "source": "d6f1b421455a"
+    },
+    "section-measure.paragraphs.3": {
+      "text": "One measurement is one sample. Send the same request again and the time to first token can differ several times over; the provider's load, its cache and the network all affect it. So the comparison experiment of this lesson only answers \"what were streamed and not streamed this time\", not \"is this provider fast\". To compare two providers or two approaches you have to repeat, swap the order, and look at the distribution; {{lesson:observability-cost}} shows how to record the time of every step systematically.",
+      "source": "1a8c262b7057"
+    },
+    "section-3.title": {
+      "text": "Cancel requests",
+      "source": "6f88b3b88f3e"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A cancel request lets the user stop a long output at any time, keeps what has already arrived, and refuses what arrives afterwards. Without it, a 30-second answer that has gone off track can only be waited out. \"Stop run\" on the page sends the cancel request with the reason `user_stop`; closing the page sends `page_closed`; a caller that gives no reason is recorded as `api`. The reason ends up in `cancel_reason` of the `done` event, so on replay it is plain who asked it to stop.",
+      "source": "ef75eea8497c"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Stopping is cooperative: the backend cannot kill a running thread from outside, it can only let the run notice that it should stop. The loop of `complete_stream` checks every 0.05 seconds whether someone asked to stop, even when no new chunk arrives. When it notices, it records the chunks already handed to the run in `response_delta`, writes a `response` whose `stream.status` is `cancelled`, and finally raises `RunCancelled`; the run ends as `cancelled`, and any lesson code written after it does not run.",
+      "source": "26c4826e191e"
+    },
+    "section-3.paragraphs.2": {
+      "text": "What had been received at the moment of the cancel falls into three parts. What was already handed to the run and recorded is written in `response_delta`, and the assembled content is exactly those chunks. What had arrived but was not yet handed to the run is only counted, in `discarded_after_cancel`, and does not enter the record. What arrives after the stop is neither recorded nor counted. Take a made-up example: at the stop, 38 chunks were recorded and 2 more sat in the queue, so the record holds 38 chunks and `discarded_after_cancel` is 2. That makes \"no new chunk is recorded after a cancel\" checkable: not one character of the assembled content comes from after the stop.",
+      "source": "ad0f144f3ee8"
+    },
+    "section-3.paragraphs.3": {
+      "text": "What is cancelled is the receiving, not the generation at the provider. After the platform stops reading, the upstream connection closes only when the next chunk arrives or the network times out; when the provider really stops writing, and whether it keeps billing, is not visible here, and a cancelled stream mostly has no usage chunk, so usage is written \"not reported\". Keep `stop_when` and cancelling apart: when lesson code returns true in `stop_when`, the stream ends as `stopped` and the run goes on; when the user cancels, the stream ends as `cancelled` and the run ends with it.",
+      "source": "cd5b72c13550"
+    },
+    "deep-dive-stop.title": {
+      "text": "Why stopping cannot take effect at once",
+      "source": "bfba135611f7"
+    },
+    "deep-dive-stop.summary": {
+      "text": "Blocking reads, the reader thread and the network timeout: the run ends first, and the connection closes later.",
+      "source": "c54272d33bc7"
+    },
+    "deep-dive-stop.paragraphs.0": {
+      "text": "Reading a network stream blocks: the thread sits on \"wait for the next chunk\" and can do nothing else. Python has no safe way to kill a thread, and certainly cannot close a connection from another thread while it is being read. So the platform gives one reader thread the job of reading the stream and putting each chunk, with its arrival time, into a queue; the run thread takes from the queue every 0.05 seconds and, when there is nothing, looks back at whether someone asked to stop. A stop is therefore seen by the run within 0.05 seconds. Looking once a second instead would make the reaction to a stop up to a second slower; the interval is a compromise between responsiveness and idle overhead.",
+      "source": "9a51fb51bbfd"
+    },
+    "deep-dive-stop.paragraphs.1": {
+      "text": "The connection cannot close that fast. The reader thread may be stuck on \"wait for the next chunk\", and only it can close the stream: it wakes up and closes the connection when the next chunk arrives or the network times out. Take a made-up example: the model pauses for 30 seconds between two chunks, the user presses stop during the pause, the run ends right then, and the upstream connection closes only after those 30 seconds. A non-streamed request is harder still: the whole request is one blocking call, cannot be taken back once sent, and is limited only by the 60-second network timeout; a streamed request can at least stop receiving before the next chunk.",
+      "source": "6e9274399a49"
+    },
+    "deep-dive-stop.paragraphs.2": {
+      "text": "Cancelling has a third layer: the provider. When the client closes the connection the provider can usually tell and stop generating, but that depends on its implementation, and it may finish what it was writing before it notices. The platform sees none of these layers, so the lesson promises only the two things it controls: no new chunk is recorded, and the run ends as `cancelled`.",
+      "source": "227c76da425a"
+    },
+    "mq-discard.q-discard.prompt": {
+      "text": "When the stop request arrives, 2 chunks have arrived but have not been handed to the run. What state are they in, in the record?",
+      "source": "2eb9d8d0cb5c"
+    },
+    "mq-discard.q-discard.a.text": {
+      "text": "Written to `response_delta` as usual, because they were received",
+      "source": "8201b9e37547"
+    },
+    "mq-discard.q-discard.a.feedback": {
+      "text": "No. A chunk that was not handed to the run does not enter the record, otherwise \"nothing recorded after a stop\" could not be checked.",
+      "source": "81c9e6e215a9"
+    },
+    "mq-discard.q-discard.b.text": {
+      "text": "Not recorded, only counted in `discarded_after_cancel`",
+      "source": "7a2cd2c3c3bc"
+    },
+    "mq-discard.q-discard.b.feedback": {
+      "text": "Right. The number is kept, the content is not in the record.",
+      "source": "12b82d3e61d9"
+    },
+    "mq-discard.q-discard.c.text": {
+      "text": "Neither recorded nor counted",
+      "source": "c5fda1d87d80"
+    },
+    "mq-discard.q-discard.c.feedback": {
+      "text": "No. Only chunks that arrive after the stop are neither recorded nor counted; chunks that had arrived but were not handed over are counted.",
+      "source": "c1f309076304"
+    },
+    "mq-discard.q-discard.explanation": {
+      "text": "Recorded, discarded (counted only) and arrived later (nothing left) are the three states at the moment of a cancel.",
+      "source": "1dd3d3910b04"
+    },
+    "section-4.title": {
+      "text": "Client disconnect and the backend run",
+      "source": "148b2a83fe7b"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A client disconnect only means the browser that reads events has left; the backend run carries on, and the final state is whatever the backend's record says. A run has two parties: the run executing on a background thread, and the browser that reads events over SSE. They are connected only through the event record: the run writes events into the store and the browser reads them by `seq`. When the reader drops, the writer does not know and has no reason to stop. \"Disconnect the event stream (the run goes on)\" on the page closes only this one reading line.",
+      "source": "33c570390035"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Reconnecting reads on from the last event: the request carries `from_seq`, the last received `seq` plus one, and the server replays from the store and then joins the live events, with nothing repeated and nothing missed. How many times the reader disconnected before the run ended is recorded in `client_disconnects` of the `done` event; if it never disconnected, the field is absent. So after a disconnect the final state is not decided by the last event the screen showed, but by the `done` the backend wrote.",
+      "source": "466b8f34b6ef"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Closing the page and disconnecting the event stream are not the same, and they are easy to confuse. This platform sends a `page_closed` cancel request when the page closes, and the run stops because of it. To show that disconnecting does not stop the run, use \"Disconnect the event stream\" on the page and do not close it. Another system may not have this convention: whether a run stops or continues when its reader leaves is the product's choice and has no general answer, but either way the record has to state the reason.",
+      "source": "cacb89e6edc2"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The final state is whatever the backend recorded, and endings that look alike have to be told apart. A full receive has `completed` as the `status` of `done`; a user stop is `cancelled` and carries `cancel_reason`; a disconnect followed by a reconnect is still `completed` as long as the backend was not stopped, with one extra `client_disconnects`. The \"disconnected\", \"stopped\" and \"completed\" shown on screen are the front end's translation of these records, not another truth. Remember too that `completed` says only that the run went through, not that the answer is right; whether the list is whole has to be checked separately, and the report of this lesson does it with a numbering check.",
+      "source": "526617301167"
+    },
+    "compare-endings.title": {
+      "text": "The four endings side by side",
+      "source": "a4ad57bcb167"
+    },
+    "compare-endings.paragraphs.0": {
+      "text": "One streamed request can end in four ways. Three things tell them apart: the `status` of the stream, the `status` of `done`, and whether the event connection dropped.",
+      "source": "d212aa5d3f46"
+    },
+    "compare-endings.columns.0": {
+      "text": "Ending",
+      "source": "7fc75ed74b81"
+    },
+    "compare-endings.columns.1": {
+      "text": "Triggered by",
+      "source": "974695bea99b"
+    },
+    "compare-endings.columns.2": {
+      "text": "Event connection",
+      "source": "586694bfcd1b"
+    },
+    "compare-endings.columns.3": {
+      "text": "Run",
+      "source": "75b269496f69"
+    },
+    "compare-endings.columns.4": {
+      "text": "`status` of `done`",
+      "source": "63b18bdd78d6"
+    },
+    "compare-endings.columns.5": {
+      "text": "`status` of the stream",
+      "source": "94828e79806c"
+    },
+    "compare-endings.columns.6": {
+      "text": "What the record holds",
+      "source": "17f7f4cadc99"
+    },
+    "compare-endings.rows.0.0": {
+      "text": "Full receive",
+      "source": "680e34777944"
+    },
+    "compare-endings.rows.0.1": {
+      "text": "Nobody does anything",
+      "source": "1595e8b4ea5c"
+    },
+    "compare-endings.rows.0.2": {
+      "text": "Connected",
+      "source": "365d1b9dc7f0"
+    },
+    "compare-endings.rows.0.3": {
+      "text": "Runs to the end",
+      "source": "7de3993e5ab8"
+    },
+    "compare-endings.rows.0.4": {
+      "text": "`completed`",
+      "source": "a6bb48f9a992"
+    },
+    "compare-endings.rows.0.5": {
+      "text": "`completed`",
+      "source": "a6bb48f9a992"
+    },
+    "compare-endings.rows.0.6": {
+      "text": "All chunks, the finish reason, the usage chunk",
+      "source": "ca90efaf61b4"
+    },
+    "compare-endings.rows.1.0": {
+      "text": "Stopped by the program",
+      "source": "ff00a4496419"
+    },
+    "compare-endings.rows.1.1": {
+      "text": "`stop_when` in lesson code",
+      "source": "4195ffd52dc4"
+    },
+    "compare-endings.rows.1.2": {
+      "text": "Connected",
+      "source": "365d1b9dc7f0"
+    },
+    "compare-endings.rows.1.3": {
+      "text": "Goes on",
+      "source": "dec75eef7da6"
+    },
+    "compare-endings.rows.1.4": {
+      "text": "`completed`",
+      "source": "a6bb48f9a992"
+    },
+    "compare-endings.rows.1.5": {
+      "text": "`stopped`",
+      "source": "80970e2aed79"
+    },
+    "compare-endings.rows.1.6": {
+      "text": "The chunks before the stop, no finish reason",
+      "source": "311de053429d"
+    },
+    "compare-endings.rows.2.0": {
+      "text": "User presses stop",
+      "source": "25bf3bde0e6d"
+    },
+    "compare-endings.rows.2.1": {
+      "text": "The \"Stop run\" button",
+      "source": "3360da9058cf"
+    },
+    "compare-endings.rows.2.2": {
+      "text": "Connected",
+      "source": "365d1b9dc7f0"
+    },
+    "compare-endings.rows.2.3": {
+      "text": "Ends",
+      "source": "c7b24e7997e9"
+    },
+    "compare-endings.rows.2.4": {
+      "text": "`cancelled`",
+      "source": "7166f63c08d9"
+    },
+    "compare-endings.rows.2.5": {
+      "text": "`cancelled`",
+      "source": "7166f63c08d9"
+    },
+    "compare-endings.rows.2.6": {
+      "text": "The chunks recorded before the stop, plus `discarded_after_cancel`",
+      "source": "b0578ca4693d"
+    },
+    "compare-endings.rows.3.0": {
+      "text": "Event stream disconnected",
+      "source": "9624477f2ee8"
+    },
+    "compare-endings.rows.3.1": {
+      "text": "The \"Disconnect the event stream\" button",
+      "source": "aeb843d6c41a"
+    },
+    "compare-endings.rows.3.2": {
+      "text": "Disconnected, can reconnect",
+      "source": "1e1d5ae0dcaf"
+    },
+    "compare-endings.rows.3.3": {
+      "text": "Goes on",
+      "source": "7c9691192f1b"
+    },
+    "compare-endings.rows.3.4": {
+      "text": "`completed`",
+      "source": "a6bb48f9a992"
+    },
+    "compare-endings.rows.3.5": {
+      "text": "`completed`",
+      "source": "a6bb48f9a992"
+    },
+    "compare-endings.rows.3.6": {
+      "text": "The same as a full receive, with one extra `client_disconnects` in `done`",
+      "source": "60d8c4e90f5f"
+    },
+    "mq-disconnect.q-disconnect.prompt": {
+      "text": "When a run ends, `client_disconnects` in `done` is 1 and `status` is `completed`. What does that say?",
+      "source": "1b9f0d4fd592"
+    },
+    "mq-disconnect.q-disconnect.a.text": {
+      "text": "The user pressed stop, the run was cancelled and then resumed",
+      "source": "d06118d08b6b"
+    },
+    "mq-disconnect.q-disconnect.a.feedback": {
+      "text": "No. A stopped run has `status` `cancelled` and carries `cancel_reason`.",
+      "source": "93f08b15a830"
+    },
+    "mq-disconnect.q-disconnect.b.text": {
+      "text": "The event stream disconnected once, the run did not stop because of it, and it finished on its own",
+      "source": "50710142de1a"
+    },
+    "mq-disconnect.q-disconnect.b.feedback": {
+      "text": "Right. A reader leaving does not affect the run; the count is all that stays behind.",
+      "source": "f5906b52e2de"
+    },
+    "mq-disconnect.q-disconnect.c.text": {
+      "text": "The backend restarted the run because the reader disconnected",
+      "source": "18f06848df87"
+    },
+    "mq-disconnect.q-disconnect.c.feedback": {
+      "text": "No. The backend never restarts or replays a run because a reader disconnected.",
+      "source": "637d1adb7d31"
+    },
+    "mq-disconnect.q-disconnect.explanation": {
+      "text": "The disconnect count says only that a reader came and went; the final state is still what the backend wrote.",
+      "source": "b39cf502bb26"
+    },
+    "section-5.title": {
+      "text": "Recording a partial result and the next round",
+      "source": "48d6b341e962"
+    },
+    "section-5.paragraphs.0": {
+      "text": "What a cancel or an early stop leaves behind is a partial result, and it has to carry the mark \"incomplete\" through every later step; it must not pass for a complete answer. The trouble comes in the next round: the user pressed stop and then says \"go on\", the program holds a half answer, and has to decide how to hand it to the model. The easiest thing is to put it back into the message history as it is, as an assistant message that looks finished, and send \"continue\". Then the model sees a message it believes it had already finished, not one that was interrupted.",
+      "source": "ae378562e6b7"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Incompleteness can be seen in the data: the `finish_reason` of a partial result is empty, the assembled response has no `usage`, and the last line often stops in the middle of a sentence. This lesson has the model write a numbered list precisely so that the program can check it too: the numbers must run from 1 to N, each once, and every line must end with a full stop. Take a made-up example: 8 items are asked for and the text stops in the middle of item 3; items 1 and 2 are finished and item 3 is half a sentence. A half answer fails this check, however fluent the words are.",
+      "source": "2b4ee3e6e761"
+    },
+    "section-5.paragraphs.2": {
+      "text": "A steadier way has three steps and follows rule 4 of chapter 6 of Understanding AI Agents in Depth and the way the speech system marks \"the turn that was interrupted\": keep the part that was written in full and drop the half sentence; say in the request that the last answer was not finished and from which item to rewrite; and have the program check the merge. The \"marked incomplete\" way of this lesson does just that: it puts no assistant prefix, and one user message holds the items written in full and the first item still to write, both computed by `analyse_partial`. It does not assume that half an output is a legal prefix to feed back; some providers offer a dedicated prefix-continuation API, which has to be read first before it is used, and this lesson does not use it.",
+      "source": "6f2cd9de9721"
+    },
+    "section-5.paragraphs.3": {
+      "text": "The check proves structure, not content. Continuous numbers and finished lines do not mean every item is right, and a garble inside one line, such as a rewritten whole sentence glued straight after half a sentence, is invisible to the numbering check and takes a person to read. Each way has a single sample in the exercise, and gluing on as it is sometimes succeeds: the report states the facts of this run, not which way is better for ever.",
+      "source": "0a1ec472db61"
+    },
+    "deep-dive-tool.title": {
+      "text": "Tool-call fragments in a stream",
+      "source": "162b08995577"
+    },
+    "deep-dive-tool.summary": {
+      "text": "When the argument JSON is not finished, a half call must not be executed.",
+      "source": "d40d5f677102"
+    },
+    "deep-dive-tool.paragraphs.0": {
+      "text": "When the model proposes a tool call, the stream holds no \"whole call\", only fragments: the first fragment carries the `id`, the type and the function name, later fragments carry only a short piece of the argument text, and each fragment names with `index` which call it belongs to. The platform's assembling joins the argument pieces by `index`, and takes the name and id from the first fragment that has them. The finished `arguments` is a piece of text that the program has to parse into JSON itself. So taking a tool call out of a stream goes in this order: merge the fragments, wait for the finish reason, and only then parse and check; none of the three steps can be skipped.",
+      "source": "635076d7e500"
+    },
+    "deep-dive-tool.paragraphs.1": {
+      "text": "When a stream stops half-way, that text may end at something like `{\"path\": \"a.t`. It is not valid JSON, and it is certainly not the whole call the model had in mind. The rule is simple: a call may be executed only when `finish_reason: tool_calls` arrived, `arguments` parses, and the argument check passed; a half call left behind by a stop or a cancel is never executed and never completed by guesswork. Chapter 2 of Understanding AI Agents in Depth notes that the first call can start as soon as its arguments are fully generated and validated, without waiting for the later calls to be written, and that does not conflict with the rule above: the precondition is the same, complete arguments.",
+      "source": "2632d041855f"
+    },
+    "deep-dive-tool.paragraphs.2": {
+      "text": "Take a made-up example: the model proposes two calls at once, and four fragments arrive one after the other: those with `index` 0 and 1 each carry an id and a function name, and each is followed by a piece of arguments. The platform joins them by `index` into two calls, each with its own arguments. Now the stream breaks; no finish reason arrived, so there is no knowing whether more fragments were still to come, and neither call should be executed, even if the arguments of one happen to be valid JSON.",
+      "source": "cfc284c2daaf"
+    },
+    "misconception-stop.claim": {
+      "text": "After \"Stop run\", the model stops generating at once and incurs no more cost.",
+      "source": "3e22be80deb6"
+    },
+    "misconception-stop.correction": {
+      "text": "What stops is this program's receiving: the platform records no more chunks and the run ends as `cancelled`. When the provider stops writing and whether it keeps billing is not visible to the platform; a stopped stream usually has no usage chunk, so usage is written \"not reported\", not 0. `discarded_after_cancel` can count only the chunks this program had received but did not record, and cannot count what the provider is still writing.",
+      "source": "a0c687d071f3"
+    },
+    "misconception-close.claim": {
+      "text": "Closing the page only disconnects the event stream, so the run is sure to continue.",
+      "source": "767433da5128"
+    },
+    "misconception-close.correction": {
+      "text": "A dropped event connection does not stop a run, and \"Disconnect the event stream\" on the page shows exactly that. But this platform sends a `page_closed` cancel request when the page closes, so closing the page does stop the run, and the reason is recorded in `cancel_reason`. A disconnect is the reader's business and a stop is an explicit request, and the record tells them apart.",
+      "source": "32740881398e"
+    },
+    "mq-resume.q-resume.prompt": {
+      "text": "The stream is stopped while item 3 is half written. What is the steadiest thing to do in the next round?",
+      "source": "c1d496fea4a6"
+    },
+    "mq-resume.q-resume.a.text": {
+      "text": "Put the half answer back into the history as an assistant message and send \"continue\"",
+      "source": "7257a8a3c9b4"
+    },
+    "mq-resume.q-resume.a.feedback": {
+      "text": "Not steady. The model takes it for something it had finished; it may carry on straight after the half sentence or rewrite the whole item, and the assembled list may not be continuous.",
+      "source": "0ad36fe610ef"
+    },
+    "mq-resume.q-resume.b.text": {
+      "text": "Keep items 1 and 2, which are finished, say the last answer was not finished, ask the model to rewrite from item 3, and check the numbers after merging",
+      "source": "3b32116501ab"
+    },
+    "mq-resume.q-resume.b.feedback": {
+      "text": "Right. The half sentence stays out of the merge, the request says what is missing, and the program checks the result.",
+      "source": "46329e6e7170"
+    },
+    "mq-resume.q-resume.c.text": {
+      "text": "Throw everything away and start over",
+      "source": "63f01b2813a1"
+    },
+    "mq-resume.q-resume.c.feedback": {
+      "text": "Not wrong, but content that was finished and could be checked is thrown away, and a whole new generation is paid for.",
+      "source": "e4da2543cad4"
+    },
+    "mq-resume.q-resume.explanation": {
+      "text": "A partial result has to be marked incomplete: keep what can be confirmed, have the model supply what is missing, and let the program check.",
+      "source": "e78cfeaa145f"
+    },
+    "walkthrough.title": {
+      "text": "A streamed run that gets stopped",
+      "source": "dde3ec4f1a4b"
+    },
+    "walkthrough.description": {
+      "text": "This is a step-by-step explanation written by the author and contains no measured values. Run it in the lab bench to see real numbers and events.",
+      "source": "0f33c5613400"
+    },
+    "walkthrough.w-1.label": {
+      "text": "1",
+      "source": "6b86b273ff34"
+    },
+    "walkthrough.w-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.w-1.title": {
+      "text": "Send the streamed request",
+      "source": "dc6d5c74c685"
+    },
+    "walkthrough.w-1.body": {
+      "text": "The runner calls `complete_stream`, the platform adds `stream` and `stream_options` to the request body and records a `request` event.",
+      "source": "dcc3dda74f6d"
+    },
+    "walkthrough.w-1.evidence": {
+      "text": "data.stream of the request event is true.",
+      "source": "2c7acf1a0fdb"
+    },
+    "walkthrough.w-2.label": {
+      "text": "2",
+      "source": "d4735e3a265e"
+    },
+    "walkthrough.w-2.actor": {
+      "text": "Provider",
+      "source": "a573affa9389"
+    },
+    "walkthrough.w-2.title": {
+      "text": "The first chunk carries only the role",
+      "source": "7243972496d0"
+    },
+    "walkthrough.w-2.body": {
+      "text": "The provider sends one chunk first: it names the role and the text is empty. The platform records it alone as a `response_delta`, and that gives the moment the first chunk arrived.",
+      "source": "62b22d6a94e2"
+    },
+    "walkthrough.w-2.evidence": {
+      "text": "chunk_range of the first response_delta is [1, 1].",
+      "source": "1d2bf102bd24"
+    },
+    "walkthrough.w-3.label": {
+      "text": "3",
+      "source": "4e07408562be"
+    },
+    "walkthrough.w-3.actor": {
+      "text": "Provider",
+      "source": "a573affa9389"
+    },
+    "walkthrough.w-3.title": {
+      "text": "The first text arrives",
+      "source": "e464778e99e9"
+    },
+    "walkthrough.w-3.body": {
+      "text": "The chunks that follow carry text and are joined one after another. The moment the first non-empty text arrives is the time to first token.",
+      "source": "3aba0e4bfd95"
+    },
+    "walkthrough.w-3.evidence": {
+      "text": "stream.first_token_ms of the response.",
+      "source": "2b33296967ae"
+    },
+    "walkthrough.w-4.label": {
+      "text": "4",
+      "source": "4b227777d4dd"
+    },
+    "walkthrough.w-4.actor": {
+      "text": "Learner",
+      "source": "fc2a74f70c45"
+    },
+    "walkthrough.w-4.title": {
+      "text": "Press \"Stop run\"",
+      "source": "3bfea30e9c45"
+    },
+    "walkthrough.w-4.body": {
+      "text": "The page sends a cancel request to the backend with the reason `user_stop`. The event connection stays open and the page keeps reading until the backend writes `done`.",
+      "source": "c4296ab8e865"
+    },
+    "walkthrough.w-4.evidence": {
+      "text": "The backend accepts the request and the run is still recording events.",
+      "source": "fc92c9d091a9"
+    },
+    "walkthrough.w-5.label": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "walkthrough.w-5.actor": {
+      "text": "Platform",
+      "source": "910887705c7a"
+    },
+    "walkthrough.w-5.title": {
+      "text": "The loop notices the stop",
+      "source": "1b87f60fd800"
+    },
+    "walkthrough.w-5.body": {
+      "text": "The loop of `complete_stream` sees the stop request: chunks handed to the run are recorded, chunks that arrived but were not handed over are only counted, then a `response` marked `cancelled` is written and `RunCancelled` is raised.",
+      "source": "4b05c8347bae"
+    },
+    "walkthrough.w-5.evidence": {
+      "text": "stream.status of the response is cancelled, with cancel_reason and discarded_after_cancel as well.",
+      "source": "f85acb8cd4cf"
+    },
+    "walkthrough.w-6.label": {
+      "text": "6",
+      "source": "e7f6c011776e"
+    },
+    "walkthrough.w-6.actor": {
+      "text": "Backend",
+      "source": "9b826346239e"
+    },
+    "walkthrough.w-6.title": {
+      "text": "Write the final state",
+      "source": "61ef5dc48826"
+    },
+    "walkthrough.w-6.body": {
+      "text": "The run ends as `cancelled` and `done` carries `cancel_reason`. The assembled content reaches only as far as what arrived before the stop, with no finish reason and no usage.",
+      "source": "a64a951eb00d"
+    },
+    "walkthrough.w-6.evidence": {
+      "text": "data.status and data.cancel_reason of the done event.",
+      "source": "a2327b93cf33"
+    },
+    "callout-next.title": {
+      "text": "Cancelling is not undoing",
+      "source": "e151d03ecdb5"
+    },
+    "callout-next.paragraphs.0": {
+      "text": "A stop only ends receiving; side effects that already happened cannot be taken back. Next, {{lesson:async-concurrency}} covers how to cancel when several tasks run at once, {{lesson:hooks-approval}} lets a person decide before an action happens whether it may go ahead, and {{lesson:human-in-the-loop}} lets a run wait for a person and carry on afterwards.",
+      "source": "f1318f796b3c"
+    },
+    "references.book-chapter6.title": {
+      "text": "Event handling: cancellation-based handling and \"a half-written output is not a legal prefix\" (Understanding AI Agents in Depth)",
+      "source": "3d8e1e02efd4"
+    },
+    "references.book-interruption.title": {
+      "text": "Interruption management in a speech system: mark the turn that was interrupted (Understanding AI Agents in Depth, companion code)",
+      "source": "f99dcf3c638e"
+    },
+    "references.book-chapter2.title": {
+      "text": "The advantage of streamed responses and time to first token (Understanding AI Agents in Depth)",
+      "source": "ffcbda9247f9"
+    },
+    "references.ms-production.title": {
+      "text": "Latency and cost metrics in production (Microsoft AI Agents for Beginners)",
+      "source": "07040ca58e30"
+    },
+    "references.cookbook-thinking.title": {
+      "text": "Typed streaming events: deltas and content blocks (Claude Cookbooks)",
+      "source": "f3791710b996"
+    },
+    "references.doc-bailian-stream.title": {
+      "text": "Streaming output (Alibaba Cloud Model Studio documentation)",
+      "source": "c0430b9cb722"
+    },
+    "code-flows.n-flows-1.text": {
+      "text": "The most basic comparison: the same request is sent twice, and the only difference is that one is streamed and the other returns in one piece.",
+      "source": "879d53de1918"
+    },
+    "code-flows.n-flows-2.text": {
+      "text": "The streamed request: the platform records as it receives, and what comes back already holds the first chunk, the first token, the total time and the assembled response.",
+      "source": "8c46ff806345"
+    },
+    "code-flows.n-flows-3.text": {
+      "text": "The non-streamed complete returns only the response body with no timing, so the runner measures it itself.",
+      "source": "a0ca0e4e416d"
+    },
+    "code-flows.n-flows-4.text": {
+      "text": "The comparison table and the checks are computed in reports.py, from the numbers measured above.",
+      "source": "6c7a63cf6fc4"
+    },
+    "code-flows.n-flows-5.text": {
+      "text": "A long output: no stop_when, so the run waits for the stream to end on its own, or to be stopped.",
+      "source": "cdb5c913997f"
+    },
+    "code-flows.n-flows-6.text": {
+      "text": "When \"Stop run\" is pressed, this line raises RunCancelled: the platform has already recorded what arrived, and the code below does not run.",
+      "source": "a3f2a979d27a"
+    },
+    "code-flows.n-flows-7.text": {
+      "text": "Only a stream that ends normally gets here; a stopped run has no such report.",
+      "source": "0ddc89d4d4f5"
+    },
+    "code-flows.n-flows-8.text": {
+      "text": "The third kind: the program itself ends the stream after chunk N.",
+      "source": "cb403ad5d249"
+    },
+    "code-flows.n-flows-9.text": {
+      "text": "stop_when is the lesson code's decision: when it returns true the stream ends as stopped and the run goes on.",
+      "source": "776eda681f37"
+    },
+    "code-flows.n-flows-10.text": {
+      "text": "Here the partial result is reported as a partial result: no finish reason, and usage not reported.",
+      "source": "bc52807c73aa"
+    },
+    "code-continue.n-cont-1.text": {
+      "text": "The last exercise: after a stop, how the cut-off text is handed to the next round.",
+      "source": "0e377c630ccc"
+    },
+    "code-continue.n-cont-2.text": {
+      "text": "The first step is the same as in the previous exercise: the stream is ended by the program at the stop point.",
+      "source": "4f97b023c568"
+    },
+    "code-continue.n-cont-3.text": {
+      "text": "Work out which lines are finished, where the half sentence is, and which item to write next.",
+      "source": "37134ad8a36d"
+    },
+    "code-continue.n-cont-4.text": {
+      "text": "The stop point was not reached, no text has arrived yet, or the list is already written: there is no gap, so nothing is continued and no gap is invented.",
+      "source": "035e60d79276"
+    },
+    "code-continue.n-cont-5.text": {
+      "text": "The wrong way: the half text goes back as a finished assistant message, followed by \"continue\".",
+      "source": "2e9dec042a4d"
+    },
+    "code-continue.n-cont-6.text": {
+      "text": "Round 2: this request is the one that glues the text on as it is.",
+      "source": "1e11dff29598"
+    },
+    "code-continue.n-cont-7.text": {
+      "text": "The right way: no assistant prefix, one user message says where the text was not finished.",
+      "source": "90cba38d1b4f"
+    },
+    "code-continue.n-cont-8.text": {
+      "text": "Round 3: the one that marks the text incomplete.",
+      "source": "4138452665b3"
+    },
+    "code-continue.n-cont-9.text": {
+      "text": "The two merge rules differ: glue on as it is, or keep only the finished lines and then add the new content.",
+      "source": "442dd74ea405"
+    },
+    "code-continue.n-cont-10.text": {
+      "text": "The checks of both ways go into one report for the learner to compare.",
+      "source": "23542764b0f5"
+    },
+    "code-stream.n-stream-1.text": {
+      "text": "The platform's main loop for reading a stream; every complete_stream in the course runs through here.",
+      "source": "359ba0433540"
+    },
+    "code-stream.n-stream-2.text": {
+      "text": "Every turn first checks whether someone asked to stop, whether or not a new chunk arrived.",
+      "source": "45ec82599090"
+    },
+    "code-stream.n-stream-3.text": {
+      "text": "The reader thread puts chunks into a queue and this waits at most 0.05 seconds for one, so a stop is seen within 0.05 seconds at the latest.",
+      "source": "13f315b12e45"
+    },
+    "code-stream.n-stream-4.text": {
+      "text": "Each chunk carries its arrival time, and the milliseconds of the first chunk and the first token come from it.",
+      "source": "f8c2038ff8f1"
+    },
+    "code-stream.n-stream-5.text": {
+      "text": "A broken stream: what was received is recorded first, then the error is raised.",
+      "source": "23cd67854bc9"
+    },
+    "code-stream.n-stream-6.text": {
+      "text": "A chunk that arrives just as the run is being stopped: only counted, never recorded.",
+      "source": "eba5e30277bd"
+    },
+    "code-stream.n-stream-7.text": {
+      "text": "The time is measured in this process: from just before the request was sent to the moment the transport handed over this chunk.",
+      "source": "ffe3760be2f1"
+    },
+    "code-stream.n-stream-8.text": {
+      "text": "The chunk is merged into the response here, and an unchanged copy is kept to be written into response_delta.",
+      "source": "eec391d1b28b"
+    },
+    "code-stream.n-stream-9.text": {
+      "text": "The lesson's stop_when sees the text assembled so far and the chunk count, and when it returns true the stream ends as stopped.",
+      "source": "e40a72b559cc"
+    },
+    "code-stream.n-stream-10.text": {
+      "text": "However it ends, the reader thread is told to quit, and chunks in the queue that were never handed to the run are counted as discarded here.",
+      "source": "456ceec9ebf1"
+    },
+    "code-stream.n-stream-11.text": {
+      "text": "Before finishing, the chunks handed to the run are written as response_delta, so what was received always has a record.",
+      "source": "a95b10262cbe"
+    },
+    "code-stream.n-stream-12.text": {
+      "text": "The stream facts in response: how it ended, the chunk count, the first chunk and the first token time.",
+      "source": "c69656638cdf"
+    },
+    "code-stream.n-stream-13.text": {
+      "text": "Only cancelled has a reason and a discard count.",
+      "source": "71e4594503e5"
+    },
+    "code-stream.n-stream-14.text": {
+      "text": "The assembled response: only what the chunks really held, no fields added.",
+      "source": "4502d5f86c4c"
+    },
+    "code-stream.n-stream-15.text": {
+      "text": "Raised only after the response is written: the run then ends as cancelled.",
+      "source": "435af82fa5cd"
+    },
+    "code-stream.f-stream-idle.label": {
+      "text": "Platform: merge the chunks gathered while idle into one event",
+      "source": "6bd2d569c155"
+    },
+    "code-stream.f-stream-error.label": {
+      "text": "Platform: record and raise when the stream carries an error object",
+      "source": "887cb68b1d7b"
+    },
+    "code-stream.f-stream-flush.label": {
+      "text": "Platform: the first chunk gets its own event, later ones merge by time or count",
+      "source": "7c5d05f68df6"
+    },
+    "code-stream.f-stream-extra.label": {
+      "text": "Platform: stop reason and error text",
+      "source": "adc89a5fd53e"
+    },
+    "code-decision.title": {
+      "text": "The platform records chunks; lesson code decides only when to stop and what to do with what arrived",
+      "source": "0b661687d5fa"
+    },
+    "code-decision.chosen": {
+      "text": "Receiving, timing, recording, stopping and assembling all live in the platform's `complete_stream`: lesson code passes only the request body and an optional `stop_when`, gets a `StreamResult` back, and checks against the real timings and the response. When a run is stopped, the platform records what arrived and then raises `RunCancelled`; lesson code cannot write events after a stop. For a partial result, `analyse_partial` decides which lines are finished, the continuation requests and the merge rules live in the runner, and the check is plain Python.",
+      "source": "3a76d94bf806"
+    },
+    "code-decision.own-sse.title": {
+      "text": "The lesson reads SSE and handles the connection itself",
+      "source": "de26d2a869c1"
+    },
+    "code-decision.own-sse.why_not": {
+      "text": "Every lesson would have to rewrite timeouts, cancelling, keys and scrubbing, and could easily miss \"nothing recorded after a stop\". The platform manages the connection in one place, and lesson code cannot get hold of the key or get around it.",
+      "source": "f5f064f700e2"
+    },
+    "code-decision.wait-then-record.title": {
+      "text": "Wait until the stream ends and record everything at once",
+      "source": "6bd581cec17d"
+    },
+    "code-decision.wait-then-record.why_not": {
+      "text": "When the stream is stopped or breaks half-way, what was received is lost, and \"what had been received at the cancel\" cannot be answered. Chunks are recorded as they arrive, so the record reaches exactly as far as the stream did.",
+      "source": "9238294f0b92"
+    },
+    "code-decision.typewriter.title": {
+      "text": "Type the assembled answer out letter by letter",
+      "source": "bc2092a5994a"
+    },
+    "code-decision.typewriter.why_not": {
+      "text": "That is a fake stream: the arrival times on the timeline would not be real, and a time to first token would mean nothing. The page shows only chunks that really arrived and the times the platform measured.",
+      "source": "2f4c3b1e6eb8"
+    },
+    "code-decision.assistant-prefix.title": {
+      "text": "Put the cut text back as an assistant prefix and let the model continue",
+      "source": "c4509abe889b"
+    },
+    "code-decision.assistant-prefix.why_not": {
+      "text": "Without a supported continuation API, half an output is not a legal prefix; the model may carry on after the half sentence or rewrite the whole item, and only a check shows which. This lesson uses a user message that marks the text incomplete, and checks the merged result.",
+      "source": "75d1c78b23a0"
+    },
+    "first-token-vs-total.title": {
+      "text": "Streamed and not streamed, side by side",
+      "source": "a94f686c2500"
+    },
+    "first-token-vs-total.hypothesis": {
+      "text": "For the same request, the streamed first token arrives much earlier than its own total time, while the streamed and non-streamed totals are close; the assembled response and the non-streamed one have the same message shape, apart from a few top-level fields that no chunk carried.",
+      "source": "7c2ed009f88d"
+    },
+    "first-token-vs-total.compare.label": {
+      "text": "Streamed, then not streamed, once each",
+      "source": "1657b3aa9dc2"
+    },
+    "first-token-vs-total.stream-request.text": {
+      "text": "The streamed request: `data.stream` is true, and `stream` and `stream_options` in the request body were added by the platform.",
+      "source": "286b1031dd07"
+    },
+    "first-token-vs-total.first-delta.text": {
+      "text": "The first chunk gets a `response_delta` of its own: `received_ms` is the moment the first chunk arrived.",
+      "source": "70f14afc344c"
+    },
+    "first-token-vs-total.stream-facts.text": {
+      "text": "`data.stream` of the assembled response: the first chunk, the first token, the chunk count and how the stream ended.",
+      "source": "d94bb681f2cf"
+    },
+    "first-token-vs-total.usage-chunk.text": {
+      "text": "`usage` in the assembled response: it comes from the last usage chunk, and without that chunk the field is absent.",
+      "source": "10031052d3cc"
+    },
+    "first-token-vs-total.plain-response.text": {
+      "text": "The non-streamed response of round 2: returned in one piece, with no `data.stream`.",
+      "source": "aa7d51f7ae62"
+    },
+    "first-token-vs-total.shape-check.text": {
+      "text": "The `shape_match` check in the report: whether the message shape is the same on both sides.",
+      "source": "a6ae6520ff46"
+    },
+    "first-token-vs-total.first-token-metric.text": {
+      "text": "The time to first token in the report, to compare with the streamed total.",
+      "source": "d3e01edeb94a"
+    },
+    "first-token-vs-total.compare-table.text": {
+      "text": "The comparison table: first chunk, first token, total time, finish reason, usage, character count and item count.",
+      "source": "f98fc2565c8d"
+    },
+    "first-token-vs-total.guide.0.text": {
+      "text": "The same request is sent twice, streamed first and then not streamed. Start with how the streamed one was sent.",
+      "source": "4518a2b43add"
+    },
+    "first-token-vs-total.guide.1.text": {
+      "text": "`stream: true` and `stream_options` in the request body were added by the platform; lesson code did not write them.",
+      "source": "ed900f9f2d0e"
+    },
+    "first-token-vs-total.guide.2.text": {
+      "text": "The first chunk gets an event of its own, `received_ms` is the moment it arrived, and it usually has no text.",
+      "source": "df1b48e66e0b"
+    },
+    "first-token-vs-total.guide.3.text": {
+      "text": "When the streamed response closes, the platform writes the first chunk, the first token, the chunk count and how it ended into `stream`.",
+      "source": "567e41ee8e35"
+    },
+    "first-token-vs-total.guide.4.text": {
+      "text": "Usage comes from the last usage chunk; if the provider did not send it, it is absent here and the report says \"not reported\".",
+      "source": "68918bd0398e"
+    },
+    "first-token-vs-total.guide.5.text": {
+      "text": "Round 2 is the same request, not streamed: one return, no `stream`, and the time is a single number.",
+      "source": "fdb2cb5cb368"
+    },
+    "first-token-vs-total.guide.6.text": {
+      "text": "Check whether the message shape is the same on both sides: it compares the role, the text and the finish reason, not the words.",
+      "source": "98046540c39b"
+    },
+    "first-token-vs-total.guide.7.text": {
+      "text": "Put the time to first token next to the streamed total: the difference is how much less the user waited because of streaming.",
+      "source": "5903ec294474"
+    },
+    "first-token-vs-total.guide.8.text": {
+      "text": "The comparison table sets the two sides next to each other; note which rows have a dash on the non-streamed side: it has no first chunk and no first token.",
+      "source": "185da56932d0"
+    },
+    "first-token-vs-total.conclusion.proves.0": {
+      "text": "In this one run, the streamed first chunk, first token, total time and chunk count, the non-streamed total time, and whether the message shape is the same on both sides; every number is the process's own timing.",
+      "source": "8752f69b3797"
+    },
+    "first-token-vs-total.conclusion.does_not_prove.0": {
+      "text": "The provider's latency level: each way has one sample, the order is fixed as streamed first and not streamed second, and the provider's cache may make the second faster.",
+      "source": "eaec31ba6efe"
+    },
+    "first-token-vs-total.conclusion.does_not_prove.1": {
+      "text": "That streaming makes the total time shorter: the comparison looks at the wait for the first word. Timings from the offline script show only how the timing works and do not stand for a real provider.",
+      "source": "2995a49b71ad"
+    },
+    "cancel-and-disconnect.title": {
+      "text": "Cancelling a stream part-way",
+      "source": "ae13a1b5a975"
+    },
+    "cancel-and-disconnect.hypothesis": {
+      "text": "For the same long-output exercise, three runs (receive in full, stop part-way, disconnect and reconnect) differ in how the stream ends and in the backend's final state: the stopped run's assembled content reaches only what arrived before the stop, and the disconnected run still ends in full.",
+      "source": "c955568bc83c"
+    },
+    "cancel-and-disconnect.long.label": {
+      "text": "Long output: full, stop, disconnect",
+      "source": "2580c3f95005"
+    },
+    "cancel-and-disconnect.stream-status.text": {
+      "text": "How the stream ended: `completed` for a full receive, `cancelled` after a stop.",
+      "source": "8481ef0156cb"
+    },
+    "cancel-and-disconnect.first-token-time.text": {
+      "text": "The time to first token: the moment the platform measured the first non-empty text arriving.",
+      "source": "91b03f5015d7"
+    },
+    "cancel-and-disconnect.delta-ranges.text": {
+      "text": "The chunk numbers covered by the first `response_delta`; each one after it joins end to end, and no chunk is missing.",
+      "source": "d16d9d7c1010"
+    },
+    "cancel-and-disconnect.finish-reason.text": {
+      "text": "The finish reason of the assembled response: `stop` for a full receive, empty for a stopped stream.",
+      "source": "9c57f23d116b"
+    },
+    "cancel-and-disconnect.done-status.text": {
+      "text": "The final state the backend wrote: this one is the last word on the ending.",
+      "source": "c52fa1dac16d"
+    },
+    "cancel-and-disconnect.list-report.text": {
+      "text": "The `list_complete` check exists only after a normal end; a stopped run has no such report.",
+      "source": "cba749f863cc"
+    },
+    "cancel-and-disconnect.guide.0.text": {
+      "text": "You run this exercise three times yourself: do nothing; press \"Stop run\" after receiving starts; press \"Disconnect the event stream\" after receiving starts and reconnect a few seconds later.",
+      "source": "9be1c639dca3"
+    },
+    "cancel-and-disconnect.guide.1.text": {
+      "text": "Look at the run where you did nothing first: the stream ended as `completed`.",
+      "source": "64e7383d5bd1"
+    },
+    "cancel-and-disconnect.guide.2.text": {
+      "text": "The first token comes much earlier than the total, and that is where streaming a long output pays off.",
+      "source": "bb89441ce32a"
+    },
+    "cancel-and-disconnect.guide.3.text": {
+      "text": "The numbers of the `response_delta` events join end to end, and every chunk is on record.",
+      "source": "f7fcd6822349"
+    },
+    "cancel-and-disconnect.guide.4.text": {
+      "text": "A full receive has a finish reason; in the stopped run it is empty, which says the model had not finished.",
+      "source": "622dbcc21c14"
+    },
+    "cancel-and-disconnect.guide.5.text": {
+      "text": "In the stopped run, `stream` in `response` also holds `cancel_reason` and `discarded_after_cancel`, which let you check what had been received at the cancel.",
+      "source": "ce41ed04d3c0"
+    },
+    "cancel-and-disconnect.guide.6.text": {
+      "text": "For the final state read `done`: a stopped run is `cancelled` and carries a reason; a disconnect followed by a reconnect is still `completed`, with one extra `client_disconnects`.",
+      "source": "646fef9b7338"
+    },
+    "cancel-and-disconnect.guide.7.text": {
+      "text": "The report exists only after a normal end; a stopped run has none, because the code after the stop does not run.",
+      "source": "ff9418cae640"
+    },
+    "cancel-and-disconnect.conclusion.proves.0": {
+      "text": "What the same exercise leaves in `response` and `done` under a full receive, a stop and a disconnect: how the stream ended, what was recorded, the backend's final state and the reason.",
+      "source": "19ef4b51c2df"
+    },
+    "cancel-and-disconnect.conclusion.does_not_prove.0": {
+      "text": "Whether the provider kept generating or billing after the stop: this platform only stops receiving, and a stopped stream usually has no usage, so usage is not reported.",
+      "source": "0476b2f80045"
+    },
+    "cancel-and-disconnect.conclusion.does_not_prove.1": {
+      "text": "That every stop leaves the same discard count: the moment you press stop differs each time, and so does the number of chunks in flight.",
+      "source": "806a948ef928"
+    },
+    "cancel-and-disconnect.conclusion.does_not_prove.2": {
+      "text": "That closing the page behaves like disconnecting the event stream: closing the page sends a `page_closed` cancel request.",
+      "source": "9ed11fb8860b"
+    },
+    "partial-result-next-round.title": {
+      "text": "Handing a partial result to the next round",
+      "source": "ecb41bd5ef40"
+    },
+    "partial-result-next-round.hypothesis": {
+      "text": "A stream stopped after chunk N has no finish reason and no usage; gluing this half text on as it is, and continuing it with the text marked incomplete, may give different results in the check of the merge, and the marked version more easily gives a complete list with continuous numbers.",
+      "source": "59fdb552545d"
+    },
+    "partial-result-next-round.stop.label": {
+      "text": "The program stops after chunk N",
+      "source": "4b0e8553f545"
+    },
+    "partial-result-next-round.continue.label": {
+      "text": "Continue: glued on as it is, and marked incomplete",
+      "source": "3cfa0958f618"
+    },
+    "partial-result-next-round.stop-reason.text": {
+      "text": "A stream the lesson code stopped on purpose: `stop_reason` is `lesson`, not `cancel_reason`.",
+      "source": "2a5fc9db3da6"
+    },
+    "partial-result-next-round.no-finish.text": {
+      "text": "The finish reason of a partial result is empty: the model never said it had finished.",
+      "source": "dba5b5a0fcdb"
+    },
+    "partial-result-next-round.usage-metric.text": {
+      "text": "The usage in the report: the provider sent no usage chunk, so it says \"not reported\".",
+      "source": "0716c932fbfb"
+    },
+    "partial-result-next-round.plain-request.text": {
+      "text": "The request of round 2: its last two messages are the cut-off assistant message and \"continue\".",
+      "source": "d3d80645fc29"
+    },
+    "partial-result-next-round.marked-request.text": {
+      "text": "The request of round 3: no assistant prefix, and one user message says where the text was not finished and from which item to rewrite.",
+      "source": "1cef58e2b33e"
+    },
+    "partial-result-next-round.plain-merge.text": {
+      "text": "The check of the merge after gluing on as it is: numbers, repeats and unfinished lines.",
+      "source": "beece876d740"
+    },
+    "partial-result-next-round.marked-merge.text": {
+      "text": "The check after the marked merge, using the same rules.",
+      "source": "0236b74c3f51"
+    },
+    "partial-result-next-round.merge-table.text": {
+      "text": "The comparison table: the finish reason of each way, the merged numbers, and the repeated, missing and unfinished ones.",
+      "source": "d2d1e2e6f35e"
+    },
+    "partial-result-next-round.guide.0.text": {
+      "text": "Start with the arm that only stops and does not continue: the program ended the stream after chunk N, and the run did not end.",
+      "source": "7d7b2215790e"
+    },
+    "partial-result-next-round.guide.1.text": {
+      "text": "A stop on purpose leaves `stop_reason`, which is a different thing from the `cancel_reason` of a user cancel.",
+      "source": "e9222c4074e3"
+    },
+    "partial-result-next-round.guide.2.text": {
+      "text": "The finish reason of a partial result is empty, the trace \"not finished\" leaves in the data.",
+      "source": "6f7c1cbbeb37"
+    },
+    "partial-result-next-round.guide.3.text": {
+      "text": "Usage is missing too: the provider sent no usage chunk, and the report says \"not reported\", not 0.",
+      "source": "260b8ed42259"
+    },
+    "partial-result-next-round.guide.4.text": {
+      "text": "Now the continuation arm. Round 2 puts the cut-off text back as a finished assistant message and then says \"continue\".",
+      "source": "e8112d041b55"
+    },
+    "partial-result-next-round.guide.5.text": {
+      "text": "Round 3 has no assistant prefix; one user message says the last answer was not finished, how many items are finished, and from which item to rewrite.",
+      "source": "d643d560be39"
+    },
+    "partial-result-next-round.guide.6.text": {
+      "text": "The merge of the text glued on as it is gets checked with the numbers, the repeats and the unfinished lines.",
+      "source": "7b320a7da448"
+    },
+    "partial-result-next-round.guide.7.text": {
+      "text": "The marked version is checked by the same rules. What each side concludes is up to your own run.",
+      "source": "fbe358011472"
+    },
+    "partial-result-next-round.guide.8.text": {
+      "text": "The comparison table sets the two ways side by side; compare them column by column.",
+      "source": "bdb13061f780"
+    },
+    "partial-result-next-round.conclusion.proves.0": {
+      "text": "What a stream stopped by the program leaves (`stopped`, no finish reason and no usage), how the requests of the two continuation ways differ, and what the program's check concluded for the two merged results.",
+      "source": "00149a1c2c6b"
+    },
+    "partial-result-next-round.conclusion.does_not_prove.0": {
+      "text": "Which way is better for every model: each way has one sample, the model writes the continuation itself, and gluing on as it is sometimes works too.",
+      "source": "9be79296b1f2"
+    },
+    "partial-result-next-round.conclusion.does_not_prove.1": {
+      "text": "That the content of the merged result is right: the check looks only at the numbers and whether each line is finished, and cannot see a garble inside one line.",
+      "source": "e3b15e49517f"
+    },
+    "partial-result-next-round.conclusion.does_not_prove.2": {
+      "text": "That the rewrite in the offline script's glued-on case stands for a real model: that is behavior written in advance, and in a real run the check decides.",
+      "source": "273b13d92ccb"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.help": {
+      "text": "Each exercise fixes one scenario; this only shows what the exercise is doing.",
+      "source": "35a3eef7405e"
+    },
+    "inputs.scenario.options.compare.label": {
+      "text": "Streamed and not streamed, side by side",
+      "source": "a94f686c2500"
+    },
+    "inputs.scenario.options.long.label": {
+      "text": "Long output: stop and disconnect",
+      "source": "693f03e925d7"
+    },
+    "inputs.scenario.options.stop.label": {
+      "text": "The program stops after chunk N",
+      "source": "4b0e8553f545"
+    },
+    "inputs.scenario.options.continue.label": {
+      "text": "The next round after an incomplete answer",
+      "source": "f6b629df35c0"
+    },
+    "inputs.items.label": {
+      "text": "Number of list items",
+      "source": "d5f9798a32bf"
+    },
+    "inputs.items.help": {
+      "text": "How many numbered items the model writes, 3 to 12. More items make a longer stream.",
+      "source": "1e4abc392064"
+    },
+    "inputs.detail.label": {
+      "text": "Length of each item",
+      "source": "69a151d796ca"
+    },
+    "inputs.detail.help": {
+      "text": "Each item is one sentence or three.",
+      "source": "19ab567bc9b6"
+    },
+    "inputs.detail.options.short.label": {
+      "text": "One sentence",
+      "source": "8aeb22800883"
+    },
+    "inputs.detail.options.long.label": {
+      "text": "Three sentences",
+      "source": "17a6708ab2d8"
+    },
+    "inputs.stop_after_chunks.label": {
+      "text": "Stop point (chunks)",
+      "source": "9566013e744f"
+    },
+    "inputs.stop_after_chunks.help": {
+      "text": "The program ends the stream after this many chunks, 2 to 400; it applies only to \"The program stops after chunk N\" and \"The next round after an incomplete answer\".",
+      "source": "916bf3b81ace"
+    },
+    "quiz.q1.prompt": {
+      "text": "After a streamed request ends, can the `body` in the `response` event be called the response body the provider sent?",
+      "source": "48f2f5adc429"
+    },
+    "quiz.q1.a.text": {
+      "text": "Yes, its content is the same as what the provider sent",
+      "source": "f9385367fd9c"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "No. The content does come from the chunks, but the whole object was assembled by the platform.",
+      "source": "e2e210a54fde"
+    },
+    "quiz.q1.b.text": {
+      "text": "No, the platform assembled it from the chunks, and `stream.assembled_from_chunks` says so",
+      "source": "9a229789824a"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Right. The original chunks are in `response_delta`, and the assembled response is only their composition.",
+      "source": "fe4cfdcba60b"
+    },
+    "quiz.q1.c.text": {
+      "text": "Only when the provider is reached through LiteLLM",
+      "source": "27d58e607a8d"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. Both paths are assembled by the platform; the only difference is whether the chunks are JSON or SDK objects.",
+      "source": "dd8f8f9cb2fe"
+    },
+    "quiz.q1.explanation": {
+      "text": "An assembled response is not the raw message, and both the text and the interface have to label it truthfully.",
+      "source": "48191e399801"
+    },
+    "quiz.q2.prompt": {
+      "text": "After the user presses \"Stop run\", one chunk of data arrives on its way. What happens to it?",
+      "source": "b4e450301ef8"
+    },
+    "quiz.q2.a.text": {
+      "text": "It is written to `response_delta`, because it really arrived",
+      "source": "8217563048f1"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "No. Chunks received after the stop request arrives are not recorded.",
+      "source": "36596d5f7e4d"
+    },
+    "quiz.q2.b.text": {
+      "text": "If it arrived but was not handed to the run, it is only counted in `discarded_after_cancel`; if it arrives after the stop, it is neither recorded nor counted",
+      "source": "1445f0130c92"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Right. At the moment of the cancel only the chunks already handed to the run are in the record.",
+      "source": "91d95598a10e"
+    },
+    "quiz.q2.c.text": {
+      "text": "The run waits for it to arrive and then ends",
+      "source": "60197ac94d75"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. A stop does not wait; what waits is the upstream connection, which closes by itself a little later.",
+      "source": "af03142f4de5"
+    },
+    "quiz.q2.explanation": {
+      "text": "After a cancel no new chunk is recorded.",
+      "source": "25bcb9aa67ce"
+    },
+    "quiz.q3.prompt": {
+      "text": "You press \"Disconnect the event stream\" and reconnect ten seconds later. What does the backend run do in the meantime?",
+      "source": "f117d463d400"
+    },
+    "quiz.q3.a.text": {
+      "text": "It is stopped, and reconnecting starts a new run",
+      "source": "1ccc77223016"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "No. A reader disconnecting does not stop the run.",
+      "source": "e676ea4c7ab2"
+    },
+    "quiz.q3.b.text": {
+      "text": "It carries on; reconnecting reads on from the last event, and the final state is the backend's `done`",
+      "source": "fa2d2d578349"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "Right. The events are in the store, and the reader continues by `seq`, with nothing repeated and nothing missed.",
+      "source": "9bbfb1dab136"
+    },
+    "quiz.q3.c.text": {
+      "text": "It pauses and waits for the reader to come back",
+      "source": "612e3d9ee100"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. A run pauses only at an approval point, which has nothing to do with readers.",
+      "source": "0fab77c53cc4"
+    },
+    "quiz.q3.explanation": {
+      "text": "A run and its reader are connected only through the event record.",
+      "source": "bcfd059832a8"
+    },
+    "quiz.q4.prompt": {
+      "text": "When lesson code returns true in `stop_when`, compared with the user pressing stop, which item belongs to the former only?",
+      "source": "59bf4f99b11d"
+    },
+    "quiz.q4.a.text": {
+      "text": "The stream ends as `stopped` and the run goes on",
+      "source": "dc811c4afa73"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. `stopped` is the lesson's own decision, the run was not cancelled, and the code after it runs as usual.",
+      "source": "8557e997ddea"
+    },
+    "quiz.q4.b.text": {
+      "text": "`response` holds `cancel_reason`",
+      "source": "d3544207332f"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. `cancel_reason` appears only with `cancelled`.",
+      "source": "5cad5f5c0bf0"
+    },
+    "quiz.q4.c.text": {
+      "text": "The `status` of the backend's `done` is `cancelled`",
+      "source": "fb94291cfc6b"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. After a stop by the program the run completes as usual, and `done` is `completed`.",
+      "source": "ada336974da6"
+    },
+    "quiz.q4.explanation": {
+      "text": "The difference between stopped and cancelled: who decided, and whether the run goes on.",
+      "source": "fc8df84e6678"
+    },
+    "quiz.q5.prompt": {
+      "text": "A stream that was ended early got no usage chunk from the provider. What should the usage in the report say?",
+      "source": "562dd9387687"
+    },
+    "quiz.q5.a.text": {
+      "text": "0, because no tokens were received",
+      "source": "c24148613ed9"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "No. Writing 0 passes off a number the provider did not report.",
+      "source": "007923ee2e39"
+    },
+    "quiz.q5.b.text": {
+      "text": "An estimate from the number of characters received",
+      "source": "fa7a89510470"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. This platform does not estimate usage.",
+      "source": "503636bccb0a"
+    },
+    "quiz.q5.c.text": {
+      "text": "Not reported",
+      "source": "b4724185c9ed"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "Right. The number may exist; it was just not given this time.",
+      "source": "2ec31e7c2fe7"
+    },
+    "quiz.q5.explanation": {
+      "text": "A number the provider did not report is written \"not reported\".",
+      "source": "fdcaa4e9feb1"
+    },
+    "quiz.q6.prompt": {
+      "text": "The stream stops at tool-call arguments like `{\"path\": \"a.t`. What should the program do?",
+      "source": "439874b573e3"
+    },
+    "quiz.q6.a.text": {
+      "text": "Complete it to `{\"path\": \"a.txt\"}` and execute it",
+      "source": "90c3cbd0f436"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "No. Completing is guessing, and the model may have meant another file.",
+      "source": "871f5297ddd7"
+    },
+    "quiz.q6.b.text": {
+      "text": "Not execute it: there is no `finish_reason: tool_calls` and the arguments do not parse",
+      "source": "43544be34b06"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "Right. Only a complete call that passed the checks may be executed.",
+      "source": "96d44a53898a"
+    },
+    "quiz.q6.c.text": {
+      "text": "Execute it first and retry if it fails",
+      "source": "95c04a5edeeb"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. A tool may have side effects, and half an argument should never reach a tool.",
+      "source": "81cfc93b4dcf"
+    },
+    "quiz.q6.explanation": {
+      "text": "An incomplete tool call is never executed.",
+      "source": "21bfd76a0f8c"
+    },
+    "quiz.q7.prompt": {
+      "text": "The numbering check passed: 1 to 8, continuous, each once, every line finished. What does it prove?",
+      "source": "e4e3dde50e05"
+    },
+    "quiz.q7.a.text": {
+      "text": "The structure is whole: no repeats, no gaps and no half sentences; whether each item is right, it does not say",
+      "source": "008e4d39525c"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. The check looks only at structure; content has to be judged separately.",
+      "source": "73fc2a790946"
+    },
+    "quiz.q7.b.text": {
+      "text": "That the content is all correct",
+      "source": "b0ca2c726518"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. The numbers can line up while the content is still wrong.",
+      "source": "d98b8fd90ac3"
+    },
+    "quiz.q7.c.text": {
+      "text": "That this way is better than the other for ever",
+      "source": "4900363b420f"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. One run is one sample, and a sample cannot say \"for ever\".",
+      "source": "799a49c9a16a"
+    },
+    "quiz.q7.explanation": {
+      "text": "What a check proves and what it does not have to be stated separately.",
+      "source": "adefed3022a8"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"The program stops after chunk N\" and find the field that proves the stream was ended by lesson code on purpose, not cancelled by the user.",
+      "source": "3f666b9e2501"
+    },
+    "check-hunt.explanation": {
+      "text": "In the assembled `response`, `stream.stop_reason` is `lesson` and `status` is `stopped`; a stream the user cancelled carries `cancel_reason` and `discarded_after_cancel` instead. The `finish_reason` in the same `response` is empty and there is no `usage`: the model never said it had finished, and the provider had no time to send a usage chunk.",
+      "source": "96013b9de7f6"
+    },
+    "check-points.title": {
+      "text": "Check by hand",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own runs with the source of this lesson, and tick an item only once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In \"Streamed and not streamed, side by side\" I read off the first chunk, the first token and the total time, and can say what each one is.",
+      "source": "a71fbb729099"
+    },
+    "check-points.item-2.text": {
+      "text": "I did a full receive, pressed \"Stop run\" and pressed \"Disconnect the event stream\", and found the evidence for each in `response` and `done`.",
+      "source": "c501569f536c"
+    },
+    "check-points.item-3.text": {
+      "text": "I can state the difference between `stopped` and `cancelled`, and the difference between recorded, discarded and arrived after the stop.",
+      "source": "f4cc39b5c628"
+    },
+    "check-points.item-4.text": {
+      "text": "I compared the check results of the two continuations, glued on as it is and marked incomplete, and know what the check proves and what it does not.",
+      "source": "efa6c3616dac"
+    },
+    "code_notes.stop_when.note": {
+      "text": "A function passed to complete_stream; when it returns true the lesson code ends the stream early, with status stopped.",
+      "source": "b30a9b956bb7"
+    },
+    "code_notes.first_chunk_ms.note": {
+      "text": "Milliseconds from just before the request to the first chunk arriving, measured by the platform in this process; the first chunk often has no text.",
+      "source": "9f26efd174f8"
+    },
+    "code_notes.first_token_ms.note": {
+      "text": "Milliseconds from just before the request to the first non-empty text arriving: the time to first token.",
+      "source": "61b464f8aaa9"
+    },
+    "code_notes.discarded_after_cancel.note": {
+      "text": "Chunks that had arrived at a cancel but were not handed to the run; counted only, not in the record.",
+      "source": "54fb748c57d6"
+    },
+    "code_notes.cancel_reason.note": {
+      "text": "Why the run was stopped: user stop, page closed or an API call; written in done.",
+      "source": "4a1e365f0d23"
+    },
+    "code_notes.response_delta.note": {
+      "text": "The chunk event of a stream: chunks recorded unchanged, the first alone, later ones merged by time or count.",
+      "source": "f603b1802018"
+    },
+    "code_notes.StreamResult.note": {
+      "text": "What complete_stream returns: assembled response, how it ended, chunk count, first chunk and first token time, total time.",
+      "source": "75263104b0cd"
+    },
+    "code_notes.RunCancelled.note": {
+      "text": "Raised from complete_stream when the run is stopped; lesson code written after it does not run.",
+      "source": "59ac9fe41b2a"
+    },
+    "code_notes.analyse_partial.note": {
+      "text": "Judges half-written text: which lines are finished, which line is the half sentence, which item to write next.",
+      "source": "30ef69d7bd3e"
+    }
+  }
+}
