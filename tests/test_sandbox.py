@@ -296,6 +296,8 @@ class PolicyTests(unittest.TestCase):
             "awk '/def/ {print}' calc.py", "set -e; python calc.py", "echo done > /dev/null",
             "cat > notes.txt <<'EOF'\nhello\nEOF", "head -n 20 calc.py && wc -l calc.py",
             "env PYTHONPATH=. python -m unittest", "printf '%s\\n' ok",
+            # a bare "/" after ":" is a sed delimiter, not the root directory
+            "sed -i 's/    if score > 90:/    if score >= 90:/' grades.py",
         ):
             with self.subTest(command=command):
                 self.assertEqual(self.policy.evaluate(command).action, "allow", self.policy.evaluate(command))

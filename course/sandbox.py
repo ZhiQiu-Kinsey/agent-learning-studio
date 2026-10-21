@@ -1179,7 +1179,9 @@ class CommandPolicy:
             first = word.strip("/").split("/", 1)[0].lower()
             # "/" alone, or a path whose first segment exists at the host's root, is a real
             # absolute path. "/foo/" in a sed or awk pattern usually is not.
-            if not first or first in self._root_entries:
+            # A bare "/" right after ":" is a sed or awk delimiter ('s/a:/b:/'), not the root directory.
+            after_colon = match.start(1) > 0 and command[match.start(1) - 1] == ":"
+            if (not first and not after_colon) or first in self._root_entries:
                 return PolicyDecision("deny", "absolute_path", _excerpt(word))
         return PolicyDecision("allow")
 
