@@ -1,0 +1,1878 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "HOOKS / APPROVAL",
+      "source": "15bca8d23fa2"
+    },
+    "hero.headline": {
+      "text": "Run the hooks before a write, then wait for a person's nod.",
+      "source": "4e2eef404f77"
+    },
+    "hero.highlight": {
+      "text": "What runs is exactly the arguments that were approved.",
+      "source": "fad72294c7e5"
+    },
+    "hero.takeaway": {
+      "text": "An Agent changes a small ticket desk with four real tools: read-only calls run at once, and a write first passes the hooks and then pauses for you to approve or reject it. You will see what the runner does on a pause, a resume, a rejection, a timeout, an edit and a swapped argument, and which evidence lets you check each claim.",
+      "source": "fbada3fa3a7d"
+    },
+    "concepts.01-hook.label": {
+      "text": "01 / HOOK",
+      "source": "878affa65c8f"
+    },
+    "concepts.01-hook.title": {
+      "text": "Hook phase",
+      "source": "617dbbda4603"
+    },
+    "concepts.01-hook.description": {
+      "text": "A hook is a small function hung before or after a tool. A hook before the tool looks at the call and rules: allow, deny, rewrite the arguments or ask for approval. A hook after the tool handles the result: mask, verify, record. The tool itself stays untouched.",
+      "source": "70853645a1c4"
+    },
+    "concepts.02-gate.label": {
+      "text": "02 / GATE",
+      "source": "1afa1d1d48f0"
+    },
+    "concepts.02-gate.title": {
+      "text": "Approval gate",
+      "source": "c42713e74e8f"
+    },
+    "concepts.02-gate.description": {
+      "text": "A call that needs approval pauses the run until a person approves or rejects it. Nothing runs before approval; a rejection and a timeout both mean it does not run, and the reason goes back to the model as a structured result.",
+      "source": "a86a4cb71bf8"
+    },
+    "concepts.03-risk.label": {
+      "text": "03 / RISK",
+      "source": "90f4efb5d32d"
+    },
+    "concepts.03-risk.title": {
+      "text": "Risk level",
+      "source": "02fc0f92d562"
+    },
+    "concepts.03-risk.description": {
+      "text": "Each call gets a grade by whether a mistake can be taken back and how far it reaches: medium, high, critical. The higher the grade, the stronger the warning on the card and the less it should run on its own.",
+      "source": "899d4f51f7d9"
+    },
+    "concepts.04-digest.label": {
+      "text": "04 / DIGEST",
+      "source": "222b612550d0"
+    },
+    "concepts.04-digest.title": {
+      "text": "Argument digest",
+      "source": "8171ab9894aa"
+    },
+    "concepts.04-digest.description": {
+      "text": "At approval the arguments are written in a fixed format and hashed with `sha256`; before the tool runs, the arguments about to run are hashed again. Only equal digests show that what runs is what was approved.",
+      "source": "ada224504c1d"
+    },
+    "callout-desk.title": {
+      "text": "The desk is a temporary directory",
+      "source": "862399ca6fd0"
+    },
+    "callout-desk.paragraphs.0": {
+      "text": "The four tools really read and write files: a ticket is a JSON file, and \"sending\" a notice appends a line to an outbox file. They work only inside a temporary directory made for this run, never use the network or touch your other files, and the directory is deleted when the run ends.",
+      "source": "c550ceba0db0"
+    },
+    "callout-desk.paragraphs.1": {
+      "text": "This is not isolated execution: the tools are ordinary Python functions in the local process. Hooks and approval decide which calls may run, not what a running call can do.",
+      "source": "a79bdcec79ec"
+    },
+    "section-1.title": {
+      "text": "Why we need hooks",
+      "source": "80c5b6e60196"
+    },
+    "section-1.paragraphs.0": {
+      "text": "A hook inserts a check before or after a tool runs, so no tool has to carry its own code for it. See what happens without one: the desk has four tools, two read-only and two that write. To restrict every write to the company's domain and to record it, the direct way is to copy the checks into the top of every tool function. Four tools and five rules make twenty checks; miss one and that tool is a back door, and changing a rule means touching every tool.",
+      "source": "6a9a68c8bc95"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Hooks move the checks out of the tools. The runner runs a chain of functions before it calls the tool and another chain after the tool returns, and the tool only has to do its job. {{lesson:tool-proposals}} showed that the model only proposes calls and the program holds the power to run them; hooks are the program's code at that hand-over. The stop hook in {{lesson:task-contract}} hangs at the point \"about to finish\"; the hooks of this lesson hang at \"about to call a tool\" and \"the tool just returned\".",
+      "source": "503702aa35a4"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Nor is a hook a way to \"make the model behave\". A system prompt that says \"ask me before deleting\" is only a suggestion: the model may follow it this time and forget next time. A hook is a program: whatever call the model proposes, the hooks run before it executes, and whether the rule holds depends on code alone, not on whether the model remembered. The price is that a hook sees only what it is handed: the name and arguments of the call and what the tool returned.",
+      "source": "21fcefab889d"
+    },
+    "section-2.title": {
+      "text": "Hook phases and verdicts",
+      "source": "072053491436"
+    },
+    "section-2.paragraphs.0": {
+      "text": "There are two hook phases, before and after the tool: a hook before the tool rules on the call, and a hook after it handles the result. A hook before the tool receives the tool name and the arguments and returns one of four verdicts: `allow` lets the call through, `deny` refuses it with a reason code, `rewrite` returns a complete replacement of the arguments, and `ask` asks for approval with a risk level. A hook after the tool receives the data the tool returned; it can change it or add information, but it cannot undo a write that already happened.",
+      "source": "85ac2f66007d"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Four real examples. `normalize_arguments` sees the recipient ` Alice@Corp.Example ` and returns `rewrite`, changing it to `alice@corp.example`. `recipient_domain` sees `eve@evil.example` and returns `deny`, because the recipient is outside the company domain. `risk_level` returns `allow` for `read_record` and `ask` for `send_notice`. `redact_customer_data` is a hook after the tool: it masks the customer's phone and email in a ticket before the model gets it.",
+      "source": "142c1bec2914"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Several hooks form a chain and run in order. `deny` stops at once, and the hooks after it never see the call; `rewrite` hands the new arguments to the hooks after it and to the final execution; `ask` is noted and the chain carries on, and only if nobody has denied by the end is the verdict \"needs approval\", with the highest risk level of all the `ask`s. So the order is part of the design: unify the spelling first, then refuse by rule, and only last decide whether to ask a person.",
+      "source": "18454617398d"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The verdict of the chain and of every step goes into a `lesson.hook_pre` event: `steps` has one row per hook, `changes` records who changed what into what, and `denied_by` records who refused. The hooks after the tool write to `lesson.hook_post`. The events tell you which hook stopped or changed a call without reading any code.",
+      "source": "e0e6a8f887d4"
+    },
+    "dive-order.title": {
+      "text": "By hand: what if the order changes",
+      "source": "ffb96d03ac5a"
+    },
+    "dive-order.summary": {
+      "text": "One call, two orders, opposite results; hooks after the tool have an order too.",
+      "source": "5df039b996d8"
+    },
+    "dive-order.paragraphs.0": {
+      "text": "Take a legitimate call whose recipient is written `Alice@Corp.Example`. Order A is this lesson's: `normalize_arguments` first turns it into `alice@corp.example`, `recipient_domain` sees the lower-case spelling, matches `corp.example` and lets it through, and `risk_level` then asks for approval. Order B puts `recipient_domain` first: its rule only knows lower case, so it refuses `Alice@Corp.Example`. A legitimate recipient is wrongly refused, and the reason the model reads is \"not under the company domain\", so it will think it got the domain wrong.",
+      "source": "34916cfbf504"
+    },
+    "dive-order.paragraphs.1": {
+      "text": "The test `test_order_matters_normalize_before_the_rules` runs both orders. The rule itself is not wrong; what is wrong is not unifying the spelling first, and the more rules there are, the more misses and false refusals an inconsistent spelling causes.",
+      "source": "e5308cf0b573"
+    },
+    "dive-order.paragraphs.2": {
+      "text": "A rewrite must also be stable: normalizing arguments that are already normalized must change nothing. `normalize_arguments` returns `allow`, not `rewrite`, for clean arguments, so edited arguments sent through the chain again are not refused for \"being rewritten once more\" as long as their spelling is already normal; if a rewrite always changed something, the re-check could never pass.",
+      "source": "bd9ce095a59b"
+    },
+    "dive-order.paragraphs.3": {
+      "text": "The same holds after the tool. The digest `audit_trail` computes must stand for \"what is returned to the model\", so it runs after `redact_customer_data`. The other way round, the ledger would hold the digest of the content before masking, which does not match what the model actually read, and the digest would lose its power to show that the model read exactly this copy.",
+      "source": "075c4a9e4f0a"
+    },
+    "predict-approvals.prompt": {
+      "text": "Before you run \"Read-only passes, writes need approval\", guess: the tools are called 4 times in this run (list, read, change the status, send a notice). How many `approval_requested` events will there be?",
+      "source": "19e9a896c681"
+    },
+    "mq-normalize.q-normalize.prompt": {
+      "text": "The recipient the model proposes is ` Alice@Corp.Example ` (with whitespace and capitals). What does the chain of hooks before the tool do?",
+      "source": "c58688526daa"
+    },
+    "mq-normalize.q-normalize.a.text": {
+      "text": "`normalize_arguments` rewrites it to `alice@corp.example` first, and the rules after it and the approval card all see the rewritten spelling",
+      "source": "8f28b7caf79b"
+    },
+    "mq-normalize.q-normalize.a.feedback": {
+      "text": "Right. The rewrite comes before the rules, so they only have to know one spelling.",
+      "source": "0c56e7817fe5"
+    },
+    "mq-normalize.q-normalize.b.text": {
+      "text": "`recipient_domain` refuses it because of the capitals",
+      "source": "c5329504c217"
+    },
+    "mq-normalize.q-normalize.b.feedback": {
+      "text": "No. `normalize_arguments` comes before it, so it already sees lower case.",
+      "source": "62c7a0890c32"
+    },
+    "mq-normalize.q-normalize.c.text": {
+      "text": "It passes unchanged and is dealt with when the tool runs",
+      "source": "e0f6be5e047a"
+    },
+    "mq-normalize.q-normalize.c.feedback": {
+      "text": "No. At execution the arguments are the approved set, and nobody gets to change them again.",
+      "source": "13267fb802c7"
+    },
+    "mq-normalize.q-normalize.explanation": {
+      "text": "The order of hooks decides what the rules see: unify the spelling, then rule.",
+      "source": "9c576933b754"
+    },
+    "section-3.title": {
+      "text": "The approval request",
+      "source": "aaf7bbc167f6"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A high-risk call first becomes an approval request that states the tool, a summary, the full arguments and the risk. This gate is the approval gate: when the chain of hooks ends in `ask`, the runner does not run the tool but calls `request_approval`: it emits an `approval_requested` event, the run state becomes `paused`, and an approval card appears on the page. The card has five things: `kind` (for example `tool.send_notice`), a one-line `summary`, the full arguments `payload`, the risk level `risk` and the wait limit `timeout_s`.",
+      "source": "6bbc726fdded"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The summary and the full arguments each have their use. The summary is for a quick human read: \"Send a notice to alice@corp.example titled \"TKT-102 is done\", body 21 characters\". The full arguments are the `payload`, body included, and the approval goes by it. Both come from one piece of code and one set of arguments, and this lesson also checks every card: does the summary state the ticket id, the field and the new value, or the recipient, the subject and the body length? However well it is written, a summary is only a paraphrase, not evidence.",
+      "source": "2d97daeece71"
+    },
+    "section-3.paragraphs.2": {
+      "text": "A person's decision has three outcomes: approve, reject, time out. A timeout means nobody decided within `timeout_s`; it counts as a rejection, but the event says `decided_by: timeout` and the `error_type` in the tool result is `approval_timeout`, which can be told apart from the `approval_rejected` a click on reject leaves. Approval has one more option: the card may allow editing the arguments, the edited arguments are recorded in the event too, and a later section explains why they must pass the rules again.",
+      "source": "d31b90d71960"
+    },
+    "section-4.title": {
+      "text": "Risk levels",
+      "source": "edfd70b48403"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A risk level grades every call by whether a mistake can be taken back and how far it reaches, and it decides whether to ask a person and how the card warns. The platform knows four levels: `low`, `medium`, `high`, `critical`. Here a read-only call passes at once and needs no level; `update_record` on the status or the note is `medium`, since it writes a file that can be changed back; closing a ticket, changing the owner and any `send_notice` are `high`, because a notice cannot be called back once sent; a notice to the broadcast address `all@corp.example` is `critical`, since one letter reaches everybody at once.",
+      "source": "0e86b32c5fb3"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The level is not decoration. For a higher level the card warns more strongly and you should look more closely; when several hooks in a chain ask for approval, the highest level wins. Risk can also change with the arguments: for the same `update_record`, changing `note` is `medium` and changing `status` to `closed` rises to `high`. A discussion question in chapter 1 of \"Understanding AI Agents\" asks how the grade should follow the arguments when deleting an ordinary file differs from deleting a system file. The answer here is to let a hook read the arguments instead of pinning a fixed label on the tool.",
+      "source": "fe1ec101399e"
+    },
+    "section-4.paragraphs.2": {
+      "text": "What to do with an unclassified tool is a question of defaults. `risk_level` returns `deny` for a tool it does not know, with the reason `tool_not_classified`: a tool nobody assessed is not let through by default. The Microsoft course's example notebook takes the other default and routes an unknown action to batched review at medium risk. Both make sense; it depends on which is dearer, a wrong pass or a wrong stop. The writing tools here change files and send notices, so the stricter one was chosen.",
+      "source": "f0bb51fba192"
+    },
+    "dive-real.title": {
+      "text": "How other projects do it: three gates and four events",
+      "source": "125e4dadd009"
+    },
+    "dive-real.summary": {
+      "text": "The permission and hook chapters of Learn Claude Code, the layers of safety in \"Understanding AI Agents\", and the Microsoft course's gate notebook.",
+      "source": "020578334c11"
+    },
+    "dive-real.paragraphs.0": {
+      "text": "The permission chapter of Learn Claude Code hands a call through three gates in turn: a deny list of things never allowed, rule matching that depends on context, and finally user approval; if none of the three hits, the call just runs. The hook chapter then moves this logic out of the loop: a registry hangs callbacks on event names, there are four events (after the user prompt is submitted, before a tool runs, after a tool runs, and when the loop is about to exit), and a callback before a tool that returns something non-empty means \"block this call\". Its teaching code only matches keywords, and its author writes that this cannot be taken as a complete security boundary.",
+      "source": "68c2ad6c8577"
+    },
+    "dive-real.paragraphs.1": {
+      "text": "This lesson differs in three ways: the verdict grows from \"a return value blocks\" into four kinds, so a hook can rewrite the arguments or ask for approval with a risk level; approval is a platform capability, the run really pauses, and the events carry the full arguments and the digest; and every step's result goes into an event that can be checked afterwards. What they share is that the checks live outside the loop.",
+      "source": "2c1b18dcfbcd"
+    },
+    "dive-real.paragraphs.2": {
+      "text": "Chapter 4 of \"Understanding AI Agents\" writes the safety of execution tools as layers: input validation fails fast instead of \"cleverly\" correcting; in permission control a deny list is only the most basic layer; for irreversible key operations a pre-approval is added, and after a failed approval the agent should not simply retry but receive the rejection reason as a tool result in its trajectory. Chapter 1 calls this the execution-layer guardrail and stresses that the review must come from a mechanism outside the context, or it fails together with the misled Agent. The approver here is you, not another model, but handing the reason back to the model works the same.",
+      "source": "123b4a9b0b00"
+    },
+    "dive-real.paragraphs.3": {
+      "text": "The notebook of chapter 6 of the Microsoft course splits human-in-the-loop into three pieces: the gate sits before the action rather than confirming afterwards, because afterwards the cost is already paid and the side effect has already happened; risk is tiered, with low-risk actions run automatically, medium-risk ones reviewed in batches and only high-risk ones blocking on a person; and every decision is written as an audit record. The risk levels here and the pair of events `approval_requested` and `approval_resolved` correspond to the last two.",
+      "source": "efa0e0d1519f"
+    },
+    "mq-reject.q-reject.prompt": {
+      "text": "You click reject on the card and write the note \"notify the owner only\". What does the model read in its next request?",
+      "source": "406b468eff7d"
+    },
+    "mq-reject.q-reject.a.text": {
+      "text": "A `tool` message: `executed` is false, `error_type` is `approval_rejected`, and the note is in `note` as typed",
+      "source": "96f230364eb5"
+    },
+    "mq-reject.q-reject.a.feedback": {
+      "text": "Right. A rejection is not an exception but a structured result, and the model can read your reason.",
+      "source": "b0fc685d7e99"
+    },
+    "mq-reject.q-reject.b.text": {
+      "text": "Nothing: the run ends in an error because it was rejected",
+      "source": "20a39492f7ca"
+    },
+    "mq-reject.q-reject.b.feedback": {
+      "text": "No. A rejection does not make the run fail; it carries on and the model gets the chance to try another way.",
+      "source": "77b0ca7823cc"
+    },
+    "mq-reject.q-reject.c.text": {
+      "text": "The tool runs as usual and the note only goes to a log",
+      "source": "417a317cc9d1"
+    },
+    "mq-reject.q-reject.c.feedback": {
+      "text": "No. The tool does not run before approval, and after a rejection it never will.",
+      "source": "f98ad0241ec8"
+    },
+    "mq-reject.q-reject.explanation": {
+      "text": "A rejection, a timeout and a stop by a hook are all structured results handed to the model, not exceptions.",
+      "source": "7982f0c21b62"
+    },
+    "section-5.title": {
+      "text": "Pause and resume",
+      "source": "6779aaba9ea0"
+    },
+    "section-5.paragraphs.0": {
+      "text": "The run stops at the approval point, continues from the same place after approval, and ends honestly after a rejection. The way it stops is plain: `request_approval` is an ordinary function call that emits `approval_requested`, changes the run state to `paused`, and waits. You click approve on the page, the platform hands the decision back, the function returns an `ApprovalDecision`, the state goes back to `running`, and the program continues from the line after the call. Nothing was saved and nothing restarted: one function call in one process waited for a while.",
+      "source": "f58fc8328bb2"
+    },
+    "section-5.paragraphs.1": {
+      "text": "So \"resume\" here just means the wait is over. Whether the program can carry on after a process restart depends on saving the execution position, which is the subject of {{lesson:human-in-the-loop}}. The wait has two more exits: a timeout counts as a rejection, and if you press stop the event says `cancelled` and the run ends as `cancelled`, with the stop semantics from {{lesson:streaming-cancel}} applying as usual. After approval and just before execution the runner checks once more whether it was stopped; that is the last place that can still prevent the side effect.",
+      "source": "c82ce444f067"
+    },
+    "section-5.paragraphs.2": {
+      "text": "A rejection is not an error. If it were thrown as an exception, the whole run would end in failure, your \"no\" would turn into \"the program broke\", and the model would have no chance to try another way. Here a rejection, a timeout and a stop by a hook are all made into structured results handed back to the model: `ok` is false, `executed` is false, `error_type` says which kind, and on a rejection your note is in `note` as typed. In its next request the model reads it and can change its approach, for example from a broadcast to notifying only the owner; if it cannot, it has to tell the user honestly that this part was not done.",
+      "source": "1badc1d082f6"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Ending honestly shows in two places. One is the answer the runner writes itself: it lists the calls that were not executed and why, then appends the model's last sentence and says the records above decide. The other is the `refused-not-executed` check in the ledger: for every call that was rejected, stopped or timed out, the digest of the desk's files equals the one at the start of the call.",
+      "source": "254b3b80bd70"
+    },
+    "compare-refusals.title": {
+      "text": "Why a call did not run: who stopped it, what the model reads",
+      "source": "e2df7cfb07e0"
+    },
+    "compare-refusals.columns.0": {
+      "text": "`error_type`",
+      "source": "22fb768597ef"
+    },
+    "compare-refusals.columns.1": {
+      "text": "Who stopped it",
+      "source": "475c67cd3a5d"
+    },
+    "compare-refusals.columns.2": {
+      "text": "Was approval requested",
+      "source": "2b7c6724f10d"
+    },
+    "compare-refusals.columns.3": {
+      "text": "What the model reads",
+      "source": "23cbcdf648ce"
+    },
+    "compare-refusals.columns.4": {
+      "text": "Where to look",
+      "source": "a33565b54746"
+    },
+    "compare-refusals.rows.0.0": {
+      "text": "`invalid_arguments`",
+      "source": "7d982196bbc7"
+    },
+    "compare-refusals.rows.0.1": {
+      "text": "The argument model",
+      "source": "22246383a62d"
+    },
+    "compare-refusals.rows.0.2": {
+      "text": "No",
+      "source": "f127804b9227"
+    },
+    "compare-refusals.rows.0.3": {
+      "text": "The names of the faulty fields",
+      "source": "ece4b6695f04"
+    },
+    "compare-refusals.rows.0.4": {
+      "text": "`tool_result`",
+      "source": "08828d9f3bd6"
+    },
+    "compare-refusals.rows.1.0": {
+      "text": "`hook_denied`",
+      "source": "2e14f5e88a40"
+    },
+    "compare-refusals.rows.1.1": {
+      "text": "A hook before the tool",
+      "source": "8438da16c15b"
+    },
+    "compare-refusals.rows.1.2": {
+      "text": "No; for a stop in the re-check after an edit, the card had already been approved",
+      "source": "a17a61a0ed3a"
+    },
+    "compare-refusals.rows.1.3": {
+      "text": "The hook name, the reason code, the phase `pre` or `recheck`",
+      "source": "743cb50bc71b"
+    },
+    "compare-refusals.rows.1.4": {
+      "text": "`denied_by` of `lesson.hook_pre`",
+      "source": "3d3aac9d5ccb"
+    },
+    "compare-refusals.rows.2.0": {
+      "text": "`approval_rejected`",
+      "source": "b405dab1f7ae"
+    },
+    "compare-refusals.rows.2.1": {
+      "text": "You",
+      "source": "a0c7716669b5"
+    },
+    "compare-refusals.rows.2.2": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-refusals.rows.2.3": {
+      "text": "Your note in `note`",
+      "source": "687c94f77cf2"
+    },
+    "compare-refusals.rows.2.4": {
+      "text": "`outcome` of `approval_resolved`",
+      "source": "a09b3fb173b0"
+    },
+    "compare-refusals.rows.3.0": {
+      "text": "`approval_timeout`",
+      "source": "57c2f0663f0c"
+    },
+    "compare-refusals.rows.3.1": {
+      "text": "Nobody decided",
+      "source": "246e7cac731b"
+    },
+    "compare-refusals.rows.3.2": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-refusals.rows.3.3": {
+      "text": "No note",
+      "source": "e7d6e9bd7665"
+    },
+    "compare-refusals.rows.3.4": {
+      "text": "`decided_by` of `approval_resolved`",
+      "source": "88fa3bc80af8"
+    },
+    "compare-refusals.rows.4.0": {
+      "text": "`approval_mismatch`",
+      "source": "b1332d2422c6"
+    },
+    "compare-refusals.rows.4.1": {
+      "text": "The digest check before execution",
+      "source": "d368ae3dfad0"
+    },
+    "compare-refusals.rows.4.2": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-refusals.rows.4.3": {
+      "text": "A one-line explanation",
+      "source": "959956916914"
+    },
+    "compare-refusals.rows.4.4": {
+      "text": "`match` of `lesson.guard`",
+      "source": "5194c75a6c3e"
+    },
+    "compare-refusals.rows.5.0": {
+      "text": "`edit_not_normalized`",
+      "source": "0e630bf6def6"
+    },
+    "compare-refusals.rows.5.1": {
+      "text": "The re-check after an edit",
+      "source": "ddf939616d50"
+    },
+    "compare-refusals.rows.5.2": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-refusals.rows.5.3": {
+      "text": "The fields normalization would change",
+      "source": "b3090cb90a8b"
+    },
+    "compare-refusals.rows.5.4": {
+      "text": "`lesson.hook_recheck`",
+      "source": "173fbc4b057a"
+    },
+    "section-6.title": {
+      "text": "The argument digest guards against swaps",
+      "source": "5137f6b80338"
+    },
+    "section-6.paragraphs.0": {
+      "text": "What was approved is the set of arguments the digest stands for, and it is checked once more before execution. See what can go wrong: you approve \"send to alice@corp.example\" on the card, and between approval and execution several pieces of code can reach those arguments: another hook, retry logic, a function with a bug. If any of them swaps the recipient for another address, what runs is not the letter you approved. A person's approval means something only when what was approved and what runs are the same thing.",
+      "source": "7c9faf098f6d"
+    },
+    "section-6.paragraphs.1": {
+      "text": "How do you show it is the same thing? Compute a digest of the arguments: write them as canonical JSON and hash it with `sha256`, so equal arguments give an equal digest and changing one character gives another. The platform records `payload_digest` in `approval_requested`; when you submit a decision the page must send the same digest to show you approved the set of arguments you saw, and the backend rejects a submission that does not match.",
+      "source": "a22f8178521f"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The lesson's own code has a second line of defence. After the decision arrives, it runs `decision.payload` instead of the variable it held before, and just before executing it calls `decision.matches`, which hashes the arguments about to run again and compares with the digest from approval. The lesson writes the two digests side by side in a `lesson.guard` event: `approved_digest` is the approved one, `attempted_digest` the one about to run, and `match` says whether they are equal. If not, nothing runs and the tool result is `approval_mismatch`.",
+      "source": "e49a42dc02c5"
+    },
+    "section-6.paragraphs.3": {
+      "text": "Normalization should be finished before approval. `normalize_arguments` turns ` Alice@Corp.Example ` into `alice@corp.example` before the approval request, so what the card shows and what the digest stands for are both the normalized spelling, and one meaning has one digest. Had normalization happened after approval, the bytes of the arguments would have changed, the digest would not match, and the digest check would stop the call. The `edit_not_normalized` in the later section \"Edited arguments must pass the rules again\" follows the same logic.",
+      "source": "fec229e59136"
+    },
+    "dive-digest.title": {
+      "text": "By hand: where the digest comes from and what changes it",
+      "source": "eae1ca36c0b9"
+    },
+    "dive-digest.summary": {
+      "text": "The order of keys does not affect the digest; the type and case of values do.",
+      "source": "5d5b40c5d922"
+    },
+    "dive-digest.paragraphs.0": {
+      "text": "The algorithm is short: write the arguments as canonical JSON (keys sorted, no extra whitespace, non-ASCII characters kept as they are) and hash that text with `sha256`. `{\"a\": 1, \"b\": \"x\"}` becomes `{\"a\":1,\"b\":\"x\"}` and its digest starts with `sha256:ecf9e98ec0641e23`; write the keys in the other order, `{\"b\": \"x\", \"a\": 1}`, and the canonical text is the same, so is the digest.",
+      "source": "abd5e47e91e7"
+    },
+    "dive-digest.paragraphs.1": {
+      "text": "Any difference in a value changes the digest: writing `1` as `\"1\"` (a number turned into a string) gives `sha256:6d2349f371a5eb9c`; the digest of the recipient `alice@corp.example` starts with `8498e1a0d3b24044`, and changing only the first letter to a capital, `Alice@corp.example`, gives `af48b03b32eb3f3d`. So the spelling has to be unified before the digest is computed: otherwise two spellings of one meaning give two digests, one is approved and the other arrives at execution, and the call is wrongly stopped.",
+      "source": "993645d44ac5"
+    },
+    "dive-digest.paragraphs.2": {
+      "text": "A digest shows that the two sets of arguments are byte for byte equal, not that this set is safe, and it does not guard against a person misreading: you nodded at the arguments on the card, and the digest only guarantees nobody swapped them afterwards.",
+      "source": "c7431bd9353a"
+    },
+    "dive-digest.paragraphs.3": {
+      "text": "When the page submits a decision it sends two things: `approval_id` says which request is approved, and the argument digest says which set of arguments on the page. The backend accepts only a run that is still executing, the request that is currently pending, and a matching digest, and it accepts a request only once; clicking after a decision, a timeout or a stop gets `no_pending_approval` and leaves the recorded decision unchanged.",
+      "source": "b408f727d6f2"
+    },
+    "dive-digest.paragraphs.4": {
+      "text": "The swap in the exercise \"Arguments swapped after approval\" is not a real attack but a fault the runner makes on purpose through the input `late_rewrite`, marked `origin: fault_injection` in the event. It exists to show that if some step really did change the arguments, the digest check would stop it. Without the fault the digest check passes in every run.",
+      "source": "ea2cee62397c"
+    },
+    "mq-digest.q-digest.prompt": {
+      "text": "After approval and before execution, a step swaps the recipient for another address. How does the runner notice?",
+      "source": "69857a73dec8"
+    },
+    "mq-digest.q-digest.a.text": {
+      "text": "Before executing it hashes the arguments about to run again and compares with the approved digest; if they differ nothing runs",
+      "source": "ed5c7ce15536"
+    },
+    "mq-digest.q-digest.a.feedback": {
+      "text": "Right. That is what `decision.matches` does, and the result is in `lesson.guard`.",
+      "source": "27fd211f15cc"
+    },
+    "mq-digest.q-digest.b.text": {
+      "text": "From the summary on the card: it names the recipient, so it cannot go wrong",
+      "source": "7a451ee7f017"
+    },
+    "mq-digest.q-digest.b.feedback": {
+      "text": "No. The summary is a paraphrase for people; it does not change when the arguments are swapped and the runner never reads it.",
+      "source": "d2aeefff6e71"
+    },
+    "mq-digest.q-digest.c.text": {
+      "text": "It cannot be sent: the tool function reports an error itself",
+      "source": "976273bd3072"
+    },
+    "mq-digest.q-digest.c.feedback": {
+      "text": "No. The replacement is another valid address, so the tool runs; only the digest check can stop it.",
+      "source": "6c155002e08b"
+    },
+    "mq-digest.q-digest.explanation": {
+      "text": "What is approved is one set of arguments; before executing, the digest confirms that the set in hand is that one.",
+      "source": "ca1312e2ab53"
+    },
+    "section-7.title": {
+      "text": "Edited arguments must pass the rules again",
+      "source": "4784feb4645e"
+    },
+    "section-7.paragraphs.0": {
+      "text": "When the card allows editing, the edited arguments are new input and must pass the deny rules of the hooks again. If the card is editable (`editable`), you can approve \"the edited arguments\". Here lies the risk: you may slip, or think \"I am approving anyway\" and change the recipient to an address outside the company. If the execution layer takes \"a person approved\" as enough, the rule `recipient_domain` has been bypassed: it ran only before approval, and what was approved is another set of arguments.",
+      "source": "842f369a1a7e"
+    },
+    "section-7.paragraphs.1": {
+      "text": "The lesson treats the edited content as a new call: first the shape, which may only have the keys `tool` and `arguments` and may not swap the tool for another; then the types, checked against the argument model; then the hooks before the tool run again. If a deny rule hits, nothing runs even though you already clicked approve, and the result is `hook_denied` with `phase` set to `recheck`; the `lesson.hook_recheck` event records which fields were edited and which hook stopped the call.",
+      "source": "0f9b3749dd7f"
+    },
+    "section-7.paragraphs.2": {
+      "text": "If the hooks would rewrite your edited arguments once more, say because you typed the recipient in capitals, the runner does not run it either and returns `edit_not_normalized`. What you approved is the copy you typed, and after normalization it is another copy; quietly changing it for you would run arguments nobody approved. Either you edit in the normalized spelling or you start again.",
+      "source": "93a5d21e81fe"
+    },
+    "section-7.paragraphs.3": {
+      "text": "Hooks and the person each own a part. Hooks hold the bottom line that does not depend on human judgement: the recipient must be inside the company domain, whoever approves. The person holds what hooks cannot judge, the meaning: whether this notice should go out and whether it is right. With both layers, an approval is not \"a click that bypasses the rules\".",
+      "source": "143d6be299e9"
+    },
+    "mq-edit.q-edit.prompt": {
+      "text": "The card allows editing. You change the recipient to an address outside the company domain and click approve. What happens?",
+      "source": "b5a533d1f500"
+    },
+    "mq-edit.q-edit.a.text": {
+      "text": "The hooks check the edited arguments again, `recipient_domain` refuses, the result is `hook_denied` with `phase` `recheck`, and no notice goes out",
+      "source": "60843398b738"
+    },
+    "mq-edit.q-edit.a.feedback": {
+      "text": "Right. A person's approval cannot bypass a rule that does not depend on human judgement.",
+      "source": "149cbcf1c7de"
+    },
+    "mq-edit.q-edit.b.text": {
+      "text": "The notice goes out: you are the person, and your approval wins",
+      "source": "0bfb6e8b65a8"
+    },
+    "mq-edit.q-edit.b.feedback": {
+      "text": "No. The rule must hold both before and after approval; approval covers meaning, not crossing the line.",
+      "source": "0ac58c7cb22c"
+    },
+    "mq-edit.q-edit.c.text": {
+      "text": "The run ends in an error because the arguments were edited",
+      "source": "633f35a84674"
+    },
+    "mq-edit.q-edit.c.feedback": {
+      "text": "No. Being stopped is a structured result; the run carries on and the model reads the reason.",
+      "source": "591d2025043b"
+    },
+    "mq-edit.q-edit.explanation": {
+      "text": "Edited arguments are new input: the shape, the types and the deny rules all pass again.",
+      "source": "e978cd60a80a"
+    },
+    "section-8.title": {
+      "text": "What hooks and approval cannot reach",
+      "source": "8e48bfe033a2"
+    },
+    "section-8.paragraphs.0": {
+      "text": "Hooks see only the name and arguments of a call and the value a tool returns, and approval can only judge what is written on the card. What a tool does inside, they cannot see; and what malicious text a notice body carries, they cannot see either unless a rule checks for it. The tools here are ordinary Python functions on your machine with no isolation, and hooks and approval cannot replace isolation. {{lesson:bash-coding-agent}} is about exactly that: without isolation, every command is run only after a person has looked at it.",
+      "source": "4d9c8b91d852"
+    },
+    "section-8.paragraphs.1": {
+      "text": "Chapter 5 of \"Understanding AI Agents\" sums up the risk as three elements: access to private data, exposure to untrusted content, and the ability to communicate outward. With all three present, one lured call can send data out; the book's conclusion is that the point is not to recognize every attack but to leave the Agent no chance to actually carry out a dangerous action even when misled. Hooks and approval stand at exactly that place, but they are only one layer.",
+      "source": "85e4e1df524a"
+    },
+    "section-8.paragraphs.2": {
+      "text": "Approval itself can wear out: ask every time and people start clicking approve by habit. The point of risk levels is to ask only when it is worth it: a read never interrupts you, a write stops, and a broadcast warns the loudest. If a run throws up twenty cards, is every one worth a careful look? The first thing to ask is whether a rule could stop some of them for you.",
+      "source": "a6127ec1a5a6"
+    },
+    "section-8.paragraphs.3": {
+      "text": "Later lessons pick up what is left: {{lesson:reliable-tools}} covers what happens when a write runs twice and whether a failure can be retried safely; {{lesson:human-in-the-loop}} covers how to carry on from a saved position after a process restart; {{lesson:prompt-injection}} covers how instructions smuggled into material can lure the model into proposing calls it should not, and then hooks and approval are the last gate.",
+      "source": "6e6f27ff6deb"
+    },
+    "misconception-approved.claim": {
+      "text": "I clicked approve on the card, so what runs is surely the one written on it.",
+      "source": "ee17e8f492ea"
+    },
+    "misconception-approved.correction": {
+      "text": "What you approved is the arguments on the card, not everything that happens afterwards. If code changes the arguments between approval and execution, or your edited arguments cross a rule, an execution layer that does not check will run a call nobody approved. So the lesson checks once more before execution with the digest from approval and runs nothing if they differ; edited arguments also pass the rules of the hooks again.",
+      "source": "e0f7e6e00e77"
+    },
+    "misconception-rules.claim": {
+      "text": "Once the hooks are written the model cannot overstep, and the hooks will stop what no rule covers.",
+      "source": "34725faf87ef"
+    },
+    "misconception-rules.correction": {
+      "text": "A hook enforces only the rules written into it. `recipient_domain` looks at the domain of the recipient and not at the content of the notice; the calls a model proposes are endlessly varied, and what no rule covers is let through or left to a person. What you can do is choose strict defaults: here an unclassified tool is denied by default and a write needs approval by default. Hooks reduce accidents; they do not promise there will be none.",
+      "source": "13e64a991683"
+    },
+    "misconception-timeout.claim": {
+      "text": "If an approval times out, treat it as consent so the run does not get stuck.",
+      "source": "f5e07c09e611"
+    },
+    "misconception-timeout.correction": {
+      "text": "A timeout means nobody looked, which cannot be taken as consent. Here it counts as a rejection: the tool does not run and the model reads `approval_timeout`. Whether to choose a longer wait limit, or to notify someone else after a timeout, is another design question, but \"let it through by default\" is not an option.",
+      "source": "ce55c88dd55b"
+    },
+    "compare-verdicts.title": {
+      "text": "The four hook verdicts",
+      "source": "770ef1fc621b"
+    },
+    "compare-verdicts.columns.0": {
+      "text": "Verdict",
+      "source": "fc7415e186e3"
+    },
+    "compare-verdicts.columns.1": {
+      "text": "Who gives it",
+      "source": "ecaaf53c4f4c"
+    },
+    "compare-verdicts.columns.2": {
+      "text": "Effect on the call",
+      "source": "f8dbc7295868"
+    },
+    "compare-verdicts.columns.3": {
+      "text": "Example here",
+      "source": "b6588d68c935"
+    },
+    "compare-verdicts.columns.4": {
+      "text": "Where to look",
+      "source": "a33565b54746"
+    },
+    "compare-verdicts.rows.0.0": {
+      "text": "`allow`",
+      "source": "153f7200713d"
+    },
+    "compare-verdicts.rows.0.1": {
+      "text": "Any hook before the tool",
+      "source": "38f7527ce5d4"
+    },
+    "compare-verdicts.rows.0.2": {
+      "text": "The chain carries on; if no hook objects the call runs",
+      "source": "0e9580b128cf"
+    },
+    "compare-verdicts.rows.0.3": {
+      "text": "`risk_level` on `read_record`",
+      "source": "bb703b6a386e"
+    },
+    "compare-verdicts.rows.0.4": {
+      "text": "`steps` of `lesson.hook_pre`",
+      "source": "c20f5fa32db4"
+    },
+    "compare-verdicts.rows.1.0": {
+      "text": "`deny`",
+      "source": "7275592ee9ae"
+    },
+    "compare-verdicts.rows.1.1": {
+      "text": "A rule hook",
+      "source": "6b453a0c9723"
+    },
+    "compare-verdicts.rows.1.2": {
+      "text": "The chain stops at once, no approval is requested and nothing runs; the reason code goes to the model",
+      "source": "1dbaf2dd7ee5"
+    },
+    "compare-verdicts.rows.1.3": {
+      "text": "A recipient outside the company domain",
+      "source": "c623625bb32a"
+    },
+    "compare-verdicts.rows.1.4": {
+      "text": "`denied_by` of `lesson.hook_pre`",
+      "source": "3d3aac9d5ccb"
+    },
+    "compare-verdicts.rows.2.0": {
+      "text": "`rewrite`",
+      "source": "c5b4526ab496"
+    },
+    "compare-verdicts.rows.2.1": {
+      "text": "A normalizing hook",
+      "source": "534fb1645c96"
+    },
+    "compare-verdicts.rows.2.2": {
+      "text": "The chain continues with the new arguments, which become the arguments approved and run",
+      "source": "a7fb8900ed1d"
+    },
+    "compare-verdicts.rows.2.3": {
+      "text": "Changing ` Alice@Corp.Example ` into `alice@corp.example`",
+      "source": "5da00462f7c8"
+    },
+    "compare-verdicts.rows.2.4": {
+      "text": "`changes` of `lesson.hook_pre`",
+      "source": "387842ae98f7"
+    },
+    "compare-verdicts.rows.3.0": {
+      "text": "`ask`",
+      "source": "bba776817185"
+    },
+    "compare-verdicts.rows.3.1": {
+      "text": "A risk hook",
+      "source": "5fab6803ad4e"
+    },
+    "compare-verdicts.rows.3.2": {
+      "text": "If nobody denies by the end of the chain, approval is required, at the highest risk",
+      "source": "5d3e7e4f008d"
+    },
+    "compare-verdicts.rows.3.3": {
+      "text": "`send_notice` is `high`",
+      "source": "257df056248a"
+    },
+    "compare-verdicts.rows.3.4": {
+      "text": "`risk` of `approval_requested`",
+      "source": "4bb189cfc910"
+    },
+    "walkthrough.title": {
+      "text": "The six gates one write passes",
+      "source": "c810f1eb3d3e"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, how the runner handles a `send_notice` the model proposed; the code is simplified. The evidence of your own run is in the events of the lab.",
+      "source": "6c72588ec4c5"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Propose",
+      "source": "5d85899b4472"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "The model proposes a call",
+      "source": "feea8af3fd6f"
+    },
+    "walkthrough.step-1.body": {
+      "text": "In `tool_calls` the model writes `send_notice` and its arguments, with the recipient carrying extra whitespace and capitals. The runner records the call proposal; the tool has not run.",
+      "source": "f718a7766b75"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "`tool_call`",
+      "source": "0fa0ecf7aee5"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Hooks",
+      "source": "5d3f86d033da"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-2.title": {
+      "text": "The hooks before the tool run in order",
+      "source": "4612865f0716"
+    },
+    "walkthrough.step-2.body": {
+      "text": "`normalize_arguments` rewrites the recipient, `recipient_domain` lets it through, and `risk_level` rules `high` and asks for approval.",
+      "source": "a4bd403dd7f5"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "`lesson.hook_pre`",
+      "source": "e9ac325c2791"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Approval",
+      "source": "64d021080a5f"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "You",
+      "source": "a0c7716669b5"
+    },
+    "walkthrough.step-3.title": {
+      "text": "The run stops and waits for you",
+      "source": "7b6837bc7c1b"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The state becomes `paused`. The card shows the normalized arguments and a one-line summary. Until you approve, the outbox file does not change.",
+      "source": "c962008525ed"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "`approval_requested` and `approval_resolved`",
+      "source": "ed5143fc4f08"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Check",
+      "source": "2e81b3dff580"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-4.title": {
+      "text": "The digest check",
+      "source": "398d1aa6275a"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The arguments about to run are hashed again and compared with the approved digest. Only if they are equal does it go on; if not it returns `approval_mismatch`.",
+      "source": "34f8f7a6be9c"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "`lesson.guard`",
+      "source": "e5a4542d1307"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Run",
+      "source": "32c8d373afe0"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-5.title": {
+      "text": "It runs only after approval",
+      "source": "83da0c4fbc62"
+    },
+    "walkthrough.step-5.body": {
+      "text": "The tool appends a line to the outbox. The hooks after it mask sensitive fields, read the write back from the file and hash the result.",
+      "source": "b0a7d3aa6318"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "`lesson.hook_post` and `tool_result`",
+      "source": "420a41a99642"
+    },
+    "walkthrough.step-6.label": {
+      "text": "Record",
+      "source": "9fad24e2c377"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-6.title": {
+      "text": "The result goes back to the model and into the ledger",
+      "source": "d4e80ef988ed"
+    },
+    "walkthrough.step-6.body": {
+      "text": "The same result goes to the model as a `tool` message and into the ledger. Before the run ends, the runner reads the real changes from the files and compares them with the ledger.",
+      "source": "547efd8e3122"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "The messages of the next `request`, and the two reports on the call ledger and the actual changes",
+      "source": "ba16e6aab750"
+    },
+    "references.lcc-permission.title": {
+      "text": "Permission checks before execution: deny list, rule matching, asking the user (Learn Claude Code)",
+      "source": "02d05f93b61b"
+    },
+    "references.lcc-hooks.title": {
+      "text": "Hooks: hang extensions outside the loop (Learn Claude Code)",
+      "source": "5544eca17e13"
+    },
+    "references.book-ch4.title": {
+      "text": "Layers of safety for execution tools, pre-approval and rejection reasons (Understanding AI Agents)",
+      "source": "d1588b994ce0"
+    },
+    "references.book-ch1.title": {
+      "text": "The three layers of guardrails and risk ratings for tools (Understanding AI Agents)",
+      "source": "b922087142c9"
+    },
+    "references.book-ch5.title": {
+      "text": "Safety of coding agents: threat model and isolation as a backstop (Understanding AI Agents)",
+      "source": "f94aea127bbb"
+    },
+    "references.ms-trust.title": {
+      "text": "Trustworthy agents: threats and human in the loop (AI Agents for Beginners)",
+      "source": "f388ac4a8253"
+    },
+    "references.ms-hitl.title": {
+      "text": "Pre-action gates, risk tiers and audit records (AI Agents for Beginners)",
+      "source": "5c89e3e5f276"
+    },
+    "references.hf-control.title": {
+      "text": "Control versus freedom: flows that need a human in the loop (Hugging Face Agents Course)",
+      "source": "b26ec56a40b2"
+    },
+    "code-hooks.n95.text": {
+      "text": "The order of the hooks is the order they run in: unify the spelling, then refuse, and only last decide whether to ask a person.",
+      "source": "69cf18e8cdb0"
+    },
+    "code-hooks.n96.text": {
+      "text": "The rewrite comes first: the rules after it only need to know one spelling.",
+      "source": "7cfbf805b52f"
+    },
+    "code-hooks.n98.text": {
+      "text": "The three in the middle are rule hooks: if any returns `deny` the chain stops there.",
+      "source": "4e8eabac7f6b"
+    },
+    "code-hooks.n100.text": {
+      "text": "Only the last hook decides whether approval is needed and sets the risk level.",
+      "source": "8c8621fa87c7"
+    },
+    "code-hooks.n115.text": {
+      "text": "`run_pre_hooks` runs a series of hooks into one verdict: allow, deny or ask, carrying the final arguments.",
+      "source": "573a4e2987fe"
+    },
+    "code-hooks.n117.text": {
+      "text": "It starts from the call's original arguments, and every rewrite after that replaces them.",
+      "source": "07ee3b090237"
+    },
+    "code-hooks.n118.text": {
+      "text": "The hooks run one by one, not in parallel: a later hook has to see the arguments as an earlier one rewrote them.",
+      "source": "7b32af781d3e"
+    },
+    "code-hooks.n119.text": {
+      "text": "A hook always receives the current arguments, never the copy the model first wrote.",
+      "source": "25d165be48ad"
+    },
+    "code-hooks.n120.text": {
+      "text": "Every hook's verdict is recorded as one row, which goes into the `steps` of `lesson.hook_pre`.",
+      "source": "13866cdc0e04"
+    },
+    "code-hooks.n123.text": {
+      "text": "Rewrite: record what changed, then carry on with the new arguments.",
+      "source": "99bf638e1ff1"
+    },
+    "code-hooks.n128.text": {
+      "text": "Deny: record who and why, and return at once; the hooks after it never see this call.",
+      "source": "671797ca7078"
+    },
+    "code-hooks.n131.text": {
+      "text": "Ask is only noted for now; the chain still runs to the end and another hook can still deny.",
+      "source": "ae149d3c36e5"
+    },
+    "code-hooks.n133.text": {
+      "text": "When several hooks ask for approval, the highest risk wins.",
+      "source": "428a30d3ead5"
+    },
+    "code-hooks.n135.text": {
+      "text": "The chain ran to the end and nobody denied: the verdict is allow, or ask.",
+      "source": "0679d2676422"
+    },
+    "code-hooks.fold-1.label": {
+      "text": "Data structure: the result of one run of the chain",
+      "source": "9b45022c30b6"
+    },
+    "code-gate.n73.text": {
+      "text": "`run` is the whole life of a call: shape, hooks, approval, check, execution. The model only reads the final result.",
+      "source": "717f2b07193d"
+    },
+    "code-gate.n75.text": {
+      "text": "Before anything else, see whether the run was stopped.",
+      "source": "fba397891109"
+    },
+    "code-gate.n76.text": {
+      "text": "One row of the ledger, with the digest of the whole desk at the start of the call to compare against later.",
+      "source": "30ae3e3f0c56"
+    },
+    "code-gate.n80.text": {
+      "text": "The shape first: a missing or an extra argument is an error before any rule runs.",
+      "source": "fc17ccf53e74"
+    },
+    "code-gate.n81.text": {
+      "text": "Run the hooks before the tool; a denial raises `Refusal` here and none of the later steps happen.",
+      "source": "f18d3720f7d6"
+    },
+    "code-gate.n83.text": {
+      "text": "Only a call that needs approval pauses; a read-only call takes the `else` and goes straight on to execution.",
+      "source": "78c74ec29a39"
+    },
+    "code-gate.n84.text": {
+      "text": "After approval the arguments to run are taken from the decision, not from a variable in hand.",
+      "source": "9c91b252c582"
+    },
+    "code-gate.n85.text": {
+      "text": "The last gate before execution: the digest check.",
+      "source": "061be9c03eda"
+    },
+    "code-gate.n88.text": {
+      "text": "Execute, then run the hooks after the tool.",
+      "source": "4257950cee29"
+    },
+    "code-gate.n89.text": {
+      "text": "Every rejection, stop and timeout ends up here and becomes a structured result, not an exception.",
+      "source": "289605807c40"
+    },
+    "code-gate.n114.text": {
+      "text": "`_ask` handles approval: write the summary, request the decision, put the decision into the ledger.",
+      "source": "cf1d4a39f8df"
+    },
+    "code-gate.n115.text": {
+      "text": "The summary comes from the runtime text and is built from the normalized arguments.",
+      "source": "a8d912b3e172"
+    },
+    "code-gate.n118.text": {
+      "text": "The run pauses here; the function returns only after a person decides or the wait times out.",
+      "source": "e961518f7289"
+    },
+    "code-gate.n119.text": {
+      "text": "The `payload` is the normalized tool name and arguments: what the card shows, what the digest covers and what finally runs.",
+      "source": "10d8e3d53bb6"
+    },
+    "code-gate.n120.text": {
+      "text": "The wait limit and whether arguments may be edited both come from the inputs; editing is off by default.",
+      "source": "fdef9f56764f"
+    },
+    "code-gate.n124.text": {
+      "text": "A rejection and a timeout do not throw; they become a `Refusal` and the tool does not run.",
+      "source": "b0cd4c0553f4"
+    },
+    "code-gate.n126.text": {
+      "text": "A rejection carries your note; with no note it says so, so the model always has a reason to read.",
+      "source": "cbc239d1e62d"
+    },
+    "code-gate.n127.text": {
+      "text": "A timeout has no note, and its reason code is a kind of its own.",
+      "source": "a21179838843"
+    },
+    "code-gate.n129.text": {
+      "text": "It runs with the arguments from the decision; edited ones go through the re-check first.",
+      "source": "b196280537b1"
+    },
+    "code-gate.fold-1.label": {
+      "text": "Platform: the shape check and the event for the hooks before the tool (the chain itself is in the previous block)",
+      "source": "75ccebfd0770"
+    },
+    "code-gate.fold-2.label": {
+      "text": "Platform evidence: whether the summary states the key arguments, and the desk's digest when approval was requested",
+      "source": "5c7c55c9d0cf"
+    },
+    "code-gate.fold-3.label": {
+      "text": "Platform evidence: the decision, the approved digest and the desk's digest when the decision arrived",
+      "source": "43912225950a"
+    },
+    "code-check.n132.text": {
+      "text": "Edited arguments are new input and must pass the rules again.",
+      "source": "b6ca70a419ed"
+    },
+    "code-check.n133.text": {
+      "text": "`decision.payload` is the copy you approved, not the original.",
+      "source": "4a6c2bd41947"
+    },
+    "code-check.n134.text": {
+      "text": "The shape first: only `tool` and `arguments` may be there, and the tool may not be swapped.",
+      "source": "d88d7dcab729"
+    },
+    "code-check.n136.text": {
+      "text": "Then the types against the argument model: edited arguments are treated like the ones the model wrote.",
+      "source": "821da1552f45"
+    },
+    "code-check.n137.text": {
+      "text": "The same hooks before the tool, the same chain, run once more.",
+      "source": "1dfa868c4002"
+    },
+    "code-check.n145.text": {
+      "text": "A deny rule hits: even though the person approved, nothing runs.",
+      "source": "7a8b514c2c06"
+    },
+    "code-check.n147.text": {
+      "text": "A hook still wants to rewrite: what was approved is the copy as typed, and after the rewrite it would be another, so nothing runs either.",
+      "source": "635c88fc6256"
+    },
+    "code-check.n150.text": {
+      "text": "The re-check passed, and the call goes on with the edited arguments.",
+      "source": "418ae9831c10"
+    },
+    "code-check.n154.text": {
+      "text": "`_guard` is the last gate before execution: the approved digest must equal the digest of what is about to run.",
+      "source": "1d0e2feb271f"
+    },
+    "code-check.n155.text": {
+      "text": "What is about to run: the tool name and arguments, in the same shape as the approved `payload`.",
+      "source": "25f52c9bc340"
+    },
+    "code-check.n156.text": {
+      "text": "The event starts with the approved digest.",
+      "source": "cfc05f6f10ed"
+    },
+    "code-check.n164.text": {
+      "text": "`decision.matches` hashes what is about to run again and compares it with the approved digest.",
+      "source": "909b7c14b302"
+    },
+    "code-check.n165.text": {
+      "text": "Both digests are written side by side into `lesson.guard`, so a learner can compare them.",
+      "source": "351368eea2d0"
+    },
+    "code-check.n168.text": {
+      "text": "If they are not equal nothing runs and `approval_mismatch` is returned.",
+      "source": "624fa5e36737"
+    },
+    "code-check.n170.text": {
+      "text": "Only if they are equal are these arguments handed to execution.",
+      "source": "d3e2b258ce42"
+    },
+    "code-check.fold-1.label": {
+      "text": "Platform: record which fields were edited and write the `lesson.hook_recheck` event",
+      "source": "4448254f09d3"
+    },
+    "code-check.fold-2.label": {
+      "text": "Teaching fault: swap the recipient after approval (a demo fault, switched on by the input `late_rewrite`)",
+      "source": "59a019bd4a8a"
+    },
+    "code-decision.title": {
+      "text": "A rejection, a timeout and a stop all return a structured result instead of raising",
+      "source": "c541001745f9"
+    },
+    "code-decision.chosen": {
+      "text": "Every kind of \"did not run\" becomes a structured result with `ok` false and `executed` false, stating the `error_type` and the reason, and goes back to the model; the run carries on, and the runner's answer and the ledger say honestly which calls did not run.",
+      "source": "167726faf7a2"
+    },
+    "code-decision.raise-error.title": {
+      "text": "Raise an exception on a rejection and end the run in error",
+      "source": "242383cdc9ef"
+    },
+    "code-decision.raise-error.why_not": {
+      "text": "Your \"no\" would turn into \"the program broke\", the model would have no chance to try another way, and a replay could not tell a rejection from a failure.",
+      "source": "22b8d4207f96"
+    },
+    "code-decision.timeout-approves.title": {
+      "text": "Treat a timeout as approval",
+      "source": "9ecbb96ad969"
+    },
+    "code-decision.timeout-approves.why_not": {
+      "text": "A timeout means nobody looked. Letting through a call nobody looked at turns approval into decoration.",
+      "source": "11093cc034dc"
+    },
+    "code-decision.own-variable.title": {
+      "text": "Run with the argument variable already in hand after approval",
+      "source": "887825987be7"
+    },
+    "code-decision.own-variable.why_not": {
+      "text": "The variable in hand may have been changed by other code during the wait. Running with the arguments from the decision and checking the digest first is what guarantees that what runs is the approved set.",
+      "source": "366943ce02eb"
+    },
+    "write-approval.title": {
+      "text": "Approval in front of the writing tools",
+      "source": "1539d1b383b2"
+    },
+    "write-approval.hypothesis": {
+      "text": "A read-only call produces no approval card, and every write stops at a card and waits for a person; the tool has not run before approval, and after approval it runs with an argument digest equal to the approved one; a rejected or timed-out call does not run, and the reason goes to the model.",
+      "source": "dac9b43b4d7b"
+    },
+    "write-approval.approve.label": {
+      "text": "Read-only passes, writes need approval",
+      "source": "dffdcbf71d2f"
+    },
+    "write-approval.reject.label": {
+      "text": "Rejection and timeout",
+      "source": "afbb0288b5a6"
+    },
+    "write-approval.read-passes.text": {
+      "text": "The first hook event before a tool: the verdict of `risk_level` on the read-only call is allow, and no approval request follows this call.",
+      "source": "6492e0506350"
+    },
+    "write-approval.rewrite-on-read.text": {
+      "text": "`normalize_arguments` turned a lower-case ticket id into upper case: `changes` appears only in an event where a rewrite happened.",
+      "source": "454525dde716"
+    },
+    "write-approval.first-risk.text": {
+      "text": "The first event that asks for approval: the risk level appears only on a call that needs approval.",
+      "source": "ed17c3c188b8"
+    },
+    "write-approval.first-card.text": {
+      "text": "The summary on the first approval card.",
+      "source": "858f6edbb0e5"
+    },
+    "write-approval.card-digest.text": {
+      "text": "The argument digest of this card: it stands for the `payload`, not for the summary.",
+      "source": "27bb639e2941"
+    },
+    "write-approval.decided-by.text": {
+      "text": "Who made the decision: in an offline run the test fixture, in a live run you.",
+      "source": "567d659f37e9"
+    },
+    "write-approval.guard-match.text": {
+      "text": "The digest check before execution: whether the approved digest equals the digest about to run.",
+      "source": "c07b1ac41244"
+    },
+    "write-approval.no-early.text": {
+      "text": "The check in the ledger report: while approvals were pending, the digest of the whole desk did not change.",
+      "source": "7727a18e22c7"
+    },
+    "write-approval.args-match.text": {
+      "text": "The check in the ledger report: the digest of the arguments that ran equals the approved digest.",
+      "source": "f0190acb1d7a"
+    },
+    "write-approval.rejected-note.text": {
+      "text": "The result of the call you rejected: `executed` is false and the note is in `note` as typed.",
+      "source": "b925cf9243af"
+    },
+    "write-approval.timeouts.text": {
+      "text": "The number of approval timeouts in the ledger report.",
+      "source": "bfc33df95886"
+    },
+    "write-approval.refused-check.text": {
+      "text": "The check in the ledger report: calls that were rejected, stopped or timed out left the desk unchanged.",
+      "source": "126d1853682d"
+    },
+    "write-approval.notices.text": {
+      "text": "The number of notices in the outbox in the actual-changes report, read from the files and independent of what the model said.",
+      "source": "022de68a9220"
+    },
+    "write-approval.guide.0.text": {
+      "text": "First see how read-only calls are let through. Both arms use the same hooks; they differ in what you (or the test fixture) decide for the writes.",
+      "source": "019603232b3b"
+    },
+    "write-approval.guide.1.text": {
+      "text": "The first call lists the tickets, and `risk_level` allows it; no approval request follows it.",
+      "source": "a1c5b340803b"
+    },
+    "write-approval.guide.2.text": {
+      "text": "When reading a ticket the model wrote a lower-case id, and `normalize_arguments` made it upper case; the rewrite is in `changes` and the call itself was not interrupted.",
+      "source": "63abd0f03b2a"
+    },
+    "write-approval.guide.3.text": {
+      "text": "The first write: the verdict of the chain is ask, and the risk level is written here.",
+      "source": "0369a1cf6c53"
+    },
+    "write-approval.guide.4.text": {
+      "text": "The run pauses here. The card has a one-line summary for a quick read.",
+      "source": "210a2063188f"
+    },
+    "write-approval.guide.5.text": {
+      "text": "What is really approved is the full arguments, and this digest stands for the `payload`.",
+      "source": "f280df22470b"
+    },
+    "write-approval.guide.6.text": {
+      "text": "The source of the decision is in `decided_by`; confirm this one first when you look back.",
+      "source": "5f436d3aa006"
+    },
+    "write-approval.guide.7.text": {
+      "text": "After approval and before execution the runner puts the two digests side by side.",
+      "source": "39bd287e279a"
+    },
+    "write-approval.guide.8.text": {
+      "text": "The first check in the ledger: at both moments of the wait the desk's digest is the same, so the tool did not run early.",
+      "source": "a0c7c44d7ad6"
+    },
+    "write-approval.guide.9.text": {
+      "text": "The second: for every call that ran after approval, the approved digest and the executed digest are equal.",
+      "source": "4bb5d6772ea4"
+    },
+    "write-approval.guide.10.text": {
+      "text": "Switch to \"Rejection and timeout\". For the broadcast notice you rejected, the note went to the model as typed.",
+      "source": "1b5d482aaee7"
+    },
+    "write-approval.guide.11.text": {
+      "text": "The second notice waited until it timed out and is counted here; it has no note and its reason code differs.",
+      "source": "e6b89a729e60"
+    },
+    "write-approval.guide.12.text": {
+      "text": "For the rejected and timed-out calls, the desk's digest equals the one at the start of the call.",
+      "source": "665e1d5e79c1"
+    },
+    "write-approval.guide.13.text": {
+      "text": "Last, the real changes in the files: the number of notices is read from the outbox, not what the model says.",
+      "source": "e297b78532d9"
+    },
+    "write-approval.conclusion.proves.0": {
+      "text": "In this run, which calls needed approval, at which risk level, what you or the fixture decided, and whether the tool ran before approval (by comparing the desk's digest before and after the wait).",
+      "source": "37e45d0b229e"
+    },
+    "write-approval.conclusion.proves.1": {
+      "text": "Calls that were rejected or timed out left the desk unchanged and the model read a structured reason; calls that ran after approval ran with an argument digest equal to the approved one.",
+      "source": "c1eed164c854"
+    },
+    "write-approval.conclusion.does_not_prove.0": {
+      "text": "In the offline test mode the decisions come from a fixture script; they stand for no real person, and a real model may not propose the same calls.",
+      "source": "10c7b0f61021"
+    },
+    "write-approval.conclusion.does_not_prove.1": {
+      "text": "Approval only shows that someone saw the contents of the card, not that the arguments are right; a complete summary does not show that you read it.",
+      "source": "b378abee86e1"
+    },
+    "write-approval.conclusion.does_not_prove.2": {
+      "text": "The desk is plain files in a temporary directory with no isolation; this experiment shows who stopped a call, not that the tools are safe.",
+      "source": "b321837b8ef0"
+    },
+    "edit-recheck.title": {
+      "text": "Edited arguments pass the rules again",
+      "source": "97a9f675af39"
+    },
+    "edit-recheck.hypothesis": {
+      "text": "When the card allows editing, edited arguments still pass the deny rules of the hooks: with the recipient changed to outside the company domain, the notice does not go out even though you clicked approve, and the desk does not change.",
+      "source": "3eb7bcd32602"
+    },
+    "edit-recheck.edit.label": {
+      "text": "Edited arguments pass the rules again",
+      "source": "fb5d6ccb5caa"
+    },
+    "edit-recheck.baseline.label": {
+      "text": "Baseline: read-only passes, writes need approval",
+      "source": "9103fe5a3a22"
+    },
+    "edit-recheck.editable-card.text": {
+      "text": "`editable` on the approval card: true in this arm and false in the baseline.",
+      "source": "67eaac658018"
+    },
+    "edit-recheck.edited-payload.text": {
+      "text": "The arguments you actually approved: only an edited approval has a `payload` field, holding the recipient after the edit.",
+      "source": "ff5e6e8b5222"
+    },
+    "edit-recheck.recheck-denied.text": {
+      "text": "The re-check event: the same hooks ran again on the edited arguments, and `denied_by` says who refused.",
+      "source": "c9fc761547c7"
+    },
+    "edit-recheck.edited-fields.text": {
+      "text": "Which fields were edited, and their values before and after.",
+      "source": "0780b7012dda"
+    },
+    "edit-recheck.recheck-result.text": {
+      "text": "The result the model reads: `phase` is `recheck`, which says the stop happened after approval.",
+      "source": "ef0903cb33c5"
+    },
+    "edit-recheck.refused-check.text": {
+      "text": "The ledger check: the call that was stopped left the desk unchanged.",
+      "source": "e80098504a46"
+    },
+    "edit-recheck.notices.text": {
+      "text": "The number of notices in the outbox in the actual-changes report.",
+      "source": "c9cd561d0537"
+    },
+    "edit-recheck.guide.0.text": {
+      "text": "In this arm the approval card allows editing arguments. Look at the baseline, whose card does not.",
+      "source": "fd238d28ae07"
+    },
+    "edit-recheck.guide.1.text": {
+      "text": "First confirm that this card is editable.",
+      "source": "a4bb34560293"
+    },
+    "edit-recheck.guide.2.text": {
+      "text": "The decision record has an extra `payload`: the arguments actually approved, with the recipient already changed to outside the company.",
+      "source": "c943ec7ab234"
+    },
+    "edit-recheck.guide.3.text": {
+      "text": "The runner did not execute; it handed the edited arguments to the hooks again and `recipient_domain` refused.",
+      "source": "2a2ad22ac966"
+    },
+    "edit-recheck.guide.4.text": {
+      "text": "The event says the field edited was `recipient`, with the values before and after.",
+      "source": "f276f8d38367"
+    },
+    "edit-recheck.guide.5.text": {
+      "text": "The result the model reads carries `phase: recheck`: you approved, and the rule still stopped it.",
+      "source": "99d502eca3c5"
+    },
+    "edit-recheck.guide.6.text": {
+      "text": "The ledger check confirms that this stop left the desk unchanged.",
+      "source": "4764ec5405e3"
+    },
+    "edit-recheck.guide.7.text": {
+      "text": "There is not one notice in the outbox, read from the files.",
+      "source": "9346325e2857"
+    },
+    "edit-recheck.conclusion.proves.0": {
+      "text": "Edited arguments pass the deny rules of the hooks again, a call that hit a rule after approval did not run, and the reason and the edited fields are in the events.",
+      "source": "cdb3df364cba"
+    },
+    "edit-recheck.conclusion.does_not_prove.0": {
+      "text": "The fixture changed the recipient to an address outside the company for you, as a script; in a live run what you edit is up to you, and the rules stop only the cases they cover.",
+      "source": "69f8b96757b9"
+    },
+    "edit-recheck.conclusion.does_not_prove.1": {
+      "text": "The re-check covers only the rules written in the hooks; changing it to someone inside the company domain who should not get this notice is invisible to the rules, and for that you have to read the card yourself.",
+      "source": "4d4c846e1c2d"
+    },
+    "swap-guard.title": {
+      "text": "Arguments swapped after approval",
+      "source": "39e0315467e2"
+    },
+    "swap-guard.hypothesis": {
+      "text": "If a step swaps the arguments after approval, the digest check before execution finds the two digests different, the notice does not go out and the desk does not change; without the fault the check passes in every run.",
+      "source": "4e0cbed68ad6"
+    },
+    "swap-guard.swap.label": {
+      "text": "Arguments swapped after approval",
+      "source": "39e0315467e2"
+    },
+    "swap-guard.baseline.label": {
+      "text": "Baseline: read-only passes, writes need approval",
+      "source": "9103fe5a3a22"
+    },
+    "swap-guard.approved.text": {
+      "text": "You approved: the outcome of the decision is `approved`.",
+      "source": "30caab367cc2"
+    },
+    "swap-guard.injected.text": {
+      "text": "`injected` in the digest-check event: it says this is a teaching fault, from `fault_injection`, and names the field that was changed.",
+      "source": "b8685c8a8310"
+    },
+    "swap-guard.digests.text": {
+      "text": "The approved digest and the digest about to run are written side by side in this event.",
+      "source": "3d23796e4d33"
+    },
+    "swap-guard.match.text": {
+      "text": "Whether the two digests are equal.",
+      "source": "75e9d044c59f"
+    },
+    "swap-guard.mismatch-result.text": {
+      "text": "The result the model reads: `approval_mismatch` with `executed` false.",
+      "source": "1a23e97b2141"
+    },
+    "swap-guard.guard-blocked.text": {
+      "text": "The number of calls stopped by the digest check, in the ledger.",
+      "source": "f8692870262c"
+    },
+    "swap-guard.notices.text": {
+      "text": "The number of notices in the outbox, read from the files.",
+      "source": "ea921bf9153e"
+    },
+    "swap-guard.guide.0.text": {
+      "text": "In this arm you approve a notice to alice, and then a demo fault swaps the recipient for another address.",
+      "source": "4fc6fdeff19d"
+    },
+    "swap-guard.guide.1.text": {
+      "text": "First confirm that your decision was approve.",
+      "source": "b792c732d0af"
+    },
+    "swap-guard.guide.2.text": {
+      "text": "The digest-check event records the injection: the runner made this fault from an input, neither the model nor you.",
+      "source": "70768c650a71"
+    },
+    "swap-guard.guide.3.text": {
+      "text": "The approved digest and the digest about to run sit side by side here.",
+      "source": "20f1415a3bb6"
+    },
+    "swap-guard.guide.4.text": {
+      "text": "`match` is false: the arguments were swapped and are no longer the approved set.",
+      "source": "975dd0e2f0c2"
+    },
+    "swap-guard.guide.5.text": {
+      "text": "The tool did not run and the model reads `approval_mismatch`.",
+      "source": "b0ac990094c0"
+    },
+    "swap-guard.guide.6.text": {
+      "text": "The ledger records one stop by the digest check.",
+      "source": "e3197572eaab"
+    },
+    "swap-guard.guide.7.text": {
+      "text": "There is no notice in the outbox: the swap after approval caused no write.",
+      "source": "bc4822e5d17c"
+    },
+    "swap-guard.conclusion.proves.0": {
+      "text": "When the arguments are changed after approval, the digest check before execution notices and stops the execution, and both digests and the source of the fault stay in the events.",
+      "source": "e2df2a1a831d"
+    },
+    "swap-guard.conclusion.does_not_prove.0": {
+      "text": "The fault is made by the runner on purpose from an input; it is not a test against a real attack and does not say which swaps occur in real systems.",
+      "source": "b0c2bc406f4f"
+    },
+    "swap-guard.conclusion.does_not_prove.1": {
+      "text": "The digest check only finds swaps after approval. Arguments already wrong before approval, or a card you misread, get the same digest and count as equal.",
+      "source": "78c857de7829"
+    },
+    "inputs.task.label": {
+      "text": "Task",
+      "source": "5253040db864"
+    },
+    "inputs.task.help": {
+      "text": "Decides the task text sent to the model; the exercises already preset it.",
+      "source": "b3578532a400"
+    },
+    "inputs.task.options.approve_write.label": {
+      "text": "Look at and change TKT-102, then notify its owner",
+      "source": "03ce0972692f"
+    },
+    "inputs.task.options.reject_timeout.label": {
+      "text": "Change TKT-103 and notify the people concerned",
+      "source": "0a8bf7f1a964"
+    },
+    "inputs.task.options.edit_recheck.label": {
+      "text": "Notify the owner of TKT-104",
+      "source": "faa3ffd6a31b"
+    },
+    "inputs.task.options.swap_guard.label": {
+      "text": "Notify alice@corp.example",
+      "source": "f40088c8501a"
+    },
+    "inputs.approval_timeout_s.label": {
+      "text": "Approval wait limit (seconds)",
+      "source": "5e0545d3a28c"
+    },
+    "inputs.approval_timeout_s.help": {
+      "text": "3 to 300 seconds. If you have not decided within that time the approval counts as timed out, that is, rejected. The exercise \"Rejection and timeout\" uses 20 seconds.",
+      "source": "21376444258e"
+    },
+    "inputs.allow_edit.label": {
+      "text": "Approval cards allow editing",
+      "source": "ff9e559a4a75"
+    },
+    "inputs.allow_edit.help": {
+      "text": "When on, the approval card gets an \"Edit arguments\" option. Edited arguments pass the deny rules of the hooks again. Only the exercise \"Edited arguments pass the rules again\" has it on by default.",
+      "source": "7ed3b0f0ed3b"
+    },
+    "inputs.late_rewrite.label": {
+      "text": "Rewrite after approval (teaching fault)",
+      "source": "60840ca33014"
+    },
+    "inputs.late_rewrite.help": {
+      "text": "When on, the runner deliberately swaps the notice's recipient for another address after you approve, to demonstrate the digest check. Only the exercise \"Arguments swapped after approval\" has it on by default; switched on in another exercise it is stopped too.",
+      "source": "19a26094f8b5"
+    },
+    "quiz.q1.prompt": {
+      "text": "Why are hooks better than writing the checks into every tool function?",
+      "source": "31aa303735fe"
+    },
+    "quiz.q1.a.text": {
+      "text": "A rule is written once, the tools stay untouched, and no tool is left as a back door by a missed edit",
+      "source": "094bd8a65d18"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. The checks are separate from the tools, and changing a rule touches only the hooks.",
+      "source": "c2f44ec975ea"
+    },
+    "quiz.q1.b.text": {
+      "text": "Hooks run faster than checks inside a function",
+      "source": "04b1ca747727"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. Speed has nothing to do with it here.",
+      "source": "51a2ab173823"
+    },
+    "quiz.q1.c.text": {
+      "text": "Hooks make the model more obedient",
+      "source": "bbc619658a90"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. A hook is a program; it governs whether a call may run and does not change what the model thinks.",
+      "source": "ee43716517e8"
+    },
+    "quiz.q1.explanation": {
+      "text": "Hooks gather the checks outside the tools and keep each rule in one place.",
+      "source": "793fc56b46c4"
+    },
+    "quiz.q2.prompt": {
+      "text": "After `risk_level` returns `ask`, what does the runner do next?",
+      "source": "c61e455de34b"
+    },
+    "quiz.q2.a.text": {
+      "text": "It calls `request_approval`: the run pauses and waits for a person",
+      "source": "c21ae0409e4b"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. Approval is requested only if nobody denied by the end of the chain.",
+      "source": "242486f58dc4"
+    },
+    "quiz.q2.b.text": {
+      "text": "It runs the tool first and asks a person afterwards",
+      "source": "20e21c7fbc97"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. By the time of an afterwards confirmation the side effect has happened and the gate is pointless.",
+      "source": "da5dc102001e"
+    },
+    "quiz.q2.c.text": {
+      "text": "It hands the call back to the model to judge itself",
+      "source": "1c6a8b58642a"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. Deciding whether a call may run is the program's job and cannot be handed to the one being checked.",
+      "source": "28001feb1715"
+    },
+    "quiz.q2.explanation": {
+      "text": "Approve first, run afterwards: the tool does not run before approval.",
+      "source": "e5f2356d526b"
+    },
+    "quiz.q3.prompt": {
+      "text": "What is the difference between an approval timing out and you clicking reject?",
+      "source": "a933bd99983c"
+    },
+    "quiz.q3.a.text": {
+      "text": "Neither runs; but `error_type` is `approval_timeout` and `approval_rejected` respectively, a timeout has no note and `decided_by` is `timeout`",
+      "source": "37f1ec28de46"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. Both count as a rejection, but the reasons can be told apart.",
+      "source": "d78bb549f361"
+    },
+    "quiz.q3.b.text": {
+      "text": "A timeout runs, because nobody objected",
+      "source": "65ebace22656"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. Nobody deciding is not consent.",
+      "source": "d9e01d7c3991"
+    },
+    "quiz.q3.c.text": {
+      "text": "No difference; the events cannot tell",
+      "source": "e59f01900b90"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. `outcome` and `decided_by` in the events both differ.",
+      "source": "23f370df260f"
+    },
+    "quiz.q3.explanation": {
+      "text": "A timeout counts as a rejection, but the fact that nobody decided is kept.",
+      "source": "57f284472c38"
+    },
+    "quiz.q4.prompt": {
+      "text": "Why does the normalizing hook come before the deny rules?",
+      "source": "03ce541cef2f"
+    },
+    "quiz.q4.a.text": {
+      "text": "So the rules only need to know one spelling and do not wrongly refuse a legitimate call written differently",
+      "source": "52ab33b1dc54"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. The order decides what the rules see.",
+      "source": "9c05d495cb09"
+    },
+    "quiz.q4.b.text": {
+      "text": "Normalizing is faster than the rules",
+      "source": "1ea4b7c875cf"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. The order has nothing to do with speed.",
+      "source": "38d834c8b09f"
+    },
+    "quiz.q4.c.text": {
+      "text": "The rules cannot read the original arguments",
+      "source": "653398d9dab3"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. They can, but with inconsistent spelling they miss or wrongly stop calls.",
+      "source": "912c0ffed137"
+    },
+    "quiz.q4.explanation": {
+      "text": "Unify the spelling first, then rule.",
+      "source": "7bfea1f0025e"
+    },
+    "quiz.q5.prompt": {
+      "text": "In some call `match` in `lesson.guard` is false. Which check in the ledger shows that the desk was not affected?",
+      "source": "987473cd28c3"
+    },
+    "quiz.q5.a.text": {
+      "text": "`refused-not-executed`: for a call that was stopped, the desk's digest equals the one at the start of the call",
+      "source": "cf34425fe89f"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. It uses a digest of the files as evidence and relies on nobody's account.",
+      "source": "a10b4450eaca"
+    },
+    "quiz.q5.b.text": {
+      "text": "`customer-data-redacted`",
+      "source": "27c20e56d77e"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. It checks whether the content returned to the model has the customer's raw contact details.",
+      "source": "a5b4a938b5f2"
+    },
+    "quiz.q5.c.text": {
+      "text": "`summary-covers-args`",
+      "source": "be26b6a3468c"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. It checks whether the summary states the key arguments, which has nothing to do with whether anything ran.",
+      "source": "3dc9ab874871"
+    },
+    "quiz.q5.explanation": {
+      "text": "\"Did not run\" is shown by comparing the files before and after.",
+      "source": "1707f344a73f"
+    },
+    "quiz.q6.prompt": {
+      "text": "The summary on the card says \"send a notice to alice@corp.example\" but the recipient in the `payload` is another address. Which one counts?",
+      "source": "661b56a4f62f"
+    },
+    "quiz.q6.a.text": {
+      "text": "The `payload`: approval goes by the full arguments, and the summary is only a paraphrase",
+      "source": "30d83cf38cb9"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. The digest is also computed on the `payload`, not on the summary.",
+      "source": "21f17ddaa3fa"
+    },
+    "quiz.q6.b.text": {
+      "text": "The summary: it is what people read, so it is more trustworthy",
+      "source": "7c310e8e0962"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. The summary is put together by a program and may omit or misstate, which is why the lesson checks every card for completeness.",
+      "source": "13fa49359fc1"
+    },
+    "quiz.q6.c.text": {
+      "text": "Either; take the one you saw first",
+      "source": "c5b6f689ea32"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. An approval needs exactly one basis.",
+      "source": "2ee492c04bcc"
+    },
+    "quiz.q6.explanation": {
+      "text": "The `payload` and its argument digest decide.",
+      "source": "c6668c3f1b89"
+    },
+    "quiz.q7.prompt": {
+      "text": "Why can hooks and approval not replace isolation?",
+      "source": "798c76d151b0"
+    },
+    "quiz.q7.a.text": {
+      "text": "They see only the name and arguments of a call and not what the tool does inside; the tools here run right in the local process",
+      "source": "5eea963a2878"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. A check at the door does not change the permissions inside.",
+      "source": "efce533ce049"
+    },
+    "quiz.q7.b.text": {
+      "text": "Hooks slow the run down, so they cannot be used",
+      "source": "cab0f543c14c"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. Speed is not the problem.",
+      "source": "d8b21e9bdde1"
+    },
+    "quiz.q7.c.text": {
+      "text": "Approval works only for read-only tools",
+      "source": "9b55f3f8249c"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. Approval is mainly used on writing tools.",
+      "source": "231414322a80"
+    },
+    "quiz.q7.explanation": {
+      "text": "Hooks and approval decide which calls may run; isolation decides what a running call can do.",
+      "source": "9e276979c8f1"
+    },
+    "quiz.q8.prompt": {
+      "text": "You type the recipient on the card in capitals, `Bob@Corp.Example`, and approve. Why does the runner return `edit_not_normalized`?",
+      "source": "c377d4335d3f"
+    },
+    "quiz.q8.a.text": {
+      "text": "What you approved is the copy you typed; after normalization it is another, and running it would run arguments nobody approved",
+      "source": "3155c8eae623"
+    },
+    "quiz.q8.a.feedback": {
+      "text": "Right. So it does not run and does not quietly change it for you.",
+      "source": "b736f9a9004b"
+    },
+    "quiz.q8.b.text": {
+      "text": "An upper-case address is invalid",
+      "source": "d8cab2845612"
+    },
+    "quiz.q8.b.feedback": {
+      "text": "No. Before normalization case does not make the address invalid; the problem is that the digest stands for the copy as typed.",
+      "source": "d0785d5e275e"
+    },
+    "quiz.q8.c.text": {
+      "text": "Because you wrote no note",
+      "source": "5472b9fcecdf"
+    },
+    "quiz.q8.c.feedback": {
+      "text": "No. The note is optional and unrelated to execution.",
+      "source": "fc077eba97ac"
+    },
+    "quiz.q8.explanation": {
+      "text": "What runs must be exactly the copy that was approved.",
+      "source": "779df4c6fbb4"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Arguments swapped after approval\" and find the event where the digest check failed and the source of the teaching fault is recorded.",
+      "source": "f7021cb2daf6"
+    },
+    "check-hunt.explanation": {
+      "text": "In this event `approved_digest` and `attempted_digest` differ, `match` is false, and `injected` says `origin: fault_injection` and names the changed field. The tool result right after is `approval_mismatch`, and `guard-blocked` in the ledger is 1. If your run has no such event, check whether you ran another exercise or switched off `late_rewrite` in the inputs.",
+      "source": "4266b40551aa"
+    },
+    "check-recap.title": {
+      "text": "Recap",
+      "source": "1fe9d18bb48b"
+    },
+    "check-recap.paragraphs.0": {
+      "text": "The thread of this lesson: the model proposes, the program executes, and a gate stands between. Hooks move the checks from inside the tools to outside; hooks before the tool rule on the call and hooks after it handle the result; a call that needs approval pauses the run for a person to approve, reject or time out; what is approved is one set of arguments, checked once more with the argument digest before execution.",
+      "source": "6cc587d37fb1"
+    },
+    "check-recap.paragraphs.1": {
+      "text": "Three easy mistakes: a rejection and a timeout are structured results handed to the model, not exceptions; edited arguments are new input and pass the rules again; the summary is only a paraphrase, and approval goes by the `payload` and its digest. The evidence is all in the events: `lesson.hook_pre`, `approval_requested`, `approval_resolved`, `lesson.guard`, `lesson.hook_post`.",
+      "source": "19da255b6480"
+    },
+    "check-recap.paragraphs.2": {
+      "text": "Next: {{lesson:human-in-the-loop}} pushes the pause past a process restart and recovers from a saved execution position; {{lesson:bash-coding-agent}} uses approval on every command; {{lesson:reliable-tools}} covers the consequences of a write running twice.",
+      "source": "6065b1b62a68"
+    },
+    "check-points.title": {
+      "text": "Hands-on check",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Check against your own runs and the lesson's source, and tick only what you have done.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In a run of \"Read-only passes, writes need approval\" I found the first approval card and pointed out its `summary`, `payload` and `payload_digest`.",
+      "source": "707e82efa4fa"
+    },
+    "check-points.item-2.text": {
+      "text": "I can name in order the events of one write: `tool_call`, `lesson.hook_pre`, `approval_requested`, `approval_resolved`, `lesson.guard`, `lesson.hook_post`, `tool_result`.",
+      "source": "597e2cc0dad0"
+    },
+    "check-points.item-3.text": {
+      "text": "In a run of \"Rejection and timeout\" I found the results for `approval_rejected` and `approval_timeout` and can name the difference.",
+      "source": "fed56e0b13c9"
+    },
+    "check-points.item-4.text": {
+      "text": "In \"Edited arguments pass the rules again\" I saw `lesson.hook_recheck` and can say why nothing went out even though I approved.",
+      "source": "396596f8acf9"
+    },
+    "check-points.item-5.text": {
+      "text": "Comparing `approved_digest` and `attempted_digest` in `lesson.guard`, I can say what the digest check guards against and what it cannot.",
+      "source": "aa2bb45e42ef"
+    },
+    "code_notes.hook_denied.note": {
+      "text": "The error_type in a tool result: a hook before the tool refused, or refused in the re-check after an edit.",
+      "source": "dff0244f26b7"
+    },
+    "code_notes.approval_mismatch.note": {
+      "text": "The error_type in a tool result: the approved digest differs from the one about to run, so the call was stopped.",
+      "source": "65b65dd67257"
+    },
+    "code_notes.edit_not_normalized.note": {
+      "text": "The error_type in a tool result: the edited arguments would change under the hooks' normalization, so nothing runs.",
+      "source": "8847f6a68454"
+    },
+    "code_notes.approval_rejected.note": {
+      "text": "The error_type in a tool result: a person rejected; the note is in note as typed.",
+      "source": "0ae9c8e54128"
+    },
+    "code_notes.approval_timeout.note": {
+      "text": "The error_type in a tool result: nobody decided within the wait limit, which counts as a rejection.",
+      "source": "fa76dfc0e9d0"
+    },
+    "code_notes.lesson.hook_pre.note": {
+      "text": "Event: every step of the chain before the tool, the rewrites, who denied and the risk level.",
+      "source": "40a970d36f16"
+    },
+    "code_notes.lesson.hook_recheck.note": {
+      "text": "Event: the result of passing the arguments edited at approval through the hooks again.",
+      "source": "3e40130c9fd0"
+    },
+    "code_notes.lesson.hook_post.note": {
+      "text": "Event: what the hooks after the tool did: masking, read-back verification, the result digest.",
+      "source": "bdb3aba2b142"
+    },
+    "code_notes.lesson.guard.note": {
+      "text": "Event: the approved digest, the digest about to run, and whether they are equal.",
+      "source": "0662c2596692"
+    },
+    "code_notes.risk_level.note": {
+      "text": "Hook before the tool: reads pass, writes need approval and get a risk level.",
+      "source": "5e3b314c8aa4"
+    },
+    "code_notes.normalize_arguments.note": {
+      "text": "Hook before the tool: unify case and whitespace, so the rules see rewritten arguments.",
+      "source": "be591d0b9be4"
+    },
+    "code_notes.recipient_domain.note": {
+      "text": "Hook before the tool: deny a recipient that is not under the company domain.",
+      "source": "6840ddc4e3d5"
+    },
+    "code_notes.redact_customer_data.note": {
+      "text": "Hook after the tool: mask the customer's phone and email before the model gets them.",
+      "source": "a8fb0488c946"
+    },
+    "code_notes.audit_trail.note": {
+      "text": "Hook after the tool: hash what is returned to the model and put it in the ledger.",
+      "source": "3a1a389b366d"
+    },
+    "code_notes.tool_not_classified.note": {
+      "text": "Deny reason code: a tool with no risk classification is not allowed by default.",
+      "source": "6cea8b58b9cf"
+    },
+    "code_notes.late_rewrite.note": {
+      "text": "Input: when true, the runner deliberately rewrites the recipient after approval (a teaching fault).",
+      "source": "51e5cf05f57b"
+    },
+    "code_notes.refused-not-executed.note": {
+      "text": "Ledger check: calls that were rejected, stopped or timed out left the desk unchanged.",
+      "source": "f6fbd7dadc15"
+    },
+    "code_notes.request_approval.note": {
+      "text": "Platform method: pause the run and wait for a person to approve, reject or time out.",
+      "source": "1dd87529ad13"
+    },
+    "code_notes.ApprovalDecision.note": {
+      "text": "The approval result the platform returns: whether approved, and the arguments and digest actually approved.",
+      "source": "47f05f61d19c"
+    },
+    "code_notes.payload_digest.note": {
+      "text": "Field name of the argument digest: recorded at approval and sent back with the decision from the page.",
+      "source": "5a02d2632e91"
+    },
+    "code_notes.editable.note": {
+      "text": "A field of the approval request: whether the card allows editing the arguments.",
+      "source": "11d153e0324a"
+    }
+  }
+}
