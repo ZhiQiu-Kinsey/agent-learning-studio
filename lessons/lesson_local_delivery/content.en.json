@@ -1,0 +1,1570 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "DELIVERY / LOCAL",
+      "source": "ee0f19c03e7a"
+    },
+    "hero.headline": {
+      "text": "Start it, configure it, say what broke: that is delivery.",
+      "source": "bca1a8fe57d7"
+    },
+    "hero.highlight": {
+      "text": "The key never shows up in any output.",
+      "source": "c59224c3d68e"
+    },
+    "hero.takeaway": {
+      "text": "This lesson does not call a model. It really starts a small local service: it resolves three layers of configuration, probes liveness and readiness, stops it and confirms nothing is left behind, reads the log back to look for leaks, then simulates a crash and restart and a failed configuration upgrade. Every conclusion comes from a real child process.",
+      "source": "8640fbe0eb59"
+    },
+    "concepts.01-layers.label": {
+      "text": "01 / LAYERS",
+      "source": "06632cbf3be1"
+    },
+    "concepts.01-layers.title": {
+      "text": "Three layers, every value has a source",
+      "source": "dd728088551b"
+    },
+    "concepts.01-layers.description": {
+      "text": "Defaults live in code, the settings file overrides the defaults, environment variables override the file. Every value can say which layer it came from.",
+      "source": "e88b7f726ffc"
+    },
+    "concepts.02-probes.label": {
+      "text": "02 / PROBES",
+      "source": "79291ba5d9d8"
+    },
+    "concepts.02-probes.title": {
+      "text": "Two probes, two questions",
+      "source": "72979bcf0cc5"
+    },
+    "concepts.02-probes.description": {
+      "text": "`/health` asks whether the process still answers; `/ready` asks whether the service is ready. During warm-up the first returns 200 and the second 503.",
+      "source": "82c421a5d9c6"
+    },
+    "concepts.03-reap.label": {
+      "text": "03 / REAP",
+      "source": "6e208387569a"
+    },
+    "concepts.03-reap.title": {
+      "text": "Stop means clean up",
+      "source": "a22cc803a5a6"
+    },
+    "concepts.03-reap.description": {
+      "text": "Send SIGTERM first and let the process finish up; if it does not, kill the whole process group. After the stop, confirm that the main process and its background worker are both gone.",
+      "source": "89e5b90715b1"
+    },
+    "concepts.04-redact.label": {
+      "text": "04 / REDACT",
+      "source": "5779c06cc1bd"
+    },
+    "concepts.04-redact.title": {
+      "text": "No credential in any output",
+      "source": "b523da1a6653"
+    },
+    "concepts.04-redact.description": {
+      "text": "The log is JSON, one object per line; a credential is reported only as \"set\" plus its source; before delivery, every line is scanned for the known fake key.",
+      "source": "aa0f23b80d39"
+    },
+    "section-1.title": {
+      "text": "From it runs to it can be delivered",
+      "source": "9ffbff7e02ab"
+    },
+    "section-1.paragraphs.0": {
+      "text": "It must start on another machine by following the instructions: that is the minimum for delivery. The earlier lessons all ran on your own machine, where dependencies were installed, environment variables were already set and the data files were at hand. Hand the tool to someone else and the missing pieces show up one by one. A colleague pulls the code, types the start command from the instructions, and the terminal stays quiet for three seconds. Is the process running? Where is it stuck? Which file should they read? That is the distance between \"it runs\" and \"it can be delivered\". This repository's instructions have only four steps: `uv sync --dev`, `npm ci`, `npm run build` and `run_web.py`; they can be that short because every step gives a clear signal when it fails.",
+      "source": "799ad6145ec3"
+    },
+    "section-1.paragraphs.1": {
+      "text": "This lesson does not call a model. The case is `notes_app` (a notes app), a small local service in the lesson directory: it has settings, a data file, `/health` and `/ready`, JSON logs and a background worker process, and like this platform it binds only to 127.0.0.1. The platform itself is delivered the same way: `run_web.py` binds the service to port 8765 on 127.0.0.1, provider keys come from environment variables, and the API only answers \"is the key configured\".",
+      "source": "785d2d669461"
+    },
+    "section-1.paragraphs.2": {
+      "text": "A delivery check is not \"it runs here\" but five questions that a real run can confirm or refute: where the configuration comes from and what happens when it is missing; whether the service started and whether it is ready; whether it stops cleanly; what the log contains and what it must not contain; whether the data survives a kill. This lesson has one check for each, and each check reads the exit code, port, log or file of a real process.",
+      "source": "826261993773"
+    },
+    "section-1.paragraphs.3": {
+      "text": "These checks only show how one small service behaves on this machine. They do not show a cloud deployment, nor use by several people at once. The ledger in {{lesson:observability-cost}} records every step of a model request; this lesson records the process's own log and probes. The idempotency key from {{lesson:reliable-tools}} comes back once more, as a file, in \"Restart, backup and rollback\". The MCP services started in {{lesson:mcp-basics}} are child processes too and need the same readiness judgement and cleanup on stop; what this lesson does carries over.",
+      "source": "30ba2f2c470d"
+    },
+    "section-2.title": {
+      "text": "Locking dependencies and configuration",
+      "source": "6c701f672fe5"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Lock dependency versions, keep configuration and credentials apart, and keep credentials in the backend only. Dependencies first: `pyproject.toml` holds version ranges, and the \"latest version\" inside a range changes every week; `uv.lock` records the exact version and hash of every package that was installed, and the frontend's `package-lock.json` does the same. This repository installs with `uv sync` and `npm ci` from the lock files, so another machine gets the same dependencies. When it worked last week and not this week, the lock file usually did not travel with the code.",
+      "source": "6d30e1d8fe89"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Now configuration. One value can live in three places: the default in code, the settings file that ships with the project, and the environment variable at run time. Configuration Layering says who overrides whom: defaults are lowest, the settings file overrides the defaults, environment variables are highest. For example, the model name has no default; the file says `file-model`, the environment says `env-model`, so `env-model` wins and its source is `env`. Every value must say which layer it came from; when something is wrong, the first question is \"who set this value\".",
+      "source": "19d2d4b650fd"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Credentials stay apart from configuration. A settings file gets copied, committed and pasted into issues; an environment variable lives only inside the process. `notes_app` has three rules: a credential is read from the environment only; `api_key` in the settings file is always refused, with the problem code `secret_in_file`; `/config` answers \"set\" and the source, never the value. The platform does the same: `local_config.py` holds only the endpoint URL and the model name and is excluded by `.gitignore`, keys come from environment variables, and a key typed into the web page stays in the backend's memory.",
+      "source": "fa631abf7518"
+    },
+    "section-2.paragraphs.3": {
+      "text": "When required settings are missing, the app must exit before it binds a port or opens the data file; this is failing fast (Fail Fast). It names all problems at once, only the setting's name and the kind of problem, never the value. All at once, because fixing one and restarting for the next means three starts for three problems; no value, because the wrong value may be exactly the key. Failing fast only covers \"is the configuration written correctly\", not \"can the service the configuration points to be reached\"; that is the probes' job. A wrong key in the settings file is the same story: if `log_lvl` instead of `log_level` were silently ignored, the app would run with the default log level while you believe you changed it, so unknown keys are refused too. A misspelled environment variable name only gets a warning, because the environment is full of unrelated names.",
+      "source": "7d7d16f70500"
+    },
+    "deep-dive-env.title": {
+      "text": "Where credentials live: settings files, `.env` and secret management",
+      "source": "ee9e96b9278b"
+    },
+    "deep-dive-env.summary": {
+      "text": "Three approaches with different trade-offs; what the reference book's deployment guide, this repository and this lesson's exercises each choose.",
+      "source": "e95e28c2b315"
+    },
+    "deep-dive-env.paragraphs.0": {
+      "text": "There are three common approaches. Putting credentials in the settings file is the most convenient and the easiest to commit by accident; a `.env` file keeps them in one file that is not committed, and a start script turns them into environment variables; production uses a dedicated secret-management service that the process queries at startup. The Docker deployment guide that ships with *Understanding AI Agents in Depth* (深入理解 AI Agent) takes the second route: copy `.env.example` to `.env`, fill in each provider's API key, and never commit a `.env` with real keys; for production deployment, switch to an external secret store.",
+      "source": "71e52a67ce80"
+    },
+    "deep-dive-env.paragraphs.1": {
+      "text": "This repository's `.gitignore` excludes `.env` and `.env.*` and lets only the two templates `.env.example` and `.env.sample` through, the same idea: the template goes into the repository and the real values stay on the machine. Environment variables are not a vault either: child processes inherit them, and on most systems other processes of the same user may be able to read them. So the runner gives the child an allow-listed environment, containing only what the run needs, such as `PATH`, plus this run's `NOTES_*`; the keys of other providers on this machine are not passed on.",
+      "source": "397bc33b2bd8"
+    },
+    "deep-dive-env.paragraphs.2": {
+      "text": "The same book makes one more point when it discusses internal evaluation infrastructure: an ablation switch must be injected at the very start of the startup path, before any module-level constant reads the configuration, or the switch has no effect. Where and when configuration is read is itself something to design. `notes_app` puts `load_settings` as the first step of `main` for the same reason. The key in this lesson's exercises is a fake key made up for each run, shaped like `sk-demo-` plus random characters; the lesson never reads your real key. What the check proves is that \"this value appears in no output\", and the logic is the same for a fake value and a real one.",
+      "source": "029b6f946e78"
+    },
+    "predict-start.prompt": {
+      "text": "Before you run “Configuration layers: missing settings, sources and the credential” in the lab, guess: how many times will the app refuse to start because of a configuration problem in this run? (Count lesson.start_failed events.)",
+      "source": "63f865786a5d"
+    },
+    "mq-layers.q-layers.prompt": {
+      "text": "The file sets `model` to `file-model` and the environment variable `NOTES_MODEL` is `env-model`. Which value wins, and what is its source?",
+      "source": "5f94052e33ed"
+    },
+    "mq-layers.q-layers.a.text": {
+      "text": "`env-model`, source `env`",
+      "source": "5cc0e3ca8282"
+    },
+    "mq-layers.q-layers.a.feedback": {
+      "text": "Right. Of the three layers the environment is the highest, and the source is recorded together with the value.",
+      "source": "5bd517308924"
+    },
+    "mq-layers.q-layers.b.text": {
+      "text": "`file-model`, source `file`",
+      "source": "9174764bf9f7"
+    },
+    "mq-layers.q-layers.b.feedback": {
+      "text": "No. The settings file is above the default but below the environment.",
+      "source": "d6beadf94be7"
+    },
+    "mq-layers.q-layers.c.text": {
+      "text": "The two values conflict and the app refuses to start",
+      "source": "cf7514c40271"
+    },
+    "mq-layers.q-layers.c.feedback": {
+      "text": "No. The override order is fixed, so this is not a conflict; only a value that is written wrongly is refused.",
+      "source": "388bf08e153a"
+    },
+    "mq-layers.q-layers.explanation": {
+      "text": "The three layers override in a fixed order, the highest layer wins, and every value carries its source so you know where to change it.",
+      "source": "27fd9c0033d0"
+    },
+    "section-3.title": {
+      "text": "Starting, stopping and probing",
+      "source": "4dbc25e6a067"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Provide a start script and a health check, and confirm the service really works. A start command that returned does not mean the service is usable. \"It did not come up\" can mean at least three things: the process has exited, usually because of a configuration error or a busy port; the process is alive but never listens, stuck in initialization; or it is listening but not ready yet, for example still warming up or unable to reach a dependency. From the outside all three look like \"the request got no answer\", and they have to be told apart.",
+      "source": "c60fb040987d"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Two probes answer two questions. The Liveness Probe is `/health`: the process is up and answers, and it checks no dependency. The Readiness Probe is `/ready`: it returns 200 only when configuration, data and warm-up are all done, and 503 otherwise, with each check's result in the response so you can see which item is holding things up. `notes_app` warms up for 400 milliseconds by default: right after it listens, `/health` is 200 at once, `/ready` is 503 first and becomes 200 after about 0.4 seconds. A start script should wait for `/ready`, not for the port, and certainly not `sleep` a few seconds and hope.",
+      "source": "c213515bddcf"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Every wait needs a limit, and when the limit is reached the report says what was awaited, for how long, and what was last seen; it neither waits forever nor quietly counts as success. In this lesson the runner waits at most 1200 milliseconds for the app to listen: if the process has exited, read its exit code; if it is alive but has no port, it is stuck; if it listens but `/ready` stays 503, it is alive but not ready. When the port is taken, the app must fail clearly and not move to another port, because other clients still connect to the old one. The listening address may only be 127.0.0.1; bound to 0.0.0.0, anyone on the same network could connect. The port defaults to 0, so the system assigns a free one and the app writes the real number into a port file, which can never collide with a service you already have running; the file is written as a temporary file and renamed, so a reader sees either the complete number or no file.",
+      "source": "d8fb63ec18bc"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Stopping takes two steps: send SIGTERM first so the process can finish up, refusing new connections, stopping the background worker and writing a `stopped` log record; after the grace period, kill the whole process group. Killing only the main process leaves an Orphan Process: the background worker keeps running and holding resources, and the next start runs into it. To verify \"nothing is left\", check that the process IDs have really disappeared; the command returning is not enough.",
+      "source": "669d34e662b5"
+    },
+    "walkthrough.title": {
+      "text": "From the start command to the first successful request",
+      "source": "bc33b900e9ba"
+    },
+    "walkthrough.description": {
+      "text": "Steps of one normal start. This is an illustration written by the author, not a run record; real times and ports are in the events of your own run.",
+      "source": "417fe0031402"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Host",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Spawn the child process",
+      "source": "e85caa62a5c4"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The child gets an environment of only the necessary variables plus NOTES_*, its standard error goes to a log file, and it becomes the leader of its own process group.",
+      "source": "c11039c7f452"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "spawned in lesson.process",
+      "source": "04e34589db6d"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "App",
+      "source": "63c73c4730f4"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Resolve the configuration",
+      "source": "72fe6224cfb6"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Settings resolve by the three-layer rule; a missing or invalid value ends the process here.",
+      "source": "e9024f2bfa66"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "config_loaded in the log",
+      "source": "d82f6e631e22"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "App",
+      "source": "63c73c4730f4"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Listen first, then write the port file",
+      "source": "cba432b68ac1"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The system assigns a free port; the runner knows it can probe once the port file is written.",
+      "source": "c2302eacb790"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "listening in lesson.process",
+      "source": "e2b138c896e4"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Host",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Probe `/health`",
+      "source": "58418b1bfb85"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The liveness probe returns 200 at once.",
+      "source": "db48f12e50ea"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.probe",
+      "source": "04bbb597e39f"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Host",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Probe `/ready`",
+      "source": "f94be8369a4a"
+    },
+    "walkthrough.step-5.body": {
+      "text": "During warm-up it returns 503 and lists the checks that have not passed.",
+      "source": "19a6d953b3ba"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.probe",
+      "source": "04bbb597e39f"
+    },
+    "walkthrough.step-6.label": {
+      "text": "06",
+      "source": "aacd834b5cdc"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "App",
+      "source": "63c73c4730f4"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Warm-up ends",
+      "source": "1ce4737cc8b4"
+    },
+    "walkthrough.step-6.body": {
+      "text": "The ready flag is set and the log records ready; the runner's next probe gets 200.",
+      "source": "1e50606dfa5b"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "ready in lesson.process",
+      "source": "bb0a2c310129"
+    },
+    "walkthrough.step-7.label": {
+      "text": "07",
+      "source": "19b100ab7725"
+    },
+    "walkthrough.step-7.actor": {
+      "text": "Host",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-7.title": {
+      "text": "The first real request",
+      "source": "66dc941073c3"
+    },
+    "walkthrough.step-7.body": {
+      "text": "Only after readiness is a write request sent, and the app returns 201.",
+      "source": "39517bf91142"
+    },
+    "walkthrough.step-7.evidence": {
+      "text": "the write records in the report",
+      "source": "6ee82e8b9d53"
+    },
+    "deep-dive-probes.title": {
+      "text": "Probes in other systems: Kubernetes, Docker and smoke tests",
+      "source": "ed64b9df8949"
+    },
+    "deep-dive-probes.summary": {
+      "text": "What liveness, readiness and smoke tests each ask, and when.",
+      "source": "894c3cdbc2ff"
+    },
+    "deep-dive-probes.paragraphs.0": {
+      "text": "Kubernetes splits probes into three kinds: when the liveness probe fails, the platform restarts the container; when the readiness probe fails, the platform takes the instance out of traffic but does not restart it; a startup probe gives slow starters a longer grace period during which liveness checks are held off. The two are kept apart because \"restart\" and \"hold the traffic for now\" are different decisions: restarting an instance that is still warming up only makes it slower. Docker's HEALTHCHECK and the health checks in `docker compose` are the same kind of thing, and the reference book's deployment guide also configures health checks and automatic restarts. A probe itself must be cheap and free of side effects: if the liveness probe queries the database, then when the database stutters every instance's liveness probe fails at once, the platform restarts them all, and a small fault becomes a large one.",
+      "source": "e1f812ab6c61"
+    },
+    "deep-dive-probes.paragraphs.1": {
+      "text": "The lesson on deploying scalable agents in Microsoft's *AI Agents for Beginners* adds a cheaper layer of checking: the smoke test. It points out that a deployment \"succeeding\" only means the control plane accepted the definition, not that the agent is answering; a missing dependency, a wrong model configuration or an expired connection can leave a green deployment that does not respond. A smoke test runs on every deployment, takes a few seconds, and asks the deployed endpoint with a few fixed prompts and assertions. It forms a pyramid with offline and online evaluation: smoke tests ask \"does it respond\", offline evaluation asks \"is it good enough\", online evaluation asks \"how does it do on real traffic\". The lesson on agents in production also recommends combining the two: small smoke cases for quick checks, larger evaluation sets for broad coverage.",
+      "source": "081f89af6f1c"
+    },
+    "deep-dive-probes.paragraphs.2": {
+      "text": "This lesson's `/ready` is the local version of a smoke test: it only asks whether the service can do its work, not how well. A smoke test that a model is usable needs a real request and so a real provider, which this lesson does not do. Running locally is not the same as being safe, either: the same course's lesson on local agents reminds us that a local MCP service still runs with your user's permissions, so limit what it can reach to the project directory.",
+      "source": "1fc7489f73e7"
+    },
+    "deep-dive-groups.title": {
+      "text": "How process groups and orphan processes actually work",
+      "source": "9a0194f2787f"
+    },
+    "deep-dive-groups.summary": {
+      "text": "A child process does not exit with its parent; a process group lets one signal reach a whole batch.",
+      "source": "278e667374b8"
+    },
+    "deep-dive-groups.paragraphs.0": {
+      "text": "On Unix-like systems, a parent exiting does not take its children with it: the children are adopted by the init process and keep running as orphan processes. This lesson's runner starts the app in a new session; the effect of `setsid` is that the app becomes the leader of a new process group, and the group ID equals its process ID; the background worker it starts stays in the same group by default.",
+      "source": "e2c9f9c2f3de"
+    },
+    "deep-dive-groups.paragraphs.1": {
+      "text": "So the runner has three ways to stop. `SIGTERM` to the main process: the app finishes up, stops the worker and exits with code 0. `SIGKILL` to the main process only: the app cannot do anything, the worker becomes an orphan, and the exercise shows 1 process left behind. `SIGKILL` to the process group: one command takes every process in the group; this is the fallback, not the routine, because it gives no process a chance to finish up.",
+      "source": "bfe57cf8a72f"
+    },
+    "deep-dive-groups.paragraphs.2": {
+      "text": "One more trap: a killed orphan that nobody reaps stays in the process table as a zombie, and signal 0 still says it \"exists\". This lesson's `pid_alive` therefore reads the state in `/proc/<pid>/stat` and counts state Z as gone. Windows has no process-group signals, so there the lesson uses `taskkill /T` to end the whole process tree. Learn Claude Code's full harness follows the same idea: each command goes into its own process group, a signal cleans it up on exit, and it warns that a process that opens another session escapes the group. To look yourself, run `ps -o pid,pgid,ppid,stat,cmd` on Linux: each process's group ID, parent ID and state are listed, and the parent ID of an orphan becomes 1 or the process that adopted it.",
+      "source": "350083592300"
+    },
+    "mq-probes.q-probes.prompt": {
+      "text": "`/health` keeps returning 200 and `/ready` keeps returning 503. How should the start script report it?",
+      "source": "14d29e62b706"
+    },
+    "mq-probes.q-probes.a.text": {
+      "text": "The service is usable, because the process answers",
+      "source": "5c0ce28a1a64"
+    },
+    "mq-probes.q-probes.a.feedback": {
+      "text": "No. `/health` only says the process is alive; during warm-up it is 200 as well.",
+      "source": "915c86ee701b"
+    },
+    "mq-probes.q-probes.b.text": {
+      "text": "Alive but not ready: after the limit, report it and name the checks that did not pass",
+      "source": "97a6fdabf424"
+    },
+    "mq-probes.q-probes.b.feedback": {
+      "text": "Right. The two probes answer different questions, and the report must say which item is holding things up.",
+      "source": "5b84f12da8a8"
+    },
+    "mq-probes.q-probes.c.text": {
+      "text": "The process is broken; restart it at once",
+      "source": "06065dc154a6"
+    },
+    "mq-probes.q-probes.c.feedback": {
+      "text": "No. The liveness probe passes, and restarting an instance that is still warming up only makes it slower.",
+      "source": "12bfeb33dfe7"
+    },
+    "mq-probes.q-probes.explanation": {
+      "text": "A passing liveness probe does not mean the service is usable. When the readiness probe still fails at the limit, report \"not ready\" honestly, with the checks that did not pass.",
+      "source": "eb8bd172bceb"
+    },
+    "misconception-health.claim": {
+      "text": "`/health` returns 200, so the service is ready to use.",
+      "source": "0dec4f97c1bf"
+    },
+    "misconception-health.correction": {
+      "text": "`/health` only says the process is alive and answering. It is 200 even while warm-up is unfinished or a dependency is not connected. Whether the service is usable is `/ready`'s question. In the report \"Alive but not ready\", `/health` stays 200 and `/ready` stays 503: the service really cannot be used, and the runner waited until the limit and reported exactly that.",
+      "source": "6c2c7a26da8f"
+    },
+    "section-4.title": {
+      "text": "Logs and sensitive data",
+      "source": "72bc2459e4cc"
+    },
+    "section-4.paragraphs.0": {
+      "text": "An error log must help locate the problem without writing out keys or personal data. A colleague says \"it won't start\", you ask \"what does the log say?\", and they paste a screenful: no time, no level, no way to tell which setting is wrong. Worse, an API key is in that screenful, and once it is pasted into a public issue the key can only be revoked and reissued. A good log looks different: one event per line, with time and level, so you can see at a glance which setting has which problem.",
+      "source": "a1dffa8a6e18"
+    },
+    "section-4.paragraphs.1": {
+      "text": "A log should be structured: one JSON object per line, always with `ts`, `level` and `event`, and other fields that vary with the event. Then \"show only errors\" and \"count the startup times\" are one-line commands. Minimal observability needs only three things: startup time, version and configuration source. `notes_app` logs `start`, `config_loaded`, `listening`, `ready`, `shutdown_requested` and `stopped` in that order. There are two startup times: `startup_ms`, reported by the app itself from `main` to listening, and the one the runner measures from spawning the process, which also includes interpreter start and imports. They answer different questions and cannot stand in for each other. The log level is a setting too: the default `info` does not log every request, `debug` does, and every probe from the runner appears in the `debug` log.",
+      "source": "3206357a47c7"
+    },
+    "section-4.paragraphs.2": {
+      "text": "A credential stays out of the log through two lines of defense: by construction, the logging function takes only names and sources; by checking, before delivery the known key value is searched for in every line. The most common leak is dumping the whole configuration into the log for debugging, which this lesson reproduces with the `config_dump` event. The scan reports only the line number, event name and setting, never the value; the lines shown have the value replaced by a marker such as `[REDACTED:api_key]`. This platform's backend also redacts the actual keys in events, but it only knows the keys it has been configured with; it does not know your small service's key, so you have to scan for it yourself.",
+      "source": "e1e5585eefac"
+    },
+    "section-4.paragraphs.3": {
+      "text": "A scan only finds known values that appear as they are: a key that was re-encoded, truncated or split across two lines is not found; personal data such as names and e-mail addresses has no fixed value to search for and can only be handled by not logging it. After a leak, the first thing is to revoke the key; fixing the log is second. Logs and reports get forwarded and stored, so redaction has to happen before writing, not as a clean-up afterwards.",
+      "source": "4dfe1ba89e61"
+    },
+    "mq-leak.q-leak.prompt": {
+      "text": "The scan finds a key on line 3 of the log. How should the report show that line?",
+      "source": "673081e6f6ab"
+    },
+    "mq-leak.q-leak.a.text": {
+      "text": "As it is, to make it easy to find",
+      "source": "ac4b69597d64"
+    },
+    "mq-leak.q-leak.a.feedback": {
+      "text": "No. A report is forwarded and stored; pasting the line as it is leaks the key again.",
+      "source": "b4abbb677387"
+    },
+    "mq-leak.q-leak.b.text": {
+      "text": "Give the line number, event name and setting, and show the line with the value replaced by a marker",
+      "source": "b3b1fe0f6308"
+    },
+    "mq-leak.q-leak.b.feedback": {
+      "text": "Right. It can be located without carrying the value.",
+      "source": "6d71acad784e"
+    },
+    "mq-leak.q-leak.c.text": {
+      "text": "Show nothing and just say \"there is a leak\"",
+      "source": "403496c5f503"
+    },
+    "mq-leak.q-leak.c.feedback": {
+      "text": "No. Without a line number and event name nobody can go and fix it.",
+      "source": "383be6381a99"
+    },
+    "mq-leak.q-leak.explanation": {
+      "text": "A report must locate the problem without carrying the value: line number, event name, setting, plus the redacted line.",
+      "source": "15b434ad9a94"
+    },
+    "misconception-env.claim": {
+      "text": "A key in an environment variable is safe.",
+      "source": "51a40e4469a8"
+    },
+    "misconception-env.correction": {
+      "text": "Environment variables are better than a settings file, but they are not a vault. Child processes inherit all environment variables by default, and they may also show up in process listings and crash dumps. This lesson's runner passes only the variables it was given to the child, and when the app starts its own background worker it also removes every variable that starts with `NOTES_`. Safety comes from \"give it only to whoever needs it\", plus scanning the output.",
+      "source": "d955a8317ca8"
+    },
+    "section-5.title": {
+      "text": "Restart, backup and rollback",
+      "source": "e8bd818020f3"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Delivery must also answer: after the process is killed, is the data still there, and will a write be duplicated? A local tool always gets interrupted: shutdown, crash, Ctrl+C. After a restart there are three questions. Is the data file intact? If the client never saw the answer and sends a write again, will there be one more note? If the new configuration will not start, how do we go back?",
+      "source": "7ff6770bf2aa"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The first two questions rest on two designs. The data file is first written as a temporary file in the same directory, flushed to disk, and then renamed over the old one with `os.replace`, so after a crash the file is either the old one or the new one, never half-written. A repeat is safe because of `op_id`, the file version of the idempotency key in {{lesson:reliable-tools}}: when the same `op_id` arrives a second time, the app returns `duplicate: true` and writes nothing. Work it out by hand: after `op-1` and `op-2` are written the whole process group is killed; after the restart 2 notes are read; resending `op-2` still gives 2; a new `op-3` makes 3. The three questions have three answers: atomic writes protect the data, operation IDs prevent duplicates, and a backup with digests handles the rollback.",
+      "source": "72768a24f617"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The third question rests on backup and digests. Before upgrading the configuration, copy the settings file and the data file and note the first 12 characters of each sha256 digest. The upgraded settings file says `settings_version: 2` and renames `model` to `model_id`, which this version cannot read: the app refuses before it listens, and the data is untouched. Put the backed-up settings back, the digest equals the one taken at backup time, the service is ready again, and the 3 notes are still there. A rollback is not \"it should be possible to go back\" but digests that match and a service that starts. The backup must not carry credentials either: credentials never live in the settings file, so backing the file up is safe.",
+      "source": "83ef9c96ec36"
+    },
+    "section-5.paragraphs.3": {
+      "text": "The limits of this section should be clear. The rollback only covers the settings file; rolling back a data-format migration is harder, so make the backup before the migration and prove that it can be restored. This lesson also does not probe the model or MCP: whether a real model is usable has to be verified with a real request in the model connection settings; \"configured\" is not \"verified\", and a provider that has not been verified must not be marked as usable.",
+      "source": "e50c635f1d13"
+    },
+    "mq-restart.q-restart.prompt": {
+      "text": "The client resends `op-2` and the app returns `duplicate: true`. What does that mean?",
+      "source": "4b30d6411c84"
+    },
+    "mq-restart.q-restart.a.text": {
+      "text": "The write ran again, so there are 3 notes",
+      "source": "7868a7c2c4c8"
+    },
+    "mq-restart.q-restart.a.feedback": {
+      "text": "No. Returning duplicate means nothing was written again.",
+      "source": "3089e4f7e7ec"
+    },
+    "mq-restart.q-restart.b.text": {
+      "text": "That operation ID was already written; the app returns the first result and writes nothing",
+      "source": "272807ff21b2"
+    },
+    "mq-restart.q-restart.b.feedback": {
+      "text": "Right. The repeat is safe because of the same `op_id`.",
+      "source": "93f72213af11"
+    },
+    "mq-restart.q-restart.c.text": {
+      "text": "The write failed",
+      "source": "8ddc2c7666cf"
+    },
+    "mq-restart.q-restart.c.feedback": {
+      "text": "No. A failure returns an error, not duplicate.",
+      "source": "e7dc04546ba6"
+    },
+    "mq-restart.q-restart.explanation": {
+      "text": "The same operation ID is written once, and a repeat gets the first result back. A different `op_id` is a new write.",
+      "source": "dd0a5e2979bf"
+    },
+    "section-6.title": {
+      "text": "Writing the checks as a checklist",
+      "source": "c5348553b5a4"
+    },
+    "section-6.paragraphs.0": {
+      "text": "A delivery check must be written as a checklist in which every line can be confirmed or refuted by a real run. A \"pass\" on the list only means that this check held in this real run, not that it holds in other environments. The table below pairs this lesson's checks with the evidence they read: first see which process or file the evidence comes from, then the condition for passing. When a check fails, the report must say what does not match; do not change the check to make it pass.",
+      "source": "e1e8c6b66862"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The kinds of conclusion must be kept apart as well. A process that exited does not mean the service is usable; a request that returned 200 does not mean a check passed; and all of this lesson's checks passing does not mean a task has been accepted. In the run with the defect, \"the log holds no credential value\" fails by design, and the answer says so; a check that was not run is not marked as passed and not left out silently. When you use this list on your own tool, think for each line first what evidence would make it fail, and only then run it.",
+      "source": "68fce67d7e4c"
+    },
+    "compare-checklist.title": {
+      "text": "This lesson's delivery checklist",
+      "source": "61287af87b6c"
+    },
+    "compare-checklist.columns.0": {
+      "text": "Question",
+      "source": "33a8618cb671"
+    },
+    "compare-checklist.columns.1": {
+      "text": "How to check",
+      "source": "ca738af9eb96"
+    },
+    "compare-checklist.columns.2": {
+      "text": "Evidence that it passes",
+      "source": "9de27c1f52ba"
+    },
+    "compare-checklist.rows.0.0": {
+      "text": "Where does the configuration come from",
+      "source": "031ef72bb75d"
+    },
+    "compare-checklist.rows.0.1": {
+      "text": "Compare the child's `/config` with this process's prediction",
+      "source": "322748852661"
+    },
+    "compare-checklist.rows.0.2": {
+      "text": "Every setting's source matches; the credential only says \"set\"",
+      "source": "144f9c47b320"
+    },
+    "compare-checklist.rows.1.0": {
+      "text": "What happens when it is missing",
+      "source": "55f1cd46b682"
+    },
+    "compare-checklist.rows.1.1": {
+      "text": "Start the child with no configuration at all",
+      "source": "46dcd113ecb4"
+    },
+    "compare-checklist.rows.1.2": {
+      "text": "It exits before listening with exit code 2, naming every problem at once",
+      "source": "b275562b1bed"
+    },
+    "compare-checklist.rows.2.0": {
+      "text": "Did it come up",
+      "source": "75b30bc6e974"
+    },
+    "compare-checklist.rows.2.1": {
+      "text": "Wait for the port file, then probe `/health`",
+      "source": "dab75dc33c97"
+    },
+    "compare-checklist.rows.2.2": {
+      "text": "It is listening; on a timeout the report says stuck or crashed",
+      "source": "ae3774e2ae42"
+    },
+    "compare-checklist.rows.3.0": {
+      "text": "Is it ready",
+      "source": "fdb49e426a8b"
+    },
+    "compare-checklist.rows.3.1": {
+      "text": "Probe `/ready` until 200 or the limit",
+      "source": "174efc7326aa"
+    },
+    "compare-checklist.rows.3.2": {
+      "text": "503 during warm-up, then 200; if still 503 at the limit, report it honestly",
+      "source": "4f8806541035"
+    },
+    "compare-checklist.rows.4.0": {
+      "text": "Does it stop cleanly",
+      "source": "9b164f4d4f3e"
+    },
+    "compare-checklist.rows.4.1": {
+      "text": "SIGTERM, wait, then look at the process IDs",
+      "source": "06d76f6712c0"
+    },
+    "compare-checklist.rows.4.2": {
+      "text": "Exit code 0, the main and background processes are gone, the port is released",
+      "source": "6a7c4991d220"
+    },
+    "compare-checklist.rows.5.0": {
+      "text": "Is a credential in the log",
+      "source": "9a0639e0bde6"
+    },
+    "compare-checklist.rows.5.1": {
+      "text": "Search every log line for the known fake key",
+      "source": "c268cefc579f"
+    },
+    "compare-checklist.rows.5.2": {
+      "text": "Zero hits; on a hit, only the line number and setting are reported",
+      "source": "64fdcbca840c"
+    },
+    "compare-checklist.rows.6.0": {
+      "text": "After a kill",
+      "source": "d08037670030"
+    },
+    "compare-checklist.rows.6.1": {
+      "text": "Kill the whole process group, restart, resend the write",
+      "source": "f9d9e0d39752"
+    },
+    "compare-checklist.rows.6.2": {
+      "text": "The data is intact and the resend is not duplicated",
+      "source": "692cd404c934"
+    },
+    "compare-checklist.rows.7.0": {
+      "text": "A failed configuration upgrade",
+      "source": "a1351e9c51f9"
+    },
+    "compare-checklist.rows.7.1": {
+      "text": "Switch to a settings file it cannot read, then put the backup back",
+      "source": "9c3060cd673c"
+    },
+    "compare-checklist.rows.7.2": {
+      "text": "Refused before listening, data unchanged, digest equals the backup's",
+      "source": "ef91cb1bbed6"
+    },
+    "references.ms-16.title": {
+      "text": "Deploying scalable agents: from prototype to production, and smoke tests (Microsoft AI Agents for Beginners)",
+      "source": "668f419aea27"
+    },
+    "references.ms-17.title": {
+      "text": "Creating local AI agents: privacy, cost, offline use and the limits of local services (Microsoft AI Agents for Beginners)",
+      "source": "ade590fed65d"
+    },
+    "references.ms-10.title": {
+      "text": "Agents in production: observability, key metrics and evaluation (Microsoft AI Agents for Beginners)",
+      "source": "4260a97c3ffd"
+    },
+    "references.book-docker.title": {
+      "text": "Docker deployment guide for MCP servers: environment variables, health checks and production notes — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "32a0f8998dbe"
+    },
+    "references.book-ch7.title": {
+      "text": "Evaluation and observability: evaluation infrastructure for production agents — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "57f7627573d9"
+    },
+    "references.lcc-s15.title": {
+      "text": "The integrated harness: process-group cleanup, permissions and background tasks (Learn Claude Code)",
+      "source": "a9ccab4eb450"
+    },
+    "code-settings.n138.text": {
+      "text": "Resolves every setting at once: each problem is collected and all are reported together, not one at the first error.",
+      "source": "719f2b6910ca"
+    },
+    "code-settings.n140.text": {
+      "text": "The settings file is read first: a credential, an unknown key or an unsupported version in it becomes a problem right here.",
+      "source": "ff9f88f13fc5"
+    },
+    "code-settings.n143.text": {
+      "text": "One setting at a time; each decides its own value and source.",
+      "source": "d834fa5147a3"
+    },
+    "code-settings.n144.text": {
+      "text": "The three layers are queued from lowest to highest: the default goes in first.",
+      "source": "2a617975d9be"
+    },
+    "code-settings.n146.text": {
+      "text": "The settings file is the second layer.",
+      "source": "84ef93b94348"
+    },
+    "code-settings.n148.text": {
+      "text": "The environment goes in last and has the highest priority; an empty string counts as unset.",
+      "source": "23bc5d7d44bd"
+    },
+    "code-settings.n149.text": {
+      "text": "No layer supplied a value.",
+      "source": "6c36035ae3cc"
+    },
+    "code-settings.n151.text": {
+      "text": "A required setting is missing: record `missing`, leave value and source empty.",
+      "source": "0044ba76abd2"
+    },
+    "code-settings.n154.text": {
+      "text": "The highest layer's value wins; if it is written wrongly it does not fall back to a lower layer, which would hide the mistake.",
+      "source": "37b2b5beb916"
+    },
+    "code-settings.n156.text": {
+      "text": "Checked for type, range and allowed choices; `host` accepts only the loopback address.",
+      "source": "5ebacea4fe51"
+    },
+    "code-settings.n160.text": {
+      "text": "The problem records only the name and the code `invalid`, never the value: the value may be the key itself.",
+      "source": "563c459b343e"
+    },
+    "code-settings.n161.text": {
+      "text": "Any problem raises, so the caller gets the complete list at once.",
+      "source": "03367981edd2"
+    },
+    "code-settings.n164.text": {
+      "text": "A misspelled `NOTES_` environment variable only gets a warning: the environment holds unrelated names anyway, so refusing to start would be wrong.",
+      "source": "3214514c905d"
+    },
+    "code-main.n169.text": {
+      "text": "Settings are resolved first, before anything is opened and before any port is bound.",
+      "source": "07566d1209e3"
+    },
+    "code-main.n171.text": {
+      "text": "The settings file name comes from the command line and the environment is the process's own; the child's environment is set entirely by the runner.",
+      "source": "9d08310bfb4a"
+    },
+    "code-main.n173.text": {
+      "text": "On refusal one log record names every problem by name and code.",
+      "source": "cc90daca7bae"
+    },
+    "code-main.n174.text": {
+      "text": "Exit code 2: the runner recognizes \"bad configuration\" by it, and there is no port file.",
+      "source": "68256760329c"
+    },
+    "code-main.n175.text": {
+      "text": "The log level is configuration too: it uses the resolved value.",
+      "source": "81e2439b32bb"
+    },
+    "code-main.n177.text": {
+      "text": "A misspelled environment variable name only gets a warning, and the name goes into the log.",
+      "source": "7cbaad29cc6f"
+    },
+    "code-main.n179.text": {
+      "text": "Writes each setting's source into the log; for a credential, only that it is set and where it came from.",
+      "source": "e6d73c316a7a"
+    },
+    "code-main.n188.text": {
+      "text": "Then the data file is opened, and only after that the port is bound.",
+      "source": "832152f1478e"
+    },
+    "code-main.n190.text": {
+      "text": "The data file lives in the data directory; the maximum number of notes comes from the settings.",
+      "source": "e77b09518fcf"
+    },
+    "code-main.n192.text": {
+      "text": "If the data file cannot be understood the app refuses to start and does not overwrite it, leaving it for a person to inspect.",
+      "source": "2e1080bef04a"
+    },
+    "code-main.n197.text": {
+      "text": "Only on this line is the port really bound; the address can only be 127.0.0.1.",
+      "source": "2ebabab7f251"
+    },
+    "code-main.n200.text": {
+      "text": "When the port is taken, the error name (such as EADDRINUSE) goes into the log.",
+      "source": "c8c50ad1d1a5"
+    },
+    "code-main.n202.text": {
+      "text": "Exit code 3; it does not switch to another port.",
+      "source": "71143cbfc494"
+    },
+    "code-main.n205.text": {
+      "text": "Listen first, then write the port file: when the runner sees the file it knows it can probe.",
+      "source": "27466c2f748c"
+    },
+    "code-main.n207.text": {
+      "text": "Records the real address, port, startup time and version.",
+      "source": "792267cd9a26"
+    },
+    "code-main.fold-faults.label": {
+      "text": "Test equipment: fault injection, not an app feature",
+      "source": "e8d2dc667553"
+    },
+    "code-launcher.n191.text": {
+      "text": "It waits for the port file, not for the process: the app writes the file only after it listens.",
+      "source": "bb43b521ecad"
+    },
+    "code-launcher.n195.text": {
+      "text": "Each turn first asks whether the run was stopped: a stop must take effect within one turn.",
+      "source": "84075c91b136"
+    },
+    "code-launcher.n196.text": {
+      "text": "If the port file exists, the app is listening.",
+      "source": "2de88748b339"
+    },
+    "code-launcher.n201.text": {
+      "text": "The process has already exited: configuration errors and busy ports both end up here, and the exit code is kept for the report.",
+      "source": "38ff55c4b21b"
+    },
+    "code-launcher.n204.text": {
+      "text": "At the limit it reports a timeout; it does not keep waiting and does not count it as success.",
+      "source": "5d332aa0ef18"
+    },
+    "code-launcher.n206.text": {
+      "text": "The polling interval is 50 milliseconds.",
+      "source": "d6567319e510"
+    },
+    "code-launcher.n208.text": {
+      "text": "Asks both endpoints in turn until `/ready` answers 200.",
+      "source": "b06fc0c9263c"
+    },
+    "code-launcher.n218.text": {
+      "text": "The two probes are asked separately because they answer different questions.",
+      "source": "10e9bea297f4"
+    },
+    "code-launcher.n221.text": {
+      "text": "Only status changes are kept: the timeline stays short and informative.",
+      "source": "67269d369194"
+    },
+    "code-launcher.n228.text": {
+      "text": "Only a 200 from `/ready` counts as ready; a 200 from `/health` does not.",
+      "source": "d9dc2a862eb7"
+    },
+    "code-launcher.n230.text": {
+      "text": "If the process exits while probing, it stops waiting.",
+      "source": "032e495b26ce"
+    },
+    "code-launcher.n232.text": {
+      "text": "Still not ready at the limit: report `not_ready` honestly.",
+      "source": "66959c1881c9"
+    },
+    "code-launcher.n247.text": {
+      "text": "Courtesy first, force second: SIGTERM first, then the grace period decides whether to kill.",
+      "source": "60e5b64dae21"
+    },
+    "code-launcher.n253.text": {
+      "text": "SIGTERM: lets the app finish up by itself.",
+      "source": "3a8e67eb993f"
+    },
+    "code-launcher.n255.text": {
+      "text": "Gives it `grace_s` seconds; exit code 0 is a clean exit.",
+      "source": "24a842aeef7d"
+    },
+    "code-launcher.n257.text": {
+      "text": "Only on timeout does it kill the whole process group, taking the background worker along.",
+      "source": "df143fc6ca7a"
+    },
+    "code-launcher.n260.text": {
+      "text": "Exit code 0 is recorded as a clean exit, anything else as terminated.",
+      "source": "3110aecbc869"
+    },
+    "code-launcher.fold-wait-setup.label": {
+      "text": "Docstring and setup: the deadline and the list of kept probes",
+      "source": "02a25d64a2a8"
+    },
+    "code-launcher.fold-worker-pid.label": {
+      "text": "Remember the background worker's process ID for the orphan check",
+      "source": "e821e71f6aa4"
+    },
+    "code-launcher.fold-note-worker.label": {
+      "text": "Ask /health for the background worker's process ID",
+      "source": "6cbcc010c56f"
+    },
+    "code-launcher.fold-already-exited.label": {
+      "text": "The process has already exited: return at once",
+      "source": "304c4bc02ed4"
+    },
+    "code-decision.title": {
+      "text": "Checks read the real process, not our own expectations",
+      "source": "eddaa68157d1"
+    },
+    "code-decision.chosen": {
+      "text": "The delivery checks treat the app as a real child process: start it in a new session, give it an allow-listed environment, wait for the port file, probe `/health` and `/ready` separately, SIGTERM first and the process group after, and read exit codes, logs, responses and files for the conclusions. The credential is a fake key made up for each run, and every output is scanned before it is published.",
+      "source": "ba166acffe8d"
+    },
+    "code-decision.in-process.title": {
+      "text": "Simulate the service with a thread in this process",
+      "source": "45c70c378ba2"
+    },
+    "code-decision.in-process.why_not": {
+      "text": "Busy ports, stuck processes and orphan processes happen between processes and cannot be tested inside a thread; a simulated \"pass\" proves nothing.",
+      "source": "c18160ecf225"
+    },
+    "code-decision.fixed-sleep.title": {
+      "text": "Wait a fixed few seconds after starting, then send the request",
+      "source": "998195ab5bac"
+    },
+    "code-decision.fixed-sleep.why_not": {
+      "text": "On a slow machine too short a wait reports a false failure, on a fast one it wastes time; and when it fails you cannot tell stuck, crashed and not ready apart.",
+      "source": "229d5872df80"
+    },
+    "code-decision.defaults-on-missing.title": {
+      "text": "Use defaults and keep starting when a required setting is missing",
+      "source": "2ec75ad9dcb1"
+    },
+    "code-decision.defaults-on-missing.why_not": {
+      "text": "It runs with a problem and the error surfaces somewhere else, harder to trace; failing fast pins the problem to the moment of the start.",
+      "source": "c9ced19f1f42"
+    },
+    "code-decision.health-only.title": {
+      "text": "Check only /health",
+      "source": "dbed23559e80"
+    },
+    "code-decision.health-only.why_not": {
+      "text": "A service stuck in warm-up or unable to reach a dependency still answers 200 and would be treated as usable.",
+      "source": "890851041bad"
+    },
+    "code-decision.regex-secrets.title": {
+      "text": "Find keys with a regular expression for strings that start with `sk-`",
+      "source": "984f688f8e5f"
+    },
+    "code-decision.regex-secrets.why_not": {
+      "text": "Keys in other formats are missed and ordinary text can cause false alarms; this lesson knows the key value, so an exact search is more reliable, and real pipelines often use both approaches together.",
+      "source": "c375e74f0255"
+    },
+    "exp-config.title": {
+      "text": "Configuration, credentials and logs",
+      "source": "872715dfc6bd"
+    },
+    "exp-config.hypothesis": {
+      "text": "The three configuration layers override in a fixed order; missing required settings and a credential in the settings file are both refused before the start; the credential value appears in no output, and when a faulty version writes it into the log, the scan locates the line number and the setting.",
+      "source": "4c5805883fe9"
+    },
+    "exp-config.config-layers.label": {
+      "text": "Configuration layers: missing settings, sources and the credential",
+      "source": "55154c0d835b"
+    },
+    "exp-config.logs-and-secrets.label": {
+      "text": "Structured logs and credential leaks",
+      "source": "5770a9af71d6"
+    },
+    "exp-config.layers.text": {
+      "text": "How many settings each layer supplied: from the environment, from the settings file, from the default.",
+      "source": "92d8d6c14694"
+    },
+    "exp-config.env-wins.text": {
+      "text": "When a setting is written in two layers, the environment wins.",
+      "source": "d0be17df6249"
+    },
+    "exp-config.credential.text": {
+      "text": "The credential is read from the environment only, and the report says just \"set\".",
+      "source": "ef74e32b1c37"
+    },
+    "exp-config.refused.text": {
+      "text": "With nothing configured the app refuses to start, and the problems carry only setting names and codes.",
+      "source": "89ed386511f3"
+    },
+    "exp-config.file-secret.text": {
+      "text": "A credential in the settings file is refused too: the problem code for api_key is secret_in_file.",
+      "source": "41305d2d840d"
+    },
+    "exp-config.log-lifecycle.text": {
+      "text": "In the log of a normal run, all lifecycle events are present, in order.",
+      "source": "f74f135e7a65"
+    },
+    "exp-config.leak.text": {
+      "text": "The faulty version writes the whole configuration into the log, and the check \"the log holds no credential value\" fails.",
+      "source": "ed20350d5b48"
+    },
+    "exp-config.redacted.text": {
+      "text": "The log line shown in the report is redacted, and scanning it again finds nothing left.",
+      "source": "612632653dd7"
+    },
+    "exp-config.gate.text": {
+      "text": "The verdict of the delivery gate.",
+      "source": "5a108466788e"
+    },
+    "exp-config.guide.0.text": {
+      "text": "This experiment calls no model. Every start is a real child process, and the credential is a fake key made up for this run.",
+      "source": "1659627cee04"
+    },
+    "exp-config.guide.1.text": {
+      "text": "First see how many settings each layer supplied.",
+      "source": "80849db199ac"
+    },
+    "exp-config.guide.2.text": {
+      "text": "For the same model name the file and the environment each give a value, and the environment wins.",
+      "source": "3fff903abdf9"
+    },
+    "exp-config.guide.3.text": {
+      "text": "The credential's source is the environment; the report says only \"set\", never a value.",
+      "source": "89c0b1ff5e87"
+    },
+    "exp-config.guide.4.text": {
+      "text": "With nothing configured the app exits before listening and names every problem at once.",
+      "source": "77de37cca306"
+    },
+    "exp-config.guide.5.text": {
+      "text": "A credential in the settings file is refused as well, even though the environment holds a usable one.",
+      "source": "9dc4a0ba6d03"
+    },
+    "exp-config.guide.6.text": {
+      "text": "Switch to the log group: in a normal run all lifecycle events are present, in order.",
+      "source": "212e6127644d"
+    },
+    "exp-config.guide.7.text": {
+      "text": "The faulty version wrote the configuration into the log, and this item fails by design.",
+      "source": "41078fea7920"
+    },
+    "exp-config.guide.8.text": {
+      "text": "In the line shown, the credential value has been replaced by a marker.",
+      "source": "2dfa328d6d71"
+    },
+    "exp-config.guide.9.text": {
+      "text": "The delivery gate therefore blocks.",
+      "source": "7b9c47727e28"
+    },
+    "exp-config.conclusion.proves.0": {
+      "text": "The three configuration layers override in the order default, settings file, environment, and the sources the child reports match the prediction.",
+      "source": "8f57ce0015f6"
+    },
+    "exp-config.conclusion.proves.1": {
+      "text": "Missing required settings and a credential in the settings file are both refused before listening, and the errors carry only setting names and problem codes.",
+      "source": "cf32742eb7ec"
+    },
+    "exp-config.conclusion.proves.2": {
+      "text": "When the faulty version writes the configuration into the log, the line-by-line scan located the line number and the setting, and what is shown is redacted.",
+      "source": "4c413c1124c3"
+    },
+    "exp-config.conclusion.does_not_prove.0": {
+      "text": "The scan only finds known values that appear as they are; a re-encoded or split key is not found.",
+      "source": "6b6a2ff12784"
+    },
+    "exp-config.conclusion.does_not_prove.1": {
+      "text": "A fake key proves the logic of the check, not that your real key management is right.",
+      "source": "14e65ef83b71"
+    },
+    "exp-config.conclusion.does_not_prove.2": {
+      "text": "The configuration rules here are `notes_app`'s own convention; another program needs its own list.",
+      "source": "6756cc698160"
+    },
+    "exp-probe.title": {
+      "text": "Starting, readiness and stopping",
+      "source": "b7f5f5873262"
+    },
+    "exp-probe.hypothesis": {
+      "text": "The liveness probe passes at once and the readiness probe passes after warm-up; a hang, a missing readiness and a busy port are each reported honestly at the limit; SIGTERM makes the app and its background worker exit together, and killing only the main process leaves an orphan process.",
+      "source": "56422f10bb2e"
+    },
+    "exp-probe.startup-probe.label": {
+      "text": "Starting, readiness and stopping: hang, busy port and orphan process",
+      "source": "c3cb9752f8b8"
+    },
+    "exp-probe.listening.text": {
+      "text": "The app starts listening; the start-to-listening time as measured by the runner.",
+      "source": "e102c8bb37f0"
+    },
+    "exp-probe.probe-order.text": {
+      "text": "Liveness before readiness: `/health` is 200 at once, `/ready` is 503 during warm-up.",
+      "source": "fb8d23ccf981"
+    },
+    "exp-probe.clean-stop.text": {
+      "text": "After the stop, the service and its background worker are both gone.",
+      "source": "2181912208cc"
+    },
+    "exp-probe.timeout.text": {
+      "text": "Startup timeout: the process is still alive, so it is stuck, not crashed.",
+      "source": "c295d80f68e2"
+    },
+    "exp-probe.not-ready.text": {
+      "text": "Still not ready at the limit; the report says how long it waited.",
+      "source": "8983c8950b72"
+    },
+    "exp-probe.busy.text": {
+      "text": "The port is taken: the app exits with code 3 and does not move to another port.",
+      "source": "4381728f0009"
+    },
+    "exp-probe.orphans.text": {
+      "text": "How many processes are left after killing only the main process.",
+      "source": "5a32750a8450"
+    },
+    "exp-probe.reaped.text": {
+      "text": "How many processes are left after killing the whole process group.",
+      "source": "d5b920e2fc82"
+    },
+    "exp-probe.guide.0.text": {
+      "text": "This experiment calls no model either. All five parts are real child processes, one report each.",
+      "source": "946d96f878c0"
+    },
+    "exp-probe.guide.1.text": {
+      "text": "The app listens first and only then does the runner start probing; the time is measured by the runner.",
+      "source": "43f5ff485ff2"
+    },
+    "exp-probe.guide.2.text": {
+      "text": "In the probe timeline liveness passes first, and readiness passes only when warm-up is over.",
+      "source": "819e55c64a9a"
+    },
+    "exp-probe.guide.3.text": {
+      "text": "After a normal stop, neither process is left.",
+      "source": "be03f389f477"
+    },
+    "exp-probe.guide.4.text": {
+      "text": "Part two makes the app hang: the runner reports a timeout at the limit, and the process is still alive.",
+      "source": "486cf4017133"
+    },
+    "exp-probe.guide.5.text": {
+      "text": "Part three never ends warm-up: liveness passes, readiness does not, and the wait ends at the limit with an honest report.",
+      "source": "270143d5a2f3"
+    },
+    "exp-probe.guide.6.text": {
+      "text": "Part four occupies the port: the app fails clearly and does not quietly move to another port.",
+      "source": "427e5058ff16"
+    },
+    "exp-probe.guide.7.text": {
+      "text": "Part five first kills only the main process, and the worker becomes an orphan.",
+      "source": "63cf901de878"
+    },
+    "exp-probe.guide.8.text": {
+      "text": "Only killing the whole process group removes everything.",
+      "source": "a9e9b35a0655"
+    },
+    "exp-probe.conclusion.proves.0": {
+      "text": "The liveness and readiness probes answer different questions: during warm-up one is 200 and the other 503.",
+      "source": "1e07250b729c"
+    },
+    "exp-probe.conclusion.proves.1": {
+      "text": "Stuck, not ready and busy port are told apart in the runner's report, each with a limit and evidence.",
+      "source": "075b562dd114"
+    },
+    "exp-probe.conclusion.proves.2": {
+      "text": "Killing only the main process leaves the background worker behind; only reaping by process group leaves nothing.",
+      "source": "c7af8f1425f6"
+    },
+    "exp-probe.conclusion.does_not_prove.0": {
+      "text": "The timeouts and the warm-up time here are exercise settings; how long a real service takes to warm up has to be measured.",
+      "source": "b6170935f225"
+    },
+    "exp-probe.conclusion.does_not_prove.1": {
+      "text": "Probing over the loopback address says nothing about how other machines reach it; that it binds to 127.0.0.1 only rests on the socket's actual address.",
+      "source": "963288a638d0"
+    },
+    "exp-probe.conclusion.does_not_prove.2": {
+      "text": "A process being gone does not mean the files it wrote or the external resources it held have been cleaned up.",
+      "source": "d3f557d3e5a1"
+    },
+    "exp-restart.title": {
+      "text": "Crash restart and configuration rollback",
+      "source": "7583860dbd38"
+    },
+    "exp-restart.hypothesis": {
+      "text": "After the whole process group is killed the data file is intact and restored on restart; a repeated write is not duplicated; a new configuration that cannot be read is refused before listening with the data untouched; after the backed-up configuration is put back the service recovers and the data is still there.",
+      "source": "3a16442b54a5"
+    },
+    "exp-restart.restart-rollback.label": {
+      "text": "Crash restart, repeated write and configuration rollback",
+      "source": "d3e794715d0c"
+    },
+    "exp-restart.crashed.text": {
+      "text": "The whole process group is killed and the process gets no chance to finish up.",
+      "source": "956b3f33174a"
+    },
+    "exp-restart.restored.text": {
+      "text": "After the restart the two notes written before the crash are read back.",
+      "source": "164072b91edf"
+    },
+    "exp-restart.no-duplicate.text": {
+      "text": "After op-2 is resent, the number of duplicate writes.",
+      "source": "2855f19b6f21"
+    },
+    "exp-restart.upgrade-refused.text": {
+      "text": "The new configuration that cannot be read: the three items in the problem list.",
+      "source": "5780ec1a3959"
+    },
+    "exp-restart.digests.text": {
+      "text": "After the rollback, the digests of the settings file and the data file side by side.",
+      "source": "ebc7dbe9a373"
+    },
+    "exp-restart.rollback-ready.text": {
+      "text": "After the rollback, the service is ready again.",
+      "source": "4956f2cc28fa"
+    },
+    "exp-restart.guide.0.text": {
+      "text": "This exercise calls no model. It writes two notes, backs up, and then kills the whole process group.",
+      "source": "a0d29e40308c"
+    },
+    "exp-restart.guide.1.text": {
+      "text": "The group is killed at once, with no chance to finish up.",
+      "source": "e1c12ab2fbb9"
+    },
+    "exp-restart.guide.2.text": {
+      "text": "The new process reads back those two notes.",
+      "source": "61e4ef1faca9"
+    },
+    "exp-restart.guide.3.text": {
+      "text": "The client resends op-2: duplicate comes back and nothing is written twice.",
+      "source": "50f61593d3ce"
+    },
+    "exp-restart.guide.4.text": {
+      "text": "With a configuration that cannot be read, the app refuses before listening and names three problems at once.",
+      "source": "1e62e73405f7"
+    },
+    "exp-restart.guide.5.text": {
+      "text": "With the backed-up configuration put back, the digests of both files match what they were.",
+      "source": "8f7926ea8686"
+    },
+    "exp-restart.guide.6.text": {
+      "text": "The service is ready again and there are still three notes.",
+      "source": "331d71908f16"
+    },
+    "exp-restart.conclusion.proves.0": {
+      "text": "After the process group is killed, the data file is still intact, and what is read after the restart matches what was there before the crash.",
+      "source": "819c994facaf"
+    },
+    "exp-restart.conclusion.proves.1": {
+      "text": "Resending with the same operation ID does not write twice; a different ID is a new write.",
+      "source": "907602850712"
+    },
+    "exp-restart.conclusion.proves.2": {
+      "text": "A new configuration that cannot be read is refused before listening and the data file's digest is unchanged; after the backup is put back, the settings file's digest equals the one from backup time and the service recovers.",
+      "source": "5692c820a17a"
+    },
+    "exp-restart.conclusion.does_not_prove.0": {
+      "text": "What is killed here is the app's process group, not a power cut; whether the disk cache survives a power cut depends on the file system and the hardware.",
+      "source": "bd9d4346bf18"
+    },
+    "exp-restart.conclusion.does_not_prove.1": {
+      "text": "The rollback covers only the settings file; rolling back a data-format migration is not shown.",
+      "source": "405e2624482b"
+    },
+    "exp-restart.conclusion.does_not_prove.2": {
+      "text": "It covers only one small service on this machine, with no model, MCP or provider availability probe.",
+      "source": "138b5a449fc1"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.options.config_layers.label": {
+      "text": "Configuration layers: missing settings, sources and the credential",
+      "source": "55154c0d835b"
+    },
+    "inputs.scenario.options.startup_probe.label": {
+      "text": "Starting, readiness and stopping",
+      "source": "b7f5f5873262"
+    },
+    "inputs.scenario.options.logs_secrets.label": {
+      "text": "Structured logs and credential leaks",
+      "source": "5770a9af71d6"
+    },
+    "inputs.scenario.options.restart_rollback.label": {
+      "text": "Crash restart and configuration rollback",
+      "source": "7583860dbd38"
+    },
+    "inputs.startup_timeout_ms.label": {
+      "text": "Limit for waiting to listen (ms)",
+      "source": "af18c7df13c9"
+    },
+    "inputs.startup_timeout_ms.help": {
+      "text": "How long the runner waits at most before it reports a startup timeout. Set too small, even a normal start times out.",
+      "source": "a76b5f60b140"
+    },
+    "inputs.ready_timeout_ms.label": {
+      "text": "Limit for waiting for readiness (ms)",
+      "source": "8ab070829a49"
+    },
+    "inputs.ready_timeout_ms.help": {
+      "text": "After the app listens, how long the runner waits at most for `/ready` to return 200. If shorter than the warm-up time, even a normal start is reported as not ready.",
+      "source": "21cc3c23ad75"
+    },
+    "inputs.warmup_ms.label": {
+      "text": "Warm-up time (ms)",
+      "source": "95e166e5ad8c"
+    },
+    "inputs.warmup_ms.help": {
+      "text": "The dependency warm-up the app simulates: during it `/health` is 200 and `/ready` is 503.",
+      "source": "e11479394099"
+    },
+    "quiz.q1.prompt": {
+      "text": "The settings file contains `api_key`, and the environment also has a valid credential. What does `notes_app` do?",
+      "source": "1d9070c3a606"
+    },
+    "quiz.q1.a.text": {
+      "text": "Use the one in the environment and ignore the one in the file",
+      "source": "a1e080f259a4"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "No. A credential in the file is a problem in itself, and ignoring it would tolerate the practice.",
+      "source": "23c593e3419f"
+    },
+    "quiz.q1.b.text": {
+      "text": "Refuse to start, with the problem code `secret_in_file`",
+      "source": "bf91d39739a1"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Right. A credential may only come from the environment; in the file it is always refused.",
+      "source": "7593a4dcb1e7"
+    },
+    "quiz.q1.c.text": {
+      "text": "Use the one in the file, because the file is more specific",
+      "source": "688efbee117d"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. Credentials are not read from the file, so the override order does not apply.",
+      "source": "cb259bf4fc5b"
+    },
+    "quiz.q1.explanation": {
+      "text": "A settings file gets copied and committed, so a credential in it cannot be protected; the app does not read it and refuses it explicitly.",
+      "source": "dfc4c9ae7e51"
+    },
+    "quiz.q2.prompt": {
+      "text": "In a listening-timeout report, how do you tell \"stuck\" from \"crashed\"?",
+      "source": "7a5f3e3046d8"
+    },
+    "quiz.q2.a.text": {
+      "text": "See whether the process is still alive at the timeout: alive means stuck, exited means read the exit code",
+      "source": "094241ee6a36"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. `alive` and `exit_code` in `lesson.start_failed` are exactly this evidence.",
+      "source": "49fb058191b6"
+    },
+    "quiz.q2.b.text": {
+      "text": "Look at the size of the port number",
+      "source": "8b2d898369ae"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The port number has nothing to do with process state.",
+      "source": "d72fdfd40ee8"
+    },
+    "quiz.q2.c.text": {
+      "text": "Look at how many log lines there are",
+      "source": "aff4f87d3f0a"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The number of lines says nothing about whether the process is still there.",
+      "source": "953b2d494520"
+    },
+    "quiz.q2.explanation": {
+      "text": "Alive but not listening is stuck, and the last log event tells at which step; if it has exited, the exit code and the log give the reason.",
+      "source": "50681757488a"
+    },
+    "quiz.q3.prompt": {
+      "text": "`/health` returns 200 and `/ready` returns 503. What does this say?",
+      "source": "2ac8699cf207"
+    },
+    "quiz.q3.a.text": {
+      "text": "The process is running but the service is not ready; look at the checks that did not pass",
+      "source": "6b96e4208b62"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. The two probes answer different questions.",
+      "source": "fcf111cf86b5"
+    },
+    "quiz.q3.b.text": {
+      "text": "The process has crashed",
+      "source": "5fb0b64f856e"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. A crashed process does not answer 200.",
+      "source": "1aa35a59ccfd"
+    },
+    "quiz.q3.c.text": {
+      "text": "The port is taken",
+      "source": "e89096e1d411"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. When the port is taken the app cannot start at all, and neither probe connects.",
+      "source": "e138b254b90c"
+    },
+    "quiz.q3.explanation": {
+      "text": "Liveness passing and readiness failing usually means warm-up is unfinished or a dependency is not connected, and the `/ready` response says which item has not passed.",
+      "source": "05478c1be3f2"
+    },
+    "quiz.q4.prompt": {
+      "text": "After `SIGKILL` goes to the app's main process only, what happens to the check \"no orphan process\"?",
+      "source": "e7f2657bf61b"
+    },
+    "quiz.q4.a.text": {
+      "text": "It fails: the background worker is still running",
+      "source": "ab03c27c224e"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. When the parent is killed the child does not exit by itself.",
+      "source": "e101b5191b55"
+    },
+    "quiz.q4.b.text": {
+      "text": "It passes: the child exits together with its parent",
+      "source": "d38db22368dd"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. On Unix-like systems the child is only adopted.",
+      "source": "6b211469b648"
+    },
+    "quiz.q4.c.text": {
+      "text": "It cannot be checked",
+      "source": "70e0b5f8937f"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. Whether a process ID still exists can be looked up directly.",
+      "source": "7d1d3f0f0ee5"
+    },
+    "quiz.q4.explanation": {
+      "text": "To take the background worker along, either let the app finish up by itself or send the signal to the whole process group.",
+      "source": "8e167886ec19"
+    },
+    "quiz.q5.prompt": {
+      "text": "Why does the log scan use the known fake key value, instead of only matching strings that start with `sk-`?",
+      "source": "b20f68f851a2"
+    },
+    "quiz.q5.a.text": {
+      "text": "An exact search for a known value misses no key of another format and raises no false alarm; shape matching can be a supplement",
+      "source": "d553006e25b5"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. Each approach has blind spots, and the known value is the most reliable one here.",
+      "source": "ea8e071e03b2"
+    },
+    "quiz.q5.b.text": {
+      "text": "Because the fake key is longer than a real one",
+      "source": "c4775f49fe71"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. Length is not the reason.",
+      "source": "277a03c0dbc5"
+    },
+    "quiz.q5.c.text": {
+      "text": "Because regular expressions are too slow",
+      "source": "b26bf48b4207"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. Slowness is not the main issue; misses and false alarms are.",
+      "source": "205f5d1447a0"
+    },
+    "quiz.q5.explanation": {
+      "text": "What a scan can prove is only that \"this known value does not appear\"; a value in another format or encoding needs another method.",
+      "source": "64952757e9d2"
+    },
+    "quiz.q6.prompt": {
+      "text": "After the restart, `op-2` is resent and `duplicate: true` comes back, with still 2 notes. What does this prove?",
+      "source": "8cf7e57489c2"
+    },
+    "quiz.q6.a.text": {
+      "text": "The same operation ID is not written twice",
+      "source": "047d4daa4eda"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. What it proves is limited to the same `op_id`.",
+      "source": "d0380f28d8dd"
+    },
+    "quiz.q6.b.text": {
+      "text": "No write is ever duplicated",
+      "source": "5ede5c41dcbf"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. A different `op_id` is a new write and adds a note.",
+      "source": "afcee80a40be"
+    },
+    "quiz.q6.c.text": {
+      "text": "The data file has been backed up",
+      "source": "d9930571e305"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. A repeat not being duplicated and a backup are two different things.",
+      "source": "121b30d1b5fc"
+    },
+    "quiz.q6.explanation": {
+      "text": "Idempotency holds only for resends carrying the same ID and cannot be generalized to all writes.",
+      "source": "984175dd6449"
+    },
+    "quiz.q7.prompt": {
+      "text": "The upgraded configuration is refused. How do you prove the data file was not touched?",
+      "source": "882523e90b63"
+    },
+    "quiz.q7.a.text": {
+      "text": "Compare the digest of `notes.json` before and after the upgrade",
+      "source": "16935a0c8ff6"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. If the digests are equal, the content did not change by a single byte.",
+      "source": "27580921ce13"
+    },
+    "quiz.q7.b.text": {
+      "text": "See whether the app reports an error",
+      "source": "f4e70be363a9"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. The error says the configuration was refused and says nothing about the data.",
+      "source": "739d520fb71a"
+    },
+    "quiz.q7.c.text": {
+      "text": "Write one more note to try",
+      "source": "88f047140a5f"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. That changes the data, and it is not a proof.",
+      "source": "b1c52d7bbf10"
+    },
+    "quiz.q7.explanation": {
+      "text": "To prove \"unchanged\", compare against the digest taken before the change; looking at behavior says nothing.",
+      "source": "553e098ce288"
+    },
+    "check-hunt.prompt": {
+      "text": "Run “Configuration layers: missing settings, sources and the credential” and find the event of the start that was refused because the settings file contained a credential.",
+      "source": "7f1d5ca5323c"
+    },
+    "check-hunt.explanation": {
+      "text": "It is the `lesson.start_failed` of round 3: `problems` holds secret_in_file for api_key and unknown_key for log_lvl, the exit code is 2 and `alive` is false. In the report of the same round, \"The refusal does not write the credential to the log\" passes.",
+      "source": "5278bf4a1bca"
+    },
+    "check-points.title": {
+      "text": "Hands-on check",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and this lesson's source; tick an item only once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In the table of “Configuration layers” I found the model row and can say what the three layers are and which one is the final source.",
+      "source": "0c2b76768765"
+    },
+    "check-points.item-2.text": {
+      "text": "I raised the warm-up time to 1500 milliseconds (more than the readiness limit of 1200), ran again, and saw \"Ready within the limit\" fail in the first report.",
+      "source": "6fac387437c7"
+    },
+    "check-points.item-3.text": {
+      "text": "In the table of “Two ways to stop, and the orphan process” I saw the number of processes left, and can explain why killing only the main process leaves an orphan process.",
+      "source": "75b90025a1fc"
+    },
+    "check-points.item-4.text": {
+      "text": "In the report “A log that leaks the credential” I found the leaked line number and setting, and checked that the line shown holds no key value.",
+      "source": "ae474342f7de"
+    },
+    "check-points.item-5.text": {
+      "text": "In the table of “A failed configuration upgrade and the rollback” I compared the digests of the two files and can say why they should match.",
+      "source": "ce04840c7961"
+    },
+    "code_notes.load_settings.note": {
+      "text": "Resolves all settings in three layers; on any problem it raises SettingsError listing every problem.",
+      "source": "01d7e61870a4"
+    },
+    "code_notes.secret_in_file.note": {
+      "text": "Problem code: a credential was written in the settings file; always refused.",
+      "source": "0eef683a53a4"
+    },
+    "code_notes.config_loaded.note": {
+      "text": "Log event: the source of every setting; a credential is only recorded as set, with its source.",
+      "source": "e58504f88a95"
+    },
+    "code_notes.startup_ms.note": {
+      "text": "Field in the listening log: measured by the app itself, from main to listening.",
+      "source": "57f014abc4c3"
+    },
+    "code_notes.config_dump.note": {
+      "text": "The log event in which the faulty version writes out the whole configuration, to demonstrate a leak.",
+      "source": "b0fe054f87d5"
+    },
+    "code_notes.op_id.note": {
+      "text": "The operation ID of a write; a resend with the same op_id returns only the first result.",
+      "source": "21f5d3c09027"
+    },
+    "code_notes.pid_alive.note": {
+      "text": "Whether a process ID is still running; a zombie that was killed but not reaped counts as gone.",
+      "source": "54b9ea53cbbd"
+    },
+    "code_notes.lesson.start_failed.note": {
+      "text": "Event when the app did not reach listening: reason, exit code, list of problems.",
+      "source": "c6deba57ba6c"
+    },
+    "code_notes.lesson.process.note": {
+      "text": "The process stages the runner sees: spawned, listening, ready, stopped, killed.",
+      "source": "5c9f9b194846"
+    }
+  }
+}
