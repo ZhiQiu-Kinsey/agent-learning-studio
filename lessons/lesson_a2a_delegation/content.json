@@ -1,0 +1,1525 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "a2a-delegation",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "orchestration",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "A2A / DISCOVER · DELEGATE · CANCEL",
+          "headline": "把活交给另一个进程里的 Agent，",
+          "highlight": "再盯住它的任务状态。",
+          "takeaway": "前面各课的工具都是 Agent 自己进程里的函数，MCP 把它搬进了独立的服务。这一课再往前一步：被委派方是另一个进程里的 Agent。运行器先读它的 Agent Card，再发一条消息创建任务，跟着任务状态走，最后取回产物；超时、失败和只做了一半这三种结局，各有各的处理。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-delegate",
+              "label": "01 / DELEGATE",
+              "title": "委派：把有状态的任务交出去",
+              "description": "A2A 协议（Agent2Agent Protocol）让一个 Agent 把任务交给另一个独立运行的 Agent。委派方只说清要做什么，怎么做由被委派方决定；两边不共享消息历史。",
+              "token": "delegate_task"
+            },
+            {
+              "id": "02-card",
+              "label": "02 / CARD",
+              "title": "Agent Card：对方的自我介绍",
+              "description": "Agent Card 是被委派方在固定地址 `/.well-known/agent-card.json` 公开的说明：名称、技能、接口地址、是否支持流式。委派方读完它，才知道能委派什么、往哪里发。",
+              "token": "agent-card.json"
+            },
+            {
+              "id": "03-lifecycle",
+              "label": "03 / LIFECYCLE",
+              "title": "任务生命周期：每个任务有自己的状态",
+              "description": "任务生命周期（Task Lifecycle）：委派出去的任务依次进入 SUBMITTED、WORKING，最后停在 COMPLETED、FAILED、CANCELED 或 REJECTED。委派方按状态判断该等、该取消还是该处理失败。",
+              "token": "WORKING"
+            },
+            {
+              "id": "04-artifact",
+              "label": "04 / ARTIFACT",
+              "title": "A2A 产物：回来的是结果，不是过程",
+              "description": "A2A 产物（Artifact）是任务产出的结构化结果。被委派方的提示词、思考过程和内部工具都不会随它送回；委派方拿到产物后，还要自己检查它是否覆盖了交出去的所有说法。",
+              "token": "evidence-report"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "Agent 之间怎么协作",
+          "paragraphs": [
+            "一个 Agent 把任务交给另一个进程里的 Agent，而不只是调用工具。青石图书馆的咨询台 Agent 要回答“B2 研究证最多能借几册、周日几点闭馆”，可它读不到服务手册。手册归资料核对员管，它是另一个独立运行的程序，只接“请为这几条说法找证据”这样的活。咨询台能做的只有三件事：说清要核对什么，等对方做完，检查交回来的东西。",
+            "把核对员包成一个工具函数，听上去更省事，可这份活不像函数。它要花几秒，中途有进度；可能失败，也可能只做一半就说做完了；等不及时还得让它停下。函数只有返回和抛异常两种结局，装不下这些。委派要给任务一个编号和一组状态：接了、在做、做完、失败、被取消，每种都有名字，结果回来才对得上号。",
+            "另一个差别是谁知道什么。咨询台的消息历史、系统提示词和用户原话，核对员一概看不到；核对员怎么检索、中间有什么结果，咨询台也看不到。双方只交换明确写出来的东西：一条消息、一个任务、一份产物。《深入理解 AI Agent》第 10 章把这叫不共享上下文的协作，代价是信息只能显式传递，出了问题要对着两边的记录拼。",
+            "A2A 协议规定的就是这种协作的约定：怎么发现对方，怎么发任务，怎么跟踪状态，怎么取回结果。本课的两个 Agent 在同一台机器的两个进程里：咨询台是运行器里的委派方，核对员是 worker.py 启动的被委派方，监听 127.0.0.1 的空闲端口。核对员是确定性程序，不调用模型，原因在第七节。委派方的模型照常经 RunContext 调用，请求和响应和前面各课一样被记录。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "能力发现",
+          "paragraphs": [
+            "通过 Agent Card 了解对方能做什么。委派方只知道对方的地址，要弄清它会什么，先向 `/.well-known/agent-card.json` 发一次 GET。回来的是一份 JSON：名称 `bluestone-reference-checker`、版本、一个 JSONRPC 接口和它的地址，`capabilities` 里写着支持流式更新、不支持推送通知，还有一项技能 `find-evidence`，它的 `inputModes` 只有 `application/json`。",
+            "这和 {{lesson:mcp-basics}} 的工具发现是同一个思路，列出的东西不同：`tools/list` 列工具的名字和参数 Schema，Agent Card 列技能的说明、输入输出格式和接口。运行器用 discover 读卡，再用 delegation_tool 把技能写成模型唯一的工具 delegate_task：技能 id 成了参数 `skill_id` 的枚举，卡里的描述原样进了工具描述。卡变了，模型看到的工具跟着变，运行器里没有写死核对员会什么。",
+            "卡是对方的自我介绍，只能当声明，不能当保证。运行器读完卡先查三件事：有没有 JSONRPC 接口，卡里的接口地址是不是本次启动的地址，有没有技能接受 `application/json`。任何一条不通过就不委派。第二条最要紧：地址由对方写，照着连，一张写错或恶意的卡就能把请求引到别处。本课只和自己启动的进程说话，测试里用一张指向别处的卡验证过拒绝。",
+            "发现不等于授权，也不等于信任。卡说明对方声称会什么，说明不了它做得对不对。读到卡的那条 lesson.a2a_message 是发现的证据；它的 `captured` 写着 `sdk_protobuf_message`，意思是 SDK 把卡解析成对象，再按协议字段名导出，不是 HTTP 的原始报文。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "任务状态与结果回传",
+          "paragraphs": [
+            "委派出去的任务有自己的状态，结果回来要能对上任务。委派方发一条 `ROLE_USER` 消息：文字部分写给人看，数据部分写给程序用（`claims`，每条说法带编号 `c1`、`c2`），所用技能写在 `metadata` 里。核对员回的第一个对象是 Task，带着任务编号、`contextId` 和状态 SUBMITTED：活收下了，还没开始。",
+            "接着是一连串状态更新。核对员先报 WORKING，附一句“已收到 2 条说法”；每核对完一条再报一次，所以两条说法有三条 WORKING。然后是一份产物 `evidence-report`：数据部分是每条说法的证据片段，文字部分是给人看的摘要。最后一条更新把状态改成 COMPLETED，事件上多一个 `terminal: true`。这串从 SUBMITTED 到终态的状态，就是任务生命周期。",
+            "结果对得上任务，靠两个编号。一个是任务编号：流里每条远端消息都带同一个 `taskId`，报告的 task_match 检查逐条核对，一个委派方可以同时有多个任务，编号对不上，就可能把别人的结果当成自己的。另一个是说法编号：`c1`、`c2` 由委派方自己编，产物里每条结果带着 `claim_id`，委派方才知道哪条说法有了结果、哪条没有。",
+            "每条协议消息都被记成 lesson.a2a_message：方向、消息类型、SDK 对象按协议字段名导出的内容。它不是线路上的字节：没有 HTTP 头，也没有 JSON-RPC 的外层；`method` 是本课按 SDK 调用写下的协议方法名。核对员内部怎么检索、做了几步，不在记录里，我们只看到它愿意用消息告诉我们的部分。"
+          ]
+        },
+        {
+          "id": "predict-messages",
+          "type": "predict",
+          "prompt": "运行“正常委派：从 Agent Card 到产物”之前先猜：这次运行会记下几条 lesson.a2a_message？提示：读卡 1 条，发消息 1 条，然后是 Task，开头的一次 WORKING，每条说法一次 WORKING，一份产物，一个终态。",
+          "experiment": "delegate-lifecycle",
+          "arm": "delegate",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.a2a_message"
+          }
+        },
+        {
+          "id": "mq-card-address",
+          "type": "micro-quiz",
+          "question": {
+            "id": "card-address",
+            "prompt": "Agent Card 里写的接口地址和本次启动的服务地址不一样。运行器该怎么办？",
+            "options": [
+              {
+                "id": "a",
+                "text": "拒绝委派，报告卡不可用",
+                "feedback": "对。地址由对方写，卡指向别处就不能照着连。"
+              },
+              {
+                "id": "b",
+                "text": "照卡里的地址连，因为卡是对方的正式说明",
+                "feedback": "不对。卡是自我介绍，不是保证；照着连会把请求送到别处。"
+              },
+              {
+                "id": "c",
+                "text": "悄悄改用启动地址，不提这件事",
+                "feedback": "不对。卡和实际不符本身就是要记录的事实，悄悄绕过会藏起它。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "discover 在创建客户端之前就检查地址，对不上就抛错，模型没有机会在这张卡上委派。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "超时、取消与远端失败",
+          "paragraphs": [
+            "等待要有上限，超时后要明确取消，远端失败要如实报告。任务在远端跑，委派方不能一直等，所以给自己定一个期限 `deadline_seconds`，到期还没有终态，就不再读流。可是不读流不等于任务停了。故障 `slow` 让核对员开工前先等 60 秒，委派方要是掉头就走，那个任务还会在远端白白跑下去。",
+            "所以到期后运行器做两件事：发 `CancelTask`，再用 `GetTask` 把任务读回来看终态。取消请求的回复只是对方当时的说法，对方也可能已经完成，或者拒绝取消。读回的状态是 CANCELED 才算确认，这一步也只给 5 秒；确认不了，报告就写“没能确认终态”，不写成功。",
+            "远端失败是另一条路。核对员报告 FAILED，附一句档案索引损坏，委派方把状态和这句话交给模型，不重试，也不自己编答案。这时协议是通的：任务有编号、有状态、有终态，只是结果是失败。它要和连接中断分开：流在终态之前就断了，运行器抛 RemoteUnavailable，意思是任务的下落不明，不能说成“远端失败”。REJECTED 和 INPUT_REQUIRED 也按失败处理：前者是对方不接这个活，后者是对方要补充信息，本课的委派方不做多轮。",
+            "三种结局在 tool_result 里各有结构化错误：DelegationTimeout、RemoteTaskFailed 和下一节的 IncompleteResult。系统提示词要求超时、失败或不完整时如实说明哪部分没核对，不要自己补答案。离线夹具照这条写；真实模型会不会照做，要在真实运行里核对。"
+          ]
+        },
+        {
+          "id": "deep-dive-states",
+          "type": "deep-dive",
+          "title": "任务状态机里本课没走到的部分",
+          "summary": "还有两种被打断的状态、三种取回结果的方式，以及取消只是请求。",
+          "paragraphs": [
+            "按规范，任务状态分三类：进行中（SUBMITTED、WORKING）、终态（COMPLETED、FAILED、CANCELED、REJECTED），以及被打断的 INPUT_REQUIRED 和 AUTH_REQUIRED：任务没有结束，在等委派方补充信息或完成认证。本课的 TERMINAL 和 INTERRUPTED 两个常量就是这样分的。真实系统里，委派方遇到被打断的状态应当针对同一个任务回一条消息，让它接着往下走；本课没有第二轮对话，所以按失败处理。",
+            "任务进入终态后就不再变化，要做新的事得开新任务；`contextId` 把同一场协作里的多个任务串在一起。本课每次运行只委派一次，只有一个任务和一个 `contextId`。任务、上下文、消息的编号都是随机的 UUID，所以实验和测试不比较具体的编号，只比较“是不是同一个”。",
+            "取回结果有三种方式。流式：发出消息后持续收到更新，本课用的就是这种。轮询：发出消息后立刻拿到 SUBMITTED 的任务，自己隔一阵用 `GetTask` 查。推送通知：被委派方在状态变化时调用委派方登记的地址。卡里写着 `pushNotifications: false`，所以本课没有用推送。几分钟甚至几小时的长任务通常用轮询或推送，因为流式连接要一直开着。",
+            "取消是请求，不是命令。任务已经结束时，对方会回 `TaskNotCancelableError`；任务被清理后再取消，可能回 `TaskNotFoundError`。慢任务在远端往往还有副作用要收尾，CANCELED 不一定立刻到。这些都是本课取消之后要读回状态的原因：取消请求发出去了，不等于任务停了。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "完成之后由委派方验收",
+          "paragraphs": [
+            "被委派方报告 COMPLETED，只说明它认为自己做完了，结果能不能用要由委派方检查。故障 `partial` 让核对员只处理第一条说法，却照常发出产物和 COMPLETED。从协议看一切正常：状态序列完整，任务编号对得上，没有错误。可咨询台交出去两条说法，产物里只有 `c1` 的结果。要是看到 COMPLETED 就把产物当答案，“周日几点闭馆”就没有任何证据支撑。",
+            "检查写在 accept 里，规则很短：产物里要有数据部分；交出去的每条说法编号都要有一条结果；每条结果至少有一个证据片段；不能出现没交过的编号。哪一条不满足，就列出问题，抛 IncompleteResult，已返回的部分一并交给模型。模型读到“`c2` 没有结果”和 `c1` 的结果，才说得出“第一条查到了，第二条没核对”。",
+            "为什么不信 COMPLETED？《深入理解 AI Agent》第 10 章引用的多个 Agent 协作的失败研究，把任务验证缺失列为一大类：Agent 声称完成，结果并不合要求。书里还说，Agent 的故障常常不是崩溃，而是继续给出看似可信的错误结论。所以验收要看产物本身，并且用委派方自己掌握的信息，这里就是自己编的说法编号。",
+            "这道检查只验结构。每条说法有没有结果、有没有证据，它能判断；证据相不相关、旧版本换对没有、最后的回答对不对，它判断不了。那要读片段原文，或者像{{lesson:evaluation-sets}}那样用独立的验证器。报告里并排放着两个结论：任务状态 COMPLETED，委派方的结果检查未通过。不要把它们合成一个“成功”或“失败”。"
+          ]
+        },
+        {
+          "id": "misconception-completed",
+          "type": "misconception",
+          "claim": "任务状态是 COMPLETED，就说明委派成功了。",
+          "correction": "COMPLETED 是被委派方的说法，不是委派方的验收结论。它能说明任务走完了流程，说明不了产物覆盖了所有说法。“远端返回不完整结果”练习里状态是 COMPLETED，委派方的结果检查却没有通过。看结论要把任务状态、结果检查和回答有没有依据分开看。"
+        },
+        {
+          "id": "mq-cancel-readback",
+          "type": "micro-quiz",
+          "question": {
+            "id": "cancel-readback",
+            "prompt": "超时到期后，运行器发出 `CancelTask`，随后又发 `GetTask`。第二步为什么不能省？",
+            "options": [
+              {
+                "id": "a",
+                "text": "取消请求的回复只是对方当时的说法，读回的状态是 CANCELED 才算确认",
+                "feedback": "对。对方可能已经完成，也可能拒绝取消。"
+              },
+              {
+                "id": "b",
+                "text": "`GetTask` 能让远端更快停下来",
+                "feedback": "不对。它只读状态，不改变任务。"
+              },
+              {
+                "id": "c",
+                "text": "协议规定取消后必须查询，否则连接会泄漏",
+                "feedback": "不对。协议没有这条规定，读回是本课为了确认而加的步骤。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "看报告里“等待有上限”那项检查：它写的是读回的状态，不是取消请求的回复。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "与 MCP 的区别",
+          "paragraphs": [
+            "MCP 连接工具，A2A 连接 Agent，两者可以同时使用。{{lesson:mcp-basics}} 里模型调用 `search_handbook`，一次请求、一次结果，工具同步执行。A2A 里委派方发一条消息，换来一个有状态的任务，过程中收到进度，最后拿到产物。前者像调用一个函数，后者像把一件事交给一位有自己节奏的同事。",
+            "区别落在四处。发现的对象：MCP 列工具，A2A 读 Agent Card。调用的单位：MCP 是一次调用，A2A 是一个任务，有编号和状态。过程：MCP 的调用等一个回复，超时就是协议错误；A2A 的任务可以跑很久，能流式更新、能查询、能取消。内部：MCP 服务端是代码写死的函数，A2A 的被委派方是不透明的 Agent，怎么做由它决定，委派方只看见消息和产物。",
+            "那这个场景为什么不用 MCP？核对手册完全可以做成 MCP 工具，{{lesson:mcp-basics}} 就是这样做的。本课改用 A2A，是因为条件变了：核对员是另一个团队维护的 Agent，有自己的版本规则，一次要处理多条说法，要花几秒、报告进度，会失败，会半途而废，还得能被取消。这些需求逼出了任务状态。只是一次快速、确定的查询，就用工具；要让对方自己决定怎么做、过程有状态，才值得委派。",
+            "两者不是二选一。被委派方内部完全可以用 MCP 连它自己的工具；一个 Agent 对外说 A2A，对内用 MCP，很常见。{{lesson:mcp-lifecycle}}讲连接怎么活着、怎么重连、多个服务怎么命名，A2A 的卡和任务在它之上。Microsoft 的课程把分工概括成：MCP 让 Agent 使用工具和数据，A2A 让 Agent 与 Agent 协作。"
+          ]
+        },
+        {
+          "id": "compare-mcp-a2a",
+          "type": "compare",
+          "title": "MCP 调用与 A2A 委派",
+          "columns": [
+            "对比项",
+            "MCP 调用工具",
+            "A2A 委派任务"
+          ],
+          "rows": [
+            [
+              "发现什么",
+              "工具：名字、描述、输入 Schema（`tools/list`）",
+              "Agent：技能、接口、能力（Agent Card）"
+            ],
+            [
+              "一次交互的单位",
+              "一次调用，一个结果",
+              "一个任务，有编号和状态，可以有多条消息"
+            ],
+            [
+              "过程可见吗",
+              "只有请求和结果",
+              "状态更新和进度说明随流送回"
+            ],
+            [
+              "等得太久怎么办",
+              "读超时，协议错误",
+              "委派方自己定期限，到期发 `CancelTask` 并读回状态"
+            ],
+            [
+              "内部是什么",
+              "代码写死的函数，行为由服务端代码决定",
+              "不透明的 Agent，做法由对方自己决定"
+            ],
+            [
+              "结果长什么样",
+              "`content` 和 `structuredContent`",
+              "A2A 产物，由委派方自己验收"
+            ],
+            [
+              "本课的证据",
+              "上一课的 lesson.mcp_message",
+              "本课的 lesson.a2a_message"
+            ]
+          ]
+        },
+        {
+          "id": "deep-dive-no-shared-context",
+          "type": "deep-dive",
+          "title": "不共享上下文的协作：数据面与控制面",
+          "summary": "《深入理解 AI Agent》把 Agent 之间的传话看成进程间通信，A2A 的状态和取消都能在这个框架里找到位置。",
+          "paragraphs": [
+            "进程间通信归根结底只有两种范式：共享内存和消息传递。Agent 之间也一样，常见的三种做法分别是工具调用的参数、共享文件系统和消息总线。A2A 属于消息传递，而且是跨信任边界的那一种：同一个团队内部用消息总线就够，只有协作方互不信任、实现互不可见时，才需要 A2A 这样的公开协议。",
+            "书里把协作的基础设施分成数据面和控制面。数据面交换产物，本课就是 `evidence-report`；控制面包括消息传递、状态查询、执行终止和资源调度。状态查询有推和拉两种：被委派的一方主动汇报，或者委派的一方去问。书里主张状态要用统一的词汇，执行中、需要输入、已完成、失败，A2A 的任务生命周期正是把这组状态标准化了。",
+            "终止有两种强度，对应 Unix 的 SIGTERM 和 SIGKILL。优雅终止是发出信号，对方在安全点收尾并回一个确认；强制终止是直接结束进程，可能留下没写完的东西。本课两种都有：`CancelTask` 是优雅的，要对方确认；`spawn_local_service` 退出时先终止信号、3 秒后强杀，是兜底。书里还借用 Go 的 context 讲级联取消：取消父级，派生出的子级一并取消，免得留下没人认领的任务。",
+            "再算一笔连接数。点对点通信时，n 个 Agent 两两相连需要 `n(n-1)/2` 条连接：3 个是 3 条，10 个是 45 条，而且收发双方必须同时在线。用消息总线，10 个 Agent 只要 10 条连接，发送方也不必知道谁来消费。本课只有两个 Agent，点对点最简单；Agent 多起来，才会遇到总线和异步通知的问题，这是本课没有展开的。"
+          ]
+        },
+        {
+          "id": "mq-which-protocol",
+          "type": "micro-quiz",
+          "question": {
+            "id": "which-protocol",
+            "prompt": "下面哪件事最适合用 A2A 委派，而不是做成 MCP 工具？",
+            "options": [
+              {
+                "id": "a",
+                "text": "按片段编号读出手册里一段原文，毫秒级返回",
+                "feedback": "不对。一次快速、确定的读取，工具就够了。"
+              },
+              {
+                "id": "b",
+                "text": "把一批说法交给另一个团队的 Agent 去核对，要几秒，中途要看进度，必要时要能取消",
+                "feedback": "对。过程有状态、对方自己决定怎么做，这是委派的场景。"
+              },
+              {
+                "id": "c",
+                "text": "查询借阅证类型对应的册数上限",
+                "feedback": "不对。这是一次确定的查询，用工具。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "判断标准是任务有没有自己的状态和节奏，不是“对方是不是 Agent”。"
+          }
+        },
+        {
+          "id": "section-7",
+          "type": "prose",
+          "title": "进程边界、模型与凭据",
+          "paragraphs": [
+            "被委派方是另一个进程，拿不到运行器的 RunContext，所以它不调用模型。RunContext 是平台给这次运行的记录和约束：模型调用被记下、被计数、能被停止，密钥只由后端持有。另一个进程用不了它。让核对员自己调模型，它的请求不会出现在这次运行的轨迹里，回放和统计都看不到；还得把密钥交给子进程，违反密钥只在后端的规则。所以核对员是确定性程序：BM25 检索加一条版本规则。",
+            "这是教学取舍，不是 A2A 的要求。协议不关心对方里面是模型还是规则：Agent Card、任务状态、产物，两种实现看上去一样。我们换来的是每条模型请求都能被记录、密钥不出进程；放弃的是“对方也是会推理的 Agent”这一面。带模型的被委派方可能给出看似可信的错误结果，更需要委派方验收，它的用量和费用也不在委派方的账里，本节的深入块再讲。",
+            "进程边界靠三处守住。启动：spawn_local_service 只从 `lessons.` 包下的模块起服务，命令不拼接字符串；子进程只拿 safe_child_environment 给的几个变量，事件里记下变量名，报告的 no_secret 检查看有没有密钥类名字，测试还在父进程里放了假密钥确认没传过去。通信：服务只绑 127.0.0.1 的随机端口，不会撞上学习者自己的服务。停止：离开 with 时子进程先收到终止信号，3 秒后强杀，运行器再连一次端口，连不上才记 `port_closed`。",
+            "学习者按停止，和超时是两件事。按停止时，run_until_cancelled 取消当前的 A2A 调用，SDK 收尾，随后抛出 `RunCancelled`，不生成报告。超时是委派方自己的决定，走取消和读回确认。回收本机进程之后，远端任务自然没了；真实的远程服务不归你停，只能发 `CancelTask`，等它自己确认。"
+          ]
+        },
+        {
+          "id": "deep-dive-real-remote",
+          "type": "deep-dive",
+          "title": "真实系统里远端有模型时，观测和凭据怎么分开",
+          "summary": "本课的核对员没有模型。真实的被委派方有模型和自己的密钥，两边的记录与账单各是各的。",
+          "paragraphs": [
+            "观测分两层。委派方记下自己看得到的：A2A 消息、自己的模型调用、任务编号。被委派方里发生的事，由它自己的记录负责：它调用了哪个模型、花了多少 Token。两边靠任务编号和 `contextId` 对得上，这就是关联用的键。被委派方不报告用量时，委派方的报告写“未报告”，不写 0，也不按消息长度估算。本课的报告用“被委派方的内部过程不在本方记录里”说的就是这一点。",
+            "凭据也分开。委派方调用自己模型的密钥，永远留在自己的后端，不会随消息交给对方。被委派方用它自己的密钥调自己的模型，费用记在它的主人账上。委派方要访问对方服务时，需要的是对方在 Agent Card 里声明的认证方式所对应的凭据，只在后端保存，不写进事件和日志。微软课程把内置认证列为 A2A 的好处之一，《深入理解 AI Agent》还建议自主性强的 Agent 使用独立的密钥，防止费用失控。",
+            "预算管不到对方。委派方的模型调用上限只约束自己的调用；被委派方可以用掉多少，委派方只能靠期限和取消去限制。所以每次委派都要带一个期限，到期就取消。更细的预算怎么分给子任务、怎么传下去，是{{lesson:delegation-budget}}要讲的。另外，对方返回的文字和本课检索到的片段一样是外来文本，系统提示词写明它们是资料而不是指令，这条规矩在{{lesson:prompt-injection}}讲过，换成 A2A 也不会自动成立。"
+          ]
+        },
+        {
+          "id": "misconception-replace",
+          "type": "misconception",
+          "claim": "A2A 是 MCP 的升级版，用了 A2A 就不再需要 MCP。",
+          "correction": "两者连接的对象不同。MCP 连接工具，调用没有自己的生命周期；A2A 连接 Agent，委派出去的是有状态的任务。被委派方内部完全可以再用 MCP 连它自己的工具。选哪个看需求：快速、确定、一次一个结果的查询用工具；需要对方自己决定怎么做、过程要看进度、还可能被取消的活，才值得委派。"
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次跨进程委派",
+          "description": "按步骤说明“正常委派”的一次运行，代码是简化的示意；本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "发现",
+              "actor": "委派方",
+              "title": "读 Agent Card",
+              "body": "运行器向被委派方的固定地址发 GET，读到技能列表和接口地址，检查通过才继续。",
+              "code": "card = await A2ACardResolver(...).get_agent_card()",
+              "language": "python",
+              "evidence": "lesson.a2a_message"
+            },
+            {
+              "id": "step-2",
+              "label": "决策",
+              "actor": "模型",
+              "title": "提出一次委派",
+              "body": "模型看到由卡生成的工具 delegate_task，把用户问题拆成两条说法，选定技能 find-evidence。",
+              "code": "response = context.complete(body, round_number)",
+              "language": "python",
+              "evidence": "tool_call"
+            },
+            {
+              "id": "step-3",
+              "label": "发送",
+              "actor": "委派方",
+              "title": "发出消息，创建任务",
+              "body": "消息有文字部分和数据部分，技能写在 metadata；被委派方先回一个 SUBMITTED 的 Task。",
+              "code": "request = SendMessageRequest(message=message)",
+              "language": "python",
+              "evidence": "lesson.a2a_message"
+            },
+            {
+              "id": "step-4",
+              "label": "工作",
+              "actor": "被委派方",
+              "title": "WORKING 与进度",
+              "body": "被委派方做 BM25 检索，每核对一条说法发一次 WORKING 更新，委派方一路读流。",
+              "code": "await updater.update_status(TaskState.TASK_STATE_WORKING, ...)",
+              "language": "python",
+              "evidence": "lesson.a2a_message"
+            },
+            {
+              "id": "step-5",
+              "label": "交付",
+              "actor": "被委派方",
+              "title": "产物与终态",
+              "body": "被委派方先发产物 evidence-report，再把状态改成 COMPLETED，事件带 terminal 标记。",
+              "code": "await updater.add_artifact(parts=[...], name=\"evidence-report\")",
+              "language": "python",
+              "evidence": "terminal"
+            },
+            {
+              "id": "step-6",
+              "label": "验收",
+              "actor": "委派方",
+              "title": "检查产物是否覆盖所有说法",
+              "body": "accept 逐条核对说法编号和证据片段，通过后才把结果交给模型。",
+              "code": "return self.accept(artifacts)",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-7",
+              "label": "回答",
+              "actor": "模型",
+              "title": "只根据返回的证据回答",
+              "body": "第二次模型调用不再允许提议新的调用；它的文字就是最终回答，运行器随后回收被委派方进程。",
+              "code": "if not calls: return message.get(\"content\")",
+              "language": "python",
+              "evidence": "answer"
+            }
+          ]
+        },
+        {
+          "id": "mq-remote-inside",
+          "type": "micro-quiz",
+          "question": {
+            "id": "remote-inside",
+            "prompt": "核对员内部怎么检索、检索了几次，在这次运行的事件里看得到吗？",
+            "options": [
+              {
+                "id": "a",
+                "text": "看不到：事件里只有 A2A 消息和委派方自己的模型调用",
+                "feedback": "对。被委派方是另一个进程，它的内部过程不在本方记录里。"
+              },
+              {
+                "id": "b",
+                "text": "看得到：被委派方的每一步都有 `request` 事件",
+                "feedback": "不对。`request` 只记录经 RunContext 发出的模型调用，被委派方没有模型调用。"
+              },
+              {
+                "id": "c",
+                "text": "看得到：Agent Card 里列出了它的内部步骤",
+                "feedback": "不对。卡只写技能和接口，不写做法。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "报告里“本方模型调用数”只数委派方自己的调用，数一数 `request` 事件就能核对。"
+          }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "ms-protocols",
+              "title": "Agent 协议：A2A 的 Agent Card、Agent 执行器、产物与事件队列（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/11-agentic-protocols/README.md"
+            },
+            {
+              "id": "book-ch10",
+              "title": "不共享上下文的协作、通信与控制、跨组织协作 A2A、多个 Agent 协作的失败模式（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter10.md"
+            },
+            {
+              "id": "book-ch4",
+              "title": "协作工具：创建、消息、取消与发现（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-bus",
+              "title": "消息信封、终止信号与确认的最小实现（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter10/parallel-web-research/message_bus.py"
+            },
+            {
+              "id": "a2a-spec",
+              "title": "A2A 规范：任务状态、取消、推送与轮询（A2A Project）",
+              "url": "https://a2a-protocol.org/latest/specification/"
+            },
+            {
+              "id": "a2a-sdk",
+              "title": "A2A Python SDK（A2A Project）",
+              "url": "https://github.com/a2aproject/a2a-python"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "mcp-basics"
+        },
+        {
+          "id": "code-discover",
+          "type": "annotated-source",
+          "path": "lessons/lesson_a2a_delegation/runtime.py",
+          "start": 121,
+          "end": 148,
+          "notes": [
+            {
+              "id": "n-discover",
+              "line": 121,
+              "anchor": "async def discover(self",
+              "text": "能力发现的入口：模型还没看到任何东西之前，先读对方的卡。"
+            },
+            {
+              "id": "n-get-card",
+              "line": 123,
+              "anchor": "card = await A2ACardResolver(",
+              "text": "向 `/.well-known/agent-card.json` 发 GET，SDK 把回复解析成 AgentCard 对象。"
+            },
+            {
+              "id": "n-record-card",
+              "line": 124,
+              "anchor": "self.emit_a2a(\"AgentCard\"",
+              "text": "先把卡按协议字段名导出并记下，再做任何判断。"
+            },
+            {
+              "id": "n-interfaces",
+              "line": 125,
+              "anchor": "interfaces = [i for i in card.supported_interfaces",
+              "text": "只认 JSONRPC 绑定，本课只实现了这一种。"
+            },
+            {
+              "id": "n-endpoint",
+              "line": 128,
+              "anchor": "else \"endpoint\" if interfaces[0].url",
+              "text": "卡里的地址由对方写，和本次启动的地址不同就拒绝，不跟着卡去连别处。"
+            },
+            {
+              "id": "n-skill-mode",
+              "line": 129,
+              "anchor": "else None if any(\"application/json\"",
+              "text": "至少有一项技能接受 `application/json`，因为委派消息的数据部分是 JSON。"
+            },
+            {
+              "id": "n-unusable",
+              "line": 130,
+              "anchor": "if problem:",
+              "text": "卡不能用就直接报错，模型没有机会在这张卡上委派。"
+            },
+            {
+              "id": "n-client",
+              "line": 133,
+              "anchor": "self.client = await create_client(",
+              "text": "用通过检查的卡创建 SDK 客户端；之后的发送、取消、查询都走它。"
+            },
+            {
+              "id": "n-tool",
+              "line": 135,
+              "anchor": "def delegation_tool(self)",
+              "text": "模型唯一的工具，由卡生成，运行器里没有写死被委派方会什么。"
+            },
+            {
+              "id": "n-skills",
+              "line": 138,
+              "anchor": "skills = \"; \".join(",
+              "text": "技能的 id 和说明拼成一段，进入工具描述。"
+            },
+            {
+              "id": "n-description",
+              "line": 141,
+              "anchor": "\"description\": t.tool_description.format(",
+              "text": "卡里的名称和描述原样进入工具描述：对方写什么，模型就读到什么，它是外来文本。"
+            },
+            {
+              "id": "n-strict",
+              "line": 142,
+              "anchor": "\"parameters\": {\"type\": \"object\", \"additionalProperties\": False",
+              "text": "Schema 不允许多余的参数。"
+            },
+            {
+              "id": "n-enum",
+              "line": 144,
+              "anchor": "\"skill_id\": {\"type\": \"string\", \"enum\"",
+              "text": "技能 id 的枚举来自卡：模型编不出卡里没有的技能。"
+            },
+            {
+              "id": "n-claims",
+              "line": 146,
+              "anchor": "\"claims\": {\"type\": \"array\", \"minItems\": 1",
+              "text": "说法 1 到 3 条，每条最长 160 个字符；上限同时写进 Schema，被委派方也会校验。"
+            }
+          ]
+        },
+        {
+          "id": "code-delegate",
+          "type": "annotated-source",
+          "path": "lessons/lesson_a2a_delegation/runtime.py",
+          "start": 223,
+          "end": 261,
+          "notes": [
+            {
+              "id": "n-deadline",
+              "line": 225,
+              "anchor": "with anyio.fail_after(seconds):",
+              "text": "整个读流过程只给 `deadline_seconds` 秒，到点抛 TimeoutError，不无限等待。"
+            },
+            {
+              "id": "n-follow",
+              "line": 226,
+              "anchor": "artifacts, last = await self.follow(request)",
+              "text": "follow 读那条流：Task、状态更新、产物更新，直到终态；产物和对方最后一句话带回来。"
+            },
+            {
+              "id": "n-timeout",
+              "line": 227,
+              "anchor": "except TimeoutError:",
+              "text": "期限到了，但远端任务还没停：不读流只是不等了。"
+            },
+            {
+              "id": "n-outcome",
+              "line": 228,
+              "anchor": "record.outcome = \"timeout\"",
+              "text": "先记下结局，报告据此写“超时”。"
+            },
+            {
+              "id": "n-cancel-call",
+              "line": 229,
+              "anchor": "state = await self.cancel_after_timeout()",
+              "text": "主动取消并读回确认，见下面的函数。"
+            },
+            {
+              "id": "n-raise-timeout",
+              "line": 230,
+              "anchor": "raise DelegationTimeout(",
+              "text": "变成结构化错误，把读回的状态写给模型。"
+            },
+            {
+              "id": "n-client-error",
+              "line": 231,
+              "anchor": "except A2AClientError as error:",
+              "text": "协议层出错（连接、对方返回错误）：和任务失败是两回事。"
+            },
+            {
+              "id": "n-unavailable",
+              "line": 232,
+              "anchor": "raise RemoteUnavailable(",
+              "text": "只写错误类型名，底层异常的原文可能带地址，不交给模型。"
+            },
+            {
+              "id": "n-last-state",
+              "line": 234,
+              "anchor": "state = record.states[-1] if record.states else None",
+              "text": "终态从本方记下的状态序列里取。"
+            },
+            {
+              "id": "n-interrupted",
+              "line": 235,
+              "anchor": "if state in INTERRUPTED:",
+              "text": "INPUT_REQUIRED 或 AUTH_REQUIRED：对方要补充信息，本课不做多轮。"
+            },
+            {
+              "id": "n-no-terminal",
+              "line": 238,
+              "anchor": "if state not in TERMINAL:",
+              "text": "流断了、没见到终态：任务下落不明，不能说成失败。"
+            },
+            {
+              "id": "n-failed",
+              "line": 240,
+              "anchor": "if state != \"TASK_STATE_COMPLETED\":",
+              "text": "FAILED 或 REJECTED：把对方附带的话原样报出，不重试。"
+            },
+            {
+              "id": "n-accept",
+              "line": 244,
+              "anchor": "return self.accept(artifacts)",
+              "text": "COMPLETED 只是对方的说法，能不能用由 accept 检查。"
+            },
+            {
+              "id": "n-cancel-def",
+              "line": 246,
+              "anchor": "async def cancel_after_timeout",
+              "text": "取消并确认：取消请求的回复不算证据。"
+            },
+            {
+              "id": "n-no-id",
+              "line": 249,
+              "anchor": "if record.task_id is None:",
+              "text": "没拿到任务编号就取消不了，如实说明。"
+            },
+            {
+              "id": "n-cancel-limit",
+              "line": 251,
+              "anchor": "with anyio.move_on_after(CANCEL_SECONDS):",
+              "text": "取消和确认也有 5 秒上限。"
+            },
+            {
+              "id": "n-cancel-task",
+              "line": 253,
+              "anchor": "await self.exchange(\"CancelTask\"",
+              "text": "发 CancelTask，请求和回复都记成 lesson.a2a_message。"
+            },
+            {
+              "id": "n-cancel-fail",
+              "line": 254,
+              "anchor": "except A2AClientError as error:",
+              "text": "任务可能已结束，或对方不认识它：取消失败不是故事的终点。"
+            },
+            {
+              "id": "n-get-task",
+              "line": 257,
+              "anchor": "state = task_state(await self.exchange(\"GetTask\"",
+              "text": "无论取消回复怎么说，都把任务读回来，以对方此刻的状态为准。"
+            },
+            {
+              "id": "n-confirmed",
+              "line": 258,
+              "anchor": "record.cancel_confirmed = state ==",
+              "text": "只有读回的是 CANCELED 才算确认，报告据此写“已取消”或“没能确认”。"
+            }
+          ]
+        },
+        {
+          "id": "code-worker",
+          "type": "annotated-source",
+          "path": "lessons/lesson_a2a_delegation/worker.py",
+          "start": 100,
+          "end": 133,
+          "notes": [
+            {
+              "id": "n-execute",
+              "line": 100,
+              "anchor": "async def execute(",
+              "text": "被委派方的入口：SDK 收到消息后调用它，它往事件队列放事件，SDK 把事件变成流。"
+            },
+            {
+              "id": "n-new-task",
+              "line": 103,
+              "anchor": "task = context.current_task or new_task_from_user_message",
+              "text": "新消息创建新任务，任务编号和 `contextId` 由 SDK 生成。"
+            },
+            {
+              "id": "n-submitted",
+              "line": 105,
+              "anchor": "await event_queue.enqueue_event(task)",
+              "text": "第一个事件是 Task 本身，状态 SUBMITTED。"
+            },
+            {
+              "id": "n-updater",
+              "line": 106,
+              "anchor": "updater = TaskUpdater(",
+              "text": "TaskUpdater 把状态更新和产物按协议格式放进队列。"
+            },
+            {
+              "id": "n-contract",
+              "line": 107,
+              "anchor": "claims = read_claims(context)",
+              "text": "技能的输入契约：metadata 里的技能 id，加 1 到 3 条带编号的说法。"
+            },
+            {
+              "id": "n-rejected",
+              "line": 109,
+              "anchor": "TaskState.TASK_STATE_REJECTED",
+              "text": "不合契约的消息被拒绝：直接进入 REJECTED，没有 WORKING。"
+            },
+            {
+              "id": "n-working",
+              "line": 112,
+              "anchor": "await updater.update_status(TaskState.TASK_STATE_WORKING",
+              "text": "WORKING 加一句话，委派方等待时可以显示。"
+            },
+            {
+              "id": "n-slow",
+              "line": 114,
+              "anchor": "if self.fault == \"slow\":",
+              "text": "故障注入：开工前先等 60 秒，每秒报一次 WORKING，用来触发委派方的期限。"
+            },
+            {
+              "id": "n-fail",
+              "line": 119,
+              "anchor": "if self.fault == \"fail\":",
+              "text": "故障注入：直接报告 FAILED，并附原因。"
+            },
+            {
+              "id": "n-partial",
+              "line": 124,
+              "anchor": "for claim in claims[:1] if self.fault == \"partial\" else claims:",
+              "text": "故障注入 partial：只处理第一条说法，后面照常报 COMPLETED，协议层看不出问题。"
+            },
+            {
+              "id": "n-check",
+              "line": 126,
+              "anchor": "results.append(self.handbook.check(t, claim))",
+              "text": "真实的 BM25 检索加版本规则：这是被委派方自己的业务，委派方看不到。"
+            },
+            {
+              "id": "n-progress",
+              "line": 127,
+              "anchor": "await updater.update_status(TaskState.TASK_STATE_WORKING, message=self.say(",
+              "text": "每核对一条说法发一次进度更新。"
+            },
+            {
+              "id": "n-artifact",
+              "line": 130,
+              "anchor": "await updater.add_artifact(",
+              "text": "产物：数据部分给程序，文字部分给人。"
+            },
+            {
+              "id": "n-completed",
+              "line": 133,
+              "anchor": "await updater.update_status(TaskState.TASK_STATE_COMPLETED",
+              "text": "终态 COMPLETED，之后流结束。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "为什么被委派方是确定性程序，而不是另一个调模型的 Agent？",
+          "chosen": "核对员在子进程里只做 BM25 检索和版本规则，不调用模型。这样每条模型请求都经 RunContext 记录，密钥不出进程，协议这一层看到的和带模型的被委派方完全一样。",
+          "alternatives": [
+            {
+              "id": "remote-model",
+              "title": "子进程自己调用模型",
+              "why_not": "请求不会进入这次运行的记录，回放和用量统计都看不到；还得把密钥交给子进程，违反密钥只在后端的规则。"
+            },
+            {
+              "id": "proxy-model",
+              "title": "子进程把模型请求转回父进程代发",
+              "why_not": "可行，但平台目前没有这个能力：需要子进程到父进程的受控通道，以及对子进程请求的限额。本课不自建绕过 RunContext 的通道。"
+            },
+            {
+              "id": "in-process",
+              "title": "在同一进程里模拟“远端”",
+              "why_not": "没有进程边界：看不到任务状态的真实传递、取消和进程回收，也演示不了环境变量隔离。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "delegate-lifecycle",
+          "title": "正常委派：从 Agent Card 到产物",
+          "hypothesis": "委派方能读到被委派方进程的 Agent Card，据此写出模型的工具；发出消息后，同一个任务依次经过 SUBMITTED、WORKING 到 COMPLETED，产物回来后每条说法都能对上结果。",
+          "predict": "predict-messages",
+          "arms": [
+            {
+              "id": "delegate",
+              "exercise": "delegate",
+              "label": "正常委派"
+            }
+          ],
+          "observe": [
+            {
+              "id": "card",
+              "text": "Agent Card：名称、接口地址、`capabilities` 和技能列表。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.skills"
+              }
+            },
+            {
+              "id": "tool-from-card",
+              "text": "第一次请求里的工具：技能 id 是枚举，描述来自卡。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools"
+              }
+            },
+            {
+              "id": "send",
+              "text": "委派方发出的消息：文字部分、带编号的说法和 `metadata` 里的技能。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.message.metadata"
+              }
+            },
+            {
+              "id": "submitted",
+              "text": "被委派方回的第一个对象：状态 SUBMITTED 的 Task。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.task.status.state"
+              }
+            },
+            {
+              "id": "working",
+              "text": "WORKING 更新和被委派方附带的进度说明。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.statusUpdate.status.message.parts"
+              }
+            },
+            {
+              "id": "artifact",
+              "text": "产物 `evidence-report`：每条说法的证据片段。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.artifactUpdate.artifact.parts"
+              }
+            },
+            {
+              "id": "terminal",
+              "text": "带 `terminal: true` 的终态消息。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.terminal"
+              }
+            },
+            {
+              "id": "task-match",
+              "text": "报告里的任务编号核对：所有远端消息对着同一个任务。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=task_match]"
+              }
+            },
+            {
+              "id": "accept",
+              "text": "委派方的结果检查：每条说法都有结果和证据。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=result]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这次运行有两个进程：运行器里的委派方，和它启动的资料核对员。所有协议消息都记成 lesson.a2a_message，先从发现开始。"
+            },
+            {
+              "text": "第一条消息是 Agent Card，委派方在这里知道对方会什么。",
+              "observe": "card",
+              "stage": "runtime"
+            },
+            {
+              "text": "模型请求里的工具就是照这张卡写的，卡里的描述原样进了工具描述。",
+              "observe": "tool-from-card",
+              "stage": "model"
+            },
+            {
+              "text": "委派方发出的消息：文字给人看，数据部分是带编号的说法，技能写在 `metadata`。",
+              "observe": "send",
+              "stage": "tool"
+            },
+            {
+              "text": "被委派方先回一个 Task，状态 SUBMITTED，带着任务编号。",
+              "observe": "submitted"
+            },
+            {
+              "text": "接着是 WORKING，附着对方写的进度说明；每核对一条说法再来一次。",
+              "observe": "working"
+            },
+            {
+              "text": "产物里是每条说法的证据片段，按说法编号一一对应。",
+              "observe": "artifact"
+            },
+            {
+              "text": "终态 COMPLETED 带着 `terminal: true`，流到这里结束。",
+              "observe": "terminal"
+            },
+            {
+              "text": "报告核对了每条远端消息都对着同一个任务编号。",
+              "observe": "task-match"
+            },
+            {
+              "text": "最后是委派方自己的验收：每条说法都有结果和证据才算通过。",
+              "observe": "accept",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，发现、任务状态和产物都来自和另一个进程的真实 A2A 往来：SDK 解析出的每个对象都有记录，检索由被委派方进程里的 BM25 真实执行。",
+              "状态序列和任务编号能从记录里逐条核对，委派方的验收按产物内容判定。"
+            ],
+            "does_not_prove": [
+              "消息是 SDK 对象按字段名导出的内容，不是线路上的原始字节；键顺序和 JSON-RPC 外层都不能拿来对照。",
+              "离线测试模式下模型的决策和回答来自固定脚本，不代表任何真实模型；一次运行也说明不了模型会不会拆对说法。",
+              "结果检查只验结构，证据是否相关、回答是否正确要读片段原文。"
+            ]
+          }
+        },
+        {
+          "id": "three-failures",
+          "title": "三条失败路径：超时、远端失败、结果不完整",
+          "hypothesis": "三种结局各有自己的记录：超时由委派方发出 `CancelTask` 并读回 CANCELED，没有无限等待；远端失败是协议通着、终态为 FAILED；远端报告 COMPLETED 但产物不全时，状态正常，委派方的结果检查却不通过。",
+          "arms": [
+            {
+              "id": "timeout",
+              "exercise": "timeout",
+              "label": "超时后取消"
+            },
+            {
+              "id": "failure",
+              "exercise": "remote-failure",
+              "label": "远端失败"
+            },
+            {
+              "id": "incomplete",
+              "exercise": "incomplete",
+              "label": "远端返回不完整结果"
+            }
+          ],
+          "observe": [
+            {
+              "id": "cancel-request",
+              "text": "委派方发出的 `CancelTask`，请求里只有任务编号。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.id"
+              }
+            },
+            {
+              "id": "cancel-reply",
+              "text": "取消请求的回复：一个已是 CANCELED 的 Task。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.message.status.state"
+              }
+            },
+            {
+              "id": "bounded",
+              "text": "报告里“等待有上限”一项，写着读回的终态。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=bounded]"
+              }
+            },
+            {
+              "id": "terminal",
+              "text": "第一条带 `terminal: true` 的消息。",
+              "selector": {
+                "event": "lesson.a2a_message",
+                "path": "data.terminal"
+              }
+            },
+            {
+              "id": "error-type",
+              "text": "`tool_result` 里的错误类型，三种结局各不相同。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "result-check",
+              "text": "结果检查：状态是 COMPLETED 的那组没有通过。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=result]"
+              }
+            },
+            {
+              "id": "outcome",
+              "text": "报告里的“委派结果”，三种结局分开写。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=outcome]"
+              }
+            },
+            {
+              "id": "answer",
+              "text": "模型的回答：说明哪部分没核对。",
+              "selector": {
+                "event": "answer",
+                "path": "data.content"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三个对照组用同一个问题，只改被委派方启动时的故障参数。先看超时那一组。"
+            },
+            {
+              "text": "期限到了，委派方发出 `CancelTask`，请求里只有任务编号。",
+              "observe": "cancel-request",
+              "stage": "tool"
+            },
+            {
+              "text": "取消的回复已经是 CANCELED，但这只是对方当时的说法，后面还要读回。",
+              "observe": "cancel-reply"
+            },
+            {
+              "text": "报告的“等待有上限”一项写着读回的终态，这才是取消的确认。",
+              "observe": "bounded",
+              "stage": "runtime"
+            },
+            {
+              "text": "再看终态标记：超时组是读回的 CANCELED，远端失败组是 FAILED，不完整组是 COMPLETED。",
+              "observe": "terminal"
+            },
+            {
+              "text": "三种结局进入 `tool_result` 的错误类型各不相同，模型据此知道发生了什么。",
+              "observe": "error-type"
+            },
+            {
+              "text": "完成但不完整的那组：状态是 COMPLETED，结果检查没有通过；另两组没有产物可检查。",
+              "observe": "result-check"
+            },
+            {
+              "text": "报告把三种结局分开写，没有笼统地说“失败”。",
+              "observe": "outcome"
+            },
+            {
+              "text": "模型的回答如实说明哪部分没核对，没有补出答案。这是离线夹具的写法，真实模型要另行核对。",
+              "observe": "answer",
+              "stage": "model"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这三次运行里，超时被取消并读回了终态，没有无限等待；远端失败和结果不完整被分成两种结局，类型、状态序列和说明都能从记录里查到。",
+              "离线夹具下，三种结局都没有被当成成功回答。"
+            ],
+            "does_not_prove": [
+              "故障是被委派方的启动参数注入的，来源写在报告里；真实的远端失败可能以别的状态或别的断开方式出现。",
+              "CANCELED 只说明这次对方确认了取消，不说明它的副作用都已收尾。",
+              "夹具里模型的回答是脚本，不说明真实模型面对这些结果会怎么措辞。"
+            ]
+          }
+        },
+        {
+          "id": "process-boundary",
+          "title": "进程边界：看不见的内部与拿不到的密钥",
+          "hypothesis": "被委派方只拿到安全的环境变量，没有密钥类名字；它的内部过程不出现在本方的事件里，本方模型调用数只数委派方自己的请求；运行结束后进程已被回收，端口不再接受连接，超时那一组也一样。",
+          "arms": [
+            {
+              "id": "delegate",
+              "exercise": "delegate",
+              "label": "正常委派"
+            },
+            {
+              "id": "timeout",
+              "exercise": "timeout",
+              "label": "超时后取消"
+            }
+          ],
+          "observe": [
+            {
+              "id": "env-names",
+              "text": "启动被委派方时记下的环境变量名。",
+              "selector": {
+                "event": "lesson.a2a_process",
+                "path": "data.env_names"
+              }
+            },
+            {
+              "id": "no-secret",
+              "text": "报告里的检查：变量名里没有密钥类名字。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_secret]"
+              }
+            },
+            {
+              "id": "model-calls",
+              "text": "本方模型调用数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=model_calls]"
+              }
+            },
+            {
+              "id": "timeline",
+              "text": "报告里的时间线表格：每条协议消息的方向、类型和状态。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            },
+            {
+              "id": "fault",
+              "text": "故障注入的来源：被委派方的启动参数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=fault]"
+              }
+            },
+            {
+              "id": "stopped",
+              "text": "最后一条进程事件：端口是否还接受连接。",
+              "selector": {
+                "event": "lesson.a2a_process",
+                "path": "data.port_closed"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这个实验看进程边界：什么传得过去，什么看不见，什么在结束后必须消失。"
+            },
+            {
+              "text": "启动事件里列着被委派方收到的环境变量名，只有几个系统变量。",
+              "observe": "env-names",
+              "stage": "runtime"
+            },
+            {
+              "text": "报告按名字找密钥类变量，找不到才通过；变量的值从不记录。",
+              "observe": "no-secret"
+            },
+            {
+              "text": "本方模型调用数只有两次：一次决定委派，一次写回答。被委派方没有模型调用。",
+              "observe": "model-calls",
+              "stage": "model"
+            },
+            {
+              "text": "时间线按顺序列出每条消息的方向、类型和状态，进度说明是被委派方自己写的。",
+              "observe": "timeline"
+            },
+            {
+              "text": "超时那一组的故障来自启动参数，报告写明了，不是真实的远端故障。",
+              "observe": "fault"
+            },
+            {
+              "text": "最后一条进程事件：端口已不再接受连接，进程被回收，超时那一组也是如此。",
+              "observe": "stopped"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这两次运行里，被委派方进程只收到安全的环境变量，没有密钥类名字；运行结束后它的端口不再接受连接。",
+              "本方的模型调用数只来自委派方自己的请求，被委派方的内部过程没有任何记录。"
+            ],
+            "does_not_prove": [
+              "变量名里没有密钥，只说明没通过环境变量传过去；本课靠被委派方是确定性程序、不碰模型来保证它用不到密钥。",
+              "端口关闭说明本机进程已被回收；真实的远程服务不归你停，这里没有演示。",
+              "本课没有带模型的被委派方，它的观测与费用怎么对账见第七节的深入块。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "fault",
+          "label": "故障注入",
+          "help": "被委派方启动时带的 `--fault` 参数。每个练习已预设好，换成别的值会改变这次运行的结局。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无：正常工作"
+            },
+            {
+              "value": "slow",
+              "label": "slow：开工前先等 60 秒"
+            },
+            {
+              "value": "fail",
+              "label": "fail：开工后报告失败"
+            },
+            {
+              "value": "partial",
+              "label": "partial：只核对第一条说法就报告完成"
+            }
+          ]
+        },
+        {
+          "name": "deadline_seconds",
+          "label": "等待时限（秒）",
+          "help": "委派方等终态的上限，1 到 10 秒；超时后取消。只有被委派方来不及完成时才会用到。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "下面哪一项不在 Agent Card 里？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "技能列表和每项技能接受的输入格式",
+                  "feedback": "不对。这正是卡的主要内容。"
+                },
+                {
+                  "id": "b",
+                  "text": "被委派方的系统提示词和内部工具",
+                  "feedback": "对。卡只写对外的声明，内部做法不透明。"
+                },
+                {
+                  "id": "c",
+                  "text": "接口地址和是否支持流式更新",
+                  "feedback": "不对。接口和能力都写在卡里。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "卡是对外的自我介绍：能做什么、怎么连，不写怎么做。"
+            },
+            {
+              "id": "q2",
+              "prompt": "一次正常委派里，委派方从流里读到的第一个对象是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "状态为 SUBMITTED 的 Task，带着任务编号",
+                  "feedback": "对。之后才是 WORKING 的状态更新。"
+                },
+                {
+                  "id": "b",
+                  "text": "产物",
+                  "feedback": "不对。产物在 WORKING 之后、终态之前。"
+                },
+                {
+                  "id": "c",
+                  "text": "状态为 COMPLETED 的更新",
+                  "feedback": "不对。终态是最后一条。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "可以在实验“正常委派”里看事件顺序：Task、WORKING、产物、终态。"
+            },
+            {
+              "id": "q3",
+              "prompt": "期限到了，任务还没进入终态。委派方应该怎么做？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "发 `CancelTask`，读回状态，在报告里写明超时和确认结果",
+                  "feedback": "对。等待有上限，取消要得到确认。"
+                },
+                {
+                  "id": "b",
+                  "text": "继续等，直到远端给出结果",
+                  "feedback": "不对。这就是无限等待。"
+                },
+                {
+                  "id": "c",
+                  "text": "根据已收到的进度估计一个答案",
+                  "feedback": "不对。没有核对结果就不能给答案。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "超时练习的报告里，“等待有上限”一项写着读回的状态。"
+            },
+            {
+              "id": "q4",
+              "prompt": "流在终态之前断了，最后看到的状态是 WORKING。应该怎么记录？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "通信中断：任务下落不明，不能说成远端失败",
+                  "feedback": "对。FAILED 是对方明确报告的终态，这里什么也没报告。"
+                },
+                {
+                  "id": "b",
+                  "text": "远端失败，因为任务没有完成",
+                  "feedback": "不对。对方没有说它失败了。"
+                },
+                {
+                  "id": "c",
+                  "text": "任务完成，因为没有看到错误",
+                  "feedback": "不对。没有看到终态不等于完成。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "代码里这条路径抛的是 RemoteUnavailable，而不是 RemoteTaskFailed。"
+            },
+            {
+              "id": "q5",
+              "prompt": "状态是 COMPLETED，产物里只有 `c1` 的结果，而交出去的是 `c1` 和 `c2`。该怎么办？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "按结果不完整处理：把已有部分和缺失的说法一起告诉模型",
+                  "feedback": "对。状态正常不代表产物完整。"
+                },
+                {
+                  "id": "b",
+                  "text": "当作成功，因为协议没有报错",
+                  "feedback": "不对。协议层的成功不等于结果可用。"
+                },
+                {
+                  "id": "c",
+                  "text": "当作连接故障，重新建立连接",
+                  "feedback": "不对。连接是好的，问题在产物。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "报告里状态序列以 COMPLETED 结束，结果检查却没有通过，两者并排记录。"
+            },
+            {
+              "id": "q6",
+              "prompt": "为什么本课的资料核对员不调用模型？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它在另一个进程，拿不到 RunContext：请求记不下来，还得把密钥交给子进程",
+                  "feedback": "对。这是教学取舍，不是协议要求。"
+                },
+                {
+                  "id": "b",
+                  "text": "A2A 协议规定被委派方不能使用模型",
+                  "feedback": "不对。协议不关心对方里面是什么。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为模型调用太慢，会拖垮委派方的期限",
+                  "feedback": "不对。原因是记录和密钥，不是速度。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "看决策块：另外两种做法分别违反密钥规则和缺少平台能力。"
+            },
+            {
+              "id": "q7",
+              "prompt": "Agent Card 把接口地址写成了别处，运行器该拒绝。这条规则防的是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "对方写的地址把请求引到别处",
+                  "feedback": "对。地址由对方写，不能直接信。"
+                },
+                {
+                  "id": "b",
+                  "text": "卡里的技能太多，模型选不过来",
+                  "feedback": "不对。这条检查与技能数量无关。"
+                },
+                {
+                  "id": "c",
+                  "text": "流式更新太快，运行器读不过来",
+                  "feedback": "不对。这和地址无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "本课只连自己启动的进程，测试里用指向别处的卡验证了拒绝。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt-cancel",
+          "type": "trace-hunt",
+          "prompt": "运行“超时后取消”，找出委派方发给被委派方的取消请求。",
+          "target": {
+            "event": "lesson.a2a_message",
+            "path": "data.message.id"
+          },
+          "explanation": "它是 `name` 为 `CancelTaskRequest`、方向为 `client_to_agent` 的那条 lesson.a2a_message，请求里只有任务编号。紧跟着的是取消的回复，再后面是 `GetTaskRequest` 和读回的 Task。最后这个 Task 的状态才是取消的确认。"
+        },
+        {
+          "id": "check-hunt-incomplete",
+          "type": "trace-hunt",
+          "prompt": "运行“远端返回不完整结果”，找出报告里没有通过的那项检查。",
+          "target": {
+            "event": "lesson.report",
+            "path": "data.checks[id=result]"
+          },
+          "explanation": "`result` 这一项的 `passed` 为假，说明里写着哪条说法没有结果。同一份报告里状态序列以 COMPLETED 结束，所以“任务完成”和“结果可用”是两个不同的结论。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我跑了“正常委派”，在事件里依次找到了 Agent Card、Task、WORKING、产物和终态，并说得出每一步是谁发出的。"
+            },
+            {
+              "id": "item-2",
+              "text": "我跑了“超时后取消”，找到了 `CancelTask` 和读回的 `GetTask`，知道为什么取消的回复不算确认。"
+            },
+            {
+              "id": "item-3",
+              "text": "我对比了“远端失败”和“远端返回不完整结果”：一个终态是 FAILED，一个是 COMPLETED，我能说出各自的结果检查和错误类型。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在报告里找到了被委派方收到的环境变量名和本方的模型调用数，并解释了为什么被委派方没有 `request` 事件。"
+            },
+            {
+              "id": "item-5",
+              "text": "我能用自己的话说明这个场景为什么用 A2A 而不是 MCP，并举一个反过来该用 MCP 的例子。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "delegate_task",
+      "note": "模型唯一的工具：技能和参数范围都由 Agent Card 生成。"
+    },
+    {
+      "name": "discover",
+      "note": "读 Agent Card 并检查能不能用；通过才创建客户端。"
+    },
+    {
+      "name": "delegation_tool",
+      "note": "把 Agent Card 的技能写成模型的工具定义。"
+    },
+    {
+      "name": "accept",
+      "note": "委派方的验收：每条说法都有结果和证据才通过。"
+    },
+    {
+      "name": "DelegationTimeout",
+      "note": "到期后已发取消并读回状态，没有拿到结果。"
+    },
+    {
+      "name": "RemoteTaskFailed",
+      "note": "远端以 FAILED、REJECTED 等结束，附对方的说明。"
+    },
+    {
+      "name": "IncompleteResult",
+      "note": "远端报告 COMPLETED，但产物没通过验收。"
+    },
+    {
+      "name": "RemoteUnavailable",
+      "note": "协议层出错或流在终态前断了，任务下落不明。"
+    },
+    {
+      "name": "lesson.a2a_message",
+      "note": "一条 A2A 协议对象：方向、类型和 SDK 导出的内容。"
+    },
+    {
+      "name": "sdk_protobuf_message",
+      "note": "captured 的取值：SDK 的 protobuf 对象按字段名导出。"
+    },
+    {
+      "name": "spawn_local_service",
+      "note": "平台函数：启动本地服务进程，退出时必定回收。"
+    },
+    {
+      "name": "safe_child_environment",
+      "note": "平台函数：子进程只得到 SDK 的安全环境变量。"
+    },
+    {
+      "name": "run_until_cancelled",
+      "note": "平台函数：运行被停止时取消异步调用并回收进程。"
+    },
+    {
+      "name": "task_match",
+      "note": "报告检查：所有远端消息都带同一个任务编号。"
+    },
+    {
+      "name": "no_secret",
+      "note": "报告检查：传给子进程的变量名里没有密钥类名字。"
+    },
+    {
+      "name": "TERMINAL",
+      "note": "终态集合：COMPLETED、FAILED、CANCELED、REJECTED。"
+    },
+    {
+      "name": "INTERRUPTED",
+      "note": "被打断的状态：INPUT_REQUIRED 和 AUTH_REQUIRED。"
+    }
+  ]
+}
