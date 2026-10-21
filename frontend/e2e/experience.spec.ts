@@ -14,6 +14,9 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
   page,
   request,
 }) => {
+  // 验的是导学内容与课程树，不是动效；无头浏览器没有 GPU，首页与导学的 WebGL 背景靠软件渲染，
+  // 这条点遍所有章节的用例会因此逼近 30 秒上限。
+  await page.emulateMedia({ reducedMotion: "reduce" });
   let runs = 0;
   page.on("request", (req) => {
     if (isRunCreation(req)) runs++;
