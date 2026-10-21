@@ -1564,7 +1564,7 @@ Loading and chunking, then comparing keyword, vector, and hybrid retrieval.
 
 Turn a fixed set of local documents into chunks that carry their source, compare chunking strategies, and mark the trust boundary of external text at load time.
 
-**Terms in this lesson:** Chunking
+**Terms in this lesson:** Chunking, Chunk Overlap, Chunk ID, Trust Boundary
 
 **Sections**
 
@@ -1585,7 +1585,7 @@ Turn a fixed set of local documents into chunks that carry their source, compare
 
 - Document loading and format cleanup
 - Source path, title, and version
-- Chunk size, overlap, and context
+- Chunk size, chunk overlap, and context
 - Chunk IDs and locating the original text
 - External text is untrusted
 - Empty documents, duplicate content, and parse failures
@@ -1620,6 +1620,8 @@ Deliverable: A list of the fixed corpus, two chunk catalogs, and a log of loadin
 **Prerequisites:** Lesson 25 Document loading and chunking
 
 Retrieve over local documents with keywords and BM25, see the hits, ranking, and misses, and set up a comparable baseline for later vector retrieval.
+
+**Terms in this lesson:** Keyword retrieval, Inverse document frequency, BM25, Query set, Retrieval miss
 
 **Sections**
 
@@ -1673,6 +1675,8 @@ Deliverable: The query set, a hit table, and examples of misses.
 
 Turn document chunks into embeddings, retrieve by cosine similarity, and compare hits and misses with the keyword baseline on the same query set.
 
+**Terms in this lesson:** Vector retrieval, Embedding, Cosine similarity, Vector index
+
 **Sections**
 
 1. **An embedding is a list of numbers**: Map text to a vector. Texts with similar meaning get similar vectors.
@@ -1725,7 +1729,7 @@ Deliverable: A table comparing the hits of the two retrieval methods.
 
 Merge and rerank keyword and vector results, compare the three retrieval methods on one query set, and handle index updates and deletions.
 
-**Terms in this lesson:** Vector retrieval, Hybrid retrieval
+**Terms in this lesson:** Hybrid retrieval, Reciprocal Rank Fusion, Reranking, Metadata Filtering
 
 **Sections**
 
@@ -1785,7 +1789,7 @@ Validate citations, then study bounded Agentic RAG.
 
 Give the model the chunks that were actually retrieved, generate traceable answers, and handle insufficient or conflicting sources.
 
-**Terms in this lesson:** Retrieval-augmented generation, Citation
+**Terms in this lesson:** Retrieval-augmented generation, Citation, Groundedness
 
 **Sections**
 
@@ -1806,7 +1810,7 @@ Give the model the chunks that were actually retrieved, generate traceable answe
 
 - Retrieval context and the generation prompt
 - Chunk IDs, sources, and citation format
-- Citation existence and support
+- Citation existence, support, and groundedness
 - No answer and uncertainty
 - Conflicting sources and freshness
 - Separating retrieval quality from generation quality
@@ -1843,7 +1847,7 @@ Deliverable: A Q&A record, a citation check table, and a classification of retri
 
 Let the model decide within a budget whether to rewrite the query, retrieve again, or stop, and use the same question set to judge whether the extra retrieval improves results.
 
-**Terms in this lesson:** Agentic RAG
+**Terms in this lesson:** Agentic RAG, Static RAG, Multi-hop question, Query rewriting, Attempt log
 
 **Sections**
 
@@ -1862,7 +1866,7 @@ Let the model decide within a budget whether to rewrite the query, retrieve agai
 **Topics**
 
 - Retrieval tool and query routing
-- Query rewriting and sub-questions
+- Multi-hop questions, query rewriting, and sub-questions
 - Observation feedback and evidence coverage
 - Repeated queries and attempt records
 - Budgets for calls, rounds, and time
@@ -1908,6 +1912,8 @@ Map native models, tools, and result contracts onto it, and reuse mature compone
 
 Compare the native loop with LangChain on the same task and tools, and explain which messages, calls, and result handling the framework takes over.
 
+**Terms in this lesson:** Agent Framework, Framework Input, Invalid Tool Call
+
 **Sections**
 
 1. **The same task, two implementations**: Take a task the native loop already did and do it again with LangChain.
@@ -1924,9 +1930,9 @@ Compare the native loop with LangChain on the same task and tools, and explain w
 
 **Topics**
 
-- Model interface and provider adapters
-- Framework messages vs. native messages
-- Tool registration and the agent loop
+- Agent framework model interfaces and provider adapters
+- Framework input, framework messages, and native messages
+- Tool registration, invalid tool calls, and the agent loop
 - Deterministic chains vs. autonomous calls
 - Callbacks and a unified trace
 - Checking dependency versions and capabilities
@@ -1961,6 +1967,8 @@ Deliverable: Paired traces of the two implementations and a table mapping framew
 **Prerequisites:** Lesson 9 Structured output and business validation, Lesson 31 LangChain vs. the native implementation
 
 Plug existing business contracts into the framework's model, tool, and validation components, and compare the unified interface with the provider's raw response.
+
+**Terms in this lesson:** Tool Decorator, Capability Matrix
 
 **Sections**
 
@@ -2020,6 +2028,8 @@ Build a state graph you can explain, and decide the boundaries for dependencies,
 
 Describe the task flow with State, Node, and Edge, and orchestrate tool calls and validation as a graph with terminal states.
 
+**Terms in this lesson:** StateGraph, Conditional edge, Reducer, Recursion limit
+
 **Sections**
 
 1. **Why draw it as a graph**: Branches, loops, and terminal states are easier to check as a graph than as nested ifs.
@@ -2039,8 +2049,8 @@ Describe the task flow with State, Node, and Edge, and orchestrate tool calls an
 - State, Node, Edge, and StateGraph
 - Typed state and updates
 - Message merging and reducers
-- Conditional routing and tool nodes
-- Loop budget and START/END
+- Conditional-edge routing and tool nodes
+- Recursion limit and START/END
 - Node events and state diffs
 
 **Experiments**
@@ -2328,7 +2338,7 @@ Fixing the failing test in a fixture repository:
 
 1. Create an independent temporary workspace for each run and copy in the fixture repository with the failing test.
 2. The agent has only one bash tool. Record each command's cwd, policy verdict, exit code, head and tail of output, and duration.
-3. When the run ends, the platform reruns pytest to decide whether the bug is fixed.
+3. When the run ends, the platform reruns the tests (standard-library unittest) to decide whether the bug is fixed.
 
 Deliverable: Command records, file diffs, and the platform's acceptance result.
 
@@ -2654,12 +2664,12 @@ Reuse existing business tools to do service discovery and calls.
 
 Use the official SDK to expose an existing course retrieval tool as a service, complete real discovery, calls, and error return, and tell the protocol apart from agent scheduling.
 
-**Terms in this lesson:** Model Context Protocol
+**Terms in this lesson:** Model Context Protocol, MCP Server, MCP Client, Tool Discovery
 
 **Sections**
 
 1. **What problem MCP solves**: Make a tool an independent service that any client supporting the protocol can discover and call.
-2. **Client, server, and transport**: Local processes talk over standard input and output, so you can see the raw messages of one call.
+2. **Client, server, and transport**: Local processes talk over standard input and output, so you can see the complete protocol messages of one call.
 3. **Tool discovery and input schema**: The client lists the tools first, then calls them according to the schema.
 4. **Protocol errors vs. business failures**: A failed connection and a tool returning an error are different things, recorded separately.
 5. **Permission boundary**: What the service can do is decided by the server. The client can only make requests.
@@ -2673,7 +2683,7 @@ Use the official SDK to expose an existing course retrieval tool as a service, c
 **Topics**
 
 - MCP vs. plain function calling
-- Client, server, and transport
+- Client, MCP server, and transport
 - Tool discovery and input schema
 - Real calls and returning results
 - Protocol errors vs. business failures
@@ -2768,6 +2778,8 @@ Deliverable: A multi-server registry, a disconnect and recovery trace, and exit 
 
 Let agents in two independent processes delegate tasks through the A2A protocol, and observe capability discovery, task state, and returned results.
 
+**Terms in this lesson:** A2A artifact, Agent2Agent protocol, Agent Card, Task lifecycle
+
 **Sections**
 
 1. **How agents collaborate**: One agent hands a task to an agent in another process, rather than just calling a tool.
@@ -2784,8 +2796,8 @@ Let agents in two independent processes delegate tasks through the A2A protocol,
 **Topics**
 
 - Agent Card and capability discovery
-- Task state
-- Cross-process messages
+- Task lifecycle and states
+- Cross-process messages and A2A artifacts
 - Failures and timeouts
 - Comparison with MCP
 
@@ -2883,6 +2895,8 @@ Deliverable: A task graph for the four patterns and a paired quality and cost re
 
 Specify inputs, outputs, evidence, and stop conditions for subtasks, isolate their context, and verify merged results and the shared budget.
 
+**Terms in this lesson:** Delegation Contract, Merge Check, Shared Budget, Cancellation Propagation
+
 **Sections**
 
 1. **Subtask contract**: A task handed off states its inputs, outputs, evidence, and stop conditions.
@@ -2901,7 +2915,7 @@ Specify inputs, outputs, evidence, and stop conditions for subtasks, isolate the
 - Subtask contract and role capabilities
 - Shared and isolated context
 - Evidence packets and source metadata
-- Merging results and resolving conflicts
+- Merge checks and conflict resolution
 - Global, subtask, and time budgets
 - Cancellation propagation and collaborative termination
 
@@ -2990,11 +3004,13 @@ Deliverable: A background lane timeline and the goal evaluation record.
 
 Use an independent goal evaluation to decide whether to continue, finish, or give up, set a budget and give-up conditions for the loop, and record the evidence behind each round's evaluation.
 
+**Terms in this lesson:** Goal evaluation, Unreachable goal
+
 **Sections**
 
 1. **A goal has to be checkable**: Write the goal as a condition the program can judge, not "until it's good".
 2. **Independent goal evaluation**: The executor saying it's done doesn't count. The evaluator decides by the conditions whether to continue, finish, or give up.
-3. **Budget and give-up conditions**: Rounds, time, and cost all have limits, and when they are reached the loop gives up honestly.
+3. **Budget and give-up conditions**: Rounds, time, and cost all have limits; when one is reached the loop stops and reports the budget as exhausted, and when the goal cannot be reached it gives up on purpose.
 4. **Round-by-round records**: Keep the basis of every round's evaluation, so a replay shows why it continued or stopped.
 
 **Objectives**
@@ -3008,7 +3024,7 @@ Use an independent goal evaluation to decide whether to continue, finish, or giv
 - Goal evaluation
 - Continue, finish, and give up
 - Budget and timeout
-- Give-up conditions
+- Unreachable goals and abandon conditions
 - Evaluation records
 
 **Experiments**

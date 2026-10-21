@@ -105,6 +105,14 @@
 | 不可评估（验证器缺少判定所需的信息，如开放式回答、缺少来源结果） | 无法评估、未评估 |
 | 角色切换（`multi-agent-patterns` 引入：同一个 Agent 换系统提示词，消息历史共享） | 角色转换、多角色转换 |
 | 交接包（`multi-agent-patterns` 引入：交给另一个 Agent 的全部输入） | 移交包、交接内容 |
+| 漏检（`keyword-retrieval` 引入：查询人工标注的小节没进前 `top_k` 条） | 漏召回、未召回、没检索到（指这件事时） |
+| 命中率（有人工标注的查询里命中的比例；参考书写作 recall@k） | 召回率（指这个数时：“召回”已是记忆一课的术语） |
+| Embedding（英文原词，指结果、模型和请求：Embedding、Embedding 模型、Embedding 请求；`embedding-retrieval` 引入） | 嵌入、嵌入向量、向量化模型 |
+| 向量索引（`embedding-retrieval` 引入：片段向量连同模型、维度、资料版本一起保存） | 向量库、向量数据库（指本课的索引文件时） |
+| 归并函数（`langgraph-state` 引入：规定节点的更新怎样并入旧值） | 合并函数、规约函数、正文里的 reducer |
+| 路由函数（条件边上读状态、返回去向的函数；`langgraph-state`） | 条件函数、指它时的“路由器” |
+| 状态差异（节点返回的那几个字段，记为 `lesson.graph_update`；`langgraph-state`） | 状态增量、状态补丁 |
+| 委派方、被委派方（A2A 委派的两端；`a2a-delegation` 引入；“远端”只作形容词，如远端任务、远端失败） | 客户端 Agent、服务端 Agent、远端 Agent（指这两端时；“客户端”“服务端”留给 MCP） |
 
 “评审”和“评估者”的分界：
 
@@ -127,7 +135,10 @@
 - `persistent-memory`：召回（命名空间已是课程概念，`persistent-memory` 引入，字段名写 `namespace`）；`memory-lifecycle`：范围（`scope`）、乐观并发控制、过时写入；
 - `todo-planning`：运行层**插入**的消息；
 - `plan-and-replan`：失败后重新规划（策略）、修订计划（动作）；
-- `observability-cost`：账本（`Tracer` 每个跨度记一行）、指纹（`fingerprint`）、重复执行（指纹相同的第二次及以后的执行，缓存命中不算）、工具缓存（只在一次运行内）、端到端耗时（报告标签；术语是端到端延迟）、不适用（工具行没有 Token 用量，写“—”，不同于未报告）。
+- `observability-cost`：账本（`Tracer` 每个跨度记一行）、指纹（`fingerprint`）、重复执行（指纹相同的第二次及以后的执行，缓存命中不算）、工具缓存（只在一次运行内）、端到端耗时（报告标签；术语是端到端延迟）、不适用（工具行没有 Token 用量，写“—”，不同于未报告）；
+- `langgraph-state`：终态节点（answer、ask_user、fail）、业务预算（`max_repairs`，与递归上限相对）、修正（验证失败后回到 plan 重新调用）、验证节点（`verify`）；
+- `agentic-rag`：检索记录（运行器每轮插入的消息，事件 `lesson.harness_injected`）、重复查询（词集合相同且 top_k 不更大，照常计数）、停止原因（`lesson.stop`）、最后一次请求（到上限后 `tool_choice` 为 none、只能回答的那次请求）、变差（逐题对照里不如静态 RAG 的题；术语“回归”由 `evaluation-sets` 引入）。
+- `goal-loops`：执行者（模型，代码里是 `Worker`；它交出的 `status` 叫完成声明）、验收器（`evaluate_goal`，执行目标评估的程序）、完成条件（`CRITERIA`：字段、值的形状和来源，是验收标准在本课的写法）、通知卡（执行者的产物，不同于任务卡）、结局（完成、放弃、预算耗尽三种，事件字段 `decision`）、停止原因（`reason_code`）、轮数上限（`max_rounds`，不叫迭代上限，那是修订循环的）。放弃条件和预算耗尽已在更早的课里出现，登记为背景词。
 
 ## 4. 作者流程（新课和改课都适用）
 

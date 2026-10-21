@@ -113,6 +113,14 @@ The table is a Chinese wording table: it lists the Chinese wording to use and th
 | 不可评估 (the verifier lacks what it needs to decide, such as an open-ended answer or a missing source result) | 无法评估, 未评估 | unassessable |
 | 角色切换 (introduced in `multi-agent-patterns`: one agent swaps its system prompt while the message history stays shared) | 角色转换, 多角色转换 | role switching |
 | 交接包 (introduced in `multi-agent-patterns`: everything handed to another agent) | 移交包, 交接内容 | handoff package |
+| 漏检 (introduced by `keyword-retrieval`: none of a query's annotated sections reach the first `top_k`) | 漏召回, 未召回, 没检索到 (for this) | retrieval miss |
+| 命中率 (the share of annotated queries that hit; the reference book writes recall@k) | 召回率 (for this number: 召回 is already the memory lessons' term) | hit rate |
+| Embedding (the English word, for the result, the model and the request: Embedding, Embedding 模型, Embedding 请求; introduced by `embedding-retrieval`) | 嵌入, 嵌入向量, 向量化模型 | embedding, embedding model, embedding request |
+| 向量索引 (introduced by `embedding-retrieval`: chunk vectors saved together with the model, dimensions and corpus version) | 向量库, 向量数据库 (for this lesson's index file) | vector index |
+| 归并函数 (introduced by `langgraph-state`: decides how a node's update is merged into the old value) | 合并函数, 规约函数, reducer in Chinese text | reducer |
+| 路由函数 (the function on a conditional edge that reads the state and returns where to go; `langgraph-state`) | 条件函数, 路由器 for this | router function |
+| 状态差异 (the fields a node returns, recorded as `lesson.graph_update`; `langgraph-state`) | 状态增量, 状态补丁 | state diff (state update) |
+| 委派方, 被委派方 (the two ends of an A2A delegation; introduced by `a2a-delegation`; 远端 is only an adjective, as in 远端任务, 远端失败) | 客户端 Agent, 服务端 Agent, 远端 Agent (for these two ends; 客户端 and 服务端 are kept for MCP) | delegating side, remote agent |
 
 The boundary between 评审 (review) and 评估者 (evaluator):
 
@@ -136,6 +144,9 @@ Names within a single lesson must also stay fixed. For example:
 - `todo-planning`: messages the run layer **inserts**.
 - `plan-and-replan`: 失败后重新规划 (re-planning after a failure, the strategy) and 修订计划 (revising the plan, the action).
 - `observability-cost`: 账本 (the ledger, one row per span written by `Tracer`), 指纹 (fingerprint, `fingerprint`), 重复执行 (repeated execution: the second and later executions with the same fingerprint; cache hits do not count), 工具缓存 (tool cache, within one run only), 端到端耗时 (end-to-end time, the report label; the term is 端到端延迟, end-to-end latency), 不适用 (not applicable: tool rows have no token usage and show "—", which differs from not reported).
+- `langgraph-state`: 终态节点 (terminal nodes: answer, ask_user, fail), 业务预算 (the business budget, `max_repairs`, as opposed to the recursion limit), 修正 (repair: going back to plan after a failed check), 验证节点 (the verify node, `verify`).
+- `agentic-rag`: 检索记录 (the search record the runner inserts each round, event `lesson.harness_injected`), 重复查询 (a repeated query: the same set of terms with no larger top_k, still counted), 停止原因 (the stop reason, `lesson.stop`), 最后一次请求 (the last request after a limit, with `tool_choice` none, which can only answer), 变差 (got worse: a question where the loop does worse than static RAG in the per-question comparison; the term 回归, regression, is introduced by `evaluation-sets`).
+- `goal-loops`: 执行者 (the worker, `Worker` in code; the `status` it hands in is the completion claim), 验收器 (the validator `evaluate_goal`, the program that performs the goal evaluation), 完成条件 (the completion condition, `CRITERIA`: field, shape of the value and source; the form the acceptance criteria take in this lesson), 通知卡 (the notice card, the worker's product, not the task card), 结局 (the outcome: complete, abandoned or budget exhausted, event field `decision`), 停止原因 (the stop reason, `reason_code`), 轮数上限 (the round limit, `max_rounds`, not the iteration limit, which belongs to the revision loop). The abandon condition and budget exhausted already appear in earlier lessons and are registered as background terms.
 
 ## 4. Author workflow (for new and revised lessons)
 
