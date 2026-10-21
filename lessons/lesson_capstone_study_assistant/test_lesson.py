@@ -411,6 +411,23 @@ class VerifierTests(unittest.TestCase):
         self.assertEqual((result["verdict"], result["category"]), ("failed", "misused"))
         self.assertEqual(check_of(result, "citations")["status"], "fail")
 
+    def test_two_versions_cited_as_noise_do_not_fail_a_case_that_is_not_about_a_conflict(self):
+        from lessons.lesson_rag_citations.citations import Citation, Claim, GroundedAnswer
+        case, outcome, t = outcome_for("h02")
+        versions = [next(chunk for chunk in notes_chunks("en") if chunk.doc_id == doc)
+                    for doc in ("capabilities", "capabilities-2026-03")]
+        claims = [Claim(text=chunk.text.split("\n")[-1], citations=[Citation(chunk_id=chunk.chunk_id,
+                                                                              quote=chunk.text.split("\n")[-1])])
+                  for chunk in versions]
+        noisy = {**outcome, "provided": [*outcome["provided"], *versions],
+                 "answer": GroundedAnswer(claims=claims, insufficient_evidence=False)}
+        result = verifier.verify_case(case, noisy, t)
+        self.assertNotIn("conflict", {item["id"] for item in result["checks"]})
+        self.assertNotIn("conflict_not_disclosed", result["reasons"])
+        d04_case, d04_outcome, _ = outcome_for("d04")
+        conflict = verifier.verify_case(d04_case, d04_outcome, t)
+        self.assertIn("conflict", {item["id"] for item in conflict["checks"]}, "the conflict case is still judged on it")
+
     def test_answering_a_question_the_notes_cannot_answer_fails(self):
         from lessons.lesson_rag_citations.citations import Citation, Claim, GroundedAnswer
         case, outcome, t = outcome_for("d03")

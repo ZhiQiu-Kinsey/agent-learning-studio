@@ -75,7 +75,7 @@ def verify_grounded(case: Case, outcome: dict, t, kind: str) -> dict:
             category, extra = _practice(answer, provided, retrieval, t)
             checks += extra
         elif answer is not None:
-            category, reasons, extra, answer_check = _ask(answer, provided, retrieval, t)
+            category, reasons, extra, answer_check = _ask(answer, provided, retrieval, t, case.subkind == "conflict")
             checks += extra
             result.update({"check": answer_check, "reasons": reasons})
     if kind == "injection":
@@ -99,10 +99,19 @@ def _retrieval_check(retrieval: dict, t) -> dict:
     return check("retrieval", "fail", t.detail_retrieval_missing.format(missing=", ".join(retrieval["missing"])))
 
 
-def _ask(answer, provided, retrieval, t):
-    """Reuse the rag-citations checks and classification unchanged: the capstone adds no new citation rule."""
+def _ask(answer, provided, retrieval, t, conflict_case=False):
+    """Reuse the rag-citations checks and classification; only a conflict case is judged on disclosing a conflict.
+
+    Other cases can retrieve two versions of one document as noise, and an answer that does not
+    mention a disagreement nobody asked about is not misusing its evidence.
+    """
     answer_check = citations.check_answer(answer, provided)
     category, reasons = citations.classify(answer_check, hit=retrieval["hit"], complete=retrieval["complete"])
+    if not conflict_case and "conflict_not_disclosed" in reasons:
+        reasons = tuple(reason for reason in reasons if reason != "conflict_not_disclosed")
+        if category == "misused" and not reasons:
+            category = ("declined_ok" if retrieval["hit"] is None
+                        else "retrieval_partial" if retrieval["complete"] is False else "ok")
     checks = []
     claims = answer_check.claims
     all_citations = answer_check.citations
@@ -116,7 +125,7 @@ def _ask(answer, provided, retrieval, t):
     if retrieval["hit"] is None:
         checks.append(check("declined", "pass" if answer_check.insufficient_evidence else "fail",
                             t.detail_declined_ok if answer_check.insufficient_evidence else t.detail_declined_missing))
-    if answer_check.conflict_disclosed is not None:
+    if conflict_case and answer_check.conflict_disclosed is not None:
         checks.append(check("conflict", "pass" if answer_check.conflict_disclosed else "fail",
                             t.detail_conflict_ok if answer_check.conflict_disclosed else t.detail_conflict_missing))
     if "stale_version" in reasons:
