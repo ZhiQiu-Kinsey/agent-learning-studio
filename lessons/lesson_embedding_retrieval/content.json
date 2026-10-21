@@ -1,0 +1,1320 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "embedding-retrieval",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "knowledge"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "KNOWLEDGE / EMBEDDING",
+          "headline": "按意思找片段，",
+          "highlight": "索引要记得自己从哪来。",
+          "takeaway": "Embedding 把文本变成向量，余弦相似度按方向比较远近。向量算一次存下来，但只在模型、维度和资料都没变时才能复用。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-embedding",
+              "label": "01 / EMBEDDING",
+              "title": "一段文本，一组数字",
+              "description": "Embedding 模型把一段文本变成固定长度的一组数字。意思相近的文本，这组数字指向相近的方向，所以“滞纳金”能找到只写了“逾期费用”的片段。",
+              "token": "[0.12, -0.03, …]"
+            },
+            {
+              "id": "02-cosine",
+              "label": "02 / COSINE",
+              "title": "比方向，不比长短",
+              "description": "余弦相似度（Cosine Similarity）是两个向量夹角的余弦，越接近 1 方向越一致。它说明意思接近，不说明片段回答了问题。",
+              "token": "cos θ"
+            },
+            {
+              "id": "03-index",
+              "label": "03 / INDEX",
+              "title": "索引记得自己从哪来",
+              "description": "向量索引（Vector Index）把片段向量连同 Embedding 模型、维度和资料版本一起保存。三者都没变才能复用，任一变化就要重建。",
+              "token": "model · dimensions · version"
+            },
+            {
+              "id": "04-compare",
+              "label": "04 / BASELINE",
+              "title": "和关键词检索比一比",
+              "description": "向量检索（Vector Retrieval）按意思找片段，BM25 按共有的词找。两者在同一查询集上逐条比较命中与漏检，才知道各自擅长什么。",
+              "token": "BM25 vs cos"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "Embedding 是一组数字",
+          "paragraphs": [
+            "Embedding 把一段文本变成一组固定长度的数字，意思相近的文本，这组数字也相近。{{lesson:keyword-retrieval}}的 BM25 只认字面：查询问“晚还书要交多少滞纳金”，资料里只写“逾期费用”，两边没有共同的词，这一节就排不进前 5，成了漏检。这种情况在真实问答里很常见：读者用自己的话提问，资料用馆方的说法书写，两边很少逐字对上。要让“滞纳金”找到“逾期费用”，需要一种不看字面、按意思比较的表示。",
+            "可以把 Embedding 想成在一张地图上给每段文本定一个点。举个编的例子，只用三个维度：第一维表示“和钱有关”，第二维表示“和时间有关”，第三维表示“和房间有关”。“晚还书要交多少滞纳金”落在 (0.9, 0.6, 0.0)，“逾期费用每天 0.5 元”落在 (0.8, 0.7, 0.1)，“R-305 有几个座位”落在 (0.0, 0.1, 0.9)。前两个点挨得很近，第三个离得远。向量就是这样一组坐标，维度就是坐标的个数；比较两段文本，就变成了比较两个点的位置关系。",
+            "真实的 Embedding 模型不会告诉你每一维代表什么，维度也多得多，常见的是几百到几千维。这些数字是模型训练时学出来的，同一段文本换一个模型，得到的数字完全不同。本课的运行器把每个片段交给平台的 context.embed 发出 Embedding 请求（交出去的文字去掉了小节标记，原因见“维度、成本与编码的文字”）；响应里每段文本对应一个 embedding 数组，长度等于请求里的 dimensions。这类请求和聊天请求走同一套记录：request 和 response 事件多一个 endpoint 字段，值是 embeddings，向量完整记录在响应体里。",
+            "本课调用 Embedding 模型，不调用聊天模型，也不生成回答：它只负责找片段。Embedding 是模型对意思的一种压缩，它能说“这两段像”，不能说“这段回答了问题”。找回来的片段对不对，仍然要用{{lesson:keyword-retrieval}}的查询集和人工标注来判断，这正是本课后半段要做的事。后面的课会把找到的片段交给聊天模型写回答，那时检索漏掉的内容，模型也就看不到。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "余弦相似度",
+          "paragraphs": [
+            "余弦相似度用两个向量的夹角比较相似程度，只看方向，不看长短。为什么不直接量两点之间的距离？一段长文本和一段短文本可能讲的是同一件事，向量的长短却不同；用距离比较，长短的差别会被误当成意思的差别。夹角不受长短影响，两段话指向同一个方向，就算相似。在向量空间里，方向大致对应“讲的是什么”，长短更多受文本长度和用词多少影响。",
+            "计算只有三步：对应维度相乘再相加，得到点积；分别算两个向量的长度，即各维平方和再开方；点积除以两个长度的乘积。还用上一节编的三维例子：“滞纳金”和“逾期费用”两句的余弦约是 0.99，“滞纳金”和“R-305”那句只有约 0.06。点积大，说明两个向量在同样的维度上都有分量；除以长度，是为了去掉“哪个向量更长”这个因素。完整的手算过程见下面的深入块。",
+            "本课 vector_index.py 里的 cosine 就是这三步：长度为 0 时返回 0，两个向量维度不同直接报错。VectorIndex.search 把查询向量和每个片段向量都算一遍余弦，从大到小排序，取前 top_k 个。片段只有三十多个，一个一个比完也只要几毫秒，所以本课不用近似检索，排出来的就是精确的先后。分数相同时按片段原来的顺序排，同样的输入每次排出同样的结果，测试才能写得确定。",
+            "余弦相似度的范围是 -1 到 1，但不同模型的分数分布差别很大：有的模型给无关文本也打出 0.7，有的模型给相关文本也只有 0.5。所以分数只能在同一个模型、同一批片段里比先后，不能拿一个固定的数当“相关”的门槛，更不能跨模型比较。资料里根本没有答案时，向量检索照样会返回分数最高的几个片段：离线测试里，资料没有答案的 `q07`，第一名的余弦也在 0.75 以上。"
+          ]
+        },
+        {
+          "id": "deep-dive-cosine",
+          "type": "deep-dive",
+          "title": "手算余弦相似度",
+          "summary": "用三个编的三维向量算一遍点积、长度和余弦，再验证“只看方向”。",
+          "paragraphs": [
+            "用正文的三维例子完整算一遍。A 是“晚还书要交多少滞纳金”，`A = (0.9, 0.6, 0.0)`；B 是“逾期费用每天 0.5 元”，`B = (0.8, 0.7, 0.1)`；C 是“R-305 有几个座位”，`C = (0.0, 0.1, 0.9)`。三个维度分别表示和钱、和时间、和房间有关的程度。这些数是编的，只为好算，真实模型的每一维没有这样直白的含义。",
+            "A 和 B：点积 `0.9×0.8 + 0.6×0.7 + 0.0×0.1 = 1.14`；长度 `|A| = √1.17 ≈ 1.082`，`|B| = √1.14 ≈ 1.068`；余弦 `1.14 ÷ (1.082 × 1.068) ≈ 0.99`。A 和 C：点积只有 `0.6×0.1 = 0.06`，`|C| = √0.82 ≈ 0.906`，余弦 `0.06 ÷ (1.082 × 0.906) ≈ 0.06`。0.99 对 0.06，哪一句更近一眼就能看出来。注意 A 和 C 的点积只来自第二维，因为另外两维总有一边是 0。",
+            "再验证“只看方向”：把 B 的每一维都乘以 2，变成 `(1.6, 1.4, 0.2)`。点积翻倍成 2.28，B 的长度也翻倍成约 2.136，相除之后余弦还是 0.99。这就是长片段和短片段能公平比较的原因。换成两点之间的直线距离，放大后的 B 离 A 远了一大截，意思却一点没变。",
+            "很多 Embedding 模型返回的向量已经归一化，长度为 1，这时余弦就等于点积，向量库常利用这一点只做乘加。余弦可以是负数，表示方向相反，但实际的文本向量很少出现明显的负分，很多模型的分数挤在一个不宽的区间里，所以本课只比先后，不设门槛。离线测试模式的测试向量是词频计数，没有负数，也没有归一化，cosine 的公式照样适用。"
+          ]
+        },
+        {
+          "id": "predict-requests",
+          "type": "predict",
+          "prompt": "先跑一次。在实验“建索引并检索”里运行“建索引并检索”之前先猜：如果这是第一次用这个模型和维度建索引，这次运行会发出几个 request 事件？",
+          "experiment": "index-build",
+          "arm": "build",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-scale",
+          "type": "micro-quiz",
+          "question": {
+            "id": "scale",
+            "prompt": "把一个片段向量的每一维都乘以 3，它和查询向量的余弦相似度会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不变",
+                "feedback": "对。点积和这个向量的长度都变成 3 倍，相除后抵消。"
+              },
+              {
+                "id": "b",
+                "text": "变成原来的 3 倍",
+                "feedback": "不对。余弦除以了两个长度，结果始终在 -1 到 1 之间。"
+              },
+              {
+                "id": "c",
+                "text": "变小，因为向量离查询更远了",
+                "feedback": "不对。变远的是两点之间的距离，夹角没有变。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "余弦相似度只看方向。同样的内容写得长一些，向量变长，分数不受影响。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "建立并保存索引",
+          "paragraphs": [
+            "向量索引要连同 Embedding 模型、维度和资料版本一起保存，下次才能放心复用。为什么要保存？生成向量要调用模型：默认的 38 个中文片段（英文 36 个）按每批最多 10 条分批，要发 4 次 Embedding 请求。每次检索都重新编码一遍，又慢又花钱；向量算一次存下来，以后只需为查询本身发一次请求。这和{{lesson:keyword-retrieval}}的 BM25 不同：BM25 的词频统计在本地几毫秒就能重算，不必保存。",
+            "分批由运行器自己做。平台的 embedding_batch_limit 说明一次请求最多带几条文本（百炼的兼容接口是 10），Embedder.embed 按这个数切片，每批调一次 context.embed，再按响应里的 index 把向量放回原来的顺序；每批的请求和响应是一对事件，第几批就是第几轮。服务商如果忽略了 dimensions，返回了别的长度，运行器直接停下，不把长度不一的向量混进索引。建好后 VectorIndex.save 先写临时文件再改名，写到一半中断也不会留下一个看起来完整的坏文件。",
+            "存下来的向量只在三件事都没变时可用：同一个 Embedding 模型、同样的维度、同一版资料。换了模型，两个模型的向量各成一套坐标，旧片段向量和新查询向量之间的夹角没有意义；换了维度，长度对不上，根本没法算；资料改了，旧向量描述的是已经不存在的文字。is_stale 比较这三项，stale_reasons 再逐项说明哪里不同；片段列表变了，比如同一份资料换了分块方式，也算过期。所以能不能复用不是看文件在不在，而是看文件记下的来历和现在对不对得上。",
+            "索引文件放在 `.runtime/rag-index/` 下，不提交；文件名带语言、模型和维度，换了维度会去读另一个文件，这是第一道防线。is_stale 是第二道；查询向量和索引维度不同时 search 直接报错，是第三道。资料版本 corpus_version 是全部文档内容摘要合起来再取的摘要，任何一份文档改一个字都会变。离线测试模式不碰这个目录，每次运行用一个临时文件夹，所以测试里每次都是新建；要检验复用的测试，会显式指定一个几次运行共用的文件夹。"
+          ]
+        },
+        {
+          "id": "misconception-reuse",
+          "type": "misconception",
+          "claim": "索引建过一次，以后就一直能用。",
+          "correction": "向量只在模型、维度、资料版本都没变时有效。换模型后旧向量和新查询向量不在同一套坐标里，分数没有意义；改资料后旧索引可能把已经下线的片段找回来。“资料改了：旧索引不能用”的报告里，误用旧索引时 2025 年版开放时间就排在前 5 里。"
+        },
+        {
+          "id": "mq-stale",
+          "type": "micro-quiz",
+          "question": {
+            "id": "stale",
+            "prompt": "索引是用 256 维建的，现在请求改成 512 维。下面哪种做法对？",
+            "options": [
+              {
+                "id": "a",
+                "text": "继续用旧索引，把 512 维的查询向量截成 256 维再比较",
+                "feedback": "不对。两种维度的向量不是同一套坐标，截断后的比较没有依据。"
+              },
+              {
+                "id": "b",
+                "text": "判定旧索引过期，按 512 维重新编码全部片段",
+                "feedback": "对。维度是索引身份的一部分，变了就重建。"
+              },
+              {
+                "id": "c",
+                "text": "片段向量不动，只把查询改成 256 维",
+                "feedback": "这样能算，但实验条件已经不是 512 维了，等于没有换维度。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "模型、维度、资料版本三项任一变化，旧向量都不能再回答新的查询。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "与关键词检索对照",
+          "paragraphs": [
+            "在同一查询集上比较命中，才能看出两种检索各自擅长什么、漏掉什么。“向量检索更聪明”是一句没法检验的话。把{{lesson:keyword-retrieval}}的 14 条查询原样交给两种检索，各取前 5 个片段，用同一份人工标注判断命中，差别才落到具体的查询上：哪一条只有一方找到，哪一条两边都漏检。这也是{{lesson:keyword-retrieval}}先建查询集、再谈检索好坏的原因。",
+            "compare 函数做的就是这件事：同一批片段建 BM25Index，也用同一份向量索引；14 条查询的向量同样分批生成，是两次请求；每条查询两种检索各跑一次，结果都交给 judge；两边各取前 5 个，深度相同，免得一方多看几个片段占了便宜。judge 按片段覆盖的小节锚点和人工标注比较，给出是否命中、是否完整覆盖、第一个命中排第几。报告里的两项检查写明两边用的是同一查询集、同一批片段。",
+            "离线测试模式下，夹具用一张概念词表构造测试向量：同义词共用一维，房间号、证件代号这类编号没有自己的维度。在这组测试向量上，12 条有答案的查询里 BM25 命中 9 条，向量检索命中 11 条；三条同义改写 `q04`–`q06` 只有向量检索命中，问 R-305 座位数的 `q02` 只有 BM25 命中。BM25 那一列是确定的计算，换不换 Embedding 模型都一样；会变的只有向量检索那一列。这是按设计构造出来的分工，不代表任何真实模型的成绩。",
+            "表里还有两种情况要逐条看。资料里没有答案的 `q07`、`q08`，两种检索都照样返回 5 个片段，谁都不该被当成答案。问周日几点闭馆的 `q13`，向量检索把读者“希望周日开到九点”的留言排进前 3（中文运行第 1，英文运行第 3），覆盖标注小节的片段到第 5 名才出现：留言在意思上很像，可意思像不等于是规定。跨小节和多跳的查询还要看完整覆盖率：只命中一半，回答仍然缺材料。真实运行时，对照表的数字由你选的 Embedding 模型决定，结论以你自己的运行为准。"
+          ]
+        },
+        {
+          "id": "compare-retrievers",
+          "type": "compare",
+          "title": "BM25 与向量检索",
+          "columns": [
+            "方面",
+            "BM25",
+            "向量检索"
+          ],
+          "rows": [
+            [
+              "比较的依据",
+              "查询和片段共有的词",
+              "两个向量的夹角"
+            ],
+            [
+              "擅长",
+              "编号、名称、金额这类精确用词",
+              "同义改写、换了说法的问题"
+            ],
+            [
+              "容易漏检",
+              "资料里没有出现的说法",
+              "只靠编号或专名区分的内容"
+            ],
+            [
+              "资料里没有答案时",
+              "只返回至少共有一个词的片段，可能少于 5 个",
+              "照样返回分数最高的前 5 个"
+            ],
+            [
+              "成本",
+              "本地计算，不调用模型",
+              "建索引和每条查询都要发 Embedding 请求"
+            ],
+            [
+              "能不能拆开看",
+              "每个词贡献多少分一目了然",
+              "维度没有可读的含义，只能看最终分数"
+            ]
+          ]
+        },
+        {
+          "id": "mq-code",
+          "type": "micro-quiz",
+          "question": {
+            "id": "code",
+            "prompt": "离线测试里，`q02`（R-305 有几个座位？）只有 BM25 命中。最合理的解释是哪一个？",
+            "options": [
+              {
+                "id": "a",
+                "text": "测试向量里编号没有自己的维度，查询剩下的意思不足以定位那一节",
+                "feedback": "对。这条查询的关键全在 R-305 上，而关键词检索把它当作一个完整的词。"
+              },
+              {
+                "id": "b",
+                "text": "BM25 理解了“座位”的意思",
+                "feedback": "不对。BM25 只比较词面，命中靠的是 R-305 和“座位”这两个词正好出现在那一节里。"
+              },
+              {
+                "id": "c",
+                "text": "向量检索的代码有错",
+                "feedback": "不对。同一个索引在 `q04`–`q06` 上都命中了，问题出在这类查询本身。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "编号类查询的意思集中在几个字符上，向量检索容易把它和别的编号混在一起；这正是关键词检索擅长的地方。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "成本与局限",
+          "paragraphs": [
+            "生成 Embedding 要调用模型，按输入计费；数字、专有名词这类查询，向量检索未必更好。成本分两块：建索引时每个片段编码一次，检索时每条查询编码一次。本课的报告把两块分开记：索引报告写建索引用了几次请求，结果报告写整次运行一共几次、服务商报告的 total_tokens 合计多少；服务商没有报告用量时写“未报告”，不估算。向量本身也要占存储，下面的深入块算了一笔账。",
+            "这些请求和聊天请求共用 lesson.json 里的调用上限，本课的 max_rounds 是 12。最费的是两个过期检测练习：旧索引建 4 次、查询 1 次、新索引再建 4 次，一共 9 次；索引已经存在且没过期时，“建索引并检索”只发 1 次请求。调用上限挡的是失控的循环，不是正常的建索引，所以上限要按最费的练习来定；上限不够时，运行停在超出上限的那一次，而不是悄悄少建几批。换维度或换 Embedding 模型之前，先想清楚重建要花多少次请求。",
+            "向量检索的盲区和 BM25 正好相反。编号、型号、金额这类查询，意思全在那几个字符上，R-301 和 R-305 在向量里可能非常接近，在关键词检索里却是两个不同的词。专有名词、新造的词、模型训练时没见过的写法，也可能被编码到含糊的位置。离线测试里问 R-305 座位数的 `q02` 就是这样漏检的。所以实际系统很少只用一种检索，{{lesson:hybrid-retrieval}}会把两路结果合起来。",
+            "最后，向量检索只负责把可能相关的片段排到前面，不判断片段可不可信、过没过时。本课语料里的读者留言和 2025 年版开放时间，在向量空间里离查询一样近。“建索引并检索”可以按文档过滤：search 的 where 参数在排序之前就去掉其他文档的片段。哪一版算数、留言能不能当规定，还要靠元数据，以及{{lesson:rag-citations}}要讲的回答出处。检索只管像不像，对不对、算不算数是后面几课的事。"
+          ]
+        },
+        {
+          "id": "deep-dive-dimensions",
+          "type": "deep-dive",
+          "title": "维度、成本与编码的文字",
+          "summary": "维度决定每个向量有几个数：它影响存储、比较的计算量和检索质量，也决定能不能复用旧索引；编码前去掉小节标记是一个取舍。",
+          "paragraphs": [
+            "维度是每个向量有几个数。本课默认请求 256 维。按每个浮点数 4 字节估算，38 个片段 × 256 维约 38 KB，换成 1024 维约 152 KB。本课把向量存成 JSON 文本，实际文件更大一些，但量级相同。片段到了一百万个，1024 维就是约 4 GB，这时存储和内存才真正成为问题。",
+            "计算量也随维度增长。暴力检索要把查询和每个片段都算一遍余弦，一次检索的乘法次数大约是片段数乘以维度：38 × 256 不到一万次，一百万 × 1024 就是十亿次。所以大规模的向量库用近似最近邻索引，比如《深入理解 AI Agent》第三章对比的 HNSW 和 ANNOY，先缩小候选再精确比较，用一点准确度换速度。本课片段少，精确比较更好懂，也不会错过真正最近的向量。",
+            "维度越高能表达的细节越多，但不是越高越好。有的 Embedding 模型允许在请求里用 dimensions 要一个更短的向量，例如百炼的 `text-embedding-v4` 和 OpenAI 的 `text-embedding-3` 系列；短向量省存储和计算，检索质量可能略降。能选哪些维度以服务商文档为准。不支持这个参数的模型可能报错，也可能悄悄忽略它，本课的运行器发现返回长度不对就停下。",
+            "费用方面，Embedding 按输入 Token 计费，单价通常比聊天模型低，而且索引只建一次。真正要算的是重建：换模型、换维度或改资料，都要把全部片段重新编码。实际系统常常只重新编码改动过的片段，前提是模型和维度都没变，还要能确认未改动片段的文字一字未改；本课为了把过期判断讲清楚，一律整体重建。",
+            "编码之前还有一个取舍：片段原文里带着 `{#anchor}` 这样的小节标记，本课的 embedding_text 在编码前把它去掉。标记只是语料用来标出小节、供 judge 对照人工标注的，读者看不到；BM25 的分词同样先去掉它，两路读到的是同样的文字，对照才公平，英文的标签名也不会混进中文片段的向量。代价是编码的文字和片段原文不再逐字一致，想核对向量对应哪段文字，要看 embedding_text 的结果。{{lesson:hybrid-retrieval}}直接用片段原文算向量，那里的向量带着这些标记；两课各存各的索引，向量不能互相复用。",
+            "这个取舍还留下一个盲区：corpus_version 只摘要文档内容。以后若改了 embedding_text 的处理方式，旧索引记下的模型、维度和资料版本照样对得上，过期判断发现不了，要自己想到重建。换分块方式有 chunk_ids 把关，改编码前的文字却没有人把关。"
+          ]
+        },
+        {
+          "id": "deep-dive-evaluation",
+          "type": "deep-dive",
+          "title": "怎样评检索：命中率、完整覆盖率与 Pass@k",
+          "summary": "本课的对照表区分命中率和完整覆盖率；参考资料里的指标口径各不相同，比较数字前先看清定义。",
+          "paragraphs": [
+            "本课的对照表区分“命中”和“完整覆盖”。命中是前 5 个片段里至少有一个覆盖了标注的小节；完整覆盖是标注的小节全都覆盖到了。命中的查询占的比例叫命中率，完整覆盖的比例叫完整覆盖率。跨小节、多跳、版本冲突这几类查询要两个小节才答得完整，只命中一半，后面生成回答的步骤仍然缺材料。所以只看命中数，会高估检索的效果。",
+            "参考资料里的口径各不相同。《深入理解 AI Agent》第三章专门说明，书中写的 `recall@k` 其实是命中率：前 k 个结果里有一篇相关文档就算。Claude Cookbooks 的上下文嵌入指南用 Pass@k，把每条查询找到的标注片段占比取平均，有多个标注片段的查询按比例给分，比命中率严格，比本课的完整覆盖率宽松。跨资料比较数字之前，先看清它用的是哪种口径。",
+            "同一份指南还给了一个改进思路：分块会让片段丢掉它所在的上下文，可以先让模型为每个片段写一句说明它出自哪里的前缀，再连同前缀一起编码。指南在它的代码库数据集上报告，这一步让前 5、10、20 个结果的检索失败率都降低了约 30% 到 40%，代价是建索引时每个片段多一次模型调用。本课没有做这一步，想深入可以读参考资料里的原文。"
+          ]
+        },
+        {
+          "id": "misconception-score",
+          "type": "misconception",
+          "claim": "余弦相似度越高，片段越能回答问题。",
+          "correction": "余弦相似度只说明两段文本意思接近。离线测试里问周日闭馆时间，读者“希望周日开到九点”的留言排进前 3，覆盖标注小节的片段要到第 5 名才出现，而那条留言是愿望，不是规定；资料里没有答案的查询，最高分也不低。片段能不能回答问题，要对照人工标注或读原文。"
+        },
+        {
+          "id": "mq-reuse",
+          "type": "micro-quiz",
+          "question": {
+            "id": "reuse",
+            "prompt": "同样的模型和维度，资料也没改，索引已经存在。再运行一次“建索引并检索”，会发几次 Embedding 请求？",
+            "options": [
+              {
+                "id": "a",
+                "text": "1 次，只为查询编码",
+                "feedback": "对。片段向量从索引文件读出来，不再调用模型。"
+              },
+              {
+                "id": "b",
+                "text": "5 次，和第一次一样",
+                "feedback": "不对。没过期的索引会被复用，索引报告写“复用”。"
+              },
+              {
+                "id": "c",
+                "text": "0 次，查询也能从索引里读",
+                "feedback": "不对。索引里只有片段的向量，新查询的向量要现算。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "保存索引省下的是片段编码；每条新查询仍要发一次 Embedding 请求。"
+          }
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次“建索引并检索”经过哪几步",
+          "description": "教学示意，非运行记录：按本课代码的顺序走一遍，数字取自默认中文片段。",
+          "steps": [
+            {
+              "id": "batch",
+              "label": "分批",
+              "actor": "运行器",
+              "title": "38 个片段切成 4 批",
+              "body": "Embedder.embed 按 embedding_batch_limit 切片：10、10、10、8，每批一次 Embedding 请求，请求里写明 dimensions。",
+              "code": "for start in range(0, len(texts), limit):",
+              "language": "python",
+              "evidence": "第 1 到第 4 个 request 事件的 data.body.input"
+            },
+            {
+              "id": "encode",
+              "label": "编码",
+              "actor": "Embedding 模型",
+              "title": "每段文本一个向量",
+              "body": "响应的 data 里每一项带 index 和 embedding，运行器按 index 放回原来的顺序，并检查长度等于 dimensions。",
+              "code": "for item in sorted(response[\"data\"], key=lambda item: item[\"index\"]):",
+              "language": "python",
+              "evidence": "response 事件的 data.body.data"
+            },
+            {
+              "id": "save",
+              "label": "保存",
+              "actor": "运行器",
+              "title": "连同来历一起存",
+              "body": "VectorIndex 记下模型、维度、资料版本和片段列表，写到 `.runtime/rag-index/` 下按语言、模型和维度命名的文件里。",
+              "code": "index = VectorIndex(model, dimensions, version, chunk_ids, vectors)",
+              "language": "python",
+              "evidence": "索引报告的模型、维度和资料版本"
+            },
+            {
+              "id": "query",
+              "label": "查询",
+              "actor": "Embedding 模型",
+              "title": "查询也要编码",
+              "body": "“晚还书要交多少滞纳金？”单独发一次 Embedding 请求，用同一个模型、同样的维度。",
+              "code": "[vector] = embedder.embed([inputs[\"query\"]], index.dimensions)",
+              "language": "python",
+              "evidence": "最后一个 request 事件"
+            },
+            {
+              "id": "rank",
+              "label": "排序",
+              "actor": "运行器",
+              "title": "逐个算余弦，取前 5",
+              "body": "search 把查询向量和 38 个片段向量都算一遍余弦相似度，从大到小取前 top_k 个，写进检索结果报告。",
+              "code": "hits = index.search(vector, inputs[\"top_k\"], where=where)",
+              "language": "python",
+              "evidence": "检索结果报告的表格"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch3-dense",
+              "title": "稠密嵌入、余弦相似度与检索指标（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter3.md"
+            },
+            {
+              "id": "book-dense-embedding",
+              "title": "稠密向量检索服务：精确检索与 ANN 索引对比（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter3/dense-embedding/README.md"
+            },
+            {
+              "id": "cookbook-contextual-embeddings",
+              "title": "向量库的分批编码、保存与检索效果对比（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/capabilities/contextual-embeddings/guide.ipynb"
+            },
+            {
+              "id": "ms-agentic-rag",
+              "title": "把检索交给 Agent：检索结果要能检查、能追溯（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/05-agentic-rag/README.md"
+            },
+            {
+              "id": "hf-llamaindex-components",
+              "title": "加载、节点与向量存储：查询要用建索引时的同一个 Embedding 模型（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/llama-index/components.mdx"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "keyword-retrieval"
+        },
+        {
+          "id": "code-embedder",
+          "type": "annotated-source",
+          "path": "lessons/lesson_embedding_retrieval/runtime.py",
+          "start": 72,
+          "end": 103,
+          "notes": [
+            {
+              "id": "n69",
+              "line": 72,
+              "anchor": "class Embedder:",
+              "text": "本次运行的每一个 Embedding 请求都从这里发出：分批、轮次编号、用量统计放在一处，报告里的请求次数就是 calls。"
+            },
+            {
+              "id": "n77",
+              "line": 80,
+              "anchor": "def embed(self, texts: list[str], dimensions: int)",
+              "text": "片段和查询都走这个方法。dimensions 由调用方给：换维度练习会先后用两种维度。"
+            },
+            {
+              "id": "n81",
+              "line": 84,
+              "anchor": "for start in range(0, len(texts), limit):",
+              "text": "按 embedding_batch_limit 切片。38 个片段、每批 10 条，就是 10、10、10、8 四批；平台会拒绝超过上限的一批。"
+            },
+            {
+              "id": "n83",
+              "line": 86,
+              "anchor": "self.context.embed(texts[start:start + limit], self.calls, dimensions=dimensions)",
+              "text": "每批一次 context.embed：平台记下 request 和 response 事件（endpoint 为 embeddings），并计入调用上限。轮次用请求序号，时间线上一批一格。"
+            },
+            {
+              "id": "n85",
+              "line": 88,
+              "anchor": "sorted(response[\"data\"], key=lambda item: item[\"index\"])",
+              "text": "按 index 排回输入顺序，不信任响应里的排列；向量和片段一旦错位，检索结果就全错了。"
+            },
+            {
+              "id": "n87",
+              "line": 90,
+              "anchor": "if len(item[\"embedding\"]) != dimensions:",
+              "text": "服务商忽略 dimensions 时返回的长度会不同。宁可停下报错，也不把长度不一的向量混进索引。"
+            },
+            {
+              "id": "n90",
+              "line": 93,
+              "anchor": "usage = response.get(\"usage\")",
+              "text": "只记服务商报告的 total_tokens；没有报告的那次记为 None，不填 0。"
+            },
+            {
+              "id": "n95",
+              "line": 98,
+              "anchor": "def usage(self) -> int | str:",
+              "text": "全部没报告写“未报告”，部分没报告就写出合计和缺了几次，不拿估算冒充。"
+            }
+          ]
+        },
+        {
+          "id": "code-open-index",
+          "type": "annotated-source",
+          "path": "lessons/lesson_embedding_retrieval/runtime.py",
+          "start": 106,
+          "end": 149,
+          "notes": [
+            {
+              "id": "n103",
+              "line": 106,
+              "anchor": "def stale_reasons(t: Texts, index: VectorIndex",
+              "text": "旧索引能不能用，返回一串原因；空列表才表示可以复用。原因写进报告，学习者看得到为什么重建。"
+            },
+            {
+              "id": "n107",
+              "line": 110,
+              "anchor": "if index.is_stale(model=model, dimensions=dimensions, corpus_version=version):",
+              "text": "is_stale 一次比较模型、维度、资料版本三项；任一不同就逐项写出旧值和新值。"
+            },
+            {
+              "id": "n113",
+              "line": 116,
+              "anchor": "if index.chunk_ids != chunk_ids:",
+              "text": "单独再查片段列表：资料没改、分块方式改了，资料版本相同，旧向量却对不上新片段。"
+            },
+            {
+              "id": "n121",
+              "line": 124,
+              "anchor": "def open_index(context: RunContext, t: Texts, embedder: Embedder",
+              "text": "本课的核心决策：复用还是重建。save=False 用于模拟的资料改动，免得覆盖与真实资料对应的索引。"
+            },
+            {
+              "id": "n127",
+              "line": 130,
+              "anchor": "if path.exists():",
+              "text": "路径由语言、模型和维度决定，换维度会找另一个文件；找到了也要先过 stale_reasons。"
+            },
+            {
+              "id": "n132",
+              "line": 135,
+              "anchor": "except (ValueError, KeyError, TypeError) as error:",
+              "text": "文件损坏、格式版本不对，一律按过期处理并重建，不去猜里面的数据还能不能用。"
+            },
+            {
+              "id": "n135",
+              "line": 138,
+              "anchor": "if saved is not None and not reasons:",
+              "text": "三项都对得上才复用：不发任何 Embedding 请求，报告写“复用”，建索引的请求数为 0。"
+            },
+            {
+              "id": "n139",
+              "line": 142,
+              "anchor": "vectors = embedder.embed([embedding_text(chunk) for chunk in chunks], dimensions)",
+              "text": "否则把全部片段重新编码。embedding_text 先去掉 {#anchor} 标记，BM25 分词也去掉它，两路读到同样的文字；取舍见深入块“维度、成本与编码的文字”。"
+            },
+            {
+              "id": "n140",
+              "line": 143,
+              "anchor": "index = VectorIndex(model, dimensions, version, chunk_ids, vectors)",
+              "text": "向量和它的来历一起封装：模型、维度、资料版本、片段编号，缺一项都没法判断下次能不能用。"
+            },
+            {
+              "id": "n142",
+              "line": 145,
+              "anchor": "index.save(path)",
+              "text": "写入 .runtime/ 下的文件；离线测试模式写在临时文件夹。"
+            },
+            {
+              "id": "n144",
+              "line": 147,
+              "anchor": "_index_report(context, t, index, path if save else None, status=status,",
+              "text": "索引报告记下状态（新建、复用或过期后重建）、建索引用了几次请求和过期原因。"
+            }
+          ]
+        },
+        {
+          "id": "code-vector-index",
+          "type": "annotated-source",
+          "path": "lessons/lesson_embedding_retrieval/vector_index.py",
+          "start": 23,
+          "end": 61,
+          "notes": [
+            {
+              "id": "v23",
+              "line": 23,
+              "anchor": "def cosine(a: list[float], b: list[float]) -> float:",
+              "text": "余弦相似度：点积除以两个长度的乘积，只看方向。"
+            },
+            {
+              "id": "v25",
+              "line": 25,
+              "anchor": "if len(a) != len(b):",
+              "text": "维度不同的两个向量没法比较，直接报错，不补零也不截断。"
+            },
+            {
+              "id": "v27",
+              "line": 27,
+              "anchor": "dot = sum(x * y for x, y in zip(a, b))",
+              "text": "第一步点积，第二步两个长度相乘，第三步相除；长度为 0 时返回 0，避免除以零。"
+            },
+            {
+              "id": "v33",
+              "line": 33,
+              "anchor": "class VectorIndex:",
+              "text": "索引就是五样东西：模型、维度、资料版本、片段编号、向量。前三样是它的身份。"
+            },
+            {
+              "id": "v40",
+              "line": 40,
+              "anchor": "def __post_init__(self):",
+              "text": "构造时就检查编号和向量一一对应、每个向量都是声明的维度，坏索引建不出来。"
+            },
+            {
+              "id": "v46",
+              "line": 46,
+              "anchor": "def search(self, query_vector: list[float], top_k: int = 5, *,",
+              "text": "暴力检索：查询和每个片段都算一遍。片段只有三十多个，结果是精确的先后，不是近似。"
+            },
+            {
+              "id": "v51",
+              "line": 51,
+              "anchor": "if len(query_vector) != self.dimensions:",
+              "text": "第三道防线：查询向量和索引维度不同就拒绝，换维度练习的报告里能看到这条错误。"
+            },
+            {
+              "id": "v53",
+              "line": 53,
+              "anchor": "scored = [(cosine(query_vector, vector), index)",
+              "text": "where 在排序之前过滤：不符合条件的片段根本不参与比较，这就是按元数据筛选。"
+            },
+            {
+              "id": "v56",
+              "line": 56,
+              "anchor": "scored.sort(key=lambda item: (-item[0], item[1]))",
+              "text": "分数相同时按片段原来的顺序排，同样的输入总是同样的结果。"
+            },
+            {
+              "id": "v60",
+              "line": 60,
+              "anchor": "def is_stale(self, *, model: str, dimensions: int, corpus_version: str) -> bool:",
+              "text": "三项身份任一不同就是过期。它只回答能不能用，为什么不能用由 stale_reasons 说明。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "向量存成一个 JSON 文件，检索逐个比较",
+          "chosen": "几十个片段时，把向量和它的来历写进一个 JSON 文件、检索时逐个算余弦，每一步都能打开看、能手算复核；复用与否由模型、维度、资料版本三项决定。",
+          "alternatives": [
+            {
+              "id": "vector-db",
+              "title": "接一个向量数据库",
+              "why_not": "要多装一个服务，存取细节藏在库里。本课要讲的是索引要记住什么、什么时候过期，自己写更看得清。"
+            },
+            {
+              "id": "ann",
+              "title": "用近似最近邻索引",
+              "why_not": "片段少时没有速度上的好处，还会让结果和精确比较不一致，学习者没法手算核对。"
+            },
+            {
+              "id": "no-cache",
+              "title": "每次检索都重新编码全部片段",
+              "why_not": "每次运行多花 4 次 Embedding 请求，也就看不到复用与过期判断这件事。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "index-build",
+          "title": "建索引并检索",
+          "hypothesis": "第一次运行要把全部片段分批编码：默认中文片段 38 个、英文 36 个，每批最多 10 条，建索引要 4 次 Embedding 请求，再加查询的 1 次；索引存下后，同样的模型、维度和资料再运行只需查询那 1 次。",
+          "predict": "predict-requests",
+          "arms": [
+            {
+              "id": "build",
+              "exercise": "build-and-search",
+              "label": "建索引并检索"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-batch",
+              "text": "第一批 Embedding 请求带的片段正文。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.input"
+              }
+            },
+            {
+              "id": "batch-dimensions",
+              "text": "请求里写明的维度。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.dimensions"
+              }
+            },
+            {
+              "id": "first-vector",
+              "text": "第一批响应里的第一个向量。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.data[0].embedding"
+              }
+            },
+            {
+              "id": "index-model",
+              "text": "索引报告记下的 Embedding 模型。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=embedding_model]"
+              }
+            },
+            {
+              "id": "index-version",
+              "text": "索引报告记下的资料版本。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=corpus_version]"
+              }
+            },
+            {
+              "id": "index-status",
+              "text": "这次是新建还是复用。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=index_status]"
+              }
+            },
+            {
+              "id": "results",
+              "text": "检索结果：每个片段的余弦相似度和覆盖的小节。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这个练习先建索引，再用一条同义改写的查询做向量检索。先看建索引的第一批请求。"
+            },
+            {
+              "text": "运行器按 embedding_batch_limit 切批，第一批带 10 条片段正文。",
+              "observe": "first-batch",
+              "stage": "runtime"
+            },
+            {
+              "text": "每批都写明 dimensions，返回的向量长度由它决定。",
+              "observe": "batch-dimensions"
+            },
+            {
+              "text": "Embedding 模型为每条文本返回一个向量，完整记录在响应里。",
+              "observe": "first-vector",
+              "stage": "model"
+            },
+            {
+              "text": "索引报告记下生成这些向量的 Embedding 模型和维度。",
+              "observe": "index-model",
+              "stage": "runtime"
+            },
+            {
+              "text": "资料版本是全部文档内容的摘要。模型、维度、版本任一变化，这份索引就不能再用。",
+              "observe": "index-version"
+            },
+            {
+              "text": "第一次运行是新建；同样的条件再跑一次，这里会变成复用，建索引的请求也没有了。",
+              "observe": "index-status"
+            },
+            {
+              "text": "最后看检索结果：第 1 名是不是讲逾期费用的那一节，分数是多少。",
+              "observe": "results"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行发了几次 Embedding 请求、每批几条、向量多长，以及索引记下的模型、维度和资料版本。",
+              "查询“滞纳金”时排在前面的片段和它们的余弦相似度。"
+            ],
+            "does_not_prove": [
+              "余弦相似度高不等于片段回答了问题，要读原文或对照人工标注。",
+              "一条查询的结果说明不了向量检索整体更好，对照要在整个查询集上做。",
+              "离线测试模式下的向量由夹具按概念词表构造，不是 Embedding 模型的输出。"
+            ]
+          }
+        },
+        {
+          "id": "vector-vs-bm25",
+          "title": "向量检索与关键词基线对照",
+          "hypothesis": "同义改写的查询，向量检索更容易命中；只靠编号区分的查询，关键词检索更容易命中。两种检索在同一查询集、同一批片段上比较，差别才能落到具体的查询上。",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "vector-vs-keyword",
+              "label": "向量检索与关键词基线对照"
+            }
+          ],
+          "observe": [
+            {
+              "id": "same-queries",
+              "text": "两种检索用的是同一查询集。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=same_queries]"
+              }
+            },
+            {
+              "id": "same-chunks",
+              "text": "两种检索面对的是同一批片段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=same_chunks]"
+              }
+            },
+            {
+              "id": "bm25-hits",
+              "text": "BM25 的命中率：有答案的查询里命中几条。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=bm25_hits]"
+              }
+            },
+            {
+              "id": "vector-hits",
+              "text": "向量检索的命中率。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=vector_hits]"
+              }
+            },
+            {
+              "id": "only-vector",
+              "text": "只有向量检索命中的查询数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=only_vector]"
+              }
+            },
+            {
+              "id": "only-bm25",
+              "text": "只有 BM25 命中的查询数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=only_bm25]"
+              }
+            },
+            {
+              "id": "table",
+              "text": "逐条对照表：每条查询两种检索的结果和结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "no-answer",
+              "text": "资料里没有答案时，向量检索仍返回的片段数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=no_answer_returned]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这个练习不看单条查询，而是把整个查询集交给两种检索，用同一份人工标注判断。"
+            },
+            {
+              "text": "先确认比较是公平的：同一查询集。",
+              "observe": "same-queries",
+              "stage": "runtime"
+            },
+            {
+              "text": "也是同一批片段、同一版资料。",
+              "observe": "same-chunks"
+            },
+            {
+              "text": "BM25 的命中率，分母是有人工标注答案的查询。",
+              "observe": "bm25-hits"
+            },
+            {
+              "text": "向量检索的命中率。总数接近时，差别藏在逐条结果里。",
+              "observe": "vector-hits"
+            },
+            {
+              "text": "只有向量检索命中的，多是同义改写的查询。",
+              "observe": "only-vector"
+            },
+            {
+              "text": "只有 BM25 命中的，看看是不是靠编号区分的查询。",
+              "observe": "only-bm25"
+            },
+            {
+              "text": "逐条读表：哪一类查询谁赢，哪条是命中了却没有完整覆盖。",
+              "observe": "table"
+            },
+            {
+              "text": "最后看资料里没有答案的查询：向量检索照样返回 5 个片段，它们都不该被当成答案。",
+              "observe": "no-answer"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "在这一个查询集、这一批片段上，两种检索各命中了哪些查询、漏检了哪些。",
+              "两种检索用的是同一组查询和同一份人工标注。"
+            ],
+            "does_not_prove": [
+              "14 条查询太少，说明不了换一批资料或查询之后谁更好。",
+              "命中只说明相关小节出现在前 5 个里，不说明后面能写出正确回答。",
+              "离线测试模式的测试向量是按设计构造的，它复现的分工不代表任何真实 Embedding 模型的成绩。"
+            ]
+          }
+        },
+        {
+          "id": "stale-index",
+          "title": "索引过期检测",
+          "hypothesis": "维度或资料一变，旧索引就被判定过期，不会被拿来回答。换维度时旧索引连比较都做不了；资料改了时，误用旧索引会找回已下线的片段。",
+          "arms": [
+            {
+              "id": "dims",
+              "exercise": "stale-dimensions",
+              "label": "换维度：旧索引不能用"
+            },
+            {
+              "id": "corpus",
+              "exercise": "stale-corpus",
+              "label": "资料改了：旧索引不能用"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stale-detected",
+              "text": "旧索引被判定过期，以及哪一项不同。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=stale_detected]"
+              }
+            },
+            {
+              "id": "size-guard",
+              "text": "旧索引拒绝比较不同维度的查询向量。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=size_guard]"
+              }
+            },
+            {
+              "id": "separate-files",
+              "text": "不同维度的索引存成不同文件。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=separate_files]"
+              }
+            },
+            {
+              "id": "leak",
+              "text": "误用旧索引时，结果里出现已下线的片段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=old_results_leak]"
+              }
+            },
+            {
+              "id": "rebuild-reasons",
+              "text": "重建新索引时写下的过期原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=stale_reasons]"
+              }
+            },
+            {
+              "id": "new-clean",
+              "text": "新索引的结果只来自当前片段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=new_results_clean]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组各改一样东西：一组换维度，一组让 2025 年版开放时间下线。先看旧索引有没有被认出来。"
+            },
+            {
+              "text": "过期检查逐项写出哪一项不同、旧值和新值。",
+              "observe": "stale-detected",
+              "stage": "runtime"
+            },
+            {
+              "text": "换维度那组：就算误读了旧文件，维度不同的向量也比较不了，这是第三道防线。",
+              "observe": "size-guard"
+            },
+            {
+              "text": "文件名带维度，新旧两种维度各存一个文件，这是第一道防线。",
+              "observe": "separate-files"
+            },
+            {
+              "text": "资料改了那组：如果误用旧索引，结果里会出现已经下线的 2025 年版片段。",
+              "observe": "leak"
+            },
+            {
+              "text": "新索引重建时，报告写明了为什么旧的不能用。",
+              "observe": "rebuild-reasons"
+            },
+            {
+              "text": "最后确认新索引的结果只来自当前的片段。",
+              "observe": "new-clean"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "改了维度或资料之后，旧索引被判定过期、没有被拿来回答，原因逐项可查。",
+              "误用旧索引会出什么问题：维度不同没法比较，资料改了会找回已下线的片段。"
+            ],
+            "does_not_prove": [
+              "资料改动是本次运行里模拟的，真实资料没有变，这个新索引也没有保存。",
+              "过期判断只看模型、维度、资料版本和片段列表；同一个模型名背后的模型被服务商更新了，或者本课改了 embedding_text 的处理方式，这里都察觉不到。",
+              "离线测试模式下的向量是测试向量，新旧索引的排名不代表真实模型的结果。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "task",
+          "label": "练习内容",
+          "options": [
+            {
+              "value": "search",
+              "label": "建索引并检索"
+            },
+            {
+              "value": "compare",
+              "label": "向量检索与 BM25 对照"
+            },
+            {
+              "value": "stale",
+              "label": "索引过期检测"
+            }
+          ]
+        },
+        {
+          "name": "query",
+          "label": "查询",
+          "help": "建索引并检索时用它做向量检索；索引过期检测时用它比较新旧索引的结果。对照练习用固定的查询集，不读这一项。"
+        },
+        {
+          "name": "top_k",
+          "label": "返回片段数",
+          "help": "只用于建索引并检索，1 到 10。"
+        },
+        {
+          "name": "dimensions",
+          "label": "维度",
+          "help": "请求里的 dimensions，可选 64、128、256、512、768、1024、1536、2048。索引按语言、模型和维度分文件保存；不支持这个参数或这个取值的 Embedding 模型会报错。"
+        },
+        {
+          "name": "doc_filter",
+          "label": "按文档过滤",
+          "help": "只用于建索引并检索：排序之前先去掉其他文档的片段。",
+          "options": [
+            {
+              "value": "all",
+              "label": "不过滤"
+            },
+            {
+              "value": "borrowing",
+              "label": "借阅规则"
+            },
+            {
+              "value": "fees",
+              "label": "费用与赔偿"
+            },
+            {
+              "value": "membership",
+              "label": "借阅证"
+            },
+            {
+              "value": "rooms",
+              "label": "研讨室"
+            },
+            {
+              "value": "hours",
+              "label": "开放时间（2026 年版）"
+            },
+            {
+              "value": "hours-2025",
+              "label": "开放时间（2025 年版）"
+            },
+            {
+              "value": "digital",
+              "label": "数字服务"
+            },
+            {
+              "value": "conduct",
+              "label": "入馆须知"
+            },
+            {
+              "value": "floors",
+              "label": "楼层指南"
+            },
+            {
+              "value": "reader-notes",
+              "label": "读者留言精选"
+            }
+          ]
+        },
+        {
+          "name": "change",
+          "label": "改变什么",
+          "help": "只用于索引过期检测。",
+          "options": [
+            {
+              "value": "dimensions",
+              "label": "维度"
+            },
+            {
+              "value": "corpus",
+              "label": "资料：2025 年版开放时间下线"
+            }
+          ]
+        },
+        {
+          "name": "new_dimensions",
+          "label": "新维度",
+          "help": "只用于换维度：取值范围同上，必须和维度不同。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "why-cosine",
+              "prompt": "为什么比较两个文本向量时用夹角（余弦），而不是两点之间的距离？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "夹角只看方向，同一件事写得长或短都不影响分数",
+                  "feedback": "对。向量长短常常反映文本长短，不反映意思。"
+                },
+                {
+                  "id": "b",
+                  "text": "余弦算起来比距离快得多",
+                  "feedback": "不对。两者计算量差不多，选择余弦是因为它不受长短影响。"
+                },
+                {
+                  "id": "c",
+                  "text": "距离没法用在高维向量上",
+                  "feedback": "不对。距离也能算，只是长短的差别会混进结果。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "意思相同、长度不同的两段文本，方向一致而长短不同；余弦只比较方向。"
+            },
+            {
+              "id": "model-change",
+              "prompt": "同一批片段，Embedding 模型从 A 换成了 B，维度也碰巧相同。旧索引还能用吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "能，维度一样就能算余弦",
+                  "feedback": "能算出数，但两个模型的向量各成一套坐标，这个数没有意义。"
+                },
+                {
+                  "id": "b",
+                  "text": "不能，模型是索引身份的一部分，要重新编码全部片段",
+                  "feedback": "对。is_stale 会因为模型不同返回真。"
+                },
+                {
+                  "id": "c",
+                  "text": "只要资料版本没变就能用",
+                  "feedback": "不对。模型、维度、资料版本三项都要一致。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "查询向量和片段向量必须出自同一个模型，比较才有意义。"
+            },
+            {
+              "id": "batches",
+              "prompt": "英文默认有 36 个片段，embedding_batch_limit 是 10。第一次建索引要发几次 Embedding 请求？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "1 次",
+                  "feedback": "不对。一次请求最多带 10 条。"
+                },
+                {
+                  "id": "b",
+                  "text": "4 次",
+                  "feedback": "对。10、10、10、6。"
+                },
+                {
+                  "id": "c",
+                  "text": "36 次",
+                  "feedback": "不对。分批正是为了不一条一次。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "36 条按每批 10 条切，要 4 批；再加查询，就是 5 个 request 事件。"
+            },
+            {
+              "id": "no-answer",
+              "prompt": "资料里没有停车场的信息。问“图书馆有停车场吗？”，向量检索会返回什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "空列表，因为没有相关片段",
+                  "feedback": "不对。向量检索总能算出余弦，照样排出前 5。"
+                },
+                {
+                  "id": "b",
+                  "text": "分数最高的 5 个片段，但都不是答案",
+                  "feedback": "对。返回什么都不代表资料里有答案。"
+                },
+                {
+                  "id": "c",
+                  "text": "一条报错",
+                  "feedback": "不对。检索本身不会因为没有答案而失败。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "判断资料里有没有答案，要靠人工标注或后面回答步骤的检查，不能靠检索有没有返回结果。"
+            },
+            {
+              "id": "same-set",
+              "prompt": "为什么对照实验要让两种检索用同一查询集、同一批片段？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这样命中数的差别才只来自检索方式本身",
+                  "feedback": "对。换了查询或片段，差别就说不清来自哪里。"
+                },
+                {
+                  "id": "b",
+                  "text": "这样请求次数更少",
+                  "feedback": "不对。公平比较才是目的，请求次数是另一回事。"
+                },
+                {
+                  "id": "c",
+                  "text": "BM25 只能处理固定的查询",
+                  "feedback": "不对。BM25 可以处理任何查询。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "对照实验只改一个条件。这里改的是检索方式，查询、片段和人工标注都不变。"
+            },
+            {
+              "id": "q13",
+              "prompt": "离线测试里问“周日几点闭馆？”，向量检索的前 3 名里有读者“希望周日开到九点”的留言，覆盖标注小节的片段到第 5 名才出现。这说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "向量检索出错了",
+                  "feedback": "不对。留言和查询在意思上确实很像，排在前面并不奇怪。"
+                },
+                {
+                  "id": "b",
+                  "text": "意思相近不等于是规定，片段能不能当答案要另外判断",
+                  "feedback": "对。检索只排相关程度，不判断可信与否。"
+                },
+                {
+                  "id": "c",
+                  "text": "应该把余弦门槛调高到 0.99",
+                  "feedback": "不对。门槛挡不住意思很像的干扰项，还会挡掉真正的答案。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "来源是否可信、哪一版算数，要靠元数据和后面几课的回答步骤来处理。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "在“建索引并检索”的运行里，找到建索引的最后一批请求，数一数它带了几条文本。",
+          "target": {
+            "event": "request",
+            "round": 4,
+            "path": "data.body.input"
+          },
+          "explanation": "中文默认 38 个片段，前三批各 10 条，第 4 批是剩下的 8 条；英文 36 个，最后一批是 6 条。第 5 个请求才是查询本身。如果这次的索引是复用的，运行里只有 1 个请求，换一个维度再运行就能看到建索引的过程。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在请求事件里找到了 dimensions，并核对了响应里向量的长度。"
+            },
+            {
+              "id": "item-2",
+              "text": "我把“建索引并检索”连着运行了两次，第二次索引报告写的是复用，只发了 1 次请求。"
+            },
+            {
+              "id": "item-3",
+              "text": "我逐条读了对照表，能指出哪类查询向量检索赢、哪类 BM25 赢。"
+            },
+            {
+              "id": "item-4",
+              "text": "我能说出旧索引在哪三种变化之后不能用，以及本课用哪三道防线挡住误用。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "embedding_batch_limit",
+      "note": "平台给出的单次 Embedding 请求最多带几条文本（百炼兼容接口为 10），运行器按它分批。"
+    },
+    {
+      "name": "is_stale",
+      "note": "VectorIndex 的方法：模型、维度、资料版本任一不同就返回真，旧索引不能用。"
+    },
+    {
+      "name": "stale_reasons",
+      "note": "逐项列出旧索引不能用的原因，包括片段列表变了；空列表表示可以复用。"
+    },
+    {
+      "name": "judge",
+      "note": "按片段覆盖的小节锚点和人工标注比较，给出是否命中、是否完整覆盖、首个命中排第几。"
+    },
+    {
+      "name": "corpus_version",
+      "note": "资料版本：全部文档的编号和内容摘要合起来再取摘要，任何文档改一个字都会变。"
+    },
+    {
+      "name": "where",
+      "note": "VectorIndex.search 的过滤参数：排序之前先去掉不符合条件的片段。"
+    }
+  ]
+}
