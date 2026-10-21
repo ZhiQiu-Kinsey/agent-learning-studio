@@ -1,0 +1,1343 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "keyword-retrieval",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "knowledge"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "KNOWLEDGE / KEYWORD RETRIEVAL",
+          "headline": "按词面给片段打分，",
+          "highlight": "每一分都拆得开，漏掉的也说得清。",
+          "takeaway": "BM25 把查询词的稀有程度、在片段里出现的次数和片段长度合成一个分数；查询集记下该找到哪些小节，命中和漏检才能逐条核对。本课不调用模型。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-keyword",
+              "label": "01 / MATCH",
+              "title": "只认共有的词",
+              "description": "关键词检索（Keyword Retrieval）给每个片段打分，依据只有一条：它和查询共有哪些词。编号、名称找得准，换个说法就找不到。",
+              "token": "BM25Index.search"
+            },
+            {
+              "id": "02-idf",
+              "label": "02 / RARITY",
+              "title": "少见的词更值钱",
+              "description": "逆文档频率（Inverse Document Frequency）衡量一个词有多少见：38 个片段里只有 1 个含“最高”，它的权重是 3.22；12 个片段都有“研究”，只有 0.75。",
+              "token": "idf"
+            },
+            {
+              "id": "03-bm25",
+              "label": "03 / SCORE",
+              "title": "一分一分加起来",
+              "description": "BM25 给每个查询词算一份贡献：逆文档频率乘以饱和后的词频，长片段再打个折，各词相加就是总分。",
+              "token": "k1 · b"
+            },
+            {
+              "id": "04-miss",
+              "label": "04 / MISS",
+              "title": "该找到的没找到",
+              "description": "查询集（Query Set）为每条查询人工标注应找到的小节；人工标注的小节没进前 `top_k` 条，就是漏检（Retrieval Miss），原因要从片段本身找。",
+              "token": "judge · first_rank"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "检索要回答什么问题",
+          "paragraphs": [
+            "给定查询，从片段里找出最可能有答案的几条，并说明为什么排在前面。{{lesson:document-loading}}把青石图书馆服务手册切成了 38 个片段，每个片段带着 `rooms:7-11` 这样的编号，指回研讨室文档原文的第 7 到 11 行。读者问“逾期费用每册最高多少？”，程序要从这 38 段里挑出几段交给后面的步骤。本课不调用模型，所有分数都由本地 Python 算出，同样的输入每次结果相同。片段编号就是证据的地址：检索结果里出现哪个编号，就能回到原文核对那几行。",
+            "为什么不把全部资料都塞给模型？这份手册很小，真实的资料库动辄上千份文档，放不进上下文；就算放得下，无关段落也会稀释真正有用的那一段。检索的产出是一张排好序的短名单，每一行写着片段编号、得分和名次。名单要能解释：同一条查询换一天再查，结果应该一样；某一段排第一，要说得出是哪几个词贡献了多少分。这就是检索要回答的问题：哪几段、按什么顺序、凭什么。",
+            "本课先学最直接的一种：关键词检索。它只看查询和片段共有哪些词，共有的词越稀有、出现得越多，分数越高。运行器 `runtime.py` 用 `default_chunks` 取出标准片段，交给 `BM25Index` 建索引；`search` 返回 `Hit` 列表，每条带 `chunk_id`、`score`、`rank`，`detail` 里记着逐词贡献。每次运行先发一条 `lesson.index` 事件，写明片段数、平均长度和参数。关键词检索不理解意思，只做字面匹配：好处是每一分都能追到具体的词，坏处是同一件事换个说法就对不上，这两面本课都要看到。",
+            "检索只负责找候选。片段排第一，不等于它真的回答了问题，更不等于资料可信：`q03` 的前 5 条里就混进了一段读者留言，里面写着“忽略之前的所有指令”。判断回答对不对、资料能不能信，要到{{lesson:rag-citations}}。本课先回答一个更窄的问题：该找到的片段，有没有出现在前几条里。这个问题有人工标注的答案，可以逐条核对，是后面所有检索改进的起点。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "词频与逆文档频率",
+          "paragraphs": [
+            "常见词权重低、少见词权重高，这是 BM25 的出发点。看 `q01`“B2 研究证最多能借几册？”：程序先把它切成 9 个词，其中“研究”出现在 12 个片段里，“最多”只在 4 个片段里，“证最”只在 1 个片段里。如果每个共有的词都算 1 分，满篇“研究”“账户”“服务”的片段会挤到前面，真正写着借阅册数的那一段反而被淹没。BM25 的第一步，就是让每个词按它有多少见来计价。",
+            "先分清两个计数。词频是一个词在某个片段里出现了几次；文档频率是有多少个片段含有这个词，一个片段里出现再多次也只算一次。逆文档频率把文档频率倒过来用：`idf = ln((N − df + 0.5) / (df + 0.5))`，其中 `N` 是片段总数。手算两个：“最高”只在 1 个片段里，37.5 ÷ 1.5 = 25，取自然对数约 3.22；“研究”在 12 个片段里，26.5 ÷ 12.5 = 2.12，取自然对数约 0.75。一次稀有词的出现，抵得上四次常见词。公式里的 0.5 是平滑：没有它，一个词出现在全部片段或一个都没有时，公式会除以零或对零取对数。",
+            "切词决定了“词”是什么。英文按空格和标点切开、统一小写，再去掉 `the`、`how` 这类停用词；中文没有空格，`tokenize` 把连续的汉字交给 `cjk_bigrams`，切成相邻两字一组的字二元组，“逾期费用”变成“逾期”“期费”“费用”。“的”“吗”这类停用字当分隔符去掉，停用词表放在 `stopwords.json`。`r-305`、`b2`、`0.5` 这样的编号整体保留，精确查询要的正是它们。切词规则必须两边一致：查询和片段如果切法不同，同一个词也会被当成两个词。",
+            "二元组的代价也看得见：“研究证”会切出“究证”这种不成词的组合，好在它只在含“研究证”的片段里出现，反而成了一个稀有而准确的线索。切完只剩一个字的片段原样保留，可资料里全是二元组，这个单字几乎不可能匹配上。`q05`“书可以续借几次？”去掉停用词“可以”后剩下“书”，它在 38 个片段里一次也没出现。英文运行也有类似的事：`q03` 里的 `maximum` 在资料里一次也没出现，手册写的是 `capped`。切词不是细枝末节，它直接决定哪些查询有机会命中。"
+          ]
+        },
+        {
+          "id": "deep-dive-bigrams",
+          "type": "deep-dive",
+          "title": "中文为什么切成字二元组",
+          "summary": "没有空格的语言怎么切词，以及这种切法换来了什么、付出了什么。",
+          "paragraphs": [
+            "英文天然有空格，词和词之间的边界几乎是免费的。中文没有，要么用分词库按词典和统计模型切出“逾期费用”“借阅证”这样的词，要么退一步，不判断词边界，把每两个相邻的字当成一个检索单位。参考实现的稀疏检索引擎侧重英文和编号的切分；本课两种语言都要支持，又不想引入第三方分词库，所以中文用字二元组。",
+            "字二元组的好处是匹配不挑词典：查询里的“逾期费用”和资料里的“逾期费用”一定切出同样的“逾期”“期费”“费用”，新词、专名也不会因为词典里没有而被切碎。坏处有三个。一是噪声组合，“期费”“究证”不是词，却照样参与打分。二是词表膨胀：中文 38 个片段切出 1039 个不同的二元组，英文 36 个片段只有 502 个词。三是单字落空，只剩一个字的片段匹配不上任何二元组。",
+            "英文这边也有取舍。`WORD_OR_CODE` 让连字符、点、冒号夹在字母数字中间时不拆开，`r-305`、`20:00` 各算一个词；可这也意味着查询写“R 305”就对不上。停用词表去掉 `how`、`many`、`can` 这类词，查询 `How many items can I borrow on a B2 research card?` 只剩 5 个词。停用词表越长，噪声越少，也越可能误删有用的词，比如 `not`。",
+            "怎么判断一条漏检是不是切词造成的？对人工标注片段运行一次拆分，看查询词在片段里的词频。如果查询词和片段里的词意思相同、只是切法不同，比如查询写“R 305”而资料写“R-305”，就是切词问题，改切词规则能修好；如果意思相同、字面完全不同，比如“滞纳金”和“逾期费用”，切得再好也对不上，那是措辞问题，要靠改写查询或换一种匹配方式。"
+          ]
+        },
+        {
+          "id": "predict-search-count",
+          "type": "predict",
+          "prompt": "去实验台运行“前 5 条（默认）”之前先猜：一次运行会发出几条 lesson.search 事件？提示：每条查询一条。",
+          "experiment": "hit-table",
+          "arm": "top5",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.search"
+          }
+        },
+        {
+          "id": "mq-idf",
+          "type": "micro-quiz",
+          "question": {
+            "id": "rare-term",
+            "prompt": "一个词出现在全部 38 个片段的 30 个里，它的逆文档频率会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "原值是负数，代码取极小的下限，它几乎不加分",
+                "feedback": "对。8.5 ÷ 30.5 小于 1，取对数是负数；`IDF_FLOOR` 让它不再扣分，也几乎不加分。"
+              },
+              {
+                "id": "b",
+                "text": "很高，因为出现得多",
+                "feedback": "不对。出现得多说明它区分不了片段，权重应该低。"
+              },
+              {
+                "id": "c",
+                "text": "和它在某个片段里出现几次有关",
+                "feedback": "不对。那是词频；逆文档频率只看有多少个片段含有它。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "逆文档频率只看文档频率：片段越多含有它，它越不值钱，超过一半时原值变成负数。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "BM25 得分怎么读",
+          "paragraphs": [
+            "逐项拆开一条命中的得分，看清长度归一化的作用。BM25 的总分是各查询词贡献之和，一个词的贡献是 `idf × tf × (k1 + 1) / (tf + k1 × norm)`，其中 `norm = 1 − b + b × length / avg_length`，`length` 是片段的词数，`avg_length` 是全部片段的平均词数。三个因子各管一件事：逆文档频率管稀有，词频部分管出现次数，长度归一化系数管片段长短。片段里没有的词，贡献就是 0。所以读一条得分就是读一张表：每个查询词一行，三个因子相乘得到这一行的贡献，最后把贡献一列相加。",
+            "拿“拆开一条结果的得分”的默认运行来读。`q03` 的第 1 条是费用文档第 7 到 13 行那一段，41 个词，比平均的 57.92 个短，长度归一化系数是 0.25 + 0.75 × 41 ÷ 57.92 ≈ 0.78。“逾期”在这一段出现 4 次，词频部分是 4 × 2.5 ÷ (4 + 1.5 × 0.78) ≈ 1.93，乘以逆文档频率 1.4351 得 2.7751；“最高”只出现 1 次，词频部分 1.15，但逆文档频率高达 3.2189，贡献 3.7061，反而是全场最多。五个词加起来 15.8188。“用每”“册最”这两个二元组在 38 个片段里一次也没出现，贡献为 0。贡献最大的是最稀有的词，不是出现最多的词。",
+            "词频部分会饱和：出现 4 次只比出现 1 次多拿约 1.7 倍，再多也不会超过 `k1 + 1 = 2.5`。这挡住了“把关键词重复十遍”就能霸榜的片段。长度归一化让长片段吃亏：同样出现一次，长片段里的那一次说明力更弱。把 `b` 调成 0 关掉它，费用文档那一段的得分从 15.8188 降到 14.4831，因为它本来是靠“短”多拿了分。换一组参数，同一个片段可能名次不变而分数变了，比较参数时要看名次，不能只看分数。",
+            "得分不是概率，也不能跨查询比较。查询词越多，能加起来的项越多，长查询天然得分高；同一个 15 分，在 `q03` 里遥遥领先，换一条五个词都很常见的查询可能根本到不了。得分只回答一件事：在这一条查询下，片段之间谁排在谁前面。报告里的“各词贡献之和等于结果得分”这一项，就是在核对这个加法没有藏着别的东西。要比较不同查询的检索质量，看命中和名次，不看分数大小。"
+          ]
+        },
+        {
+          "id": "deep-dive-hand",
+          "type": "deep-dive",
+          "title": "手算一遍 BM25：k1 和 b 各管什么",
+          "summary": "把一个词的贡献从头算到尾，再看两个参数把它往哪边推。",
+          "paragraphs": [
+            "先完整算“最高”在费用文档第 7 到 13 行那一段里的贡献。片段总数 38，文档频率 1，逆文档频率是 (38 − 1 + 0.5) ÷ (1 + 0.5) = 25 的自然对数，约 3.2189。片段长度 41，平均长度 57.92，`b = 0.75`，长度归一化系数 0.25 + 0.75 × 0.7079 ≈ 0.7809。词频 1，`k1 = 1.5`，词频部分 1 × 2.5 ÷ (1 + 1.5 × 0.7809) = 2.5 ÷ 2.1713 ≈ 1.1514。贡献 3.2189 × 1.1514 ≈ 3.7061，和报告表格里这一行一致。",
+            "`k1` 管饱和速度。取 `norm = 1`，`k1 = 1.5` 时，词频 1、2、4、8 对应的词频部分是 1.00、1.43、1.82、2.11，越往后涨得越慢，上限是 2.5。`k1 = 0` 时不管出现几次都是 1，退化成“有没有”；`k1` 很大时接近按次数线性增长。实验里把 `k1` 调到 3，费用文档那一段的得分从 15.8188 升到 19.156，因为它的几个词都出现了 2 到 4 次。",
+            "`b` 管长度折扣的强弱。同一个 41 词的片段，`b = 0` 时系数是 1，不看长短；`b = 0.75` 时 0.7809；`b = 1` 时 0.7079，完全按长度比例。短片段 `b` 越大越占便宜，长片段相反。逆文档频率还有一个边界：文档频率超过一半时原值为负。举个编的例子，38 个片段里有 20 个含某词，18.5 ÷ 20.5 ≈ 0.90，取对数约 −0.10。代码用 `IDF_FLOOR` 把它抬到一个极小的正数，否则多匹配一个常见词反而扣分。",
+            "`k1 = 1.5`、`b = 0.75` 是参考实现和多数教材的起点值，不是这份手册调出来的最优值。参数要在查询集上比较：改一个值，跑一遍命中表，看命中和名次变了没有。在这份小语料上，三组参数下 `q03` 的第 1 名都不变，变的是后几名的次序。"
+          ]
+        },
+        {
+          "id": "mq-length",
+          "type": "micro-quiz",
+          "question": {
+            "id": "length-norm",
+            "prompt": "把 `b` 从 0.75 调到 0，比平均长度短的片段得分会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "下降：它原来靠“短”多拿的那部分没了",
+                "feedback": "对。短片段的系数小于 1，关掉后变成 1，词频部分随之变小。"
+              },
+              {
+                "id": "b",
+                "text": "上升：长度不再被考虑，所有片段都加分",
+                "feedback": "不对。比平均长的片段才会上升，短片段会下降。"
+              },
+              {
+                "id": "c",
+                "text": "不变：`b` 只影响逆文档频率",
+                "feedback": "不对。`b` 只出现在长度归一化系数里，和逆文档频率无关。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "`b` 越大，长度折扣越强；短片段受益，长片段吃亏。`b = 0` 时所有片段按同一长度看待。"
+          }
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一条查询从文字到命中表的一行",
+          "description": "按步骤说明一次检索做了什么。代码是简化的示意，数值来自本课的确定性计算，实际的值以你运行出的 lesson.search 和 lesson.report 为准。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "01",
+              "actor": "运行器",
+              "title": "切词",
+              "body": "查询和片段走同一个切词函数，查询里重复的词只算一次。",
+              "code": "terms = index.query_terms(query.text)  # query: q03\n# one entry per distinct term, stop words removed",
+              "language": "python",
+              "evidence": "lesson.search 的 terms"
+            },
+            {
+              "id": "step-2",
+              "label": "02",
+              "actor": "BM25Index",
+              "title": "查稀有程度",
+              "body": "每个词查一次文档频率，换算成逆文档频率；没出现过的词也有值，只是用不上。",
+              "code": "idf = index.idf(term)  # ln((N - df + 0.5) / (df + 0.5)), floored at IDF_FLOOR",
+              "language": "python",
+              "evidence": "lesson.score 的 terms[].idf"
+            },
+            {
+              "id": "step-3",
+              "label": "03",
+              "actor": "BM25Index",
+              "title": "逐片段算贡献",
+              "body": "对每个片段，每个查询词算一份贡献，一个词都不共有的片段直接跳过。",
+              "code": "parts = {term: index.term_score(term, i) for term in terms}\nparts = {term: value for term, value in parts.items() if value > 0}",
+              "language": "python",
+              "evidence": "lesson.search 的 hits[].terms"
+            },
+            {
+              "id": "step-4",
+              "label": "04",
+              "actor": "BM25Index",
+              "title": "排序取前几条",
+              "body": "按总分降序，同分按片段在语料里的顺序，保留前 `top_k` 条。",
+              "code": "scored.sort(key=lambda item: (-item[0], item[1]))\nhits = scored[:top_k]",
+              "language": "python",
+              "evidence": "lesson.search 的 hits[].rank"
+            },
+            {
+              "id": "step-5",
+              "label": "05",
+              "actor": "运行器",
+              "title": "对照人工标注",
+              "body": "看结果片段覆盖了哪些小节，和人工标注比，得出是否命中、是否完整、首个命中排第几。",
+              "code": "verdict = judge(ranked_chunks(index, hits), query)\n# {'hit': True, 'complete': True, 'first_rank': 1, ...}",
+              "language": "python",
+              "evidence": "lesson.search 的 judge"
+            }
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "查询集与命中表",
+          "paragraphs": [
+            "为一组查询人工标注应命中的小节，再统计前 `top_k` 条结果里命中了多少。只试一两条查询，看到的是运气；本课的查询集有 14 条，分六类：精确名称、同义改写、无答案、跨小节、多跳、版本冲突，每类两到三条。查询文字放在 `queries.json`，每条带人工标注，比如 `q03` 标的是 `fees#overdue`，即费用文档的逾期费用小节。六类查询各考检索的一个侧面：精确名称考编号匹配，同义改写考换说法，无答案考找不到时怎么办。",
+            "人工标注写的是小节锚点，不是片段编号。片段怎么切会变，锚点不变，同一份人工标注能检验任何切法。`judge` 拿结果片段覆盖到的小节去对：命中任一小节就是 `hit`，全部覆盖才是 `complete`，`first_rank` 是第一个命中的名次。跨小节、多跳和版本冲突的查询要看 `complete`：`q11` 找到了第一跳的研讨室，却没找到第二跳的关闭时间，`hit` 为真，`complete` 为假。无答案查询没有人工标注，`hit` 和 `complete` 都是空值，表示无从判定。",
+            "命中表把 14 条查询排成 14 行。默认参数下，有人工标注的 12 条里命中 9 条，完整覆盖 7 条，平均倒数排名 0.75：命中的 9 条都排第 1，漏掉的 3 条算 0。两条无答案查询没有人工标注，不计入命中率，单独看。把 `top_k` 改成 1 再跑，命中数不变，完整覆盖率降到 0.25，跨小节和版本冲突都要第二段才凑得齐。两个数要一起看：`top_k` 越大越容易凑齐，后面的步骤要读的片段也越多。",
+            "命中表要能复跑。报告记下语料版本、查询集版本、切片参数、`k1`、`b` 和 `top_k`，还会重建一次索引把全部查询再跑一遍，逐条比对。这样{{lesson:embedding-retrieval}}换一种检索方式时，可以在同一份资料、同一个查询集上逐行对照，这张表就是那时的基线。命中只说明人工标注的小节进了名单，不说明后面的回答用对了它。资料或查询集一改，版本号就变，旧表不能直接拿来比。"
+          ]
+        },
+        {
+          "id": "misconception-hit-rate",
+          "type": "misconception",
+          "claim": "命中率 0.75，说明四个问题里有三个能答对。",
+          "correction": "命中率只统计人工标注的小节有没有进前 `top_k` 条。进了名单，后面的步骤可能没用上它，也可能被同时检索到的旧版本、读者留言带偏；多跳查询只找到第一跳也算命中。它也不覆盖无答案查询，那两条本来就不该有命中。回答对不对要另外检验。"
+        },
+        {
+          "id": "mq-complete",
+          "type": "micro-quiz",
+          "question": {
+            "id": "complete",
+            "prompt": "`q13` 问周日几点闭馆，人工标注是 2026 版和 2025 版的周末小节。`top_k = 1` 时结果只有其中一个版本的那一段，`judge` 会给出什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`hit` 为真，`complete` 为假，`first_rank` 是 1",
+                "feedback": "对。命中了一个人工标注小节，缺另一个。"
+              },
+              {
+                "id": "b",
+                "text": "`hit` 为假，因为另一个版本没找到",
+                "feedback": "不对。命中任一人工标注小节就算 `hit`。"
+              },
+              {
+                "id": "c",
+                "text": "`hit` 和 `complete` 都是 `None`",
+                "feedback": "不对。`None` 只留给没有人工标注的无答案查询。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "跨小节、多跳、版本冲突都要两个以上的小节，看 `complete` 才知道凑齐没有。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "漏检从哪里来",
+          "paragraphs": [
+            "换了说法、用了同义词的查询会漏检，这正是{{lesson:embedding-retrieval}}按意思找片段要解决的问题。`q04` 问“滞纳金”，手册只写“逾期费用”；`q05` 问“续借”，手册写“延长借期”；`q06` 问“还书”，手册写“归还”。三条查询的人工标注片段一个查询词都不含，BM25 给它们的分数是 0，排名根本轮不到它们。这类没找到的情况叫漏检（Retrieval Miss），本课先学会给每条漏检找出原因。",
+            "“漏检与无答案查询”这个练习对每条漏检直接看人工标注片段：它和查询共有哪些词，在全部结果里排第几。原因只有两种，记在 `lesson.miss` 的 `reason` 里。一种是 `no_shared_terms`，一个词也不共有，调参数救不回来；另一种是 `outranked`，共有一些词，但都是弱词，被别的片段挤到前 `top_k` 条之外。中文三条都属于前一种；英文 `q06` 属于后一种，它和人工标注片段只共有一个 `after`，排第 9。把 `top_k` 调到 10，英文的 `q06` 就能命中。",
+            "验证原因的办法是用资料里的说法重问一次：“晚归还图书要交多少逾期费用？”“图书可以延长借期几次？”“闭馆以后去哪里归还图书？”三条都把人工标注片段排到了第 1。重问命中，说明资料里有这一段，漏检出在措辞。人可以这样改写，前提是知道资料怎么写；{{lesson:agentic-rag}}会让模型自己改写查询再查，{{lesson:embedding-retrieval}}则换一种不依赖字面的匹配方式。改写也有代价：每多问一次就多一次检索，问法越多，混进来的无关片段也越多。",
+            "还有一类更隐蔽：资料里根本没有答案。`q07` 问停车场，手册一字未提，可 BM25 照样返回 5 条结果，靠的是“图书”“书馆”这种到处都有的词，最高分 3.5889，记在 lesson.no_answer 事件里。BM25 没有“找不到”这个输出，只要有一个共有的词就会打分排序。分数阈值也靠不住：得分随查询长短和用词变化，没有固定刻度。挡住这类结果，要靠后面的回答步骤看清证据不足，并如实说资料里没有。更稳妥的做法，是要求回答里的每个结论都能指回检索到的原文。"
+          ]
+        },
+        {
+          "id": "deep-dive-systems",
+          "type": "deep-dive",
+          "title": "从命中表到真实系统",
+          "summary": "真实系统怎么衡量检索、怎么加速，以及关键词检索在里面的位置。",
+          "paragraphs": [
+            "本课的命中率在参考书里写作 `recall@k`，书中脚注特意说明这其实是命中率：只要前 `k` 条里有一条相关就算。学术上的 `recall@k` 指相关片段被找到的比例，一条查询有两个人工标注小节、只找到一个，是 0.5。本课把后者近似成 `complete` 这一列：全找到为真。参考书另外两个常用指标是平均倒数排名，看第一个相关结果排得多靠前；以及归一化折损累积增益，同时看所有相关结果的名次。",
+            "本课的索引对每条查询把 38 个片段全部打一遍分。资料一多就太慢，真实引擎用倒排索引：从词到含有它的片段列表的反向映射，像书后的术语索引，查“逾期”直接翻到那几页，只给这些片段打分。参考实现 `sparse-embedding` 就是这样做的，并打印每一步的文档频率、词频和贡献，和本课 `explain` 给出的字段一一对应。",
+            "关键词检索在生产系统里很少单独使用，但几乎总在。参考书的流水线让关键词和按意思匹配两路并行，再把两份排名合并，最后用更慢更准的模型重新排序。另一个做法是给每个片段加一句上下文前缀，比如“本段摘自青石图书馆费用文档的逾期费用小节”，前缀带来了新的可匹配词。参考书引用的数据是，加前缀并配合 BM25 后，检索失败率降低约一半。这些改进都要在同一个查询集上比，才看得出是不是真的变好了。"
+          ]
+        },
+        {
+          "id": "mq-no-answer",
+          "type": "micro-quiz",
+          "question": {
+            "id": "no-answer",
+            "prompt": "`q07` 问停车场，手册里没有。BM25 会返回什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "返回几条低分片段，靠的是到处都有的常见词",
+                "feedback": "对。只要共有一个词就有分，BM25 没有“找不到”这个输出。"
+              },
+              {
+                "id": "b",
+                "text": "返回空列表，因为没有相关内容",
+                "feedback": "不对。BM25 不判断相关与否，只看共有的词。只有一个词都不共有时才会是空列表。"
+              },
+              {
+                "id": "c",
+                "text": "返回一条明确的“资料不足”提示",
+                "feedback": "不对。说资料不足是后面回答步骤的事，检索本身给不出这个结论。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "无答案查询照样有结果。不能拿“有结果”当“有答案”，也不能指望一个固定分数线把它们挡住。"
+          }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "ai-agent-book-sparse",
+              "title": "稀疏嵌入：从 TF-IDF 到 BM25，以及衡量检索的指标（深入理解 AI Agent，第 3 章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter3.md"
+            },
+            {
+              "id": "ai-agent-book-bm25-engine",
+              "title": "教学用 BM25 引擎：分词、倒排索引、逐词得分与离线评测（深入理解 AI Agent，实验 3-5）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter3/sparse-embedding/README.md"
+            },
+            {
+              "id": "hf-llamaindex-components",
+              "title": "检索流程的五个阶段：加载、索引、存储、查询与评测（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/llama-index/components.mdx"
+            },
+            {
+              "id": "ms-agentic-rag",
+              "title": "检索、检查结果、改写查询再检索的循环（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/05-agentic-rag/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "document-loading"
+        },
+        {
+          "id": "code-tokenize",
+          "type": "annotated-source",
+          "path": "lessons/lesson_keyword_retrieval/bm25.py",
+          "start": 18,
+          "end": 55,
+          "notes": [
+            {
+              "id": "n18",
+              "line": 18,
+              "anchor": "STOPWORDS = json.loads(",
+              "text": "停用词放在 stopwords.json：代码里不写任何一种语言的词表，中文分停用词和停用字两张表。"
+            },
+            {
+              "id": "n19",
+              "line": 19,
+              "anchor": "ANCHOR_MARK = re.compile",
+              "text": "小节锚点是给人工标注定位用的标记，不是正文，切词前先去掉，免得锚点里的 `overdue` 被当成一个词。"
+            },
+            {
+              "id": "n21",
+              "line": 21,
+              "anchor": "WORD_OR_CODE = ",
+              "text": "英文词和编号的写法：R-305、0.5、20:00 中间的连字符、点、冒号不拆开，整体算一个词。"
+            },
+            {
+              "id": "n22",
+              "line": 22,
+              "anchor": "CJK_RUN = ",
+              "text": "连续的汉字算一段，后面再切成字二元组。"
+            },
+            {
+              "id": "n29",
+              "line": 29,
+              "anchor": "def tokenize(text: str, locale: str) -> list[str]:",
+              "text": "建索引和查询走同一个函数：两边切法一致，词才可能对上。"
+            },
+            {
+              "id": "n31",
+              "line": 31,
+              "anchor": "text = ANCHOR_MARK.sub(\" \", text).lower()",
+              "text": "统一小写：`B2` 和 `b2` 是同一个词。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "anchor": "if word not in (stop[\"words\"] if locale == \"en\" else ()):",
+              "text": "英文运行按停用词表去掉 `the`、`how` 这类词；中文运行里的英文和编号一个都不去。"
+            },
+            {
+              "id": "n38",
+              "line": 38,
+              "anchor": "elif locale != \"en\":",
+              "text": "英文运行跳过汉字：英文资料里没有汉字，留着也对不上。"
+            },
+            {
+              "id": "n43",
+              "line": 43,
+              "anchor": "def cjk_bigrams(run: str, stop: dict) -> list[str]:",
+              "text": "把一段汉字切成相邻两字一组：没有分词库，“逾期费用”也能切出“逾期”“期费”“费用”。"
+            },
+            {
+              "id": "n45",
+              "line": 45,
+              "anchor": "for word in sorted(stop[\"words\"], key=len, reverse=True):",
+              "text": "先去停用词，长的先换，短词不会把长词拆坏。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "anchor": "for char in stop[\"chars\"]:",
+              "text": "停用字换成空格当分隔符：二元组不会跨过被去掉的字。"
+            },
+            {
+              "id": "n51",
+              "line": 51,
+              "anchor": "if len(piece) == 1:",
+              "text": "只剩一个字的片段原样保留；资料里全是二元组，它几乎匹配不上，`q05` 的“书”就是这样。"
+            },
+            {
+              "id": "n54",
+              "line": 54,
+              "anchor": "tokens.extend(piece[i:i + 2] for i in range(len(piece) - 1))",
+              "text": "相邻两字滑动切分：五个字得到四个二元组。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-idf-floor",
+              "start": 24,
+              "end": 26,
+              "label": "打分用的下限 IDF_FLOOR，下一个读码块讲"
+            }
+          ]
+        },
+        {
+          "id": "code-score",
+          "type": "annotated-source",
+          "path": "lessons/lesson_keyword_retrieval/bm25.py",
+          "start": 66,
+          "end": 115,
+          "notes": [
+            {
+              "id": "n66",
+              "line": 66,
+              "anchor": "class BM25Index:",
+              "text": "索引就是每个片段的词频表加几项全局统计；片段少，查询时逐个打分，没有用倒排索引。"
+            },
+            {
+              "id": "n67",
+              "line": 67,
+              "anchor": "k1: float = 1.5, b: float = 0.75",
+              "text": "`k1`、`b` 的默认值 1.5 和 0.75，是参考实现和多数教材的起点。"
+            },
+            {
+              "id": "n72",
+              "line": 72,
+              "anchor": "self.term_counts = [Counter(tokenize(chunk.text, locale)) for chunk in self.chunks]",
+              "text": "每个片段的词频：哪个词出现几次，不管词序。"
+            },
+            {
+              "id": "n73",
+              "line": 73,
+              "anchor": "self.lengths = ",
+              "text": "片段长度按词数算，不按字符数。"
+            },
+            {
+              "id": "n74",
+              "line": 74,
+              "anchor": "self.avg_length = ",
+              "text": "平均长度是长度归一化的参照。"
+            },
+            {
+              "id": "n75",
+              "line": 75,
+              "anchor": "self.doc_freq = Counter(term for counts in self.term_counts for term in counts)",
+              "text": "文档频率：每个词出现在几个片段里，一个片段里出现多次只算一次。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "anchor": "def raw_idf(self, term: str) -> float:",
+              "text": "逆文档频率原值 `ln((N − df + 0.5) / (df + 0.5))`，报告里的“原值”一列就是它。"
+            },
+            {
+              "id": "n83",
+              "line": 83,
+              "anchor": "return max(self.raw_idf(term), IDF_FLOOR)",
+              "text": "超过一半片段都有的词原值为负，取一个极小的下限，让它不再扣分。"
+            },
+            {
+              "id": "n85",
+              "line": 85,
+              "anchor": "def length_norm(self, index: int) -> float:",
+              "text": "长度归一化系数：平均长度的片段是 1，越长越大。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "anchor": "return 1 - self.b + self.b * self.lengths[index] / self.avg_length",
+              "text": "`b = 0` 时恒为 1，不看长度；`b = 1` 时就是长度与平均长度之比。"
+            },
+            {
+              "id": "n93",
+              "line": 93,
+              "anchor": "if not tf:",
+              "text": "片段里没有这个词，贡献就是 0，不管它多稀有。"
+            },
+            {
+              "id": "n95",
+              "line": 95,
+              "anchor": "return self.idf(term) * tf * (self.k1 + 1) / (tf + self.k1 * self.length_norm(index))",
+              "text": "一个词的贡献：逆文档频率乘饱和后的词频；词频再大，第二个因子也到不了 `k1 + 1`。"
+            },
+            {
+              "id": "n99",
+              "line": 99,
+              "anchor": "return list(dict.fromkeys(tokenize(query, self.locale)))",
+              "text": "查询里重复的词只算一次，每个词的贡献可以直接读出来。"
+            },
+            {
+              "id": "n101",
+              "line": 101,
+              "anchor": "def search(self, query: str, top_k: int = 5) -> list[Hit]:",
+              "text": "返回前 `top_k` 条；可能少于 `top_k`，甚至为空。"
+            },
+            {
+              "id": "n109",
+              "line": 109,
+              "anchor": "parts = {term: value for term, value in parts.items() if value > 0}",
+              "text": "只留贡献大于 0 的词；一个词都不共有的片段不进名单。"
+            },
+            {
+              "id": "n112",
+              "line": 112,
+              "anchor": "scored.sort(key=lambda item: (-item[0], item[1]))",
+              "text": "按总分降序，同分按片段在语料里的顺序，复跑结果才会逐条相同。"
+            },
+            {
+              "id": "n113",
+              "line": 113,
+              "anchor": "return [Hit(",
+              "text": "`detail` 里留下逐词贡献，命中表和报告都从这里取数。"
+            }
+          ]
+        },
+        {
+          "id": "code-misses",
+          "type": "annotated-source",
+          "path": "lessons/lesson_keyword_retrieval/runtime.py",
+          "start": 118,
+          "end": 151,
+          "notes": [
+            {
+              "id": "n118",
+              "line": 118,
+              "anchor": "def misses(context: RunContext, values: Inputs) -> str:",
+              "text": "漏检分析只看两类查询：同义改写和无答案。"
+            },
+            {
+              "id": "n123",
+              "line": 123,
+              "anchor": "for query in (item for item in queries if item.kind == \"synonym\"):",
+              "text": "同义改写的三条查询逐条分析。"
+            },
+            {
+              "id": "n124",
+              "line": 124,
+              "anchor": "context.check_cancelled()",
+              "text": "每条查询前检查停止请求。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "anchor": "verdict = judge(ranked_chunks(index, hits), query)",
+              "text": "`judge` 拿结果片段覆盖的小节和人工标注比：`hit` 命中任一小节，`complete` 全部覆盖。"
+            },
+            {
+              "id": "n128",
+              "line": 128,
+              "anchor": "gold_chunks = [_gold_chunk(index, query.text, chunk) for chunk in index.chunks",
+              "text": "直接看人工标注小节所在的片段：它们和查询共有哪些词，在全部结果里排第几。"
+            },
+            {
+              "id": "n130",
+              "line": 130,
+              "anchor": "reason = None if verdict[\"hit\"] else _miss_reason(gold_chunks)",
+              "text": "原因两种：一个词也不共有，或共有一些词但排在前 `top_k` 条之外。"
+            },
+            {
+              "id": "n132",
+              "line": 132,
+              "anchor": "rewrite = t.rewrites[query.id]",
+              "text": "用资料原文的说法重问；改写写在运行时文本里，中英各一份。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "rewrite_verdict = judge(ranked_chunks(index, rewrite_hits), query)",
+              "text": "重问后命中，说明资料里有这一段，漏检出在措辞。"
+            },
+            {
+              "id": "n140",
+              "line": 140,
+              "anchor": "context.emit(\"lesson.miss\", record)",
+              "text": "每条一条 lesson.miss 事件：原问题、原因、人工标注片段和重问结果。"
+            },
+            {
+              "id": "n142",
+              "line": 142,
+              "anchor": "for query in (item for item in queries if item.kind == \"no_answer\"):",
+              "text": "无答案查询没有人工标注，单独处理。"
+            },
+            {
+              "id": "n145",
+              "line": 145,
+              "anchor": "hits = index.search(query.text, values.top_k)",
+              "text": "照样检索：只要有一个共有的词，就会有结果。"
+            },
+            {
+              "id": "n147",
+              "line": 147,
+              "anchor": "\"returned\": len(hits), \"top_score\": hits[0].score if hits else None,",
+              "text": "记下返回几条和最高分；BM25 没有“找不到”这个输出。"
+            },
+            {
+              "id": "n151",
+              "line": 151,
+              "anchor": "return _report_misses(context, values, diagnosed, unanswerable)",
+              "text": "报告把漏检原因、重问名次和无答案查询的结果排成一张表。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-miss-record",
+              "start": 135,
+              "end": 139,
+              "label": "证据：拼装 lesson.miss 的数据（原问题、结果、人工标注片段、重问结果）"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "手写 BM25，中文切字二元组，人工标注写到小节",
+          "chosen": "bm25.py 用标准库写出 BM25，`explain` 能逐词给出文档频率、逆文档频率、词频和贡献；中文切成字二元组，停用词放在数据文件里；查询集的人工标注写小节锚点，`judge` 按片段覆盖的小节判定命中，和切法无关。",
+          "alternatives": [
+            {
+              "id": "library",
+              "title": "直接用现成的 BM25 库或搜索引擎",
+              "why_not": "生产里应该这样做，可它们通常只给总分，学习者看不到每个因子；本课要逐项核对加法。"
+            },
+            {
+              "id": "segmenter",
+              "title": "用中文分词库切词",
+              "why_not": "切出的词更像人写的，却多一个依赖和一份词典；新词切错时，查询和资料可能切得不一样。"
+            },
+            {
+              "id": "chunk-labels",
+              "title": "人工标注直接写片段编号",
+              "why_not": "片段编号随切法变化，改一次切片参数，整份人工标注就作废了。"
+            },
+            {
+              "id": "threshold",
+              "title": "设一个分数线，低于它就算没找到",
+              "why_not": "得分随查询长短和用词浮动，没有固定刻度；同一个分数线在一条查询里太严，在另一条里太松。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "hit-table",
+          "title": "同一查询集上的关键词检索",
+          "hypothesis": "精确名称的查询把人工标注小节排在第 1；同义改写的查询漏检；`top_k` 从 5 降到 1，命中数不变，需要两段才凑齐的查询变得不完整。",
+          "predict": "predict-search-count",
+          "arms": [
+            {
+              "id": "top5",
+              "exercise": "query-table",
+              "label": "前 5 条（默认）"
+            },
+            {
+              "id": "top1",
+              "exercise": "query-table",
+              "label": "只看第 1 条",
+              "inputs": {
+                "scenario": "query_table",
+                "top_k": 1,
+                "k1": 1.5,
+                "b": 0.75
+              }
+            }
+          ],
+          "observe": [
+            {
+              "id": "versions",
+              "text": "索引用的语料版本：复跑时先核对它。",
+              "selector": {
+                "event": "lesson.index",
+                "path": "data.corpus_version"
+              }
+            },
+            {
+              "id": "terms",
+              "text": "第一条查询切出的词。",
+              "selector": {
+                "event": "lesson.search",
+                "path": "data.terms"
+              }
+            },
+            {
+              "id": "top-hit",
+              "text": "第 1 名的片段编号、得分和覆盖的小节。",
+              "selector": {
+                "event": "lesson.search",
+                "path": "data.hits[0]"
+              }
+            },
+            {
+              "id": "judge",
+              "text": "对照人工标注的判定：hit、complete 和 first_rank。",
+              "selector": {
+                "event": "lesson.search",
+                "path": "data.judge"
+              }
+            },
+            {
+              "id": "table",
+              "text": "命中表：14 条查询各一行。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "hit-rate",
+              "text": "命中率：只算有人工标注的 12 条。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=hit_rate]"
+              }
+            },
+            {
+              "id": "complete-rate",
+              "text": "完整覆盖率：两组对照时变化最大的数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=complete_rate]"
+              }
+            },
+            {
+              "id": "rerun",
+              "text": "重建索引复跑，结果逐条相同。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=rerun_identical]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。同一个查询集，看 14 条查询各自找到了什么。"
+            },
+            {
+              "text": "先看索引记下的语料版本；查询集版本、参数也在这条事件里。",
+              "observe": "versions",
+              "stage": "runtime"
+            },
+            {
+              "text": "第一条查询被切成了这些词，编号整体保留。",
+              "observe": "terms"
+            },
+            {
+              "text": "第 1 名是哪个片段、几分、覆盖哪些小节。",
+              "observe": "top-hit"
+            },
+            {
+              "text": "和人工标注一比，得出命中、完整和首个命中名次。",
+              "observe": "judge"
+            },
+            {
+              "text": "报告把 14 条排成一张表，漏检的几行一眼能看到。",
+              "observe": "table"
+            },
+            {
+              "text": "命中率只算有人工标注的查询，无答案的两条不在分母里。",
+              "observe": "hit-rate"
+            },
+            {
+              "text": "换到“只看第 1 条”再跑，命中率不变，完整覆盖率明显下降。",
+              "observe": "complete-rate"
+            },
+            {
+              "text": "最后一项检查重建了索引再跑一遍，结果逐条相同，这张表可以复跑。",
+              "observe": "rerun"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "在这份语料、这个查询集和这组参数下，哪些查询命中、排第几，每一行都能对应到片段编号和得分。",
+              "`top_k` 只决定名单多长：它不改变排序，却决定需要多段的查询能否凑齐。"
+            ],
+            "does_not_prove": [
+              "命中不等于回答正确；本课没有生成回答。",
+              "14 条查询太少，命中率 0.75 不能推到别的资料或别的问法上。",
+              "复跑一致只说明程序是确定的，不说明这组参数最好。"
+            ]
+          }
+        },
+        {
+          "id": "explain-score",
+          "title": "拆开一条结果的得分",
+          "hypothesis": "`q03` 第 1 名的得分等于各词贡献之和；关掉长度归一化或调大 `k1`，得分按公式预期的方向变化。",
+          "arms": [
+            {
+              "id": "default",
+              "exercise": "explain-score",
+              "label": "默认参数（k1=1.5，b=0.75）"
+            },
+            {
+              "id": "b0",
+              "exercise": "explain-score",
+              "label": "关掉长度归一化（b=0）",
+              "inputs": {
+                "scenario": "explain",
+                "query_id": "q03",
+                "top_k": 5,
+                "k1": 1.5,
+                "b": 0.0
+              }
+            },
+            {
+              "id": "k3",
+              "exercise": "explain-score",
+              "label": "词频更晚饱和（k1=3）",
+              "inputs": {
+                "scenario": "explain",
+                "query_id": "q03",
+                "top_k": 5,
+                "k1": 3.0,
+                "b": 0.75
+              }
+            }
+          ],
+          "observe": [
+            {
+              "id": "term-table",
+              "text": "逐词的文档频率、逆文档频率、词频、词频部分和贡献。",
+              "selector": {
+                "event": "lesson.score",
+                "path": "data.terms"
+              }
+            },
+            {
+              "id": "length-norm",
+              "text": "长度归一化系数：短于平均小于 1，长于平均大于 1。",
+              "selector": {
+                "event": "lesson.score",
+                "path": "data.length_norm"
+              }
+            },
+            {
+              "id": "score",
+              "text": "这条结果的总分。",
+              "selector": {
+                "event": "lesson.score",
+                "path": "data.score"
+              }
+            },
+            {
+              "id": "sum-check",
+              "text": "检查：各词贡献之和等于结果得分。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=sum_matches]"
+              }
+            },
+            {
+              "id": "baseline",
+              "text": "同一片段在默认参数下的得分，用来对照改过的参数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=baseline_score]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。一条查询、一个片段，把得分拆到每个词。"
+            },
+            {
+              "text": "每个查询词一行：没出现的词词频为 0，贡献也是 0。",
+              "observe": "term-table",
+              "stage": "runtime"
+            },
+            {
+              "text": "所有词共用同一个长度归一化系数，它由片段长度和平均长度决定。",
+              "observe": "length-norm"
+            },
+            {
+              "text": "总分就是表里贡献一列的和。",
+              "observe": "score"
+            },
+            {
+              "text": "报告把这个加法核对了一遍，也和检索名单里的分数对上。",
+              "observe": "sum-check"
+            },
+            {
+              "text": "换到改过参数的一组，对照默认参数下的得分，看变化方向是否和公式一致。",
+              "observe": "baseline"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "BM25 得分是逐词贡献的和，每一项都能从文档频率、词频和长度手算出来。",
+              "`b` 只通过长度归一化系数起作用，`k1` 只通过词频部分起作用。"
+            ],
+            "does_not_prove": [
+              "一条查询上的参数效果，不能说明这组参数在整个查询集上更好；那要跑命中表比较。",
+              "得分高只说明在这条查询下排得靠前，不说明片段回答了问题。"
+            ]
+          }
+        },
+        {
+          "id": "misses",
+          "title": "漏检从哪里来",
+          "hypothesis": "同义改写的查询漏检，因为人工标注片段不含查询词或只含弱词；用资料里的说法重问就能命中；无答案查询照样返回结果。",
+          "arms": [
+            {
+              "id": "misses",
+              "exercise": "misses",
+              "label": "同义改写与无答案查询"
+            }
+          ],
+          "observe": [
+            {
+              "id": "reason",
+              "text": "第一条漏检的原因。",
+              "selector": {
+                "event": "lesson.miss",
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "shared",
+              "text": "人工标注片段和查询共有的词。",
+              "selector": {
+                "event": "lesson.miss",
+                "path": "data.gold_chunks[0].shared_terms"
+              }
+            },
+            {
+              "id": "rewrite",
+              "text": "用资料说法重问后，首个命中排第几。",
+              "selector": {
+                "event": "lesson.miss",
+                "path": "data.rewrite.first_rank"
+              }
+            },
+            {
+              "id": "no-answer-returned",
+              "text": "无答案查询返回了几条结果。",
+              "selector": {
+                "event": "lesson.no_answer",
+                "path": "data.returned"
+              }
+            },
+            {
+              "id": "no-answer-top",
+              "text": "无答案查询的最高分。",
+              "selector": {
+                "event": "lesson.no_answer",
+                "path": "data.top_score"
+              }
+            },
+            {
+              "id": "misses-table",
+              "text": "报告表格：每条漏检的原因、共有的词和重问名次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。先看同义改写的查询为什么找不到。"
+            },
+            {
+              "text": "原因写在这里：一个词也不共有，或者共有的词太弱。",
+              "observe": "reason",
+              "stage": "runtime"
+            },
+            {
+              "text": "人工标注片段和查询共有的词，空列表就是一个都没有。",
+              "observe": "shared"
+            },
+            {
+              "text": "换成资料里的说法重问，人工标注片段排到了前面。",
+              "observe": "rewrite"
+            },
+            {
+              "text": "再看无答案查询：资料里没有，结果却不是空的。",
+              "observe": "no-answer-returned"
+            },
+            {
+              "text": "最高分并不低到能一眼认出，分数线挡不住它。",
+              "observe": "no-answer-top"
+            },
+            {
+              "text": "报告把每条漏检的原因、共有的词和重问名次并排列出。",
+              "observe": "misses-table"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这几条漏检的人工标注片段确实存在，换成资料里的说法就能找到，漏检来自措辞。",
+              "BM25 对资料里没有答案的查询照样返回结果，只要有一个共有的词。"
+            ],
+            "does_not_prove": [
+              "重问是人按资料原文改写的，不说明用户或模型会这样问。",
+              "本课没有验证按意思匹配能找回这几条；那是{{lesson:embedding-retrieval}}的实验。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "练习",
+          "options": [
+            {
+              "value": "query_table",
+              "label": "整个查询集的命中表"
+            },
+            {
+              "value": "explain",
+              "label": "拆开一条结果的得分"
+            },
+            {
+              "value": "misses",
+              "label": "漏检与无答案查询"
+            }
+          ]
+        },
+        {
+          "name": "top_k",
+          "label": "前几条结果（top_k）",
+          "help": "每条查询保留几条结果，1 到 10。只改变名单长度，不改变排序。"
+        },
+        {
+          "name": "k1",
+          "label": "词频饱和参数 k1",
+          "help": "0 到 3。越大，词频的作用越接近按次数增长；0 时只看有没有。"
+        },
+        {
+          "name": "b",
+          "label": "长度归一化参数 b",
+          "help": "0 到 1。0 时不看片段长短，1 时完全按长度比例打折。"
+        },
+        {
+          "name": "query_id",
+          "label": "查询集里的查询",
+          "help": "只用于“拆开一条结果的得分”：要拆开哪条查询的结果，默认 q03。"
+        },
+        {
+          "name": "query",
+          "label": "自己写的查询",
+          "help": "只用于“拆开一条结果的得分”：填了就代替上面的查询集查询；用当前运行语言书写。"
+        },
+        {
+          "name": "chunk_id",
+          "label": "要拆开的片段",
+          "help": "只用于“拆开一条结果的得分”：留空就拆第 1 名；写法如 `rooms:7-11`，从命中表里复制。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "why-rare",
+              "prompt": "查询“B2 研究证最多能借几册？”里，为什么“最多”比“研究”贡献大？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "“最多”出现在更少的片段里，逆文档频率更高，而且在这一段里出现了 3 次",
+                  "feedback": "对。稀有加上重复，两个因子都更大。"
+                },
+                {
+                  "id": "b",
+                  "text": "“最多”在查询里排得更靠前",
+                  "feedback": "不对。BM25 不看词序。"
+                },
+                {
+                  "id": "c",
+                  "text": "“研究”是停用词，被去掉了",
+                  "feedback": "不对。“研究”留下了，只是 12 个片段都有它，权重低。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "贡献由稀有程度、出现次数和片段长度共同决定，词在查询里的位置无关。"
+            },
+            {
+              "id": "saturation",
+              "prompt": "一个片段把“逾期”重复了 20 次，它的这一项贡献会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "接近上限 `idf × (k1 + 1)`，不会是出现 1 次时的 20 倍",
+                  "feedback": "对。词频部分饱和，`k1 = 1.5` 时上限是 2.5。"
+                },
+                {
+                  "id": "b",
+                  "text": "变成出现 1 次时的 20 倍",
+                  "feedback": "不对。那是朴素词频的做法，BM25 正是为挡住它才加了饱和。"
+                },
+                {
+                  "id": "c",
+                  "text": "变成 0，重复太多会被当作作弊",
+                  "feedback": "不对。BM25 不惩罚重复，只是让重复的边际收益越来越小。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "`k1` 决定饱和多快；重复只能把这一项推近上限，推不过去。"
+            },
+            {
+              "id": "gold-anchor",
+              "prompt": "查询集的人工标注为什么写 `fees#overdue` 这样的小节锚点，而不写片段编号？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "片段编号随切法变化，锚点不变，同一份人工标注能检验任何切法",
+                  "feedback": "对。改切片参数也不用重新人工标注。"
+                },
+                {
+                  "id": "b",
+                  "text": "锚点更短，省空间",
+                  "feedback": "不对。长短不是原因，稳定才是。"
+                },
+                {
+                  "id": "c",
+                  "text": "BM25 只能检索锚点",
+                  "feedback": "不对。BM25 检索的是片段正文，锚点在切词前就被去掉了。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "`judge` 看片段覆盖了哪些小节，和片段怎么切无关。"
+            },
+            {
+              "id": "miss-reason",
+              "prompt": "英文运行里 `q06` 的人工标注片段和查询共有一个词 `after`，却排在第 9。这条漏检属于哪种原因？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "`outranked`：共有的词太弱，被挤到前 `top_k` 条之外",
+                  "feedback": "对。把 `top_k` 调到 10 它就命中了，但根本原因仍是措辞不同。"
+                },
+                {
+                  "id": "b",
+                  "text": "`no_shared_terms`：一个词都不共有",
+                  "feedback": "不对。它共有 `after`，只是 `after` 很常见、分很低。"
+                },
+                {
+                  "id": "c",
+                  "text": "资料里没有这一段",
+                  "feedback": "不对。用资料说法重问就排第 1，资料里有。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "先看人工标注片段和查询共有哪些词：一个都没有，调参数无用；有但太弱，加大 `top_k` 能找回，改措辞更根本。"
+            },
+            {
+              "id": "no-answer-score",
+              "prompt": "能不能定一个分数线，比如 3 分，低于它就当“资料里没有”？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "靠不住：得分随查询长短和用词浮动，没有固定刻度",
+                  "feedback": "对。长查询天然分高，短查询天然分低，一条线管不了所有查询。"
+                },
+                {
+                  "id": "b",
+                  "text": "可以，3 分以下的结果一定无关",
+                  "feedback": "不对。正确的结果也可能低于 3 分，无关的结果也可能高于 3 分。"
+                },
+                {
+                  "id": "c",
+                  "text": "可以，BM25 的得分就是相关的概率",
+                  "feedback": "不对。BM25 得分不是概率，也不能跨查询比较。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "“资料里没有”要由回答步骤根据证据判断，不能交给一个固定的分数线。"
+            },
+            {
+              "id": "rerun",
+              "prompt": "命中表报告里记下语料版本、查询集版本和参数，主要是为了什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "下一次换检索方式时，能在完全相同的条件下逐行对照",
+                  "feedback": "对。资料或查询集改了，前后两张表就不能比。"
+                },
+                {
+                  "id": "b",
+                  "text": "让分数更高",
+                  "feedback": "不对。记录版本不改变任何分数。"
+                },
+                {
+                  "id": "c",
+                  "text": "服务商要求必须记录",
+                  "feedback": "不对。本课不调用模型，也没有服务商参与。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "这张表是后面几课的基线，只有条件相同，差异才说明检索方式本身的好坏。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“漏检与无答案查询”，找出第一条漏检给出原因的那一步。",
+          "target": {
+            "event": "lesson.miss",
+            "path": "data.reason"
+          },
+          "explanation": "第一条 lesson.miss 事件是 `q04`：`hit` 为假，`reason` 是 `no_shared_terms`，`gold_chunks` 里人工标注片段的 `shared_terms` 是空列表，`rewrite` 里用资料说法重问后 `first_rank` 是 1。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在命中表里找到了漏检的三条查询，并说得出它们的人工标注小节。"
+            },
+            {
+              "id": "item-2",
+              "text": "我照着报告表格，手算出了一个词的逆文档频率和贡献，和表里的数一致。"
+            },
+            {
+              "id": "item-3",
+              "text": "我把 `b` 改成 0 再跑“拆开一条结果的得分”，能解释得分为什么朝那个方向变。"
+            },
+            {
+              "id": "item-4",
+              "text": "我能说出 `hit` 与 `complete` 的区别，并举出一条命中但不完整的查询。"
+            },
+            {
+              "id": "item-5",
+              "text": "我能说出无答案查询为什么照样有结果，以及为什么分数线挡不住它们。"
+            },
+            {
+              "id": "item-6",
+              "text": "我能说出命中表报告里记了哪些版本和参数，以及下一课为什么需要它们。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "BM25Index",
+      "note": "本课的索引：每个片段的词频、文档频率和平均长度，`search` 打分排序，`explain` 拆开得分。"
+    },
+    {
+      "name": "cjk_bigrams",
+      "note": "把一段汉字切成相邻两字一组的字二元组，停用字当分隔符。"
+    },
+    {
+      "name": "judge",
+      "note": "拿结果片段覆盖的小节和人工标注比，给出命中、完整、首个命中名次。"
+    },
+    {
+      "name": "first_rank",
+      "note": "第一个命中人工标注小节的名次；没命中是空值。"
+    },
+    {
+      "name": "complete",
+      "note": "人工标注的小节是否全部出现在结果里；跨小节、多跳、版本冲突要看它。"
+    },
+    {
+      "name": "IDF_FLOOR",
+      "note": "逆文档频率的下限 0.000001：超过一半片段都有的词原值为负，取下限后不再扣分。"
+    },
+    {
+      "name": "lesson.search",
+      "note": "本课事件：一条查询的切词结果、前 `top_k` 条结果和对照人工标注的判定。"
+    },
+    {
+      "name": "lesson.score",
+      "note": "本课事件：一条结果逐词拆开的得分；`ok` 为假时带结构化错误。"
+    },
+    {
+      "name": "lesson.miss",
+      "note": "本课事件：一条同义改写查询的漏检原因、人工标注片段和重问结果。"
+    },
+    {
+      "name": "lesson.no_answer",
+      "note": "本课事件：一条无答案查询返回了几条结果、最高分是多少。"
+    },
+    {
+      "name": "lesson.index",
+      "note": "本课事件：索引用的语料版本、查询集版本、切片参数和 `k1`、`b`，复跑靠它。"
+    },
+    {
+      "name": "reason",
+      "note": "漏检原因：`no_shared_terms` 一个词都不共有，`outranked` 共有的词太弱。"
+    }
+  ]
+}
