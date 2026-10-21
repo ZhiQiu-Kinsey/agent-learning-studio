@@ -54,7 +54,7 @@
 
 平台使用 React + TypeScript + Vite、FastAPI 和本机 Python。课程按“概念 → 最小实现 → 运行证据 → 实验 → 自检”组织。框架课程在制作时核对 API 与依赖；运行和回放保持独立，回放不产生新请求。
 
-当前“原生基础”“任务与接口”“上下文与状态”“推理与控制模式”四个单元共 24 门课可运行（来源见第 6 节与各单元的来源文档），其余课次保留为规划。其中 23 门新课（知识检索、框架与协议、质量与工程、多 Agent 与交付，来源见第 11 节）已有完整实现与离线测试，保持 planned，等待真实模型验收与教学验收；另有 6 门（`streaming-cancel`、`async-concurrency`、`hooks-approval`、`human-in-the-loop`、`prompt-injection`、`capstone-study-assistant`）尚未开始。课程目录由 `curriculum/catalog.json` 统一维护；实现方式见 [新增课程指南](adding-lessons.md)，完整验收见 [开发验证](validation.md)。
+当前“原生基础”“任务与接口”“上下文与状态”“推理与控制模式”各单元共 53 门课可运行（来源见第 6 节与各单元的来源文档）。其中 29 门新课（知识检索、框架与协议、质量与工程、多 Agent 与交付，来源见第 11 节）已有完整实现与离线测试，并于 2026-10-21 用 `claude-haiku-5-5` 做过一轮真实运行（见 [验证记录](../verification/live-runs-2026-10-21.md)）；`embedding-retrieval`、`hybrid-retrieval` 需要配置有 Embedding 接口的服务商，没有真实模型运行过；`prompt-injection` 的防线没有经过被说服的模型检验。课程目录由 `curriculum/catalog.json` 统一维护；实现方式见 [新增课程指南](adding-lessons.md)，完整验收见 [开发验证](validation.md)。
 
 ## 6. 推理与控制模式新课的来源（2026-10）
 

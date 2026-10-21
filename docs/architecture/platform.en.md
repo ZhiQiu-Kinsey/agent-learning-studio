@@ -12,7 +12,7 @@ The web app offers source reading, preset exercises, real model calls, local pro
 
 Reuse first: platform infrastructure uses mature dependencies. Before adding an editor, flow chart, persistence or framework capability, evaluate existing components and official adapters. The hand-written native loop carries the teaching job; the UI does not re-implement Markdown, code highlighting or SSE parsing.
 
-There are 24 runnable lessons covering model-call basics, tool calling, tasks and interfaces, context and state (including prompt caching and Skills), and reasoning and control patterns. Later stages will add retrieval, frameworks and system-level evaluation. Lessons still marked `planned` in the catalog cannot run and do not count as finished.
+There are 53 runnable lessons covering model-call basics, tool calling, tasks and interfaces, context and state (including prompt caching and Skills), reasoning and control patterns, retrieval, frameworks, quality and reliability, protocols and the capstone. The 29 newer lessons were run once against a real model (2026-10-21, see the [verification record](../verification/live-runs-2026-10-21.md)); `embedding-retrieval` and `hybrid-retrieval` have not been run with a real model. Lessons marked `planned` in the catalog cannot run and do not count as finished.
 
 ## Technology choices
 

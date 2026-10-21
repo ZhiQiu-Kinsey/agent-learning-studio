@@ -8,7 +8,7 @@
 
 `curriculum/catalog.json` 是课程 ID、别名、标题、简介、学习目标、层级、先修和状态的唯一来源；显示课号由它的目录顺序计算（见下一节）。`lessons/lesson_*/lesson.json` 描述实现位置；后端自动发现清单，不再编辑 `server/catalog.py` 加分支。
 
-以下使用仍处于规划中的 `document-loading` 演示命令，按实际课程替换。`--id` 接受课程 slug（或改名前的旧 slug 别名）；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
+以下用 `document-loading` 演示命令（它已开放，这里只当命令示例），按实际课程替换。`--id` 接受课程 slug（或改名前的旧 slug 别名）；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
 
 ```powershell
 # 先预览文件清单，不写文件
