@@ -1,0 +1,1286 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "OBSERVABILITY / COST",
+      "source": "aa5f7dd9d284"
+    },
+    "hero.headline": {
+      "text": "When a run gets slow or expensive,",
+      "source": "b6323953b78a"
+    },
+    "hero.highlight": {
+      "text": "find the step in the trace first.",
+      "source": "5fa02e96c459"
+    },
+    "hero.takeaway": {
+      "text": "A run is one trace, and each model request and tool call is a span in it. Record the time of every span and the usage the provider reported, sort them and group them by fingerprint, and the slow steps and repeated calls show themselves. After an optimization, rerun the same question set to confirm nothing got worse.",
+      "source": "b1de5187cbce"
+    },
+    "concepts.01-trace.label": {
+      "text": "01 / TRACE",
+      "source": "dfcd2bb2374c"
+    },
+    "concepts.01-trace.title": {
+      "text": "A trace is made of spans",
+      "source": "8089d6d4e9e3"
+    },
+    "concepts.01-trace.description": {
+      "text": "A run is one trace; each model request and each tool call is a span with a start and an end, under the step it belongs to.",
+      "source": "e692916d89e2"
+    },
+    "concepts.02-correlate.label": {
+      "text": "02 / CORRELATE",
+      "source": "b65e152afec3"
+    },
+    "concepts.02-correlate.title": {
+      "text": "Correlation IDs lead back to raw events",
+      "source": "ef87884af38c"
+    },
+    "concepts.02-correlate.description": {
+      "text": "Each ledger row carries a step number and a call id; with them you go back to the request and tool_call events the platform recorded.",
+      "source": "6c26cf3d1321"
+    },
+    "concepts.03-measure.label": {
+      "text": "03 / MEASURE",
+      "source": "21b2b61879f7"
+    },
+    "concepts.03-measure.title": {
+      "text": "Measured, estimated, not reported",
+      "source": "e8619d03054d"
+    },
+    "concepts.03-measure.description": {
+      "text": "The runner times each call; token counts are copied from the usage in the response, and \"not reported\" when it gives none; cost is only an estimate with a source and a date.",
+      "source": "ce2d31972ac4"
+    },
+    "concepts.04-regress.label": {
+      "text": "04 / REGRESS",
+      "source": "76ca9390624b"
+    },
+    "concepts.04-regress.title": {
+      "text": "Change one thing, rerun the same set",
+      "source": "72b08e917984"
+    },
+    "concepts.04-regress.description": {
+      "text": "After an optimization, compare on the same receipts and the same human labels: first whether quality dropped, then what was saved.",
+      "source": "0ac58f0dae50"
+    },
+    "section-1.title": {
+      "text": "The whole of one run",
+      "source": "e2ed05969194"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Only when requests, tools, state and time are tied into one trace and layered by span can you see what a run actually did. The call ledger in {{lesson:orchestrator-evaluator}} gives only the number of model calls and a total_tokens sum. That is enough to compare two patterns, not enough to diagnose a problem. If a user complains that checking 4 receipts took 6 seconds, the sum cannot say which step took those 6 seconds or which call was unnecessary. When the answer is wrong, it cannot say whether the model picked the wrong category or a tool returned an error. The skill this lesson practices is observability: without changing the program and without running it again, answer afterward, from the data recorded during the run, where it was slow, where it was expensive and where it went wrong.",
+      "source": "34a9f81265bd"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Work through the baseline by hand first. The task is fixed: 4 expense receipts. For each one the model picks a category (transport, lodging or meals), then two tools run: lookup_rate gets the exchange rate and category_limit gets the limit for that category. The program works out the reimbursable amount and compares it with the human label. The baseline asks the model once per receipt and calls both tools each time, 4 model requests plus 8 tool calls. Draw them as a tree: the root is the run, below it 4 steps, one per receipt, and under each step 1 model request and 2 tool calls. The 12 rows of the ledger are the 12 leaves of this tree. Every node has a start and an end; such a timed unit with a start and an end is a span.",
+      "source": "e67c71ddb203"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The trace the platform has recorded since {{lesson:dependent-calls}} is organized as this tree. Every event carries a `run_id` and an increasing `seq`; request and response open and close a model span, tool_call and tool_result open and close a tool span, and events of the same round belong to one step. These envelope fields are filled in by the backend and lesson code cannot change them, so the structure of the trace can be trusted. run_pass gives each receipt its own round, so the model request and the two tool calls of receipt 3 all sit under step 3; expand step 3 and you see everything it went through. The response event also carries duration_ms, the time the platform measured around the provider call; a tool span has no duration field, so you subtract the `timestamp` of tool_call from that of tool_result, which is precise to the microsecond.",
+      "source": "00d9dfb67ab4"
+    },
+    "section-1.paragraphs.3": {
+      "text": "Platform events are the raw record: laid out in the order they happened, not summed up, not judged. They will not tell you which two calls were identical or which step was slowest. So this lesson keeps a second ledger inside the runner: Tracer times each call from just before to just after, writes one row per span, and attaches a correlation ID that leads back to the raw events. A model request row matches the request event of the same round by its step number; a tool row's call_id is the id of the tool_call event. The ledger is derived from the same run, and when the two disagree, the events win. It does not store request bodies again, only fingerprints, times and the usage as reported. In the lab, the lab report shows the table the ledger summarizes and the timeline shows the raw events, so you can read them side by side.",
+      "source": "6b8f8fd99e50"
+    },
+    "section-2.title": {
+      "text": "Find slow steps and repeated calls",
+      "source": "7361f9414787"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Two simple rules are enough to find the slowest step and the repeated requests in real data: sort by time, group by fingerprint. Slow steps answer where the time went; repeated calls answer which money and time did not need to be spent, and both answers have to land on a specific row. The baseline ledger has 12 rows, and reading them one by one hides the problem. Sort the same 12 rows from slow to fast and the top ones are the bottleneck candidates; put calls with exactly the same content into one group and every one after the first is a repeat. The hard part is not the algorithm but having reliable row-by-row data first, which is what the ledger from the previous section is for.",
+      "source": "b81da3aed0c1"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Count the repeats in the baseline by hand. Receipts r1, r2 and r4 are all in US dollars, so lookup_rate is asked the same question three times, in steps 1, 2 and 4, each time with USD. The lesson's rate table is fixed and the rate does not change within a run, so the last two are pure repeats; if each one waits 200 milliseconds, that is 400 milliseconds of waiting for nothing. category_limit looks up the transport limit twice as well. One more is costlier: r4 has exactly the same description as r1, so the model request body sent in step 4 is identical to step 1, another model call spent. The first occurrence does not count as a repeat; it is the necessary original. So the baseline has 4 repeated executions in total, and the report shows the time and tokens they cost as separate items.",
+      "source": "6112b6ef0bbc"
+    },
+    "section-2.paragraphs.2": {
+      "text": "fingerprint serializes the call kind and its arguments (for a model request, the whole request body) as JSON with sorted keys and takes the first 12 hex digits of sha256; the same fingerprint means a repeat, without comparing two long request bodies character by character. Tracer remembers the row where each fingerprint first appeared, and later rows point back to it in repeat_of. repeated_groups groups the repeated executions and adds up the extra time and the tokens the provider reported; slowest ranks the executed spans by time, slowest first. The report also puts two totals side by side: end-to-end latency is the wall-clock time of the whole run from start to finish, while the sum of step times covers only the spans themselves; the difference is the program overhead between spans, such as parsing replies and recording events.",
+      "source": "daf5906e355c"
+    },
+    "section-2.paragraphs.3": {
+      "text": "A fingerprint only recognizes an exact match. If r4's description had one more period, the fingerprint would differ while the meaning would still be a repeat. Conversely, the same fingerprint does not always mean the call should be saved: for calls whose result changes, such as a balance or stock lookup, the second lookup may be exactly right. The slow-step ranking also only says where this run was slow. In offline test mode the fixture replies instantly, so the slowest step will be lookup_rate, which waits rate_latency_ms to stand in for a remote rate service; in a real run one model request often takes hundreds of milliseconds to several seconds, and the ranking will likely change. Ask of the top spans whether they should be slow anyway: a model request with a long output is slow by nature, while looking up the same rate three times is the problem. Go by the report of your own run.",
+      "source": "5469103f3e28"
+    },
+    "deep-dive-otel.title": {
+      "text": "How observability platforms record spans",
+      "source": "1448d94386bf"
+    },
+    "deep-dive-otel.summary": {
+      "text": "The span tree comes from tracing in distributed systems; standard protocols let the same data go to different analysis platforms.",
+      "source": "ef2c01640075"
+    },
+    "deep-dive-otel.paragraphs.0": {
+      "text": "The span tree was not invented for agents. It comes from tracing in distributed systems: one user request passes through a dozen services, each service records a span with a start and an end, one trace identifier ties them together, and the parent-child relations form a tree. Chapter 7 of *Understanding AI Agents in Depth* (深入理解 AI Agent) carries this model straight over to agents: one task is a trace, and each model call, tool call and retrieval is a span recording its inputs and outputs, start and end times, token usage and errors; the main loop is the parent span, with model calls and tool calls under it. With the tree, you can start from a slow parent span and expand down to the exact call.",
+      "source": "72b62a46c1fc"
+    },
+    "deep-dive-otel.paragraphs.1": {
+      "text": "OpenTelemetry is the general tracing standard, and specifications such as OpenInference define on top of it how LLM applications record prompts, model parameters and token usage. The benefit of a standard protocol is that collection and analysis are separate: the same data can go to Langfuse, Arize Phoenix or LangSmith, and switching platforms does not mean rewriting the instrumentation. The observability unit of the Hugging Face Agents Course does exactly this: it adds the OpenInference instrumentation to the agent framework and sends every run to Langfuse, where it appears as an expandable span tree with time and tokens on each node. The production lesson of Microsoft AI Agents for Beginners uses the same concepts and recommends adding spans by hand on top of automatic instrumentation, with business attributes such as user, session and model version.",
+      "source": "f8aa48bf1b76"
+    },
+    "deep-dive-otel.paragraphs.2": {
+      "text": "The book notes that platforms such as LangSmith collect tracing data asynchronously in batches, so that tracing itself does not slow the agent down. This platform's event envelope is a slimmed-down version of the same idea: `run_id`, `seq`, `span_id` and `parent_span_id` are filled in by the backend and stored in a local SQLite database, not exported to an outside platform. request and response also state their representation: Bailian over raw HTTP is recorded as `http_body`, calls through LiteLLM as `sdk_standardized`, and the usage in the latter has been standardized by the SDK, so it must not be taken for the provider's raw payload. The book also points out that the most valuable destination of production traces is to flow back, after scrubbing, as new cases in the evaluation set: a failure exposed in production today becomes the regression case that holds the line tomorrow. This lesson's ledger and reports can be used the same way: add the receipt that caused trouble to the question set and compare it again at the next optimization.",
+      "source": "301f47b6d210"
+    },
+    "misconception-sum.claim": {
+      "text": "End-to-end time is just the sum of the step times.",
+      "source": "42f309473d8b"
+    },
+    "misconception-sum.correction": {
+      "text": "In a sequential run the two are close, and the difference is the program overhead between spans, such as parsing replies and recording events; requests sent in parallel overlap, so end-to-end time can even be shorter than the sum of the steps. This lesson's report shows both numbers side by side; when they differ a lot, check first where the time outside the spans went.",
+      "source": "cf5279413fb7"
+    },
+    "predict-tool-calls.prompt": {
+      "text": "Before running \"Tool cache only\", guess: how many tool_call events will this run produce?",
+      "source": "cf453e6ea3c3"
+    },
+    "mq-fingerprint.repeat-count.prompt": {
+      "text": "In the baseline, lookup_rate is called 4 times, with USD, USD, CNY and USD in that order. By this lesson's fingerprint rule, how many of them are repeated executions?",
+      "source": "f4ef25f34fd3"
+    },
+    "mq-fingerprint.repeat-count.a.text": {
+      "text": "2: the second and the fourth USD",
+      "source": "d1aab924d4a1"
+    },
+    "mq-fingerprint.repeat-count.a.feedback": {
+      "text": "Right. The first USD is not a repeat; the two later ones have the same fingerprint.",
+      "source": "9a230040b535"
+    },
+    "mq-fingerprint.repeat-count.b.text": {
+      "text": "3: every USD counts",
+      "source": "0650f8bddd18"
+    },
+    "mq-fingerprint.repeat-count.b.feedback": {
+      "text": "No. The first occurrence is the original; only the later ones are repeats.",
+      "source": "c99d2258d945"
+    },
+    "mq-fingerprint.repeat-count.c.text": {
+      "text": "1: only two identical calls in a row count",
+      "source": "4958a1ce3d17"
+    },
+    "mq-fingerprint.repeat-count.c.feedback": {
+      "text": "No. The same fingerprint is a repeat, even with other calls in between.",
+      "source": "d7f93107ceaa"
+    },
+    "mq-fingerprint.repeat-count.explanation": {
+      "text": "repeat_of points to the row where the fingerprint first appeared; the first occurrence itself is not a repeat.",
+      "source": "0d6934f53ab5"
+    },
+    "section-3.title": {
+      "text": "Usage and cost",
+      "source": "7b4ecbf0af31"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Keep the usage the provider reported, local estimates and not reported apart, and convert cost only with a price table whose source and date are written down. You met usage in {{lesson:chat-request}}: the usage in a response is filled in by the provider and is what this call is metered on. The trouble is that it is not always there: some providers leave it out when streaming, and some compatible endpoints give only some of the fields. Then it is easy for a program to write 0 instead; the total still comes out as a number, but that number is wrong. So first be clear which kind of number you have: what the provider reported is measured, what you get by multiplying with a price table is an estimate, and what the response does not contain is not reported. The report keeps the three apart.",
+      "source": "4d09e35f4795"
+    },
+    "section-3.paragraphs.1": {
+      "text": "A made-up example. A request reports prompt_tokens 120 and completion_tokens 8; the price you looked up is 2 yuan per million input tokens and 8 yuan per million output tokens, so this call is `120 × 2 / 1e6 + 8 × 8 / 1e6 = 0.000304` yuan. If 1 of 4 responses has no usage, the total can only read \"the sum of the 3 reported, 1 more not reported\", and the estimate covers only 3/4 of the calls. Writing 0 is wrong: 0 means the provider said this call cost nothing, while the truth is that it did not tell us. The estimate must also say which model's prices it uses: the same usage at another model's prices can differ several times over. So three numbers in the report are read separately: the reported token total, the number of calls with usage not reported, and how many calls the estimate covers.",
+      "source": "5aee10ee28ae"
+    },
+    "section-3.paragraphs.2": {
+      "text": "read_usage first reads the OpenAI-compatible field names prompt_tokens and completion_tokens (Bailian and LiteLLM both use them), then the Anthropic-style input_tokens and output_tokens; a value must be a non-negative integer, and a boolean is not taken as 1. Only when there is no total_tokens but both input and output are reported are the two added; the sum of two reported values is still reported data. A tool row has no token usage, so the table shows \"—\", meaning not applicable, which is not the same as not reported. estimate_cost converts only when both price_source and price_date are filled in, and the result names the model, the price source, the date and how many calls it covers, and says it is an estimate, not a bill. The ledger also keeps the raw usage dictionary: if your provider uses other field names, the three counts read as None while the raw dictionary shows what it actually returned.",
+      "source": "acb3526881f7"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Prices change. The cost optimization notebook in Claude Cookbooks says explicitly that its price table is only a snapshot from the time of writing; the cost experiment that accompanies *Understanding AI Agents in Depth* (深入理解 AI Agent) also keeps prices in a separate config, where changing them only recomputes the same trace and does not mean another model would use the same amount. So an estimate must carry its price source and date, and be looked up again once it is stale. The estimate is also off in three ways: it does not price cache hits differently (see {{lesson:prompt-caching}}), it leaves out tool and infrastructure costs, and it ignores discounts and free allowances. To check real spending, look at the billing data in the provider's console or usage API; Claude Cookbooks also notes that such APIs are for analysis after the fact, not for real-time monitoring.",
+      "source": "219d3dc1e05e"
+    },
+    "deep-dive-compound.title": {
+      "text": "By hand: why the cost of a multi-round task does not grow linearly",
+      "source": "c1dde06a579c"
+    },
+    "deep-dive-compound.summary": {
+      "text": "Every round resends the history, so tool results are billed again and again; optimizations used together must be measured together.",
+      "source": "1d90815e6d03"
+    },
+    "deep-dive-compound.paragraphs.0": {
+      "text": "In every round an agent sends the earlier message history and tool results again, so the model knows what has happened. The book's example: round 1 sends 1000 tokens, round 2 sends 2000 and round 3 sends 3000, so the three rounds add up to 6000 input tokens, not `3 × 1000`. One web search returns 2000 to 5000 tokens, and that content is billed again as input in every later round. The more rounds, the more often early tool results are billed again, and the total grows roughly with the square of the number of rounds rather than linearly.",
+      "source": "6f64848a61e7"
+    },
+    "deep-dive-compound.paragraphs.1": {
+      "text": "The book's companion experiment runs a fixed eight-round customer refund task, each of four switch combinations once, priced at the public rates of `gpt-4o-mini`. In the baseline the input per round grows from 1113 tokens to 3668, and tool results account for 9544 input tokens in total; with both a stable prefix and history compression on, that figure drops to 5248 and the total cost falls by 30%. A stable prefix alone saves 28.3% and history compression alone 17.5%, yet both together save only 30%, not the sum of the two. These are measurements from that experiment in the book, not data from this platform.",
+      "source": "78c223880489"
+    },
+    "deep-dive-compound.paragraphs.2": {
+      "text": "Two lessons follow for this lesson. First, only a per-step ledger shows this growth: from the total alone you cannot see that the input of round 7 has grown to three times that of round 1. Second, each optimization should be switchable on its own, measured alone and then measured together; compressing the history shortens the prefix that can hit the cache, so the two together save less than the sum. This lesson's two optimizations also change one thing each, so the before-and-after report can put each saving down to its change.",
+      "source": "98a2ee5ce73d"
+    },
+    "mq-unreported.partial-total.prompt": {
+      "text": "Of 4 model calls, the second response has no usage and the other three report total_tokens adding up to 300. What should \"Reported tokens in total\" say in the report?",
+      "source": "702b1ada65a4"
+    },
+    "mq-unreported.partial-total.a.text": {
+      "text": "300, noting 1 more not reported",
+      "source": "bb91094b27b7"
+    },
+    "mq-unreported.partial-total.a.feedback": {
+      "text": "Right. Add only reported values and state how many are missing.",
+      "source": "c0f58728c204"
+    },
+    "mq-unreported.partial-total.b.text": {
+      "text": "300",
+      "source": "983bd614bb5a"
+    },
+    "mq-unreported.partial-total.b.feedback": {
+      "text": "No. A reader would assume all 4 were counted.",
+      "source": "a06dd4ce4b85"
+    },
+    "mq-unreported.partial-total.c.text": {
+      "text": "400, filling in the missing one with the average of the other three",
+      "source": "98bc7f86b2e2"
+    },
+    "mq-unreported.partial-total.c.feedback": {
+      "text": "No. That is a local estimate and cannot pass for the usage the provider reported.",
+      "source": "034904a4b70c"
+    },
+    "mq-unreported.partial-total.explanation": {
+      "text": "A total adds only reported numbers and says how many were not reported; an estimate is labeled separately.",
+      "source": "f59ebd42c66e"
+    },
+    "section-4.title": {
+      "text": "Caching and optimization regression",
+      "source": "4f5ce90d1fd9"
+    },
+    "section-4.paragraphs.0": {
+      "text": "After an optimization, rerun the same question set to confirm it saved money without getting worse; only when one thing changes at a time can you say which change earned the savings. The ledger points to two kinds of waste, and this lesson offers one single-change fix for each: the tool cache touches only tool calls, the batched request touches only model requests, and no other line of code changes, nor do the question set, the prompts or the tools. This is the same idea as the controlled experiments in {{lesson:sampling-variance}}: when two runs differ in one variable only, the difference can be put down to it. Turn on the cache and batch the requests at the same time, and when tokens go down you cannot say which change saved them; when quality drops, you cannot say which one to roll back.",
+      "source": "8321925e37ec"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Work out the expectation by hand first. The tool cache remembers the result of each fingerprint within a run and reuses it when the same call comes up again: of the baseline's 8 tool calls, 3 are repeats, so with the cache only 5 run and 3 cache hits are recorded; model requests stay at 4, and the repeated request of step 4 is still there. The batched request puts the 4 descriptions into one JSON array and gets 4 categories back from one request: model calls drop from 4 to 1, and the system prompt is sent only once. The price is that the model has to read 4 items at once and the output format is more complex, so the risk of one item going wrong or the whole reply failing to parse goes up; if the whole reply fails to parse, all 4 are marked as unparsed.",
+      "source": "95b58973bcc1"
+    },
+    "section-4.paragraphs.2": {
+      "text": "\"Batched request, compared with the baseline\" runs the baseline first (steps 1 to 4) and then the batched request (steps 5 to 9) within one run, both passes on the same receipts and the same human labels. regressions compares item by item, which is the paired analysis from {{lesson:evaluation-sets}}: an item that passed in the baseline and failed after the optimization is a regression, the other way round is a fix. The before-and-after report first gives two checks, \"Quality did not drop\" and \"Failures did not increase\", then lists model calls, tool calls, end-to-end time and reported tokens, each traceable to its own ledger rows. Only when the quality row holds do the savings below it mean anything.",
+      "source": "b25ee0e9ef1a"
+    },
+    "section-4.paragraphs.3": {
+      "text": "This comparison has only 4 receipts, each run once: it shows the mechanism but cannot support the conclusion that batching is always better. Model output is random, so run it several times and look at the distribution before concluding; the question set should also cover enough cases, as in {{lesson:evaluation-sets}}. When several optimizations are on together, their savings cannot simply be added. To decide whether to adopt an optimization, pass the quality guardrail first, then look at tokens and time, and last ask whether the savings, at your real task volume, are worth changing the code. Caching has limits too: tools whose result changes cannot be cached, and a cache needs a clear scope; this lesson's cache lives only within one run. The next lesson, {{lesson:reliable-tools}}, goes on to retries and idempotency after a tool fails.",
+      "source": "f9416e33da3b"
+    },
+    "deep-dive-metrics.title": {
+      "text": "From reports to improvements: mechanism metrics, goal metrics and guardrails",
+      "source": "dcf4326a2160"
+    },
+    "deep-dive-metrics.summary": {
+      "text": "The number you change and the number you care about are often not the same; the quality floor comes before saving money.",
+      "source": "cd813aca4624"
+    },
+    "deep-dive-metrics.paragraphs.0": {
+      "text": "In the book's AndroidWorld tuning, each of three rounds changed one thing. Adding navigation hints left the success rate unchanged. Switching the UI input to the UIAutomator element tree raised the success rate on four tasks from 25% to 100%, but tokens grew to 2.5 times. Removing invisible, textless and non-interactive nodes from the tree kept the success rate and halved the tokens. Each round's conclusion only decided what to test next; 100% on four tasks does not represent overall performance.",
+      "source": "576f394a681f"
+    },
+    "deep-dive-metrics.paragraphs.1": {
+      "text": "The book also separates mechanism metrics from goal metrics. Shortening the plan file is the mechanism you change directly; the real goal may be the cost of the whole session, and a plan that is too short can make the agent run extra rounds of editing and checking, producing more output in total. Guardrail metrics are the floor that must not get worse, such as error rate and user satisfaction. In this lesson's before-and-after report, \"Quality did not drop\" is the guardrail; tokens and time are the goals.",
+      "source": "378195fd0a8d"
+    },
+    "deep-dive-metrics.paragraphs.2": {
+      "text": "The cost optimization notebook in Claude Cookbooks gives the same order: get the agent working on a capable model first, build a small evaluation set, measure the pass rate and the cost per task as a baseline, then try caching, leaner input and output control one by one, and only last consider a cheaper model. It compares cost per task, not price per token: a model with a higher price per token can be cheaper if it finishes the task in fewer rounds.",
+      "source": "1e59a3b013aa"
+    },
+    "deep-dive-metrics.paragraphs.3": {
+      "text": "The production lesson of Microsoft AI Agents for Beginners lists three ways to control cost: hand simple tasks to small models, route requests to different models by complexity, and cache answers to common requests. All three can change quality, so it likewise recommends building evaluation first, comparing small and large models on the same tasks, and then choosing. This lesson's batched request and tool cache are the same kind of trade-off: the ledger shows how much is saved, and the question set shows whether it is worth it.",
+      "source": "e5e5be7beff2"
+    },
+    "misconception-zero.claim": {
+      "text": "When the provider returns no usage, record 0; the total still works.",
+      "source": "a443d8eaa006"
+    },
+    "misconception-zero.correction": {
+      "text": "0 means the provider reported that the call cost nothing; no usage means it did not tell us. Recording not reported as 0 makes the total and the estimated cost too low, with no sign that they are too low. This lesson's total adds only reported values and states how many were not reported; tool rows have no token usage and show \"—\" for not applicable.",
+      "source": "cd2375940376"
+    },
+    "mq-regression.regression-first.prompt": {
+      "text": "After batching, model calls drop from 4 to 1 and tokens go down, but r2 went from passed to failed. How should you judge this optimization?",
+      "source": "b06631a32c61"
+    },
+    "mq-regression.regression-first.a.text": {
+      "text": "Quality regressed, so don't adopt it yet; find out why r2 is wrong first",
+      "source": "d4338ea7a5d5"
+    },
+    "mq-regression.regression-first.a.feedback": {
+      "text": "Right. The guardrail failed, so the savings do not count.",
+      "source": "bae76b57e6e3"
+    },
+    "mq-regression.regression-first.b.text": {
+      "text": "It saves three quarters of the calls, so adopt it",
+      "source": "f51b3bd8b87a"
+    },
+    "mq-regression.regression-first.b.feedback": {
+      "text": "No. Saving money cannot come at the cost of wrong answers.",
+      "source": "8e3b581a67ae"
+    },
+    "mq-regression.regression-first.c.text": {
+      "text": "Look at end-to-end time and adopt it if it is faster",
+      "source": "d0831915ab20"
+    },
+    "mq-regression.regression-first.c.feedback": {
+      "text": "No. Time and quality are separate; quality has to pass first.",
+      "source": "ee8954c5f289"
+    },
+    "mq-regression.regression-first.explanation": {
+      "text": "Check first whether quality dropped, then what was saved.",
+      "source": "491d0ea76b93"
+    },
+    "compare-strategies.title": {
+      "text": "Three strategies",
+      "source": "d50f8d49faa9"
+    },
+    "compare-strategies.paragraphs.0": {
+      "text": "The call counts assume the model gets all 4 categories right; a wrong category changes the category_limit arguments and the number of cache hits with them, so in a real run the report is what counts. The three strategies use the same receipts, the same human labels and the same tools; only one column differs.",
+      "source": "1a8e52c686f4"
+    },
+    "compare-strategies.columns.0": {
+      "text": "Strategy",
+      "source": "9c8eb75c7e58"
+    },
+    "compare-strategies.columns.1": {
+      "text": "What changed from the baseline",
+      "source": "ef92ff92b02c"
+    },
+    "compare-strategies.columns.2": {
+      "text": "Model calls",
+      "source": "bc9b653fb094"
+    },
+    "compare-strategies.columns.3": {
+      "text": "Tool calls",
+      "source": "a8ca3c13eb75"
+    },
+    "compare-strategies.columns.4": {
+      "text": "Main risk",
+      "source": "a53f0c67cdda"
+    },
+    "compare-strategies.rows.0.0": {
+      "text": "Baseline: one request per receipt, no cache",
+      "source": "5f5f0947fbbe"
+    },
+    "compare-strategies.rows.0.1": {
+      "text": "Nothing",
+      "source": "484d55613910"
+    },
+    "compare-strategies.rows.0.2": {
+      "text": "4",
+      "source": "5641872dab77"
+    },
+    "compare-strategies.rows.0.3": {
+      "text": "8",
+      "source": "f01dc4021a52"
+    },
+    "compare-strategies.rows.0.4": {
+      "text": "Every repeated call is paid in full",
+      "source": "4dd36955be80"
+    },
+    "compare-strategies.rows.1.0": {
+      "text": "Tool cache only",
+      "source": "cdbf86c75a73"
+    },
+    "compare-strategies.rows.1.1": {
+      "text": "The same tool call runs only once within the run",
+      "source": "457f6297f475"
+    },
+    "compare-strategies.rows.1.2": {
+      "text": "4",
+      "source": "5641872dab77"
+    },
+    "compare-strategies.rows.1.3": {
+      "text": "5, plus 3 cache hits",
+      "source": "111a299ca650"
+    },
+    "compare-strategies.rows.1.4": {
+      "text": "Tools whose result changes cannot be cached",
+      "source": "39862e4cbd38"
+    },
+    "compare-strategies.rows.2.0": {
+      "text": "Batched request only",
+      "source": "6340b1348f0e"
+    },
+    "compare-strategies.rows.2.1": {
+      "text": "All 4 receipts go into one model request",
+      "source": "02a44935d065"
+    },
+    "compare-strategies.rows.2.2": {
+      "text": "1",
+      "source": "35cf44ac0fcb"
+    },
+    "compare-strategies.rows.2.3": {
+      "text": "8",
+      "source": "f01dc4021a52"
+    },
+    "compare-strategies.rows.2.4": {
+      "text": "The output format is more complex; an item may get the wrong category",
+      "source": "4e3eae133421"
+    },
+    "walkthrough.title": {
+      "text": "How one ledger row gets written",
+      "source": "34c59b17af52"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, how Tracer writes one ledger row for a model request; the code is a simplified illustration. The evidence of your run is in the events on the lab bench.",
+      "source": "3b3e17c0f94c"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Fingerprint",
+      "source": "0d6a14a9ab25"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Fingerprint the request body first",
+      "source": "9c38993365b8"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Before the call, serialize the request body with sorted keys and take the first 12 hex digits of sha256.",
+      "source": "ef711b92f0af"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "fingerprint in the ledger row",
+      "source": "9971f43abcff"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Request",
+      "source": "393e1241552b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Platform",
+      "source": "910887705c7a"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Send the request and record events",
+      "source": "31ec580ed90b"
+    },
+    "walkthrough.step-2.body": {
+      "text": "context.complete records request and response; the round is the step number.",
+      "source": "90d562ebe8d0"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "request / response; response carries duration_ms",
+      "source": "99834cc3605d"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Usage",
+      "source": "42723e8b498c"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Copy the usage as is",
+      "source": "f81b69250ec0"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Read the token counts from the usage in the response; a missing field becomes None.",
+      "source": "0ab4fcf15143"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "input_tokens and output_tokens in the ledger row",
+      "source": "1ba976bb9e49"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Record",
+      "source": "23b1604546bf"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Write the row and check for a repeat",
+      "source": "978db1f121ef"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Stop the clock; if this fingerprint appeared before, repeat_of points back to that first row.",
+      "source": "958d5a9f306f"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "rows in lesson.ledger",
+      "source": "cbbdced75b00"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Summarize",
+      "source": "bd0a40247497"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Sort, group, compare",
+      "source": "0917522038eb"
+    },
+    "walkthrough.step-5.body": {
+      "text": "After the pass, sort by time, group by fingerprint and compare with the human labels.",
+      "source": "625b6856f86a"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.hf-observability.title": {
+      "text": "What agent observability and evaluation are: traces, spans and key metrics (Hugging Face Agents Course)",
+      "source": "9f36dc934814"
+    },
+    "references.hf-notebook.title": {
+      "text": "Monitoring and evaluating agents: instrumentation, cost and latency (Hugging Face Agents Course)",
+      "source": "f07e67b74f77"
+    },
+    "references.book-observability.title": {
+      "text": "Agent observability, cost analysis, and from reports to improvements — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "93c595b6f6c9"
+    },
+    "references.book-tracer.title": {
+      "text": "A homemade lightweight tracer: usage and cost broken down by step — Understanding AI Agents in Depth (深入理解 AI Agent), companion code",
+      "source": "04698604c57b"
+    },
+    "references.ms-production.title": {
+      "text": "AI agents in production: observability and evaluation (Microsoft AI Agents for Beginners)",
+      "source": "f1331c626f67"
+    },
+    "references.cookbook-cost.title": {
+      "text": "Cost optimization: baseline first, then one lever at a time (Claude Cookbooks)",
+      "source": "eae06c30c704"
+    },
+    "references.cookbook-usage-api.title": {
+      "text": "Usage and cost API: checking real spending (Claude Cookbooks)",
+      "source": "eb094c96f79f"
+    },
+    "code-tracer.n75.text": {
+      "text": "What \"repeated\" means in this lesson: the call kind plus its arguments, or the whole request body, identical to the character once serialized.",
+      "source": "f0ff70727e5d"
+    },
+    "code-tracer.n77.text": {
+      "text": "Keys are sorted before serializing, so arguments in a different order are still the same call; the first 12 hex digits of sha256 are the fingerprint.",
+      "source": "32e38358b421"
+    },
+    "code-tracer.n81.text": {
+      "text": "The lesson's ledger. The platform records events as usual; Tracer adds one summary row at the boundary of each call.",
+      "source": "882c29c27c25"
+    },
+    "code-tracer.n87.text": {
+      "text": "The row where each fingerprint first appeared, used to tell whether a later call is a repeat.",
+      "source": "ecad00e2d795"
+    },
+    "code-tracer.n89.text": {
+      "text": "Fields shared by every row: which pass, which step, kind, name, receipt, fingerprint and time.",
+      "source": "be9ecb3f740e"
+    },
+    "code-tracer.n91.text": {
+      "text": "Time runs from just before the call until the row is written, including the platform's event recording, so it is a little longer than duration_ms.",
+      "source": "69f0c6887f06"
+    },
+    "code-tracer.n92.text": {
+      "text": "repeat_of points back to the row where the fingerprint first appeared; it is None the first time.",
+      "source": "81a77463f085"
+    },
+    "code-tracer.n97.text": {
+      "text": "A model request row: the step number is also the event round, which leads back to request and response.",
+      "source": "505884ea5fcf"
+    },
+    "code-tracer.n99.text": {
+      "text": "The platform still records the request and response as events, unchanged; the ledger does not store the body again.",
+      "source": "d113ddbbccda"
+    },
+    "code-tracer.n102.text": {
+      "text": "The usage is copied into the ledger as is, and read_usage reads out the three token counts; missing ones are None.",
+      "source": "9e5439e929c5"
+    },
+    "code-tracer.n105.text": {
+      "text": "A tool call row; when cache is not None, the run's own cache is checked first.",
+      "source": "12b14cb9dbda"
+    },
+    "code-tracer.n107.text": {
+      "text": "Cache hit: no tool event is emitted; the ledger records a cache-hit row that takes close to 0 ms.",
+      "source": "361fe399035f"
+    },
+    "code-tracer.n111.text": {
+      "text": "The runner chooses the correlation ID; passed to the platform, it becomes the id of the tool_call event.",
+      "source": "35efb426a8d3"
+    },
+    "code-tracer.n112.text": {
+      "text": "A call made by the runner; the platform records tool_call and tool_result, paired by the same id.",
+      "source": "5a1516b41522"
+    },
+    "code-tracer.n114.text": {
+      "text": "Only successful results are cached; a failed call really runs again next time.",
+      "source": "f1d27dd2f1e2"
+    },
+    "code-pass.n146.text": {
+      "text": "One pass over the 4 receipts with one strategy; the comparison exercise calls it twice in a row.",
+      "source": "5a88043630ad"
+    },
+    "code-pass.n149.text": {
+      "text": "rate_latency_ms is bound into the rate tool: it waits that long before answering, standing in for a remote service.",
+      "source": "4e8e43812bf5"
+    },
+    "code-pass.n150.text": {
+      "text": "The only change of the tool cache strategy: give Tracer a dictionary.",
+      "source": "f59808fe6927"
+    },
+    "code-pass.n153.text": {
+      "text": "The only change of the batched strategy: the 4 descriptions go into one request, which gets a step of its own.",
+      "source": "318a6b3ab341"
+    },
+    "code-pass.n156.text": {
+      "text": "Categories are read from the reply by id; a missing item is recorded as unparsed.",
+      "source": "fece89fe1435"
+    },
+    "code-pass.n158.text": {
+      "text": "One step per receipt, and the step number is the event round, so all spans of a receipt hang under the same step.",
+      "source": "b3d229b4f179"
+    },
+    "code-pass.n161.text": {
+      "text": "The other two strategies ask once per receipt; r4 and r1 have the same description, so their request bodies are identical.",
+      "source": "5a7be86129b8"
+    },
+    "code-pass.n166.text": {
+      "text": "Without the cache, the same currency is looked up every time it comes up.",
+      "source": "1b2aa6cbb9bf"
+    },
+    "code-pass.n168.text": {
+      "text": "When no category can be parsed from the reply, the limit is not looked up and the item is judged unparsed.",
+      "source": "d2733e048b79"
+    },
+    "code-pass.n169.text": {
+      "text": "grade compares with the human label and attributes the failure: unparsed, tool error, wrong category or wrong amount.",
+      "source": "b6bc9806d8bf"
+    },
+    "code-pass.n172.text": {
+      "text": "End-to-end time includes the program overhead between spans and goes into the report next to the sum of step times.",
+      "source": "8ae084175625"
+    },
+    "code-analysis.n196.text": {
+      "text": "Usage reads only what the provider reported; anything missing is None, never 0.",
+      "source": "80230207976c"
+    },
+    "code-analysis.n198.text": {
+      "text": "The response has no usage at all: all three counts are not reported.",
+      "source": "45f20456e484"
+    },
+    "code-analysis.n201.text": {
+      "text": "Read the OpenAI-compatible field names first; if they are missing, try the Anthropic-style names.",
+      "source": "8aeac559360b"
+    },
+    "code-analysis.n205.text": {
+      "text": "_count accepts only non-negative integers; booleans, strings and negatives are not guessed into numbers.",
+      "source": "f30e90aed22b"
+    },
+    "code-analysis.n206.text": {
+      "text": "Adding two reported values is still reported data; with either one missing, there is no total.",
+      "source": "cbac328d0dbb"
+    },
+    "code-analysis.n211.text": {
+      "text": "Group the spans whose fingerprint ran more than once.",
+      "source": "f49b1b5e8cb9"
+    },
+    "code-analysis.n215.text": {
+      "text": "A cache hit is a repeat avoided, not a repeated execution; the first occurrence does not count either.",
+      "source": "e2ee6eee9eb9"
+    },
+    "code-analysis.n218.text": {
+      "text": "Group by fingerprint; the step list starts with the step of the first occurrence.",
+      "source": "ef49014d0ee8"
+    },
+    "code-analysis.n222.text": {
+      "text": "The extra time counts only the repeats.",
+      "source": "e74466fa1a4a"
+    },
+    "code-analysis.n225.text": {
+      "text": "Tokens of repeated requests are also added only when reported; unreported ones are counted separately.",
+      "source": "a1e8787280a3"
+    },
+    "code-analysis.n232.text": {
+      "text": "Slow-step ranking: the top 5 by time, slowest first.",
+      "source": "338cbc0bbf24"
+    },
+    "code-analysis.n234.text": {
+      "text": "Only executed spans are ranked; a cache hit takes almost no time and has no event.",
+      "source": "d030a385b7cb"
+    },
+    "code-decision.title": {
+      "text": "Why the runner keeps its own ledger at the call boundary",
+      "source": "43380ffb7d9d"
+    },
+    "code-decision.chosen": {
+      "text": "Every call goes through Tracer: before the call it computes the fingerprint and starts the clock, after the call it copies the usage as is and writes one row with a correlation ID. The platform events stay the raw record; the ledger is only a derived summary that can always be checked against the events by step number and call_id.",
+      "source": "9d5068fdd8b3"
+    },
+    "code-decision.events-only.title": {
+      "text": "Read only the platform events, keep no ledger",
+      "source": "0c3af2efc86c"
+    },
+    "code-decision.events-only.why_not": {
+      "text": "Events are laid out in order, not summed up, with no fingerprints and no usage normalization; every look at a report would mean recomputing it all. The ledger does that work once and keeps the correlation IDs.",
+      "source": "2425b9ffcaa4"
+    },
+    "code-decision.otel-platform.title": {
+      "text": "Connect an observability platform such as Langfuse",
+      "source": "fcaf3357661e"
+    },
+    "code-decision.otel-platform.why_not": {
+      "text": "It needs an extra service, keys and network access. This lesson first uses a few dozen lines of code to show where spans, fingerprints and usage come from; in production, a mature component is the better choice.",
+      "source": "8461b73f0fa0"
+    },
+    "code-decision.zero-usage.title": {
+      "text": "Record 0 when usage is missing",
+      "source": "0683875d2bd1"
+    },
+    "code-decision.zero-usage.why_not": {
+      "text": "The book's companion tracer.py records tokens and cost as 0 when usage is empty. The total still adds up, but \"not reported\" turns into \"cost nothing\"; this lesson records None and the report says not reported.",
+      "source": "3f271784661d"
+    },
+    "find-waste.title": {
+      "text": "Find repeated calls and slow steps",
+      "source": "435cfbcda797"
+    },
+    "find-waste.hypothesis": {
+      "text": "The baseline executes 4 calls more than once: lookup_rate twice, category_limit once and a model request once; with only the tool cache on, tool calls drop from 8 to 5 and model requests stay the same.",
+      "source": "750dcbe6a092"
+    },
+    "find-waste.baseline.label": {
+      "text": "Baseline: one request per receipt, no cache",
+      "source": "5f5f0947fbbe"
+    },
+    "find-waste.tool-cache.label": {
+      "text": "Tool cache only",
+      "source": "cdbf86c75a73"
+    },
+    "find-waste.usage.text": {
+      "text": "The usage the provider reported in the step 1 response; the ledger copies it as is.",
+      "source": "181ef840754e"
+    },
+    "find-waste.ledger-row.text": {
+      "text": "The first ledger row: step, kind, fingerprint, time and token counts.",
+      "source": "16e1bfb8670b"
+    },
+    "find-waste.same-request.text": {
+      "text": "The model request body of step 4, identical to step 1.",
+      "source": "9f47b3ee36fc"
+    },
+    "find-waste.repeats.text": {
+      "text": "Repeated executions: the result of grouping by fingerprint.",
+      "source": "93843e8fb456"
+    },
+    "find-waste.slowest.text": {
+      "text": "The slowest step and its share of the end-to-end time.",
+      "source": "3db8c05b04d4"
+    },
+    "find-waste.cache-hits.text": {
+      "text": "Cache hits: 0 in the baseline.",
+      "source": "41925826acc9"
+    },
+    "find-waste.guide.0.text": {
+      "text": "Both arms check the same 4 receipts and differ in one thing: whether the tool cache is on. First, see what one model request leaves behind.",
+      "source": "b5e9d6829a90"
+    },
+    "find-waste.guide.1.text": {
+      "text": "The usage the provider reported in the response. Without this part, the ledger writes not reported, not 0.",
+      "source": "7aa132a3c5e0"
+    },
+    "find-waste.guide.2.text": {
+      "text": "One ledger row is one span. step is the event round, which leads back to the response above.",
+      "source": "35ef48a0ec32"
+    },
+    "find-waste.guide.3.text": {
+      "text": "r4 and r1 have the same description, so this request body is identical to step 1: a model call that could have been saved.",
+      "source": "f80bb4987997"
+    },
+    "find-waste.guide.4.text": {
+      "text": "Repeats grouped by fingerprint: in the baseline there are rate, limit and model request groups. With the tool cache, only the model request group is left.",
+      "source": "fbc94b84d746"
+    },
+    "find-waste.guide.5.text": {
+      "text": "The slowest step. In offline test mode it is the rate tool; in a real run it is often a model request.",
+      "source": "00546cde3e7a"
+    },
+    "find-waste.guide.6.text": {
+      "text": "With the cache on, repeated tool calls become cache hits and no longer produce tool events.",
+      "source": "a557a37b6bc4"
+    },
+    "find-waste.conclusion.proves.0": {
+      "text": "In this run: the time of every span, the usage the provider reported, which calls were executed more than once, and how many tool executions the cache saved.",
+      "source": "6bf10561b039"
+    },
+    "find-waste.conclusion.does_not_prove.0": {
+      "text": "A fingerprint only recognizes exact matches; it cannot see repeats that mean the same thing in different words.",
+      "source": "732a9f79dac7"
+    },
+    "find-waste.conclusion.does_not_prove.1": {
+      "text": "The slow-step ranking of one run varies with the network and the model and does not represent the average.",
+      "source": "41284b57d9c8"
+    },
+    "find-waste.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the replies and usage come from the fixture, and the rate tool's wait comes from the rate_latency_ms setting.",
+      "source": "5fb3f435ab7f"
+    },
+    "batch-regression.title": {
+      "text": "Batched request: what it saves, whether it gets worse",
+      "source": "2ad3caa1f872"
+    },
+    "batch-regression.hypothesis": {
+      "text": "Batching cuts the model calls from 4 to 1 and the reported tokens go down too; on the same question set quality may stay the same or regress, and the before-and-after report tells which.",
+      "source": "712d369caf44"
+    },
+    "batch-regression.batched-compare.label": {
+      "text": "Batched request, compared with the baseline",
+      "source": "34bfe754e21e"
+    },
+    "batch-regression.batch-request.text": {
+      "text": "The batched request in step 5: the 4 descriptions in one JSON array.",
+      "source": "9ece50803384"
+    },
+    "batch-regression.no-regression.text": {
+      "text": "The guardrail check: whether any item of the question set went from passed to failed.",
+      "source": "8eb7a1841f6d"
+    },
+    "batch-regression.regressions.text": {
+      "text": "The receipts that went from passed to failed.",
+      "source": "285c129c9f1a"
+    },
+    "batch-regression.token-change.text": {
+      "text": "The change in reported tokens; not reported when either side has unreported usage.",
+      "source": "e6d2c067ad00"
+    },
+    "batch-regression.latency-change.text": {
+      "text": "The change in end-to-end time.",
+      "source": "29f7ba93ec25"
+    },
+    "batch-regression.guide.0.text": {
+      "text": "This run first does a baseline pass (steps 1 to 4), then a batched pass (steps 5 to 9), on the same receipts and the same human labels.",
+      "source": "32a95137f600"
+    },
+    "batch-regression.guide.1.text": {
+      "text": "The batched request is sent once, with all 4 descriptions in one user message.",
+      "source": "c04a0d87aecf"
+    },
+    "batch-regression.guide.2.text": {
+      "text": "Look at the guardrail first: did quality drop? If it failed, there is no need to look at what was saved.",
+      "source": "64e6aa1d32a1"
+    },
+    "batch-regression.guide.3.text": {
+      "text": "The items that regressed. \"none\" means both passes agree or the second one is better.",
+      "source": "ed0d0fc7e8e9"
+    },
+    "batch-regression.guide.4.text": {
+      "text": "Then the tokens saved: only numbers reported on both sides are compared.",
+      "source": "52b18731a3c1"
+    },
+    "batch-regression.guide.5.text": {
+      "text": "Read the time change together with the slow steps: offline the model replies instantly, so the saving is mostly model waiting in real runs.",
+      "source": "7006fe7f501d"
+    },
+    "batch-regression.conclusion.proves.0": {
+      "text": "On these 4 receipts: the model calls, reported tokens and end-to-end time before and after batching, and whether any item went from passed to failed.",
+      "source": "5bb2e02b95dd"
+    },
+    "batch-regression.conclusion.does_not_prove.0": {
+      "text": "4 samples run once each cannot show that batching avoids regressions on other tasks or other models.",
+      "source": "f9b5d6d5cd8c"
+    },
+    "batch-regression.conclusion.does_not_prove.1": {
+      "text": "The token change reflects only the usage the provider reported; it is not the billed amount.",
+      "source": "9b664b9bbb10"
+    },
+    "batch-regression.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the fixture answers with the human labels, so quality cannot change; regressions can only be observed in real runs.",
+      "source": "1b05bfc05ceb"
+    },
+    "inputs.strategy.label": {
+      "text": "Strategy",
+      "source": "9c8eb75c7e58"
+    },
+    "inputs.strategy.options.baseline.label": {
+      "text": "Baseline",
+      "source": "a7ac587ab52d"
+    },
+    "inputs.strategy.options.tool_cache.label": {
+      "text": "Tool cache",
+      "source": "366eb149c665"
+    },
+    "inputs.strategy.options.batched.label": {
+      "text": "Batched",
+      "source": "dd42589239f7"
+    },
+    "inputs.compare_with_baseline.label": {
+      "text": "Run a baseline first for comparison",
+      "source": "40d89c14ea60"
+    },
+    "inputs.compare_with_baseline.help": {
+      "text": "When on, a baseline pass runs first, then a pass with the chosen strategy, followed by a before-and-after report. Not allowed when the strategy is baseline.",
+      "source": "80ef4c956641"
+    },
+    "inputs.rate_latency_ms.label": {
+      "text": "Rate tool wait (ms)",
+      "source": "fcfdea05a6e0"
+    },
+    "inputs.rate_latency_ms.help": {
+      "text": "How many milliseconds lookup_rate waits before each execution, standing in for a remote service; a cache hit does not wait.",
+      "source": "6262465a52a2"
+    },
+    "inputs.price_input_per_m.label": {
+      "text": "Input price (per million tokens)",
+      "source": "412dd11b6ed7"
+    },
+    "inputs.price_input_per_m.help": {
+      "text": "Used only when a price source and date are filled in.",
+      "source": "c37e6bfc40e1"
+    },
+    "inputs.price_output_per_m.label": {
+      "text": "Output price (per million tokens)",
+      "source": "b7849335e9c9"
+    },
+    "inputs.price_output_per_m.help": {
+      "text": "Used only when a price source and date are filled in.",
+      "source": "c37e6bfc40e1"
+    },
+    "inputs.price_currency.label": {
+      "text": "Currency",
+      "source": "9677f386bdcd"
+    },
+    "inputs.price_currency.options.CNY.label": {
+      "text": "Chinese yuan",
+      "source": "ba9771ca730d"
+    },
+    "inputs.price_currency.options.USD.label": {
+      "text": "US dollar",
+      "source": "dcdd3b5c450b"
+    },
+    "inputs.price_source.label": {
+      "text": "Price source",
+      "source": "e209aeeb37ae"
+    },
+    "inputs.price_source.help": {
+      "text": "For example the name or address of the provider's price page; cost is converted only when the date is filled in too.",
+      "source": "5e6e71ec05a8"
+    },
+    "inputs.price_date.label": {
+      "text": "Date the price was checked",
+      "source": "f97cfcda5957"
+    },
+    "inputs.price_date.help": {
+      "text": "Format YYYY-MM-DD. Prices change, so an estimate carries a date.",
+      "source": "74f2d0be57af"
+    },
+    "quiz.q1.prompt": {
+      "text": "How does a run relate to a span?",
+      "source": "2f5074e5d17d"
+    },
+    "quiz.q1.a.text": {
+      "text": "A run is one trace, and each model request and each tool call is a span in it",
+      "source": "9276d4fc1c6c"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. Spans are layered by step and make up the trace.",
+      "source": "d880f0759678"
+    },
+    "quiz.q1.b.text": {
+      "text": "A run is a single span",
+      "source": "97e7fadfddce"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. The run is the root, with steps and finer spans below it.",
+      "source": "5fe3a84a56bf"
+    },
+    "quiz.q1.c.text": {
+      "text": "Spans record only model requests; tool calls do not count",
+      "source": "f8799d2a09fe"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. A tool call is also a span with a start and an end.",
+      "source": "8adccb504622"
+    },
+    "quiz.q1.explanation": {
+      "text": "A trace is made of spans: run → step → model request or tool call.",
+      "source": "ed52497e8273"
+    },
+    "quiz.q2.prompt": {
+      "text": "A tool row in the ledger has call_id obs_baseline_5. How do you find its raw events?",
+      "source": "cfef31a13ee1"
+    },
+    "quiz.q2.a.text": {
+      "text": "Find the tool_call event with id obs_baseline_5; its tool_result is paired by the same id",
+      "source": "b3df0d0d1bb5"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. That is what a correlation ID is for.",
+      "source": "498aec5bfc33"
+    },
+    "quiz.q2.b.text": {
+      "text": "Count events by the ledger row number",
+      "source": "3532eda6c40d"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The events also include requests, responses and reports, so row numbers do not line up.",
+      "source": "8865e7a0b0c3"
+    },
+    "quiz.q2.c.text": {
+      "text": "You cannot; the ledger and the events are separate data",
+      "source": "52e046d2873b"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The ledger is derived from the same run, and every row carries a correlation ID.",
+      "source": "ab0eb352bbcb"
+    },
+    "quiz.q2.explanation": {
+      "text": "Tool rows go back to events by call_id, model request rows by step number (the round).",
+      "source": "38908ec9b3c0"
+    },
+    "quiz.q3.prompt": {
+      "text": "A response has only prompt_tokens 30, with no completion_tokens and no total_tokens. What does read_usage return?",
+      "source": "b2304245a2a8"
+    },
+    "quiz.q3.a.text": {
+      "text": "Input 30; output and total are both None",
+      "source": "9c8eb0b9fbf0"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. With one missing they cannot be added; the missing ones are not reported.",
+      "source": "52b57889f70f"
+    },
+    "quiz.q3.b.text": {
+      "text": "Input 30, output 0, total 30",
+      "source": "980a573eb5ee"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. Not reported is not 0.",
+      "source": "be7a003dadc6"
+    },
+    "quiz.q3.c.text": {
+      "text": "All three are None because it is incomplete",
+      "source": "688a5e826b0c"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. The one that was reported is still recorded.",
+      "source": "e977f402451a"
+    },
+    "quiz.q3.explanation": {
+      "text": "Record only reported numbers; missing ones stay None.",
+      "source": "2797f4f4b0db"
+    },
+    "quiz.q4.prompt": {
+      "text": "With only the tool cache on, why does the model request of step 4 still appear among the repeated calls?",
+      "source": "7ddb1c73de73"
+    },
+    "quiz.q4.a.text": {
+      "text": "The tool cache only covers tool calls; that model request has the same body as step 1 and still ran",
+      "source": "501b39e83d9e"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. One change at a time; the other kind of waste is still there.",
+      "source": "18b934f01978"
+    },
+    "quiz.q4.b.text": {
+      "text": "The cache did not work",
+      "source": "6c1bc3c1330c"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. Tool calls did drop from 8 to 5.",
+      "source": "ecb0c879c219"
+    },
+    "quiz.q4.c.text": {
+      "text": "Model requests cannot repeat",
+      "source": "a64bcb3cf3b5"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. An identical request body is a repeat.",
+      "source": "0599bd49e70d"
+    },
+    "quiz.q4.explanation": {
+      "text": "To save that model request, change the model request side, for example by batching or caching model replies.",
+      "source": "88fa52152b6a"
+    },
+    "quiz.q5.prompt": {
+      "text": "The report shows 900 ms end to end and 860 ms as the sum of step times. What is most likely in the missing 40 ms?",
+      "source": "eb4954371ce9"
+    },
+    "quiz.q5.a.text": {
+      "text": "Program overhead between spans, such as parsing replies and recording events",
+      "source": "d8bfad42b059"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. In a sequential run the difference is the time outside the spans.",
+      "source": "9177d61c1887"
+    },
+    "quiz.q5.b.text": {
+      "text": "A timing error; the two should be equal",
+      "source": "4e5dc03da8af"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. The sum of step times covers only the spans themselves.",
+      "source": "2f6cb51cf054"
+    },
+    "quiz.q5.c.text": {
+      "text": "An extra charge from the provider",
+      "source": "35934148898c"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. This is time, not usage.",
+      "source": "d4aa9d6b0fe0"
+    },
+    "quiz.q5.explanation": {
+      "text": "Only with the two numbers side by side can you see how much time was spent outside the spans.",
+      "source": "f02ddb0bd217"
+    },
+    "quiz.q6.prompt": {
+      "text": "From a price page you work out that this run cost about 0.0012 yuan. How should the report say it?",
+      "source": "a979f973982e"
+    },
+    "quiz.q6.a.text": {
+      "text": "Say it is an estimate, with the model, price source, date and how many calls it covers",
+      "source": "3f9963317e33"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. An estimate cannot pass for a bill.",
+      "source": "385a7c1a2649"
+    },
+    "quiz.q6.b.text": {
+      "text": "Just write \"cost: 0.0012 yuan\"",
+      "source": "5469486ddc91"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. Readers will take it for the billed amount.",
+      "source": "9f2691d62009"
+    },
+    "quiz.q6.c.text": {
+      "text": "Leave it out; cost can only come from the bill",
+      "source": "f639759204e9"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. An estimate is useful as long as its source and limits are clear.",
+      "source": "131a5cb9474f"
+    },
+    "quiz.q6.explanation": {
+      "text": "An estimate carries its source and date; when prices change, recompute it.",
+      "source": "c4d3c24eb68d"
+    },
+    "quiz.q7.prompt": {
+      "text": "In the ledger table, tool rows show \"—\" for input tokens, while model request rows sometimes show \"not reported\". What is the difference?",
+      "source": "7d498c7ab4ec"
+    },
+    "quiz.q7.a.text": {
+      "text": "\"—\" means not applicable, because a tool call has no token usage; \"not reported\" means the number may exist but the provider did not give it this time",
+      "source": "06b223c0f1b6"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. The two blanks mean different things and must not be mixed up.",
+      "source": "df9dee1aaa7a"
+    },
+    "quiz.q7.b.text": {
+      "text": "No difference; both mean 0",
+      "source": "b4b60febd23a"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. Neither is 0, and writing 0 would make the total look complete.",
+      "source": "4c42276004fa"
+    },
+    "quiz.q7.c.text": {
+      "text": "\"—\" means the tool call failed",
+      "source": "920074f1a904"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. Failure is in the Status column and has nothing to do with tokens.",
+      "source": "5ebff2691483"
+    },
+    "quiz.q7.explanation": {
+      "text": "Every blank in a report should say which kind it is: not applicable, not reported, or really 0.",
+      "source": "e3799dd3b25c"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Baseline: one request per receipt, no cache\" and find the model request that was sent again, identical to step 1.",
+      "source": "9a5132ddf1c1"
+    },
+    "check-hunt.explanation": {
+      "text": "Step 4 checks r4, whose description is exactly the same as r1's, so the request body is identical to step 1 and so is the fingerprint. In the ledger, repeat_of on this row points back to the step 1 row, and the bottleneck report lists it among the repeated executions. Batching or caching model replies would save it; the tool cache alone cannot.",
+      "source": "79e6810b05cd"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Check against your own runs and this lesson's source code, and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I found the slowest step in the baseline bottleneck report and can say why it is slow.",
+      "source": "4fd766a83200"
+    },
+    "check-points.item-2.text": {
+      "text": "I matched the correlation ID of a tool row in the ledger with its tool_call event.",
+      "source": "32b3de9b3018"
+    },
+    "check-points.item-3.text": {
+      "text": "In the before-and-after report I checked whether quality dropped before looking at the calls and tokens saved.",
+      "source": "433e1858c06f"
+    },
+    "check-points.item-4.text": {
+      "text": "I know whether my provider reports usage, and what the report says when it does not.",
+      "source": "b0bce4da6093"
+    },
+    "code_notes.Tracer.note": {
+      "text": "The ledger: one row per span with step, fingerprint, time, correlation ID and usage as reported.",
+      "source": "aeae8c975832"
+    },
+    "code_notes.fingerprint.note": {
+      "text": "Call kind plus arguments (or the whole request body), keys sorted, first 12 hex digits of sha256; equal means repeated.",
+      "source": "21e0f635bc1c"
+    },
+    "code_notes.repeat_of.note": {
+      "text": "Ledger field: the row where this fingerprint first appeared; None means this is the first time.",
+      "source": "88875a8f89df"
+    },
+    "code_notes.read_usage.note": {
+      "text": "Reads token counts by the provider's field names; a missing one is None (not reported), never 0.",
+      "source": "a3937e9ccf23"
+    },
+    "code_notes.lookup_rate.note": {
+      "text": "The exchange-rate tool; it first waits rate_latency_ms milliseconds, standing in for a remote service.",
+      "source": "40d6ba4e085a"
+    },
+    "code_notes.rate_latency_ms.note": {
+      "text": "Input: how many milliseconds the rate tool waits before each execution, 0 to 1000.",
+      "source": "f47e9421cbb2"
+    },
+    "code_notes.category_limit.note": {
+      "text": "Looks up the per-receipt limit of a category; returns a structured error for an unknown category.",
+      "source": "4abb913b9b2e"
+    },
+    "code_notes.repeated_groups.note": {
+      "text": "Groups repeated executions by fingerprint and adds up the extra time and reported tokens.",
+      "source": "3abfedca41ba"
+    },
+    "code_notes.slowest.note": {
+      "text": "Ranks the executed spans by time, slowest first; cache hits are left out.",
+      "source": "048103751f6f"
+    },
+    "code_notes.estimate_cost.note": {
+      "text": "Converts reported usage with the learner's prices; no source and date, no conversion.",
+      "source": "e2d98c15b9d8"
+    },
+    "code_notes.regressions.note": {
+      "text": "Compares two passes on the same set item by item: receipts that went from passed to failed, and back.",
+      "source": "521b0c292de1"
+    },
+    "code_notes.run_pass.note": {
+      "text": "One pass over the 4 receipts with one strategy; returns ledger rows, graded cases and end-to-end time.",
+      "source": "095b6bde03de"
+    },
+    "code_notes.call_id.note": {
+      "text": "A tool row's correlation ID, equal to the id of its tool_call event.",
+      "source": "332ff187fae9"
+    },
+    "code_notes.duration_ms.note": {
+      "text": "The time the platform records in the response event, covering only the provider call.",
+      "source": "5cdcebcf5861"
+    },
+    "code_notes.lesson.ledger.note": {
+      "text": "Lesson event: the ledger rows of one pass, its end-to-end time and the verdict on each receipt.",
+      "source": "fd6d19df0a28"
+    }
+  }
+}

@@ -1,0 +1,1650 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "ASYNC / CONCURRENCY",
+      "source": "4ba9e0ac0aef"
+    },
+    "hero.headline": {
+      "text": "Read who depends on whom first, then let the independent tasks run together;",
+      "source": "d46657aa37ba"
+    },
+    "hero.highlight": {
+      "text": "with a limit and a deadline, and nothing left behind when you stop.",
+      "source": "4fc29727ea36"
+    },
+    "hero.takeaway": {
+      "text": "This lesson runs the reading, summarizing and assembling of four notes in one `asyncio` scheduler: dependencies are read from the references in each task's arguments, the tasks running at once never exceed the concurrency limit, every task has its own timeout, and the whole run has a deadline. Tasks that time out, fail or are cancelled all go into the report, and what is missing is said to be missing.",
+      "source": "ec2e79a29369"
+    },
+    "concepts.01-dependency.label": {
+      "text": "01 / DEPENDENCY",
+      "source": "96b2ce99a547"
+    },
+    "concepts.01-dependency.title": {
+      "text": "Dependencies are read from references",
+      "source": "451f571cebf8"
+    },
+    "concepts.01-dependency.description": {
+      "text": "A task's arguments say \"use the result of that task\", and the scheduler works out from them which level each task sits on. Only tasks on one level are independent and may run together; a task whose input does not exist yet should not start.",
+      "source": "08071af3510d"
+    },
+    "concepts.02-limit.label": {
+      "text": "02 / LIMIT",
+      "source": "f3e5c349617d"
+    },
+    "concepts.02-limit.title": {
+      "text": "A limit on what runs at once",
+      "source": "10f0c44c390b"
+    },
+    "concepts.02-limit.description": {
+      "text": "A concurrency limit is the most tasks that may hold a slot at the same moment. A slot comes back only when the task's work has really ended; a model request that was already sent cannot be recalled, so it still counts as holding the slot.",
+      "source": "4e670270ac50"
+    },
+    "concepts.03-timeout.label": {
+      "text": "03 / TIMEOUT",
+      "source": "9f17f81ddd64"
+    },
+    "concepts.03-timeout.title": {
+      "text": "A timeout per task, a deadline for the run",
+      "source": "2f2fcff85c21"
+    },
+    "concepts.03-timeout.description": {
+      "text": "A task timeout starts counting only once the task has a slot, so waiting in line costs nothing. When the overall deadline arrives, running tasks are cancelled and tasks that have not started never do.",
+      "source": "5c788ff6f141"
+    },
+    "concepts.04-stop.label": {
+      "text": "04 / STOP",
+      "source": "4e6efe9b636d"
+    },
+    "concepts.04-stop.title": {
+      "text": "Stop cleanly, and say what is missing",
+      "source": "872938ec2598"
+    },
+    "concepts.04-stop.description": {
+      "text": "The stop signal must reach every task, and a tool that listens to it stops within milliseconds. Tasks that did not finish go into the report: timed out, failed, cancelled and skipped each have a reason, and a partial result must never pass for a complete one.",
+      "source": "0c1ccca949ba"
+    },
+    "section-1.title": {
+      "text": "Can it run in parallel?",
+      "source": "abd160b42390"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Only tasks that do not depend on each other can run at the same time; dependencies decide the order. {{lesson:workflow-patterns}} compared serial and parallel: three unrelated restating tasks finish in much less wall-clock time in parallel. Those tasks were picked by hand. This lesson uses a list that can go wrong: read two notes, then assemble them into a review sheet. The sheet needs both notes, so if it starts together with the two reads it has no notes in hand and works on empty values, and what it produces looks like a result but is wrong.",
+      "source": "82df07986da1"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Deciding whether tasks can run in parallel takes one question: does this task need a value another task produces? If so it must wait; if not, they can go together. Here is an invented example: reading A takes 200 ms, reading B takes 300 ms, assembling takes 50 ms. Serial costs 550 ms; reading A and B together and assembling once B has arrived costs 350 ms. 350 ms is the lower bound of this list, because the chain \"read B → assemble\" is the longest, and no amount of parallelism beats it. Conversely, A and B have nothing to do with each other, so making them queue is waiting for nothing.",
+      "source": "60cc2ab8d0d0"
+    },
+    "section-1.paragraphs.2": {
+      "text": "This lesson does not let anyone write dependencies by hand. When a task's arguments need another task's result, they hold a `Ref` that points to one field of one task, for example \"the note field of reading A\". `Task` finds every `Ref` in its arguments when it is created, and that gives the tasks it depends on; `levels` then computes the levels: tasks that depend on nothing sit on level 1, every other task sits one level below its deepest dependency. Because dependencies are read, they cannot contradict the arguments (\"the arguments use A's result, but the list forgot to say so\"). In this lesson's list the summaries refer to the `note` of a read and the sheet refers to the `summary` of all four summaries, so the reads are on level 1, the summaries on level 2 and the sheet on level 3.",
+      "source": "0475275bd321"
+    },
+    "section-1.paragraphs.3": {
+      "text": "Tasks on one level may run together, which is not the same as always running together: the concurrency limit, timeouts and failures all change the real order. `levels` also only knows data dependencies. Two tasks that write the same file have no data dependency between them, and running them together still breaks things; that needs another remedy, and the version check in {{lesson:memory-lifecycle}} is one. A further kind of dependency hides in the model's judgment: what to do next depends on the last result, which is what the model discovers step by step in {{lesson:dependent-calls}}, and no scheduler can read it. So when you see \"can run in parallel\", first ask which kind of dependency it is, then decide who guarantees the order.",
+      "source": "168f6aa5b912"
+    },
+    "deep-dive-graph.title": {
+      "text": "Dependency graph and critical path: working out this lesson's list by hand",
+      "source": "e2fb2de83094"
+    },
+    "deep-dive-graph.summary": {
+      "text": "Three levels, nine tasks: work out serial, parallel and the various limits with the default parameters, then compare with the numbers measured in the report.",
+      "source": "db6829fd9ed3"
+    },
+    "deep-dive-graph.paragraphs.0": {
+      "text": "This lesson's list has nine tasks: four reads on level 1, four summaries on level 2 and the sheet on level 3. Say each read and each summary takes 200 ms and the sheet takes almost nothing (this is worked out by hand from the default parameters; your run goes by the numbers measured in the report). Serial costs 4×200 + 4×200 + 0 = 1600 ms, which is the \"sum of task durations\" in the report. The longest chain is \"a read → its summary → the sheet\", 200 + 200 = 400 ms, which is the \"longest dependency chain\" and the lower bound that no amount of parallelism can cross. In project management that longest chain is called the critical path.",
+      "source": "fa13ad94957d"
+    },
+    "deep-dive-graph.paragraphs.1": {
+      "text": "The limits fall in between: with limit 4 each level runs at once, about 400 ms; with limit 2 each level goes in two batches, about 800 ms; limit 1 is serial, about 1600 ms. The durations for limits 4, 2 and 1 are in the ratio 1 : 2 : 4, because the two levels that have tasks have exactly four each. If a level had five tasks and the limit were 4, that level would go in two batches and the second batch would run a single task, so that batch has a parallelism of 1. When you read a dependency graph, look at how many tasks each level has as well as how many levels there are.",
+      "source": "5d6d3120bc7b"
+    },
+    "deep-dive-graph.paragraphs.2": {
+      "text": "Chapter 6 of *Understanding AI Agents in Depth* (深入理解 AI Agent) makes the same judgment about asynchronous agents: work that can go on independently goes on, and a decision that needs a result waits until the result arrives. The tool calls a model proposes in one answer are independent by nature: the model has seen no result yet, so it cannot write one call's result into another call's arguments. A call that needs another's result can only be proposed in the next round, which is exactly the dependent calls from earlier.",
+      "source": "d60bf480e414"
+    },
+    "section-2.title": {
+      "text": "async/await and tasks",
+      "source": "55c41257edb3"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Python tasks send requests in parallel, and you compare the wall-clock time with serial. A function defined with `async def` does not run when you call it; you get a coroutine. `asyncio.create_task` hands the coroutine to the event loop, and the loop switches between the tasks' waits: while one task sits on an `await`, the loop runs another. So `async` and `await` do not create parallelism by themselves; \"while one waits, another works\" is what makes overlap possible.",
+      "source": "b489584a366c"
+    },
+    "section-2.paragraphs.1": {
+      "text": "The event loop has one thread, and a blocking call freezes the whole loop. `time.sleep` in a tool and one HTTP request to the model are both blocking calls. Call them straight from a coroutine and the loop is occupied, no other task can move, \"parallel\" turns into serial, and the program still looks perfectly healthy. The remedy is to put the blocking part into a worker thread, and the coroutine only waits for the thread's result while the loop keeps turning. A thread waiting on the network does not hold the interpreter, so many waits really can overlap. An invented example: four requests that each wait 1 second take 4 seconds when they block one after another in one thread, and a little over 1 second in four threads.",
+      "source": "9518deca2bc5"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The usual way is `asyncio.to_thread`. This lesson's scheduler starts its threads itself and registers them (`_in_thread`), for a reason the next two sections explain: when a task times out or is cancelled, its `await` ends at once while the thread may still be running. The scheduler has to know when the thread has really ended before it can claim that no task is left running in the background. Every task's worker thread is in a table, the table must be empty when the run ends, and the closing check in the report reads that table.",
+      "source": "863930b5d198"
+    },
+    "section-2.paragraphs.3": {
+      "text": "How to compare wall-clock time: one run takes the same list through concurrency limits 1, 2 and 4, one after another. `wall_ms` in the report is measured by the backend with a monotonic clock, and `serial_ms` is the sum of the task durations. The `serial_ms` values are close and the `wall_ms` values are far apart; the difference is the waiting that overlapped. Parallelism does not reduce the work: the number of model calls and tool calls is the same in every variant, only the time spent waiting shrinks, so parallelism does not make the bill smaller either. The report also gives each task's start and end in milliseconds; draw them as a timeline and the overlap is visible at a glance.",
+      "source": "0850fd26f16b"
+    },
+    "predict-naive.prompt": {
+      "text": "Before you run \"Dependency graph and scheduling order\", guess: in one run the same list goes through serial, by dependency and ignoring dependencies, so how many times will the sheet tool `build_sheet` be called in total? Will the scheduler notice that the \"ignoring dependencies\" variant lacks input and skip the sheet?",
+      "source": "44e1bc970463"
+    },
+    "mq-dependency.q-dependency.prompt": {
+      "text": "In the \"ignoring dependencies\" variant the sheet tool `build_sheet` starts together with the two reads. What happens to it?",
+      "source": "5b7de3b71fe7"
+    },
+    "mq-dependency.q-dependency.a.text": {
+      "text": "It is still called, gets empty values, and the tool returns a MissingInput error",
+      "source": "a866d606fc54"
+    },
+    "mq-dependency.q-dependency.a.feedback": {
+      "text": "Right. The scheduler did not wait on dependencies, so it does not know the input is missing; the tool itself refused the empty values, and that is how the problem surfaced.",
+      "source": "0cf17f4a2a61"
+    },
+    "mq-dependency.q-dependency.b.text": {
+      "text": "The scheduler notices the missing input and moves it after the reads automatically",
+      "source": "28f6d3afd2dd"
+    },
+    "mq-dependency.q-dependency.b.feedback": {
+      "text": "No. This variant deliberately ignores dependencies, and the scheduler does not reorder anything for it.",
+      "source": "1059fe60409e"
+    },
+    "mq-dependency.q-dependency.c.text": {
+      "text": "It waits for both reads to end and the result is exactly the same as by dependency",
+      "source": "b620c45d1f26"
+    },
+    "mq-dependency.q-dependency.c.feedback": {
+      "text": "No. That is what scheduling by dependency does; ignoring dependencies means not waiting.",
+      "source": "a1c33c649024"
+    },
+    "mq-dependency.q-dependency.explanation": {
+      "text": "A wrong schedule does not report itself. It is found only through the tool's check of its input and through the dependency check in the report, so a tool must refuse missing input instead of quietly filling in empty values.",
+      "source": "0b9d23a0760f"
+    },
+    "section-3.title": {
+      "text": "The concurrency limit",
+      "source": "652a6f861b6d"
+    },
+    "section-3.paragraphs.0": {
+      "text": "The number of requests in flight needs a limit, to protect the provider's quota and the local machine. Four notes need one summary request each; with forty notes and no limit, forty requests would hit the provider at once: the quota is used up first, later requests get rate-limit errors, and local connections and threads strain too. A limit fixes how many things are \"in progress\" at once and makes the rest wait, and a task that waits does not use the provider's quota. This is also a kind of backpressure: if the upstream sends too fast, make it wait at the door.",
+      "source": "0c35c34b9b6e"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The limit is built on a semaphore (`asyncio.Semaphore`). It is a door with N slots: a task gets a slot before it starts, gives it back when it is done, and waits at the door if none is free. `async with self._slots` in `_run` is that door. asyncio's semaphore hands out slots in order of arrival and does not care how important a task is. An example: with limit 2 and four reads in line, the first two get slots and the other two wait; even a summary that becomes ready very soon stands behind those two reads.",
+      "source": "b3aff9e5b27c"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Worked out by hand with the default parameters: reads and summaries take 200 ms each, four notes. With limit 4, four reads at once and four summaries at once, plus the sheet, take a little over 400 ms; with limit 2, the reads go in two batches and the summaries in two batches, about 800 ms; with limit 1, one at a time, about 1600 ms. Each time the limit halves, the time roughly doubles, until it meets the lower bound of the dependency chain. These are hand calculations; the numbers in the lab report are what this run really measured, and the \"longest dependency chain\", about 400 ms, is the lower bound no larger limit can cross.",
+      "source": "f9e0817f4f61"
+    },
+    "section-3.paragraphs.3": {
+      "text": "When a slot comes back is easy to get wrong. After a task times out, the scheduler can stop waiting for it; but the model request has already been sent and its thread is still waiting for the provider's response. Give the slot back now, the next request goes out at once, and the number of requests the provider is handling at the same time goes over the limit. This lesson's scheduler gives the slot back only when the thread has really ended, and the peak concurrency in the report is recomputed from each task's start and release time instead of read from the semaphore, so it can notice when the semaphore and reality disagree. A read tool stops within milliseconds, so this does not show there; a summary request that cannot be recalled is what exposes it.",
+      "source": "a4f63250c6af"
+    },
+    "deep-dive-semaphore.title": {
+      "text": "What the limit protects: quota, backpressure and requests",
+      "source": "04e02b3fccb7"
+    },
+    "deep-dive-semaphore.summary": {
+      "text": "Several references place the concurrency limit under \"protecting an external quota\", not under \"making the program faster\".",
+      "source": "1db9741aa8e0"
+    },
+    "deep-dive-semaphore.paragraphs.0": {
+      "text": "Chapter 10 of *Understanding AI Agents in Depth* (深入理解 AI Agent) likens resource scheduling to a duty of an operating system: what is scarce in the world of processes is CPU time and memory, and what is scarce in the world of agents is tokens and concurrency quota. Concurrency needs a limit so that dozens of agents do not exhaust the API quota together; and when the limit is reached and a more urgent task arrives, a running subtask can be interrupted, which is called preemption. This lesson's slots go strictly in order of arrival and there is no preemption.",
+      "source": "152afc149722"
+    },
+    "deep-dive-semaphore.paragraphs.1": {
+      "text": "Microsoft's *AI Agents for Beginners*, in its lesson on production deployment, calls this concurrency and backpressure: model providers have rate limits, so bound the concurrency, retry with growing intervals, and fail gracefully, because a queued \"we're on it\" answer beats a bare 500. Backpressure means that when the upstream runs too fast you slow it down instead of letting a buffer grow without bound. A limit plus a queue is the simplest backpressure. How long to wait between retries is left to {{lesson:reliable-tools}}.",
+      "source": "3ba408a76488"
+    },
+    "deep-dive-semaphore.paragraphs.2": {
+      "text": "In the latency example of Claude Cookbooks, the number of helpers running at the same time is the constant `MAX_HELPERS = 4`, with a note that it is a cost guard and not part of the mechanism: remove it and the mechanism still works, only the bill and the risk of rate limiting both grow. There is no general number for a limit: it depends on the provider's quota, the duration of one request and how many threads the machine can carry. This lesson makes it a parameter so you can try 1, 2 and 4 and see how the time changes.",
+      "source": "97f76479a4a6"
+    },
+    "mq-limit.q-limit.prompt": {
+      "text": "Change the concurrency limit from 4 to 1 and nothing else. Which of these does not change?",
+      "source": "3a03e298d9b0"
+    },
+    "mq-limit.q-limit.a.text": {
+      "text": "The number of model calls and tool calls",
+      "source": "6bed3ee2f26f"
+    },
+    "mq-limit.q-limit.a.feedback": {
+      "text": "Right. The limit changes only the order and the waiting, not what has to be done: it is always 4 model calls and 5 tool calls.",
+      "source": "7ac090dde2c2"
+    },
+    "mq-limit.q-limit.b.text": {
+      "text": "The wall-clock time",
+      "source": "2a7813f04947"
+    },
+    "mq-limit.q-limit.b.feedback": {
+      "text": "No. Limit 1 is serial, so the wall-clock time comes close to the sum of the task durations.",
+      "source": "f6d2e18c2bbe"
+    },
+    "mq-limit.q-limit.c.text": {
+      "text": "The peak concurrency",
+      "source": "1a23f42719e9"
+    },
+    "mq-limit.q-limit.c.feedback": {
+      "text": "No. Peak concurrency is at most the limit, so with limit 1 it is 1.",
+      "source": "f354b453ae6a"
+    },
+    "mq-limit.q-limit.explanation": {
+      "text": "The limit changes the waiting, not the amount of work; when you compare variants, equal call counts with different wall-clock times are what parallelism makes the difference.",
+      "source": "7dcb8fca2da0"
+    },
+    "misconception-limit.claim": {
+      "text": "The higher the concurrency limit, the faster the run.",
+      "source": "565b3981b076"
+    },
+    "misconception-limit.correction": {
+      "text": "The limit only decides the \"most\" that may run at once. This lesson's list has at most four tasks per level, so a limit above 4 does nothing; the longest dependency chain is the lower bound and no higher limit can cross it; and the provider's rate limit turns an oversized limit into a string of rate-limit errors. Set the limit from the quota and the machine's resources, not as high as it goes.",
+      "source": "ef525f943fb1"
+    },
+    "section-4.title": {
+      "text": "Timeouts and partial results",
+      "source": "6c0590920da0"
+    },
+    "section-4.paragraphs.0": {
+      "text": "One task timing out should not drag the whole run down, and the report says which tasks finished and which timed out. Without a timeout a note that takes 1500 ms to read is merely slow, but one that takes a quarter of an hour freezes the entire run, and every task that depends on it waits. The number for a timeout has no general answer: too short and slow but healthy tasks are killed; too long and it protects nothing. With a timeout the slow task is given up and the others finish as usual. Giving up is not disappearing: the slow note is reported as a timeout, and the summary that depends on it is reported as not started because of it.",
+      "source": "a77f6f1afe7d"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The timeout must start counting when the task gets its slot. If it counted while the task waited in line, the fourth task would have its time used up by the first three before it even started, and a healthy task would time out. In `_execute`, `asyncio.timeout` is created only after the slot is granted. The tests hold one comparison: with limit 1, two tasks of 150 ms each and a timeout of 250 ms both finish; with limit 2 and a timeout of only 100 ms both time out. The tasks are the same, and the only difference is where the timer starts. These numbers only verify the mechanism and do not suit a real provider.",
+      "source": "e32648200972"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Besides the task timeout there is the overall deadline `deadline_ms`: counted from the start of the run, when it is reached the running tasks are cancelled and the queued ones never start. The two deadlines guard different things: the first keeps one task from holding itself up, the second keeps the whole run from taking too long, and whichever comes first applies. In this lesson a watcher coroutine, `_watch`, looks at the clock and the Stop button every 10 ms and calls `cancel_all` when the time is up.",
+      "source": "683847795c86"
+    },
+    "section-4.paragraphs.3": {
+      "text": "After a timeout the report has to be honest. A task ends in one of five ways: done, failed, timed out, cancelled or skipped, each with a reason. A summary that depends on the task that timed out does not start and is recorded as skipped; the sheet tool's `join` is `settled`, so it runs once all its dependencies have an outcome, but the sheet it returns says itself that `complete` is false and which lesson is missing. The run's answer writes this variant's verdict as \"Partial (not a complete result)\". Every line in the report has a reason, such as \"Task timeout: still not finished after 500 ms\". A partial result is useful only when what is missing is stated plainly.",
+      "source": "a13fb89a666a"
+    },
+    "mq-timeout.q-timeout.prompt": {
+      "text": "With limit 1, tasks A and B take 150 ms each and each task's timeout is 250 ms. Why do both finish?",
+      "source": "c3d8ce377e62"
+    },
+    "mq-timeout.q-timeout.a.text": {
+      "text": "The timer starts only when the slot is granted, so B's 150 ms in line do not count",
+      "source": "57728edc0adb"
+    },
+    "mq-timeout.q-timeout.a.feedback": {
+      "text": "Right. B ran for only 150 ms after it got its slot, which is under 250 ms.",
+      "source": "948ac9df7c81"
+    },
+    "mq-timeout.q-timeout.b.text": {
+      "text": "The timeout applies only to the first task",
+      "source": "c0f8c24cb1f7"
+    },
+    "mq-timeout.q-timeout.b.feedback": {
+      "text": "No. Every task has its own timeout.",
+      "source": "4dd0b7fc8812"
+    },
+    "mq-timeout.q-timeout.c.text": {
+      "text": "The scheduler automatically lengthened B's timeout",
+      "source": "ac876d4c2de9"
+    },
+    "mq-timeout.q-timeout.c.feedback": {
+      "text": "No. The timeout is the 250 ms written in `Task`, and the scheduler does not change it.",
+      "source": "7ced859b4505"
+    },
+    "mq-timeout.q-timeout.explanation": {
+      "text": "A timeout should measure only the task's own running time; time in line belongs to the concurrency limit and the overall deadline.",
+      "source": "0177a8fce25c"
+    },
+    "misconception-late.claim": {
+      "text": "Once a timed-out task is cancelled, it no longer costs money or holds resources.",
+      "source": "68ad24ee7b19"
+    },
+    "misconception-late.correction": {
+      "text": "Cancelling only stops the waiting. A tool can stop within milliseconds because it actively listens to the stop signal; a model request has already been sent, its thread can only wait for the response, and the provider still generates and meters it. `late_ms` in the report records how much longer the work ran after the scheduler gave up waiting. Cancelling can only stop a request that has not gone out yet.",
+      "source": "e3b0d0ec9e09"
+    },
+    "section-5.title": {
+      "text": "Cancelling and the terminal state",
+      "source": "a0e732e23abf"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Cancelling must reach every subtask, and the final terminal state must be consistent. The learner presses Stop, the overall deadline arrives, or one task fails under a policy of cancelling everything: the sources differ and the handling is the same, every task stops together, and because the three sources share one entry point the terminal state has only one way of being written. If only the main loop stopped, tasks that already started would keep running in the background, still writing files and sending requests after the run is over, while the report already says \"everything ended\".",
+      "source": "9c55d3474dd2"
+    },
+    "section-5.paragraphs.1": {
+      "text": "`cancel_all` does three things: it records the first reason, sets every task's stop signal, and cancels every asyncio task that is still waiting. The first reason wins and later ones do not overwrite it, because several sources can arrive at the same moment: the Stop button has just been pressed and the deadline passes too. A cancelled task records its own outcome first and then lets the cancellation continue instead of swallowing it, so the layer above knows it was cancelled. Only after every task and every thread has ended does the runner go on; if the learner pressed Stop, `RunCancelled` is raised at that point and the run ends as cancelled.",
+      "source": "bd9c283a5998"
+    },
+    "section-5.paragraphs.2": {
+      "text": "When one task fails there are two policies. `continue`: the other tasks go on and the report says who is missing; `cancel_all`: the other tasks stop together, which saves the model requests that have not gone out and also throws away the work in progress. Neither is better: if one note is missing the sheet is still useful and carrying on is right; if every result depends on that note, carrying on is wasted money. For the same failure the two policies make 3 model calls and 0 model calls.",
+      "source": "d723c1145ba6"
+    },
+    "section-5.paragraphs.3": {
+      "text": "A cancel request and a client disconnect are two different things, which {{lesson:streaming-cancel}} kept apart: on Stop the run ends and the `status` of `done` is `cancelled`; when only the event stream disconnects, the run goes on as usual. With many tasks this has one more layer: the terminal state is what the backend wrote, not the last event on the screen. After a stop the platform accepts no more lesson events, so the scheduler cannot write \"everything has stopped\" after the stop; what can be checked is what was already recorded: a `tool_call` without a `tool_result`, and the `cancel_reason` in the `done` event. This is also why the lab asks you to press Stop by hand once: a cancel the learner makes leaves its evidence only in these traces.",
+      "source": "b03ac09b3699"
+    },
+    "deep-dive-stop.title": {
+      "text": "Graceful stop, forced stop, and tasks nobody claims",
+      "source": "ec5e3800a1d8"
+    },
+    "deep-dive-stop.summary": {
+      "text": "How the references stop things: signal and wait for an acknowledgment, cancel downwards level by level, and kill as the last resort.",
+      "source": "ee4ef2c80566"
+    },
+    "deep-dive-stop.paragraphs.0": {
+      "text": "Chapter 10 of *Understanding AI Agents in Depth* (深入理解 AI Agent) splits termination into two strengths, matching SIGTERM and SIGKILL in Unix. In a graceful termination the initiator sends a signal, the party being stopped responds at a safe point of its current step, cleans up its resources, and exits after acknowledging; forced termination is the fallback, used only when the other side does not respond to the graceful signal, at the price of possibly leaving resources unfinished. This lesson's tool takes the graceful path, called cooperative cancellation: `read_note` listens for the stop signal while it waits, raises `TaskStopped` when it hears it, and the call gets a structured error with `ok` false instead of a faked success. Chapter 6 asks for the same thing: a cancel point must be a place where work can be closed safely, and a result that was not finished has to be marked with an explicit placeholder.",
+      "source": "23212711b7e3"
+    },
+    "deep-dive-stop.paragraphs.1": {
+      "text": "The book also has an engineering remedy borrowed from Go's context: cancellation travels down the creation relationship, cancelling a task cancels the tasks it spawned, and that removes the tasks nobody claims at the root. This lesson does something more direct: all tasks live under one scheduler, and what gets cancelled is the whole scheduler. The async orchestration example in Claude Cookbooks ends the same way: it cancels every helper in `finally` and then calls `gather` with `return_exceptions` to make sure they have really finished.",
+      "source": "6dee172016ec"
+    },
+    "deep-dive-stop.paragraphs.2": {
+      "text": "Python's own `asyncio.TaskGroup` behaves similarly: when one task raises, the other tasks of the group are cancelled. It matches this lesson's `cancel_all` policy, but it has no `continue` setting and does not record each task's outcome and reason for you, which is why this lesson wrote its own scheduler. The lesson in Learn Claude Code about moving slow operations to the background has a warning worth taking away: stopping a process group is lifecycle cleanup, not isolation, and a process that starts a new session can leave it. The threads here are the same: we can guarantee they end, not what they did.",
+      "source": "18e1a9c9f386"
+    },
+    "mq-stop.q-stop.prompt": {
+      "text": "The learner presses Stop while a read tool is waiting 1500 ms. Which statement is right?",
+      "source": "b13ff0a4af8c"
+    },
+    "mq-stop.q-stop.a.text": {
+      "text": "The tool is listening to the stop signal all along, ends within milliseconds, and the run ends as cancelled",
+      "source": "0195d1841d74"
+    },
+    "mq-stop.q-stop.a.feedback": {
+      "text": "Right. `read_note` waits on the stop signal, not on a sleep, so it returns as soon as the signal comes.",
+      "source": "aba5ac6af315"
+    },
+    "mq-stop.q-stop.b.text": {
+      "text": "The run has to wait until the tool has slept the full 1500 ms",
+      "source": "8599054f231d"
+    },
+    "mq-stop.q-stop.b.feedback": {
+      "text": "No. That would happen if the tool used `time.sleep`; this lesson's tool does not.",
+      "source": "3566e31b0108"
+    },
+    "mq-stop.q-stop.c.text": {
+      "text": "The scheduler forcibly kills the thread",
+      "source": "eb89a7d772df"
+    },
+    "mq-stop.q-stop.c.feedback": {
+      "text": "No. A Python thread has no safe way to be terminated from outside; it can only notice by itself that it should stop.",
+      "source": "582a0ee9505e"
+    },
+    "mq-stop.q-stop.explanation": {
+      "text": "Stopping is cooperative cancellation: a task stops only if it waits where it can hear the signal.",
+      "source": "4b9aa6fb8065"
+    },
+    "compare-exercises.title": {
+      "text": "The comparisons at a glance",
+      "source": "490102a05f14"
+    },
+    "compare-exercises.paragraphs.0": {
+      "text": "The table shows the deterministic results in offline test mode: the model answers come from a fixed script, and the durations are whatever your own lab report says; the number of model calls is fixed by the list and not random. Each scenario is one run that goes through the job in several ways.",
+      "source": "9bdc86deceaf"
+    },
+    "compare-exercises.columns.0": {
+      "text": "Variant",
+      "source": "c963e1f234aa"
+    },
+    "compare-exercises.columns.1": {
+      "text": "How it differs from the baseline",
+      "source": "a2e81bdf57cd"
+    },
+    "compare-exercises.columns.2": {
+      "text": "Model calls",
+      "source": "72926dfb7314"
+    },
+    "compare-exercises.columns.3": {
+      "text": "Verdict",
+      "source": "b1603f54de6f"
+    },
+    "compare-exercises.rows.0.0": {
+      "text": "By dependency (two reads plus the sheet)",
+      "source": "4b9bfb6b550f"
+    },
+    "compare-exercises.rows.0.1": {
+      "text": "Baseline",
+      "source": "a7ac587ab52d"
+    },
+    "compare-exercises.rows.0.2": {
+      "text": "0",
+      "source": "5feceb66ffc8"
+    },
+    "compare-exercises.rows.0.3": {
+      "text": "Complete; the sheet starts only after both reads",
+      "source": "8bd0b5d8aa51"
+    },
+    "compare-exercises.rows.1.0": {
+      "text": "Serial (limit 1)",
+      "source": "f27834005709"
+    },
+    "compare-exercises.rows.1.1": {
+      "text": "Concurrency limit 1",
+      "source": "cff49bb08a53"
+    },
+    "compare-exercises.rows.1.2": {
+      "text": "0",
+      "source": "5feceb66ffc8"
+    },
+    "compare-exercises.rows.1.3": {
+      "text": "Complete; wall-clock time close to the sum of task durations",
+      "source": "b655f3dc777d"
+    },
+    "compare-exercises.rows.2.0": {
+      "text": "Ignoring dependencies",
+      "source": "75fd4bc7d6d7"
+    },
+    "compare-exercises.rows.2.1": {
+      "text": "Deliberately does not wait for dependencies",
+      "source": "4420c0a389c4"
+    },
+    "compare-exercises.rows.2.2": {
+      "text": "0",
+      "source": "5feceb66ffc8"
+    },
+    "compare-exercises.rows.2.3": {
+      "text": "The sheet fails for lack of input; not completed",
+      "source": "bf818e842849"
+    },
+    "compare-exercises.rows.3.0": {
+      "text": "Concurrency limit 1, 2, 4 (four notes)",
+      "source": "e857b725b45d"
+    },
+    "compare-exercises.rows.3.1": {
+      "text": "Only the concurrency limit changes",
+      "source": "041d01002d11"
+    },
+    "compare-exercises.rows.3.2": {
+      "text": "4 per variant",
+      "source": "8ddeccd4943d"
+    },
+    "compare-exercises.rows.3.3": {
+      "text": "Complete; durations about 4 : 2 : 1",
+      "source": "326d42fa5769"
+    },
+    "compare-exercises.rows.4.0": {
+      "text": "Slow but no timeout",
+      "source": "e21ac0b3d8aa"
+    },
+    "compare-exercises.rows.4.1": {
+      "text": "One note takes 1500 ms to read",
+      "source": "4b00aa3e9812"
+    },
+    "compare-exercises.rows.4.2": {
+      "text": "4",
+      "source": "4b227777d4dd"
+    },
+    "compare-exercises.rows.4.3": {
+      "text": "Complete, but the whole run is held up by it",
+      "source": "d4c4792ac1ee"
+    },
+    "compare-exercises.rows.5.0": {
+      "text": "Task timeout",
+      "source": "fb32a8e0e053"
+    },
+    "compare-exercises.rows.5.1": {
+      "text": "Tool timeout of 500 ms for the same note",
+      "source": "438f7e2fc512"
+    },
+    "compare-exercises.rows.5.2": {
+      "text": "3",
+      "source": "4e07408562be"
+    },
+    "compare-exercises.rows.5.3": {
+      "text": "Partial: this note is missing and the sheet says it is incomplete",
+      "source": "7029e6f63df8"
+    },
+    "compare-exercises.rows.6.0": {
+      "text": "Overall deadline",
+      "source": "dce9379bd44a"
+    },
+    "compare-exercises.rows.6.1": {
+      "text": "Deadline 700 ms, limit 2",
+      "source": "dd8ad6220951"
+    },
+    "compare-exercises.rows.6.2": {
+      "text": "4",
+      "source": "4b227777d4dd"
+    },
+    "compare-exercises.rows.6.3": {
+      "text": "Partial: two summaries are cancelled and the sheet never starts",
+      "source": "7dac7179f76b"
+    },
+    "compare-exercises.rows.7.0": {
+      "text": "Carry on after failure",
+      "source": "fad31a18e7e5"
+    },
+    "compare-exercises.rows.7.1": {
+      "text": "One note is locked",
+      "source": "f84985fe5bce"
+    },
+    "compare-exercises.rows.7.2": {
+      "text": "3",
+      "source": "4e07408562be"
+    },
+    "compare-exercises.rows.7.3": {
+      "text": "Partial: the locked note is missing",
+      "source": "ab51c68dddda"
+    },
+    "compare-exercises.rows.8.0": {
+      "text": "Cancel all after failure",
+      "source": "3f735abfeeda"
+    },
+    "compare-exercises.rows.8.1": {
+      "text": "Same, with the policy set to `cancel_all`",
+      "source": "0a4dac202170"
+    },
+    "compare-exercises.rows.8.2": {
+      "text": "0",
+      "source": "5feceb66ffc8"
+    },
+    "compare-exercises.rows.8.3": {
+      "text": "Not completed: every other task stops or never starts",
+      "source": "5dff1c6f3b5b"
+    },
+    "walkthrough.title": {
+      "text": "A run that is cancelled by the deadline",
+      "source": "1a8698fa4125"
+    },
+    "walkthrough.description": {
+      "text": "Step by step through the \"overall deadline\" variant. The code is simplified for illustration; the evidence of the real run is in the lab's events.",
+      "source": "6168f7ee410c"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Read dependencies",
+      "source": "dba7a3a60f4d"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Scheduler",
+      "source": "eed4addf74a7"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Three levels from the references",
+      "source": "fb05210bce97"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Nine tasks and not one hand-written dependency: the summaries' arguments refer to the reads' results, the sheet's arguments refer to the four summaries, and `levels` arranges three levels from that.",
+      "source": "0707fd755ec0"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.graph",
+      "source": "558cf3b8a52a"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Get a slot",
+      "source": "0ee3fbd0e3e8"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Scheduler",
+      "source": "eed4addf74a7"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Limit 2: read the four notes first",
+      "source": "c1093f6e4abe"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Reads are served in order of arrival: the first two get slots and the other two wait; a summary has to wait for its own read to end and cannot jump the queue.",
+      "source": "0ecfe5a0a732"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.task",
+      "source": "8e8232057662"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Time is up",
+      "source": "d19931a10b61"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Watcher coroutine",
+      "source": "ac4a0ba7a05b"
+    },
+    "walkthrough.step-3.title": {
+      "text": "The overall deadline arrives",
+      "source": "5de1bdaa9a86"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The watcher coroutine looks at the clock every 10 ms. When the time is up it records the reason `deadline` and which tasks were still running at that moment.",
+      "source": "f2bd153a6819"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.stop",
+      "source": "96d39fc2925d"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Cancel",
+      "source": "2cd0f3be8738"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Every task",
+      "source": "3334cf131b42"
+    },
+    "walkthrough.step-4.title": {
+      "text": "The stop signal reaches every task",
+      "source": "0433da138d90"
+    },
+    "walkthrough.step-4.body": {
+      "text": "A summary request in flight cannot be recalled and its thread waits for the response; the slot comes back only after they end. Tasks in the queue are simply recorded as skipped, and the sheet that has not started does not start.",
+      "source": "8d42e0f52675"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.task",
+      "source": "8e8232057662"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Report",
+      "source": "1e8ddd10bafe"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Say what is missing",
+      "source": "db6c4104f398"
+    },
+    "walkthrough.step-5.body": {
+      "text": "The report says which tasks finished, which were cancelled, which were skipped, and how late they were; the sheet was not built, and this variant's verdict reads \"Partial (not a complete result)\".",
+      "source": "fb194d362265"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.book-ch6.title": {
+      "text": "Asynchrony and events: parallel work, cancelling and safe points (Understanding AI Agents in Depth (深入理解 AI Agent))",
+      "source": "c3e6f1071621"
+    },
+    "references.book-async-agent.title": {
+      "text": "An async agent with parallel execution and interruption: parallel versus serial, cancelling and resuming (Understanding AI Agents in Depth (深入理解 AI Agent))",
+      "source": "9245114c2d5c"
+    },
+    "references.book-ch10.title": {
+      "text": "Termination and resource scheduling: graceful termination, cascading cancellation and concurrency quota (Understanding AI Agents in Depth (深入理解 AI Agent))",
+      "source": "83099ac8395e"
+    },
+    "references.cookbook-async.title": {
+      "text": "Async multi-agent orchestration: cancelling tasks and cleaning up (Claude Cookbooks)",
+      "source": "7e34f842f069"
+    },
+    "references.cookbook-latency.title": {
+      "text": "Multi-agent teams under latency pressure: a shared clock and a cap on concurrent helpers (Claude Cookbooks)",
+      "source": "70cab8614d6b"
+    },
+    "references.ms-16.title": {
+      "text": "Deploying scalable agents: concurrency and backpressure (AI Agents for Beginners)",
+      "source": "198eff89b6bb"
+    },
+    "references.lcc-s11.title": {
+      "text": "Slow operations go to the background and results are collected in later rounds (Learn Claude Code)",
+      "source": "2a8121a12377"
+    },
+    "code-run.n-run.text": {
+      "text": "One asyncio task per task: first it waits for its dependencies, then for a slot, and only then executes.",
+      "source": "377847332de9"
+    },
+    "code-run.n-schedule.text": {
+      "text": "Only scheduling by dependency waits; the \"ignoring dependencies\" variant skips this part and goes straight for a slot.",
+      "source": "e49ad6b120c6"
+    },
+    "code-run.n-wait-deps.text": {
+      "text": "Wait until each dependency has an outcome, whether done, failed or timed out.",
+      "source": "47c8c037af9c"
+    },
+    "code-run.n-join.text": {
+      "text": "A dependency that did not finish means skipping; a task whose `join` is `settled` (the sheet) does not stop here.",
+      "source": "3ac5c95624e3"
+    },
+    "code-run.n-slots.text": {
+      "text": "The door of the concurrency limit: get a slot to go on; `_finish` gives the slot back once the work has really ended.",
+      "source": "06a871f2f3d9"
+    },
+    "code-run.n-stopped-waiting.text": {
+      "text": "A stop that arrived in line means the work does not start even with a slot: it is recorded as skipped, with the stop's reason.",
+      "source": "1d12202efe6a"
+    },
+    "code-run.n-execute.text": {
+      "text": "The part that really executes; the slot stays taken until it returns.",
+      "source": "64b2ded8cbdc"
+    },
+    "code-run.n-cancel-run.text": {
+      "text": "Cancelled while in line or waiting for dependencies: add a skipped outcome so that every task has one.",
+      "source": "dac4fc2b58c1"
+    },
+    "code-run.n-reraise.text": {
+      "text": "After recording, pass the cancellation on instead of swallowing it, so the layer above knows it was cancelled.",
+      "source": "6c3fd4aa8b8a"
+    },
+    "code-run.n-settled.text": {
+      "text": "However it ended, tell the tasks that depend on it: the waiting is over.",
+      "source": "70448986a480"
+    },
+    "code-run.n-execute-def.text": {
+      "text": "What a task does once it has a slot: start the timer, execute, classify the outcome.",
+      "source": "442525e890ab"
+    },
+    "code-run.n-stop-event.text": {
+      "text": "One stop signal per task; cancellation, timeouts and the failure policy all set it to make the tool stop.",
+      "source": "55aa60beb21f"
+    },
+    "code-run.n-timer.text": {
+      "text": "The timeout starts counting only here: the task already has its slot, and time in line does not count.",
+      "source": "9170866b45c3"
+    },
+    "code-run.n-resolve.text": {
+      "text": "References become values only when the slot is granted; a result that does not exist is an empty value.",
+      "source": "34e4959c1f58"
+    },
+    "code-run.n-run-task.text": {
+      "text": "The coroutine only waits for the worker thread to hand back a result; when the timeout comes, this await is cancelled.",
+      "source": "967be518bb10"
+    },
+    "code-run.n-timeout.text": {
+      "text": "Two kinds of timeout: the scheduler's own timer going off, or a network timeout raised inside the work.",
+      "source": "f34974544f64"
+    },
+    "code-run.n-expired.text": {
+      "text": "Only a timer that really went off counts as a task timeout; any other timeout is a failure and is attributed separately.",
+      "source": "8e009782cd74"
+    },
+    "code-run.n-cancelled.text": {
+      "text": "Cancelled as a whole: the outcome is cancelled, with the stop's reason as its reason.",
+      "source": "49286e370d74"
+    },
+    "code-run.n-user-stop.text": {
+      "text": "The learner pressed Stop and the platform refused the event from the worker thread: also recorded as cancelled.",
+      "source": "83d71f97c97a"
+    },
+    "code-run.n-finish.text": {
+      "text": "However it ended, hand it to `_finish` to record the outcome, apply the failure policy and wait for the thread.",
+      "source": "d027151889e9"
+    },
+    "code-run.fold-record.label": {
+      "text": "On success record the result, and when the tool returns an error record a failure",
+      "source": "c41e6b74ee09"
+    },
+    "code-run.fold-generic.label": {
+      "text": "Any other exception: this task failed; record the error type and message",
+      "source": "da756ef14a2e"
+    },
+    "code-stop.n-finish-def.text": {
+      "text": "Where a task's outcome is closed out: record, policy, wait for the thread, notify.",
+      "source": "1e7c1649c4bd"
+    },
+    "code-stop.n-outcome.text": {
+      "text": "The outcome is recorded first: whatever happens later, the report can read it.",
+      "source": "9fd5ba3cfedb"
+    },
+    "code-stop.n-policy.text": {
+      "text": "A failure or timeout, with the policy `cancel_all`, makes every other task stop too.",
+      "source": "e4854b06b778"
+    },
+    "code-stop.n-stop-set.text": {
+      "text": "The task has its outcome and the work has no reason to go on: set its stop signal.",
+      "source": "605c1ed066e3"
+    },
+    "code-stop.n-hold.text": {
+      "text": "Wait for the work's thread to really end; the slot stays taken meanwhile, so the next request cannot jump ahead.",
+      "source": "efa5e975f948"
+    },
+    "code-stop.n-released.text": {
+      "text": "The release moment: its difference from the end moment is `late_ms` in the report.",
+      "source": "3c36d62f5304"
+    },
+    "code-stop.n-again.text": {
+      "text": "Another cancel arrived while waiting for the thread: finish waiting, then pass the cancel on; it is not lost.",
+      "source": "1e9dba13931d"
+    },
+    "code-stop.n-cancel-all.text": {
+      "text": "A stop from any of the three sources goes through here: the Stop button, the overall deadline and the failure policy.",
+      "source": "bc8114bf1a29"
+    },
+    "code-stop.n-first-reason.text": {
+      "text": "The first reason wins; later ones do not overwrite it.",
+      "source": "71807a4c9291"
+    },
+    "code-stop.n-reason.text": {
+      "text": "Record the reason, who triggered it and when; the report and `lesson.stop` both use it.",
+      "source": "45ef0b1078db"
+    },
+    "code-stop.n-signal-all.text": {
+      "text": "First set every task's stop signal: a tool hears it within milliseconds.",
+      "source": "4ffa9030c6da"
+    },
+    "code-stop.n-cancel-tasks.text": {
+      "text": "Then cancel every wait that has not ended, but not the task that is making this call.",
+      "source": "89d22ec77bbd"
+    },
+    "code-stop.n-watch.text": {
+      "text": "The watcher coroutine: only the clock and the Stop button need polling.",
+      "source": "9984dd1e7661"
+    },
+    "code-stop.n-poll-stop.text": {
+      "text": "The platform's stop is a flag and does not interrupt coroutines, so it is looked at every 10 ms.",
+      "source": "6263be707cd1"
+    },
+    "code-stop.n-deadline.text": {
+      "text": "The overall deadline counts from the start of the run and takes the same cancel path when it arrives.",
+      "source": "ea2e69644246"
+    },
+    "code-stop.n-sleep.text": {
+      "text": "Hand the loop back: the watcher sleeps most of the time and does not hold a thread.",
+      "source": "5ae52f9b2bd0"
+    },
+    "code-stop.fold-on-stop.label": {
+      "text": "Platform: record the stop event before anything is cancelled",
+      "source": "eda4cbfbab99"
+    },
+    "code-tool.n-missing.text": {
+      "text": "It inherits from ValueError: the tool loop turns it into a structured error with `ok` false instead of crashing the run.",
+      "source": "cd07a1f644e8"
+    },
+    "code-tool.n-stopped-class.text": {
+      "text": "Raised when the tool gives up itself, so the call gets a failed result and not a faked success.",
+      "source": "8d08bbf75fea"
+    },
+    "code-tool.n-read-note.text": {
+      "text": "Read one note; the keyword argument `stop` is the stop signal the scheduler gave this task.",
+      "source": "64de436587e5"
+    },
+    "code-tool.n-unknown.text": {
+      "text": "A note that does not exist is refused at once, without waiting.",
+      "source": "b2de370c980c"
+    },
+    "code-tool.n-wait-event.text": {
+      "text": "Wait on the stop signal, not with a sleep: a sleeping thread cannot hear a stop.",
+      "source": "d971b3562772"
+    },
+    "code-tool.n-probe.text": {
+      "text": "A locked note is noticed after only part of the delay, so its failure comes earlier than a success would.",
+      "source": "e78ad061aa8e"
+    },
+    "code-tool.n-wait.text": {
+      "text": "True means a stop arrived during the wait; this wakes up the moment the signal comes.",
+      "source": "e43191ba44c7"
+    },
+    "code-tool.n-raise-stopped.text": {
+      "text": "Say how long it waited before giving up; the result keeps that number.",
+      "source": "e9f03ddbe347"
+    },
+    "code-tool.n-locked.text": {
+      "text": "A lock is a fault the call arguments ask for: you can see `lock` true in the event.",
+      "source": "aa9762f10a07"
+    },
+    "code-tool.n-result.text": {
+      "text": "The note that was really read, plus the measured waiting time.",
+      "source": "d510081f0084"
+    },
+    "code-decision.title": {
+      "text": "Write a small scheduler: the task graph is read from references, the scheduler registers its own threads, and a slot comes back only when the thread has really ended",
+      "source": "01cc18b45443"
+    },
+    "code-decision.chosen": {
+      "text": "Dependencies are read from the references in the task arguments, not written by hand; the concurrency limit is a semaphore and a slot stays taken until the worker thread has really ended; every task has its own timeout and the whole run has a deadline; cancelling goes through one entry point and tools listen to the stop signal; every task has an outcome and a reason, and the thread registry must be empty when the run ends.",
+      "source": "6d008d992381"
+    },
+    "code-decision.gather.title": {
+      "text": "Throw all tasks into asyncio.gather",
+      "source": "9ae7f7e48cf0"
+    },
+    "code-decision.gather.why_not": {
+      "text": "By default gather raises the first exception as soon as it appears while the other tasks keep running in the background; it also has no concurrency limit, no per-task timeout and no record of outcomes.",
+      "source": "797c7bfba266"
+    },
+    "code-decision.to-thread.title": {
+      "text": "Run the blocking tools with asyncio.to_thread",
+      "source": "37e15c32793c"
+    },
+    "code-decision.to-thread.why_not": {
+      "text": "Convenient, but once a task is cancelled its await ends and it does not tell you whether the thread is still running. This lesson needs the moment the thread really ends, to give back the slot and to say \"no task is left running in the background\".",
+      "source": "e27d0986b539"
+    },
+    "code-decision.task-group.title": {
+      "text": "Manage the whole group with asyncio.TaskGroup",
+      "source": "27240d2ab4d5"
+    },
+    "code-decision.task-group.why_not": {
+      "text": "When any task fails the whole group is cancelled, with no \"carry on\" setting; it also does not record each task's outcome and reason for you.",
+      "source": "6b9e14d1f18f"
+    },
+    "code-decision.sleep-in-tool.title": {
+      "text": "Wait with time.sleep directly in the tool",
+      "source": "61d921064d77"
+    },
+    "code-decision.sleep-in-tool.why_not": {
+      "text": "A sleeping thread cannot hear the stop signal, so a stop has to wait until it has slept; waiting with an Event's wait wakes it up the moment the signal comes.",
+      "source": "7fd56a3bf80d"
+    },
+    "dependency-order.title": {
+      "text": "Dependency graph and scheduling order",
+      "source": "b348de9157ef"
+    },
+    "dependency-order.hypothesis": {
+      "text": "The two reads do not depend on each other and can go out together; the sheet needs both results and must wait for them. In one run, scheduling by dependency takes about one read plus the sheet, serial takes the two reads added together, and ignoring dependencies takes about as long as scheduling by dependency (within a few tens of milliseconds) but the sheet fails for lack of input, so the verdict is not completed.",
+      "source": "00433f92ec4c"
+    },
+    "dependency-order.run.label": {
+      "text": "Three schedules, one after another",
+      "source": "b89beb0d4e51"
+    },
+    "dependency-order.graph.text": {
+      "text": "The levels the scheduler read from the references in the arguments: the reads on level 1, the sheet on level 2; all three variants use the same graph.",
+      "source": "eb2cd1e8e68a"
+    },
+    "dependency-order.reads.text": {
+      "text": "The tool_call of the second read in the by-dependency variant: it went out before the first read's result came back.",
+      "source": "8382aafd5720"
+    },
+    "dependency-order.sheet-result.text": {
+      "text": "The sheet tool's result: MissingInput in the ignoring variant, and no error_type in the first two.",
+      "source": "5b44ad931d09"
+    },
+    "dependency-order.dep-check.text": {
+      "text": "The dependency check of the ignoring variant in the comparison: which task started before the task it depends on had ended.",
+      "source": "9a559467f047"
+    },
+    "dependency-order.walls.text": {
+      "text": "The serial variant's wall-clock time, measured by the backend's monotonic clock; the other two sit beside it in the comparison.",
+      "source": "fad5b170f486"
+    },
+    "dependency-order.peak.text": {
+      "text": "The peak concurrency of the by-dependency variant, recomputed from each task's start and release time.",
+      "source": "1bf03d7d56f0"
+    },
+    "dependency-order.verdict.text": {
+      "text": "The verdict of the ignoring variant.",
+      "source": "2148ba60bd84"
+    },
+    "dependency-order.guide.0.text": {
+      "text": "In one run the same list goes through three schedules, one after another: serial, by dependency and ignoring dependencies. The list is two reads plus a sheet that needs both notes.",
+      "source": "a90334041aaf"
+    },
+    "dependency-order.guide.1.text": {
+      "text": "All three variants use the same dependency graph: the reads on level 1, the sheet on level 2, and the dependencies are read from the references in the arguments.",
+      "source": "98373cd99d3f"
+    },
+    "dependency-order.guide.2.text": {
+      "text": "In the by-dependency variant the second read's call went out before the first read's result came back, and that is the parallelism.",
+      "source": "46115fd98e22"
+    },
+    "dependency-order.guide.3.text": {
+      "text": "In the ignoring variant the sheet starts together with the reads and gets empty values: the tool refuses them and returns MissingInput. The first two variants have no such field.",
+      "source": "ff9edbd2130a"
+    },
+    "dependency-order.guide.4.text": {
+      "text": "The dependency check in the comparison sets every task's start against the end of its dependencies and points out that the ignoring variant's sheet started before the reads ended.",
+      "source": "c00d5445b9c6"
+    },
+    "dependency-order.guide.5.text": {
+      "text": "The wall-clock times sit side by side: serial is longest, by dependency is about half of it, and ignoring dependencies is about as fast as that, but its result is wrong.",
+      "source": "a488977652da"
+    },
+    "dependency-order.guide.6.text": {
+      "text": "Peak concurrency: 1 for serial and 2 for by dependency, because only the two reads can run together.",
+      "source": "14207b410da3"
+    },
+    "dependency-order.guide.7.text": {
+      "text": "Verdict: only the first two variants are complete. Fast is not the same as right.",
+      "source": "64d7a67a82a1"
+    },
+    "dependency-order.conclusion.proves.0": {
+      "text": "In this run, each task's start and end (backend clock), the input the sheet tool received, and the dependency check's judgment of the order of starts.",
+      "source": "435ed641f868"
+    },
+    "dependency-order.conclusion.proves.1": {
+      "text": "The three variants make the same number of tool calls and differ only in time and result: parallelism saves waiting, not work.",
+      "source": "144e2caba2f3"
+    },
+    "dependency-order.conclusion.does_not_prove.0": {
+      "text": "The delay is an injected 200 ms; real slow tools vary, so these ratios are not a general multiple.",
+      "source": "3bc933d27520"
+    },
+    "dependency-order.conclusion.does_not_prove.1": {
+      "text": "There are only two reads, so the parallelism is at most 2; a longer or wider list gains differently.",
+      "source": "51abe3ad8575"
+    },
+    "dependency-order.conclusion.does_not_prove.2": {
+      "text": "Ignoring dependencies is a deliberately wrong schedule. In real systems the error is not always refused by a tool; some quietly use an old value.",
+      "source": "b3dd3395e443"
+    },
+    "concurrency-limit.title": {
+      "text": "Concurrency limit 1, 2 and 4",
+      "source": "08b3b5ad6782"
+    },
+    "concurrency-limit.hypothesis": {
+      "text": "Four notes each get one read and one summary: the smaller the concurrency limit, the longer the wall-clock time, but the number of model calls and tool calls stays the same; peak concurrency, computed from each task's start and release time, does not exceed the limit.",
+      "source": "f84fc0e62179"
+    },
+    "concurrency-limit.run.label": {
+      "text": "Three limits, one after another",
+      "source": "d7431bc16fd5"
+    },
+    "concurrency-limit.branch.text": {
+      "text": "The branch of a summary request: the variant's name first, then the task; the response is paired with it.",
+      "source": "1ebd2ad9bdbb"
+    },
+    "concurrency-limit.queued-read.text": {
+      "text": "The tool_call of the fourth read in the limit 1 variant: it had to wait for the first three to end before it got a slot.",
+      "source": "a9abdb6ec3f3"
+    },
+    "concurrency-limit.peak.text": {
+      "text": "The peak concurrency of the limit 4 variant: recomputed from each task's start and release time.",
+      "source": "9df98c18f2d6"
+    },
+    "concurrency-limit.limit-held.text": {
+      "text": "The check in the comparison: did any variant's peak exceed its limit?",
+      "source": "15c6bfcabfff"
+    },
+    "concurrency-limit.wall-1.text": {
+      "text": "The wall-clock time of the limit 1 variant.",
+      "source": "208769813d1b"
+    },
+    "concurrency-limit.wall-4.text": {
+      "text": "The wall-clock time of the limit 4 variant.",
+      "source": "da667d32fbc6"
+    },
+    "concurrency-limit.calls.text": {
+      "text": "The number of model calls over all three variants.",
+      "source": "18e0e771db5c"
+    },
+    "concurrency-limit.critical.text": {
+      "text": "The longest dependency chain: computed in each variant's report from the task durations measured in that variant. The three values differ, because the model's answer times differ from variant to variant.",
+      "source": "a51cb542afe5"
+    },
+    "concurrency-limit.guide.0.text": {
+      "text": "In one run the same list goes through limits 1, 2 and 4, one after another. The work to be done is the same; watch how the waiting changes.",
+      "source": "972e2101470e"
+    },
+    "concurrency-limit.guide.1.text": {
+      "text": "Every summary request carries its own branch, with the variant's name in front, and the response is paired with it, so they cannot get mixed up.",
+      "source": "19b34dd6cd56"
+    },
+    "concurrency-limit.guide.2.text": {
+      "text": "In the limit 1 variant the fourth read has to wait for the first three to end before it gets a slot, so its call goes out last.",
+      "source": "f54d6e841e48"
+    },
+    "concurrency-limit.guide.3.text": {
+      "text": "Peak concurrency is recomputed from each task's start and release time: in the limit 4 variant it is 4.",
+      "source": "25c3b6a91160"
+    },
+    "concurrency-limit.guide.4.text": {
+      "text": "The check in the comparison sets every variant's peak against its own limit; only a pass shows that all the limits held.",
+      "source": "a94f564f8a82"
+    },
+    "concurrency-limit.guide.5.text": {
+      "text": "The limit 1 variant's wall-clock time comes close to the sum of the task durations.",
+      "source": "bf70d4e7f0ba"
+    },
+    "concurrency-limit.guide.6.text": {
+      "text": "The limit 4 variant's wall-clock time comes close to the longest dependency chain.",
+      "source": "aceeaf527fa2"
+    },
+    "concurrency-limit.guide.7.text": {
+      "text": "The three variants make 12 model calls together: 4 each, because the limit does not change what has to be done.",
+      "source": "688c8f744071"
+    },
+    "concurrency-limit.guide.8.text": {
+      "text": "Each variant's wall-clock time is never below its own longest dependency chain: no larger limit can cross it. The three values differ because the model's answer times differ.",
+      "source": "ba9adb9c499a"
+    },
+    "concurrency-limit.conclusion.proves.0": {
+      "text": "The limit changes the waiting: for the same list the calls are equal, peak concurrency equals the limit, and wall-clock time grows as the limit shrinks.",
+      "source": "0368177629f7"
+    },
+    "concurrency-limit.conclusion.proves.1": {
+      "text": "The peak is recomputed from timestamps, so it and the semaphore confirm each other.",
+      "source": "a23814407d1e"
+    },
+    "concurrency-limit.conclusion.does_not_prove.0": {
+      "text": "In offline test mode the model answers pause for a fixed time; a real provider's latency is not fixed, so the ratios will differ.",
+      "source": "446f68716101"
+    },
+    "concurrency-limit.conclusion.does_not_prove.1": {
+      "text": "A limit above 4 does not go faster: each level has at most four tasks. This lesson does not show provider rate limiting; retrying after it is in {{lesson:reliable-tools}}.",
+      "source": "22b08992318f"
+    },
+    "timeouts-and-failure.title": {
+      "text": "Timeouts, the deadline and failure policy",
+      "source": "92e50b9b3740"
+    },
+    "timeouts-and-failure.hypothesis": {
+      "text": "When one note is slow or locked: without a timeout the run has to wait for it; a task timeout gives it up, the rest finish as usual and the sheet says who is missing; the overall deadline cancels the tasks still running when it arrives; and whether to carry on or cancel everything after a failure decides how many more model requests go out.",
+      "source": "eaa19365d16c"
+    },
+    "timeouts-and-failure.timeouts.label": {
+      "text": "Timeouts and the deadline, one after another",
+      "source": "fa99de9403d1"
+    },
+    "timeouts-and-failure.failure.label": {
+      "text": "Both failure policies, one after another",
+      "source": "bfb0fcf0ee92"
+    },
+    "timeouts-and-failure.stopped-tool.text": {
+      "text": "The read tool's failed result: TaskStopped for a timeout (it heard the stop signal and gave up by itself), NoteLocked for a lock.",
+      "source": "80728399c62e"
+    },
+    "timeouts-and-failure.blocked.text": {
+      "text": "A summary whose dependency did not finish: blocked_by says who blocked it, and it sent no request.",
+      "source": "5ccd9f82aa8e"
+    },
+    "timeouts-and-failure.stop.text": {
+      "text": "lesson.stop when the deadline arrives or the policy fires: the reason, who triggered it and the tasks running at that moment.",
+      "source": "4677034c57f3"
+    },
+    "timeouts-and-failure.late.text": {
+      "text": "In the overall deadline variant, the number of tasks that only really stopped after the scheduler gave up waiting.",
+      "source": "e2a6fd628225"
+    },
+    "timeouts-and-failure.sheet-marker.text": {
+      "text": "The sheet's own marker in the task timeout variant: incomplete, with the missing lesson named.",
+      "source": "3c03930a6b0d"
+    },
+    "timeouts-and-failure.wall.text": {
+      "text": "The wall-clock time of the no-timeout variant.",
+      "source": "88b967184cf5"
+    },
+    "timeouts-and-failure.calls-continue.text": {
+      "text": "The number of model calls in the carry-on-after-failure variant.",
+      "source": "92acc43ee01b"
+    },
+    "timeouts-and-failure.calls-cancel.text": {
+      "text": "The number of model calls in the cancel-all-after-failure variant.",
+      "source": "0d87afa8cda4"
+    },
+    "timeouts-and-failure.orphans.text": {
+      "text": "The closing check: was any task thread still alive when each variant ended?",
+      "source": "1fcf922fde7d"
+    },
+    "timeouts-and-failure.verdict.text": {
+      "text": "The verdict of the cancel-all-after-failure variant.",
+      "source": "bcd7b567bc77"
+    },
+    "timeouts-and-failure.guide.0.text": {
+      "text": "Both runs use the same list. In the first, one note is very slow and three variants run one after another: no timeout, a task timeout and an overall deadline. In the second, one note is locked and both failure policies run.",
+      "source": "034a00233f7b"
+    },
+    "timeouts-and-failure.guide.1.text": {
+      "text": "A timeout and a lock both show up as a structured error from the read tool: TaskStopped is what it raises when it hears the stop signal and gives up, and NoteLocked means the note is locked.",
+      "source": "ccc01505f076"
+    },
+    "timeouts-and-failure.guide.2.text": {
+      "text": "A summary whose dependency did not finish sent no request: blocked_by says who blocked it.",
+      "source": "ef1dcbef6899"
+    },
+    "timeouts-and-failure.guide.3.text": {
+      "text": "When the overall deadline arrives or the failure policy fires, lesson.stop records the reason and the tasks that were running at that moment.",
+      "source": "1140358363a9"
+    },
+    "timeouts-and-failure.guide.4.text": {
+      "text": "A model request already sent cannot be recalled: after the wait was given up the work ran a little longer, and the slot comes back only when it ends.",
+      "source": "0c0368e205ed"
+    },
+    "timeouts-and-failure.guide.5.text": {
+      "text": "The sheet says by itself whether it is complete: in the task timeout variant it says context-budget is missing.",
+      "source": "e9904f4ea483"
+    },
+    "timeouts-and-failure.guide.6.text": {
+      "text": "The no-timeout variant has to wait for the slow note to finish reading (about 1500 ms) before its summary can start; the task timeout gives it up at 500 ms. Total wall-clock also includes the model's answer time, so the gap differs from run to run and can be small.",
+      "source": "9a53ff1f5fa5"
+    },
+    "timeouts-and-failure.guide.7.text": {
+      "text": "In the carry-on variant the number of model calls is 3: the locked note has no summary request.",
+      "source": "f5d0b9a8117c"
+    },
+    "timeouts-and-failure.guide.8.text": {
+      "text": "In the cancel-all variant the number of model calls is 0: the other tasks stop together and not one request went out.",
+      "source": "235cc1a8f13b"
+    },
+    "timeouts-and-failure.guide.9.text": {
+      "text": "When each variant ends, no task thread is still running.",
+      "source": "9800259282cb"
+    },
+    "timeouts-and-failure.guide.10.text": {
+      "text": "Verdict: the cancel-all variant is not completed, the carry-on variant is partial, and each says what is missing.",
+      "source": "c3db7fc885f6"
+    },
+    "timeouts-and-failure.conclusion.proves.0": {
+      "text": "Each task's outcome and reason, how much longer the work ran after the wait was given up, and whether any thread was left when each variant ended.",
+      "source": "aec63e935665"
+    },
+    "timeouts-and-failure.conclusion.proves.1": {
+      "text": "Timeouts and failures never let the run pretend to be complete: the sheet and the report both say what is missing.",
+      "source": "e919c372868d"
+    },
+    "timeouts-and-failure.conclusion.does_not_prove.0": {
+      "text": "The slowness and the failure are injected (a delay parameter and a lock parameter, both written into the call); a real provider's slowness and failures are much less regular.",
+      "source": "fdb1978ade38"
+    },
+    "timeouts-and-failure.conclusion.does_not_prove.1": {
+      "text": "Pressing Stop and disconnecting the event stream do not appear in these two runs; they have to be triggered by hand, see the manual checks below.",
+      "source": "a2e6ea1da737"
+    },
+    "timeouts-and-failure.conclusion.does_not_prove.2": {
+      "text": "\"Cancelled\" in the report only says the scheduler told the task to stop; it does not say whether the provider is still generating.",
+      "source": "c350fc67dbbb"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.help": {
+      "text": "Each scenario runs the same list through several ways in one run; dependency does not call a model.",
+      "source": "0f6c5f84b425"
+    },
+    "inputs.scenario.options.dependency.label": {
+      "text": "Dependency graph and scheduling order (no model)",
+      "source": "b1172d0a51d0"
+    },
+    "inputs.scenario.options.limits.label": {
+      "text": "Concurrency limit 1, 2 and 4",
+      "source": "08b3b5ad6782"
+    },
+    "inputs.scenario.options.timeouts.label": {
+      "text": "Timeouts and the overall deadline",
+      "source": "4b2d044cce72"
+    },
+    "inputs.scenario.options.failure.label": {
+      "text": "Carry on or cancel everything after a failure",
+      "source": "920eddce3814"
+    },
+    "inputs.tool_delay_ms.label": {
+      "text": "Tool delay (ms)",
+      "source": "5889254fb5bd"
+    },
+    "inputs.tool_delay_ms.help": {
+      "text": "How long read_note is told to wait: an injected delay, while the note it reads is real. In offline test mode the model answers pause for the same time.",
+      "source": "391c5374248a"
+    },
+    "inputs.slow_lesson.label": {
+      "text": "The very slow note",
+      "source": "4908f86e8cc4"
+    },
+    "inputs.slow_lesson.help": {
+      "text": "Timeouts scenario: this note takes the slow delay below.",
+      "source": "79f382d21029"
+    },
+    "inputs.slow_lesson.options.none.label": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "inputs.slow_lesson.options.messages-context.label": {
+      "text": "messages-context",
+      "source": "a3ba7c1b7f32"
+    },
+    "inputs.slow_lesson.options.application-state.label": {
+      "text": "application-state",
+      "source": "1a2acf0aec45"
+    },
+    "inputs.slow_lesson.options.context-budget.label": {
+      "text": "context-budget",
+      "source": "5fa622413136"
+    },
+    "inputs.slow_lesson.options.prompt-caching.label": {
+      "text": "prompt-caching",
+      "source": "b06d833b52d8"
+    },
+    "inputs.slow_delay_ms.label": {
+      "text": "Slow delay (ms)",
+      "source": "81fe952ad33a"
+    },
+    "inputs.slow_delay_ms.help": {
+      "text": "Timeouts scenario: how long the slow note takes to read.",
+      "source": "1b6a29a672b3"
+    },
+    "inputs.task_timeout_ms.label": {
+      "text": "Task timeout (ms)",
+      "source": "ab7531f93bf2"
+    },
+    "inputs.task_timeout_ms.help": {
+      "text": "Timeouts scenario: in the task timeout variant, each tool task may run this long after it gets a slot.",
+      "source": "8aa8c5caf926"
+    },
+    "inputs.deadline_ms.label": {
+      "text": "Overall deadline (ms)",
+      "source": "2c14924325c7"
+    },
+    "inputs.deadline_ms.help": {
+      "text": "Timeouts scenario: in the overall deadline variant, counted from the start of that variant; when it is reached, running tasks are cancelled and queued ones never start.",
+      "source": "c92ae0f75c7d"
+    },
+    "inputs.locked_lesson.label": {
+      "text": "The locked note",
+      "source": "b5922ef1f21e"
+    },
+    "inputs.locked_lesson.help": {
+      "text": "Failure scenario: reading this note fails (NoteLocked); the lock is written into the call arguments.",
+      "source": "0676644bd5c1"
+    },
+    "inputs.locked_lesson.options.none.label": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "inputs.locked_lesson.options.messages-context.label": {
+      "text": "messages-context",
+      "source": "a3ba7c1b7f32"
+    },
+    "inputs.locked_lesson.options.application-state.label": {
+      "text": "application-state",
+      "source": "1a2acf0aec45"
+    },
+    "inputs.locked_lesson.options.context-budget.label": {
+      "text": "context-budget",
+      "source": "5fa622413136"
+    },
+    "inputs.locked_lesson.options.prompt-caching.label": {
+      "text": "prompt-caching",
+      "source": "b06d833b52d8"
+    },
+    "inputs.max_concurrency.label": {
+      "text": "Concurrency limit",
+      "source": "652a6f861b6d"
+    },
+    "inputs.max_concurrency.help": {
+      "text": "The concurrency limit shared by the timeouts and failure scenarios, 1 to 4; the dependency and limits scenarios choose their own limits.",
+      "source": "befcdcf8e9f2"
+    },
+    "manual-stop.title": {
+      "text": "Manual checks: stopping and disconnecting the event stream",
+      "source": "9a978522f014"
+    },
+    "manual-stop.paragraphs.0": {
+      "text": "The learner has to trigger the next two by hand; they are not among the comparisons above. {{lesson:streaming-cancel}} explained how they differ, and here you see what they look like with many tasks.",
+      "source": "5c3b7babe05c"
+    },
+    "manual-stop.stop-1.text": {
+      "text": "In the \"Concurrency limit 1, 2 and 4\" exercise change `tool_delay_ms` to 1500 and run it; once the first variant's reads have started, press \"Stop run\".",
+      "source": "eac1830dc706"
+    },
+    "manual-stop.stop-2.text": {
+      "text": "You should see in the events: the reads that were running have a `tool_call` and no `tool_result` (after a stop the platform accepts no more events), the later variants never start, the run ends as cancelled and `cancel_reason` is `user_stop`.",
+      "source": "1bbf0cd6bd03"
+    },
+    "manual-stop.stop-3.text": {
+      "text": "Run it again, and this time press \"Disconnect event stream (run continues)\"; reconnect after a dozen seconds: the run finishes as usual, all the tasks of all three variants complete, and `done` has an extra `client_disconnects`.",
+      "source": "d91f23835292"
+    },
+    "manual-stop.stop-4.text": {
+      "text": "Check the terminal state of both with the `done` event in the run record, not with the last event you saw on the screen.",
+      "source": "58913b537d1a"
+    },
+    "quiz.q1.prompt": {
+      "text": "In this lesson, how is it determined which tasks a task depends on?",
+      "source": "43ec5fe8d617"
+    },
+    "quiz.q1.a.text": {
+      "text": "It is read from the references in the task's arguments",
+      "source": "e6fa10525c6a"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. The arguments say whose result they use, and that is who the task depends on; `Task` reads it out when it is created.",
+      "source": "cf779cbe245c"
+    },
+    "quiz.q1.b.text": {
+      "text": "The execution order written in the list",
+      "source": "049a3cb0c33f"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. There is no hand-written order, and a hand-written order could disagree with the arguments.",
+      "source": "ee9b4128113e"
+    },
+    "quiz.q1.c.text": {
+      "text": "The model decides",
+      "source": "86cd23567e67"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. In this lesson the program reads the dependencies; the model only writes the summaries.",
+      "source": "855a94d25145"
+    },
+    "quiz.q1.explanation": {
+      "text": "Dependencies are read, not declared, so they cannot contradict the values the task really uses.",
+      "source": "af86cf93ce35"
+    },
+    "quiz.q2.prompt": {
+      "text": "Why is the peak concurrency in the report recomputed from start and release times instead of read from the semaphore?",
+      "source": "4e6ae2bfbdc0"
+    },
+    "quiz.q2.a.text": {
+      "text": "So that a disagreement between the semaphore and reality can be noticed",
+      "source": "7ebaac75456e"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. If a slot came back too early, for example, the recomputed peak would exceed the limit.",
+      "source": "155d76b059c7"
+    },
+    "quiz.q2.b.text": {
+      "text": "The semaphore cannot give a number",
+      "source": "3fdeb223ee86"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. It can, but what it reads is its own books.",
+      "source": "db6b1a264e04"
+    },
+    "quiz.q2.c.text": {
+      "text": "To make the report longer",
+      "source": "f72a4ff9e58b"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. This is an independent check, not decoration.",
+      "source": "4977873fb07b"
+    },
+    "quiz.q2.explanation": {
+      "text": "A check that is independent of the thing it checks is the one that proves something.",
+      "source": "408312c1b0dc"
+    },
+    "quiz.q3.prompt": {
+      "text": "When the overall deadline arrives, what happens to a summary request that was already sent?",
+      "source": "358dd7947e14"
+    },
+    "quiz.q3.a.text": {
+      "text": "The scheduler stops waiting for it, its thread waits for the response, the slot comes back afterwards, and the report says how late it was",
+      "source": "aabe527417a9"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. The request cannot be recalled, so the slot waits until it has really ended.",
+      "source": "1feb3122441a"
+    },
+    "quiz.q3.b.text": {
+      "text": "The request is recalled and the provider stops generating",
+      "source": "ad40af53e073"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. A request that has been sent cannot be recalled.",
+      "source": "a46d60596244"
+    },
+    "quiz.q3.c.text": {
+      "text": "Its result is merged into the sheet as usual",
+      "source": "31ce07a7fb2b"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. After the deadline its outcome is cancelled and its result takes no part in the assembly.",
+      "source": "e180eef7c7db"
+    },
+    "quiz.q3.explanation": {
+      "text": "Cancelling stops the waiting and what comes after, not the request that is already on its way.",
+      "source": "86c125bfb5a8"
+    },
+    "quiz.q4.prompt": {
+      "text": "The sheet says `complete` is false and context-budget is missing. What does that tell you?",
+      "source": "0de9c0c6492a"
+    },
+    "quiz.q4.a.text": {
+      "text": "The sheet tool ran with a dependency missing and honestly said what is missing",
+      "source": "d8b9a6bcad70"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. The sheet's `join` is `settled`, so it was told what is missing, and the sheet it returned says itself that it is incomplete.",
+      "source": "3f71c242e550"
+    },
+    "quiz.q4.b.text": {
+      "text": "The sheet tool failed",
+      "source": "f1983b3873a4"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. It succeeded and returned a sheet that marks itself incomplete.",
+      "source": "7af460d88be8"
+    },
+    "quiz.q4.c.text": {
+      "text": "All four summaries finished",
+      "source": "bf20e563ebe2"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. The summary of the missing lesson did not finish.",
+      "source": "b4f63abdfa3e"
+    },
+    "quiz.q4.explanation": {
+      "text": "A partial result must say itself what is missing, not leave the reader to guess.",
+      "source": "c0793a35ed1d"
+    },
+    "quiz.q5.prompt": {
+      "text": "When is the failure policy `cancel_all` a better choice than `continue`?",
+      "source": "f00c26eab8bf"
+    },
+    "quiz.q5.a.text": {
+      "text": "Every later result depends on the one that failed, and carrying on is only wasted money",
+      "source": "9e6365545a67"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. The other tasks' results are then of no use, and stopping early saves the requests that have not gone out.",
+      "source": "7cd41201d04e"
+    },
+    "quiz.q5.b.text": {
+      "text": "Always",
+      "source": "f317a2f81afa"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. When only one note is missing, the other results are still useful and carrying on is right.",
+      "source": "993a1b631ce9"
+    },
+    "quiz.q5.c.text": {
+      "text": "When the failed task does not affect the other tasks",
+      "source": "a472d04f4fcb"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. When it does not affect the others, just carry on.",
+      "source": "ff7817f5dcef"
+    },
+    "quiz.q5.explanation": {
+      "text": "Each policy has its price: carrying on can waste money, and cancelling everything can throw away useful results.",
+      "source": "59816135b7b4"
+    },
+    "quiz.q6.prompt": {
+      "text": "The learner only pressed \"Disconnect event stream\" and did not press Stop. What happens to the run on the backend?",
+      "source": "3e94e90d0b16"
+    },
+    "quiz.q6.a.text": {
+      "text": "It finishes as usual, the terminal state is completed, and `done` has an extra client_disconnects",
+      "source": "07901c9a95e0"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. The reader of the events left; the run that writes them has no reason to stop.",
+      "source": "d1dfda7de7ce"
+    },
+    "quiz.q6.b.text": {
+      "text": "All tasks are cancelled",
+      "source": "232176417575"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. That happens when you press \"Stop run\" or close the page.",
+      "source": "b9c27ef37c8f"
+    },
+    "quiz.q6.c.text": {
+      "text": "The run pauses and continues after a reconnect",
+      "source": "cc91a9d65967"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. A run does not pause because nobody reads its events.",
+      "source": "4c9231f60b8f"
+    },
+    "quiz.q6.explanation": {
+      "text": "The terminal state is the `done` the backend wrote, not the last event on the screen.",
+      "source": "d011fb89ccdb"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Timeouts and the overall deadline\" and find the evidence that the read tool heard the stop signal and gave up by itself.",
+      "source": "5a453536e95c"
+    },
+    "check-hunt.explanation": {
+      "text": "In the read tool's tool_result, `error_type` is TaskStopped: when the timeout arrived the scheduler set this task's stop signal, the tool was woken up in the middle of its wait and raised TaskStopped, and the call got a structured error with `ok` false instead of a faked success. The same result has no note, because the note was not read to the end.",
+      "source": "8f5681ee004d"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Tick each item once you have done it, against your own runs and this lesson's source.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran all four exercises and can say why the variants in each comparison reach different verdicts.",
+      "source": "5e78c1c67f26"
+    },
+    "check-points.item-2.text": {
+      "text": "In the \"ignoring dependencies\" variant I found MissingInput, and in the dependency check I found the task it points out.",
+      "source": "12c1177cf3ee"
+    },
+    "check-points.item-3.text": {
+      "text": "In the comparison for the concurrency limit I checked the three variants' peak concurrency and call counts.",
+      "source": "0c84a0d566ba"
+    },
+    "check-points.item-4.text": {
+      "text": "In the \"overall deadline\" variant I found lesson.stop and saw the tasks that only stopped after the wait was given up.",
+      "source": "d7529abf1c66"
+    },
+    "check-points.item-5.text": {
+      "text": "I pressed Stop by hand once and disconnected the event stream once, and checked both terminal states with the done event.",
+      "source": "cb85676404e2"
+    },
+    "code_notes.Ref.note": {
+      "text": "A reference in a task's arguments to one field of another task; dependencies are read from it.",
+      "source": "0dc37f5a7bb0"
+    },
+    "code_notes.levels.note": {
+      "text": "Puts tasks on levels by dependency: level 1 depends on nothing, tasks on one level are independent.",
+      "source": "ebc32e185db1"
+    },
+    "code_notes._in_thread.note": {
+      "text": "The scheduler starts its own worker thread and registers it, so it knows when it has really ended.",
+      "source": "fd2c3e95bdad"
+    },
+    "code_notes.join.note": {
+      "text": "A task's dependency policy: all needs every dependency done, settled runs once they all have an outcome.",
+      "source": "7a3b1bba1792"
+    },
+    "code_notes.settled.note": {
+      "text": "A value of join: run once the dependencies have an outcome; the task itself marks what is missing.",
+      "source": "6fc85159751d"
+    },
+    "code_notes.wall_ms.note": {
+      "text": "The run's wall-clock time, measured by the backend's monotonic clock, in milliseconds.",
+      "source": "26e2776b2ef4"
+    },
+    "code_notes.serial_ms.note": {
+      "text": "The sum of task durations: what it would take to run them one by one.",
+      "source": "38cc00ea9060"
+    },
+    "code_notes.deadline_ms.note": {
+      "text": "The overall deadline: counted from the start, when reached it cancels tasks that have not ended.",
+      "source": "cef37ba23056"
+    },
+    "code_notes._watch.note": {
+      "text": "The watcher coroutine: looks at the clock and the Stop button every 10 ms.",
+      "source": "c9e53079c812"
+    },
+    "code_notes.cancel_all.note": {
+      "text": "The entry point that cancels everything; also the name of the failure policy cancel_all.",
+      "source": "05595851a72d"
+    },
+    "code_notes.late_ms.note": {
+      "text": "How much longer a task's work ran after the wait for it was given up.",
+      "source": "b30ab884b923"
+    },
+    "code_notes.TaskStopped.note": {
+      "text": "The error the read tool raises when it hears the stop signal; it becomes a failed tool result.",
+      "source": "4fa31f81e928"
+    },
+    "code_notes.MissingInput.note": {
+      "text": "A task refused for lacking the values it depends on: a structured error from the tool.",
+      "source": "729e7c419d49"
+    }
+  }
+}

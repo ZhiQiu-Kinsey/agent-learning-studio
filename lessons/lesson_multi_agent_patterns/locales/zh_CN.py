@@ -1,0 +1,102 @@
+"""multi-agent-patterns runtime text: Chinese (source language)."""
+from lessons.lesson_multi_agent_patterns.locales import Texts
+
+TEXTS = Texts(
+    docs={
+        "d1": "路由时模型只输出一个标签。回复第一行不在可选标签里，就走兜底标签 other，原文另外记下。",
+        "d2": "编排者拆出的子任务先由程序校验。子任务最多 4 个，超出就整份不用，一个工人也不派。",
+        "d3": "评估者-优化者的迭代上限 max_iters 最大为 3。修订后和上一版完全相同，就提前停止。",
+        "d4": "编排者最多拆出 6 个子任务，工人全部并行执行。",
+    },
+    doc_titles={
+        "d1": "课堂笔记：工作流模式",
+        "d2": "课堂笔记：编排者-工人",
+        "d3": "课堂笔记：修订循环",
+        "d4": "补充笔记：编排者-工人",
+    },
+    doc_block="【{id}】{title}\n{text}",
+    topic_names={
+        "fallback_label": "路由的兜底标签",
+        "worker_cap": "编排者的子任务上限",
+        "max_iters": "修订循环的迭代上限",
+    },
+    task_brief=("任务：给学习者出 3 道四选一题，下面三个考点各一道：fallback_label（路由的兜底标签）、"
+                "worker_cap（编排者的子任务上限）、max_iters（修订循环的迭代上限）。\n"
+                "每道题写成 JSON：{\"topic\": 考点, \"question\": 题干, \"options\": [4 个选项], "
+                "\"answer\": 正确选项的下标 0 到 3, \"evidence\": {\"doc\": 资料编号, \"quote\": 资料原文}}。\n"
+                "要求：quote 必须逐字摘自 doc 那份资料；正确选项要写出资料里的原值。"),
+    outdated_rule="规则：d4 是旧版草稿，已经过时。它和其他资料冲突时以其他资料为准，不能拿它当证据。",
+    research_instruction=("这一步做研究：从资料里为每个考点找出原值和原文。只输出 JSON："
+                          "{\"facts\": [{\"topic\": 考点, \"value\": 原值, \"doc\": 资料编号, \"quote\": 资料原文}]}。"
+                          "资料里找不到的考点不要写。"),
+    write_instruction="这一步出题：根据事实列表，每个考点出一道题。只输出 JSON：{\"questions\": [...]}，每道题的格式见任务说明。",
+    review_instruction=("这一步审核：逐题核对 quote 是否逐字出自资料、正确选项是否是原值，有问题就改。只输出 JSON："
+                        "{\"verdict\": \"pass\" 或 \"revised\", \"questions\": [...]}。"),
+    single_instruction="一次做完：核对资料后直接出题。只输出 JSON：{\"questions\": [...]}，每道题的格式见任务说明。",
+    docs_header="资料：",
+    facts_header="事实列表（JSON）：",
+    questions_header="待审核的题目（JSON）：",
+    single_system="你是课程助教，根据给定资料为学习者出题。",
+    role_prompts={
+        "researcher": "你是研究员，只负责从资料里找事实，不出题。",
+        "writer": "你是出题人，只根据给你的事实出题，不另找资料。",
+        "reviewer": "你是审核人，只负责逐题核对证据，必要时修改题目。",
+    },
+    verifier_not_list="验证器需要一个题目列表，收到的不是列表",
+    problem_labels={
+        "format": "题目格式不对（题干、4 个不重复的选项、answer 为 0 到 3 的整数）",
+        "quote_not_found": "quote 没有逐字出现在它标的资料里",
+        "outdated_source": "证据来自已经过时的旧版草稿 d4",
+        "wrong_answer": "正确选项不是资料里的原值，或别的选项也写了原值",
+        "missing": "没有这个考点的题",
+        "duplicate": "这个考点出了不止一道题",
+    },
+    plan_reason="任务图：谁在什么上下文里做哪一步；最后都交给同一个程序验证器。",
+    plan_step="{agent} · {role}：{detail}",
+    plan_details={
+        "solo": "读四份资料、出题、自查，一次请求",
+        "research_all": "新请求：任务、规则和全部资料，交回事实列表",
+        "write_from_facts": "新请求：只拿到上一步的事实列表，出题",
+        "review_with_docs": "新请求：全部资料和草稿，逐题核对",
+        "stage_research": "同一份消息历史，换上研究员提示词",
+        "stage_write": "同一份消息历史，换上出题人提示词，看得到研究阶段的回复",
+        "stage_review": "同一份消息历史，换上审核人提示词，看得到前两个阶段",
+        "research_shard": "独立上下文，只看资料 {docs}，与其他研究员并行",
+        "merge": "合并事实，记下重复和冲突，不替谁裁决",
+        "write_merged": "独立上下文：交接包和合并后的事实，不看资料",
+        "review_cited": "独立上下文：交接包、草稿和草稿引用的资料",
+        "verify": "程序验证器：同一份验收集",
+    },
+    mode_names={"single": "单 Agent", "workflow": "固定流程", "roles": "角色切换", "multi": "独立多 Agent"},
+    role_names={"assistant": "助教", "researcher": "研究员", "writer": "出题人", "reviewer": "审核人", "program": "程序"},
+    handoff_names={"minimal": "最小交接：任务和分到的资料", "with_rules": "交接包带规则：再加旧版资料规则"},
+    handoff_not_used="不适用：只有独立多 Agent 用交接包",
+    report_summary=("四种模式做同一个任务，最终题目都交给同一个程序验证器；用量只取服务商报告的 total_tokens，"
+                    "墙钟时间由后端测量。下表每行是一次模型调用和它的上下文里实际有什么。"),
+    check_topic="考点 {topic}：{name}",
+    check_ok="证据可核对，正确选项是资料里的原值",
+    check_verifier="验证器执行",
+    label_task="任务验收",
+    value_task="{passed}/{total} 个考点通过",
+    label_model_calls="模型调用数",
+    label_total_tokens="累计 total_tokens",
+    value_not_reported="未报告",
+    tokens_partly_reported="{total}（另有 {missing} 次调用未报告）",
+    label_wall_ms="墙钟时间（毫秒）",
+    label_identities="运行标识与角色",
+    value_identities="{identities} 个运行标识、{roles} 种角色",
+    label_input_chars="输入字符合计",
+    label_conflicts="合并冲突（考点的值互相矛盾）",
+    label_duplicates="重复研究的考点",
+    label_handoff="交接包",
+    label_note="学习者备注",
+    value_empty="（空）",
+    value_yes="是",
+    value_no="否",
+    value_none="无",
+    list_separator="、",
+    ledger_columns=("运行标识", "角色", "分支", "轮次", "消息数", "输入字符", "看到的资料", "看到旧版规则",
+                    "total_tokens", "耗时（毫秒）"),
+    merge_detail="{duplicates} 个考点被不止一个研究员查过，{conflicts} 个考点的值互相矛盾。",
+    answer="{mode}：{passed}/{total} 个考点通过验证器，模型调用 {calls} 次，墙钟 {wall} 毫秒。",
+)

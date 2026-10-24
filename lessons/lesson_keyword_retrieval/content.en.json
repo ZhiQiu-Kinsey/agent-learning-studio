@@ -1,0 +1,1386 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "KNOWLEDGE / KEYWORD RETRIEVAL",
+      "source": "6bf20be585f0"
+    },
+    "hero.headline": {
+      "text": "Score chunks by the words they share,",
+      "source": "3f6616649701"
+    },
+    "hero.highlight": {
+      "text": "take every point apart, and say why a miss happened.",
+      "source": "eeda08e18e96"
+    },
+    "hero.takeaway": {
+      "text": "BM25 combines how rare each query term is, how often it appears in a chunk and how long the chunk is into one score; a query set records which sections should be found, so hits and misses can be checked one by one. This lesson calls no model.",
+      "source": "c96eac3d97c1"
+    },
+    "concepts.01-keyword.label": {
+      "text": "01 / MATCH",
+      "source": "6439fc594e6d"
+    },
+    "concepts.01-keyword.title": {
+      "text": "Only shared words count",
+      "source": "80525bdb9c4d"
+    },
+    "concepts.01-keyword.description": {
+      "text": "Keyword retrieval scores each chunk on one thing only: which words it shares with the query. Codes and names are found precisely; a reworded question is not.",
+      "source": "251188bbfee1"
+    },
+    "concepts.02-idf.label": {
+      "text": "02 / RARITY",
+      "source": "48d07aa04479"
+    },
+    "concepts.02-idf.title": {
+      "text": "Rare words weigh more",
+      "source": "019c5e830055"
+    },
+    "concepts.02-idf.description": {
+      "text": "Inverse document frequency measures how rare a term is: in the Chinese run only 1 of 38 chunks contains the word for \"maximum\", so it weighs 3.22; a word found in 12 chunks weighs only 0.75.",
+      "source": "2398d6894e18"
+    },
+    "concepts.03-bm25.label": {
+      "text": "03 / SCORE",
+      "source": "53390253331b"
+    },
+    "concepts.03-bm25.title": {
+      "text": "A score adds up term by term",
+      "source": "64e3e40fdde9"
+    },
+    "concepts.03-bm25.description": {
+      "text": "BM25 gives each query term a contribution: inverse document frequency times a saturated term frequency, discounted for long chunks; the contributions add up to the score.",
+      "source": "3a2a83be051e"
+    },
+    "concepts.04-miss.label": {
+      "text": "04 / MISS",
+      "source": "21abc15485b8"
+    },
+    "concepts.04-miss.title": {
+      "text": "What should have been found",
+      "source": "f09005ba17b7"
+    },
+    "concepts.04-miss.description": {
+      "text": "A query set records, for each query, the sections a person marked as the answer; when none of them reach the first `top_k`, that is a retrieval miss, and the reason is found in the chunks themselves.",
+      "source": "133d4f277b42"
+    },
+    "section-1.title": {
+      "text": "What retrieval has to answer",
+      "source": "3af555c76cec"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Given a query, find the few chunks most likely to hold the answer, and say why they rank first. {{lesson:document-loading}} cut the Bluestone Library Handbook into 36 chunks for the English run, each with an id such as `rooms:7-11`, which points back to lines 7 to 11 of the study rooms document. A reader asks \"What is the maximum overdue charge per item?\" and the program has to pick a few of those chunks for the next step. This lesson calls no model: every score is computed by local Python, and the same input always gives the same result. A chunk id is the address of the evidence: whatever id appears in the results, you can go back and check those lines.",
+      "source": "6a0bb644b041"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Why not hand the whole handbook to the model? This one is small, but a real collection runs to thousands of documents and will not fit in the context; even when it fits, unrelated passages dilute the one that matters. Retrieval produces a short ranked list, each line holding a chunk id, a score and a rank. The list has to be explainable: the same query asked tomorrow should return the same list, and when a chunk ranks first you should be able to say which terms earned how many points. That is the question retrieval answers: which chunks, in what order, and on what grounds.",
+      "source": "58158d538a7e"
+    },
+    "section-1.paragraphs.2": {
+      "text": "This lesson starts with the most direct kind, keyword retrieval. It looks only at the words a query and a chunk share; the rarer those words are and the more often they appear, the higher the score. The runner `runtime.py` takes the standard chunks from `default_chunks` and builds a `BM25Index`; `search` returns a list of `Hit` items, each with `chunk_id`, `score` and `rank`, and `detail` holds every term's contribution. Each run first emits a `lesson.index` event with the chunk count, the average length and the parameters. Keyword retrieval does not understand meaning; it matches literally. The upside is that every point traces back to a specific term; the downside is that the same idea in other words does not match. This lesson looks at both sides.",
+      "source": "2b78fb89de27"
+    },
+    "section-1.paragraphs.3": {
+      "text": "Retrieval only finds candidates. A chunk ranking first does not mean it answers the question, let alone that it can be trusted: the top 5 for `q03` include a reader comment that says \"ignore all previous instructions\". Whether an answer is right and a source trustworthy is the business of {{lesson:rag-citations}}. This lesson answers a narrower question first: did the chunks that should be found appear in the first few results? That question has annotated answers that can be checked query by query, and it is where every later improvement to retrieval starts.",
+      "source": "4943d9611d20"
+    },
+    "section-2.title": {
+      "text": "Term frequency and inverse document frequency",
+      "source": "ec4af9073e45"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Common terms weigh little and rare terms weigh a lot: that is where BM25 starts. Take `q01`, \"How many items can I borrow on a B2 research card?\". After tokenizing, five terms remain: \"items\", \"borrow\", \"b2\", \"research\" and \"card\". \"card\" appears in 16 of 36 chunks, \"borrow\" in only 6. If every shared term earned one point, chunks full of \"card\", \"level\" and \"account\" would crowd the top and the one paragraph that states the borrowing limits would be buried. BM25's first step is to price each term by how rare it is.",
+      "source": "5c6a92681642"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Keep two counts apart. Term frequency is how many times a term occurs in one chunk; document frequency is how many chunks contain the term at all, however often it occurs in each. Inverse document frequency turns document frequency upside down: `idf = ln((N − df + 0.5) / (df + 0.5))`, where `N` is the number of chunks. Two by hand: \"charge\" is in 3 chunks, 33.5 ÷ 3.5 ≈ 9.57, whose natural log is about 2.26; \"card\" is in 16, 20.5 ÷ 16.5 ≈ 1.24, natural log about 0.22. One occurrence of the rare term is worth ten of the common one. The 0.5 is smoothing: without it, a term found in every chunk or in none would divide by zero or take the log of zero.",
+      "source": "d858609899c7"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Tokenizing decides what a \"term\" is. English text is split on spaces and punctuation, lowercased, and stop words such as `the` and `how` are dropped; Chinese has no spaces, so `tokenize` hands each run of Chinese characters to `cjk_bigrams`, which cuts it into overlapping two-character pieces. Stop characters act as separators and are dropped; both lists live in `stopwords.json`. Codes such as `r-305`, `b2` and `0.5` stay whole, because those are exactly what exact queries ask for. The rules must be the same on both sides: if the query and the chunks were cut differently, the same word would count as two terms.",
+      "source": "2942996feb63"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The cost of bigrams shows in Chinese runs: a three-character word yields one piece that is not a word at all, though since it only occurs where the full word does, it becomes a rare and accurate clue. A piece left with a single character is kept as is, but the index holds only two-character pieces, so it almost never matches: in the Chinese `q05`, the word for \"book\" stands alone after a stop word is removed and matches none of the 38 chunks. English runs see something similar: `maximum` in `q03` appears in no chunk, because the handbook says `capped`. Tokenizing is not a detail: it decides which queries have a chance to hit.",
+      "source": "05734e7a19b9"
+    },
+    "deep-dive-bigrams.title": {
+      "text": "Why Chinese text is cut into two-character pieces",
+      "source": "b084458b47de"
+    },
+    "deep-dive-bigrams.summary": {
+      "text": "How to tokenize a language without spaces, and what this choice buys and costs.",
+      "source": "d79d4c422d3c"
+    },
+    "deep-dive-bigrams.paragraphs.0": {
+      "text": "English comes with spaces, so word boundaries are nearly free. Chinese does not: either a segmentation library splits text into dictionary words using statistical models, or you step back, skip word boundaries altogether and treat every two adjacent characters as one search unit. The reference sparse engine focuses on English words and codes; this lesson must support both languages without a third-party segmenter, so Chinese is cut into character bigrams.",
+      "source": "c1a7a5fc450a"
+    },
+    "deep-dive-bigrams.paragraphs.1": {
+      "text": "The upside is that matching does not depend on a dictionary: the same four-character phrase in a query and in the handbook always yields the same three pieces, and new words or names are never shredded for being missing from a dictionary. There are three downsides. Noise pieces that are not words still take part in scoring. The vocabulary swells: the 38 Chinese chunks yield 1039 distinct pieces, while the 36 English chunks have only 502 distinct words. And a lone character matches no piece at all.",
+      "source": "c265825ab5b0"
+    },
+    "deep-dive-bigrams.paragraphs.2": {
+      "text": "English has trade-offs too. `WORD_OR_CODE` keeps a hyphen, dot or colon between letters and digits, so `r-305` and `20:00` are one term each; it also means a query written \"R 305\" will not match. The stop word list removes words such as `how`, `many` and `can`, so the query `How many items can I borrow on a B2 research card?` keeps just 5 terms. A longer list removes more noise and is more likely to remove a word that matters, such as `not`.",
+      "source": "d754c02a765a"
+    },
+    "deep-dive-bigrams.paragraphs.3": {
+      "text": "How can you tell whether a miss comes from tokenizing? Take apart the annotated chunk's score and look at the query terms' frequencies in it. If a query term and a chunk term mean the same and differ only in how they were cut, such as a query written \"R 305\" against \"R-305\" in the handbook, it is a tokenizing problem and a better rule fixes it; if they mean the same with entirely different words, such as \"late fee\" and \"overdue charge\", no tokenizer can match them: that is a wording problem, solved by rewriting the query or matching another way.",
+      "source": "e2d9e37f0ece"
+    },
+    "predict-search-count.prompt": {
+      "text": "Before running \"Top 5 (default)\" in the lab, guess: how many lesson.search events will one run emit? Hint: one per query.",
+      "source": "1279bff94883"
+    },
+    "mq-idf.rare-term.prompt": {
+      "text": "A term appears in 30 of all 36 chunks. What happens to its inverse document frequency?",
+      "source": "3bb7f7745ee5"
+    },
+    "mq-idf.rare-term.a.text": {
+      "text": "The raw value is negative; the code floors it at a tiny value, so it adds almost nothing",
+      "source": "e2acb576fd51"
+    },
+    "mq-idf.rare-term.a.feedback": {
+      "text": "Right. 6.5 ÷ 30.5 is below 1, so its log is negative; `IDF_FLOOR` stops it from subtracting points, and it adds almost none.",
+      "source": "2f6e73a65548"
+    },
+    "mq-idf.rare-term.b.text": {
+      "text": "High, because it appears so often",
+      "source": "6a271fe105be"
+    },
+    "mq-idf.rare-term.b.feedback": {
+      "text": "No. Appearing everywhere means it cannot tell chunks apart, so its weight should be low.",
+      "source": "8275130abe85"
+    },
+    "mq-idf.rare-term.c.text": {
+      "text": "It depends on how often it occurs in one chunk",
+      "source": "833a8dcd60b4"
+    },
+    "mq-idf.rare-term.c.feedback": {
+      "text": "No. That is term frequency; inverse document frequency only counts how many chunks contain the term.",
+      "source": "f0c836074b6b"
+    },
+    "mq-idf.rare-term.explanation": {
+      "text": "Inverse document frequency depends only on document frequency: the more chunks contain a term, the less it is worth, and past half of them the raw value turns negative.",
+      "source": "e366f3f720de"
+    },
+    "section-3.title": {
+      "text": "How to read a BM25 score",
+      "source": "38de9003ecf1"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Take one hit's score apart term by term and see what length normalization does. The BM25 score is the sum of the query terms' contributions, and one term contributes `idf × tf × (k1 + 1) / (tf + k1 × norm)`, where `norm = 1 − b + b × length / avg_length`, `length` being the chunk's term count and `avg_length` the average over all chunks. Each factor has one job: inverse document frequency for rarity, the term frequency part for repetition, the length normalization factor for chunk length. A term the chunk does not contain contributes 0. So reading a score means reading a table: one row per query term, three factors multiplied into that row's contribution, and the contribution column summed.",
+      "source": "f1bd50cd55ef"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Read the default run of \"Take one result's score apart\". The top result for `q03` is lines 7 to 17 of the charges document, 43 terms long, a little longer than the average of 37.78, so the length normalization factor is 0.25 + 0.75 × 43 ÷ 37.78 ≈ 1.10. \"overdue\" occurs 3 times; its term frequency part is 3 × 2.5 ÷ (3 + 1.5 × 1.10) ≈ 1.61, which times an inverse document frequency of 1.3695 gives 2.2062. \"charge\" occurs once, so its part is only 0.94, but its inverse document frequency is 2.2588 and it contributes 2.1265, almost as much. Three terms add up to 6.539; \"maximum\" contributes 0. The largest contribution need not come from the most repeated term: here one occurrence of a rarer term nearly matches three of a commoner one.",
+      "source": "d4e6609a9db6"
+    },
+    "section-3.paragraphs.2": {
+      "text": "The term frequency part saturates: 3 occurrences earn only about 1.7 times what one does, and no number of repeats can push it past `k1 + 1 = 2.5`. That stops a chunk from topping the list by repeating a keyword ten times. Length normalization penalizes long chunks: one occurrence in a long chunk says less than one in a short chunk. Set `b` to 0 to switch it off and the charges chunk rises from 6.539 to 6.8237, because it had been paying a small penalty for being longer than average. Under different parameters the same chunk may keep its rank while its score changes; when comparing parameters, look at ranks, not just scores.",
+      "source": "cdfbb015a32e"
+    },
+    "section-3.paragraphs.3": {
+      "text": "A score is not a probability, and it cannot be compared across queries. More query terms mean more terms to add, so long queries score higher by nature; a score of 6.5 tops the list for `q03` and might not even appear for a query made of five common words. A score answers one thing only: under this query, which chunk ranks above which. The report check \"Term contributions add up to the result's score\" verifies that the sum hides nothing else. To compare retrieval quality across queries, look at hits and ranks, not at how big the scores are.",
+      "source": "48c1d63909b8"
+    },
+    "deep-dive-hand.title": {
+      "text": "BM25 by hand: what k1 and b each control",
+      "source": "835aa0954b39"
+    },
+    "deep-dive-hand.summary": {
+      "text": "Work one term's contribution through from start to end, then see which way each parameter pushes it.",
+      "source": "6d2ed85cc365"
+    },
+    "deep-dive-hand.paragraphs.0": {
+      "text": "Start with \"charge\" in lines 7 to 17 of the charges document. There are 36 chunks and the document frequency is 3, so inverse document frequency is the natural log of (36 − 3 + 0.5) ÷ (3 + 0.5) ≈ 9.571, about 2.2588. The chunk has 43 terms against an average of 37.78 and `b = 0.75`, so the length normalization factor is 0.25 + 0.75 × 1.1382 ≈ 1.1037. With a term frequency of 1 and `k1 = 1.5`, the term frequency part is 1 × 2.5 ÷ (1 + 1.5 × 1.1037) = 2.5 ÷ 2.6556 ≈ 0.9414. The contribution is 2.2588 × 0.9414 ≈ 2.1265, the same as that row of the report table.",
+      "source": "099741bc4ef3"
+    },
+    "deep-dive-hand.paragraphs.1": {
+      "text": "`k1` controls how fast saturation sets in. With `norm = 1` and `k1 = 1.5`, term frequencies 1, 2, 4 and 8 give parts of 1.00, 1.43, 1.82 and 2.11, each step smaller than the last, with a ceiling of 2.5. At `k1 = 0` every count gives 1, so only presence matters; a very large `k1` approaches counting linearly. In the lab, raising `k1` to 3 lifts the charges chunk from 6.539 to 7.3038, because two of its terms occur three times.",
+      "source": "e01261f9a700"
+    },
+    "deep-dive-hand.paragraphs.2": {
+      "text": "`b` controls how strong the length discount is. For the same 43-term chunk, `b = 0` gives a factor of 1 and ignores length; `b = 0.75` gives 1.1037; `b = 1` gives 1.1382, fully proportional to length. A larger `b` helps short chunks and hurts long ones. Inverse document frequency has one more edge: past half the chunks the raw value is negative. To take a made-up example, if 20 of 36 chunks contain a term, 16.5 ÷ 20.5 ≈ 0.80, whose log is about −0.22. The code lifts it to a tiny positive number with `IDF_FLOOR`; otherwise matching one more common term would cost points.",
+      "source": "2a4ce2fea47d"
+    },
+    "deep-dive-hand.paragraphs.3": {
+      "text": "`k1 = 1.5` and `b = 0.75` are the starting values of the reference engine and most textbooks, not values tuned for this handbook. Parameters should be compared on the query set: change one value, run the hit table again, and see whether hits and ranks moved. On this small corpus the top result for `q03` is the same under all three settings; only the order further down changes.",
+      "source": "342d04ebb2eb"
+    },
+    "mq-length.length-norm.prompt": {
+      "text": "If `b` goes from 0.75 to 0, what happens to the score of a chunk shorter than average?",
+      "source": "4634a4ad1261"
+    },
+    "mq-length.length-norm.a.text": {
+      "text": "It drops: the bonus it got for being short is gone",
+      "source": "2f2b7fdd09ce"
+    },
+    "mq-length.length-norm.a.feedback": {
+      "text": "Right. A short chunk's factor is below 1; switched off, it becomes 1 and the term frequency part shrinks.",
+      "source": "da7219b56a94"
+    },
+    "mq-length.length-norm.b.text": {
+      "text": "It rises: length no longer counts, so every chunk gains",
+      "source": "b6e141b994ac"
+    },
+    "mq-length.length-norm.b.feedback": {
+      "text": "No. Chunks longer than average rise; short ones drop.",
+      "source": "e7ef19b66271"
+    },
+    "mq-length.length-norm.c.text": {
+      "text": "It stays the same: `b` only affects inverse document frequency",
+      "source": "50ebc722b50f"
+    },
+    "mq-length.length-norm.c.feedback": {
+      "text": "No. `b` appears only in the length normalization factor and has nothing to do with inverse document frequency.",
+      "source": "93d36eae6f94"
+    },
+    "mq-length.length-norm.explanation": {
+      "text": "The larger `b`, the stronger the length discount: short chunks gain and long ones lose. At `b = 0` every chunk is treated as average length.",
+      "source": "3c8caf2f47e7"
+    },
+    "walkthrough.title": {
+      "text": "One query, from text to a row of the hit table",
+      "source": "920bed9d81cc"
+    },
+    "walkthrough.description": {
+      "text": "What one search does, step by step. The code is a simplified sketch and the numbers come from this lesson's deterministic computation; the real values are the lesson.search and lesson.report events of your own run.",
+      "source": "ac13e86c82c6"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Tokenize",
+      "source": "487857973b92"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The query goes through the same tokenizer as the chunks; a repeated query term counts once.",
+      "source": "e2f3041559b6"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "terms in lesson.search",
+      "source": "3a07c79568a8"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "BM25Index",
+      "source": "2c8a45ed2d60"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Look up rarity",
+      "source": "19db50bd576c"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Each term's document frequency becomes its inverse document frequency; a term that never occurs still has a value, it just never applies.",
+      "source": "2e7907c1a417"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "terms[].idf in lesson.score",
+      "source": "24d1d361f3c1"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "BM25Index",
+      "source": "2c8a45ed2d60"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Score every chunk",
+      "source": "bcbac02ca100"
+    },
+    "walkthrough.step-3.body": {
+      "text": "For every chunk, each query term gets a contribution; chunks sharing no term are skipped.",
+      "source": "09561a962cea"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "hits[].terms in lesson.search",
+      "source": "0097a764cd97"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "BM25Index",
+      "source": "2c8a45ed2d60"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Sort and keep the top few",
+      "source": "dfd36f5a7222"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Sort by total score, break ties by corpus order, keep the first `top_k`.",
+      "source": "92b6f8ea17d5"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "hits[].rank in lesson.search",
+      "source": "e62e5a9fb645"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Compare with the annotations",
+      "source": "656c3597be62"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Check which sections the results cover against the annotated ones: hit or not, complete or not, and the rank of the first hit.",
+      "source": "5ef4ee0ff050"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "judge in lesson.search",
+      "source": "93e082cc3720"
+    },
+    "section-4.title": {
+      "text": "Query set and hit table",
+      "source": "b1b3405d6fa3"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Mark, for a set of queries, the sections each should find, then count how many are found in the first `top_k` results. One or two queries show you luck; this lesson's query set has 14 queries in six kinds: exact names, reworded questions, no answer, cross-section, multi-hop and version conflicts, two or three of each. The wording lives in `queries.json` and every query carries its annotations; `q03`, for instance, is marked `fees#overdue`, the overdue section of the charges document. Each kind tests one side of retrieval: exact names test code matching, reworded queries test changed wording, unanswerable ones test what happens when there is nothing to find.",
+      "source": "3f7f905d9bfa"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Annotations name section anchors, not chunk ids. How chunks are cut may change; anchors do not, so the same annotations can test any chunking. `judge` compares the sections covered by the result chunks: covering any annotated section is a `hit`, covering all of them is `complete`, and `first_rank` is the rank of the first hit. Cross-section, multi-hop and conflict queries need `complete`: `q11` finds the study rooms of the first hop but not the closing time of the second, so `hit` is true and `complete` is false. Unanswerable queries have no annotations, so `hit` and `complete` are empty: there is nothing to judge against.",
+      "source": "24c287b9b379"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The hit table puts the 14 queries in 14 rows. With default parameters, 9 of the 12 annotated queries hit and 7 are fully covered; the mean reciprocal rank is 0.75, because all 9 hits rank first and the 3 misses count as 0. The two unanswerable queries carry no annotations and stay out of the hit rate; they are read separately. Run again with `top_k` set to 1: the hit count stays the same, while full coverage drops to 0.33, because most cross-section and conflict queries need a second chunk (in English q10 still fits in one). Read the two numbers together: a larger `top_k` makes completeness easier and leaves more chunks for later steps to read.",
+      "source": "5124ec9be920"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The hit table has to be reproducible. The report records the corpus version, the query set version, the chunking parameters, `k1`, `b` and `top_k`; it also rebuilds the index, runs every query again and compares row by row. When {{lesson:embedding-retrieval}} brings a different retrieval method, it can be compared row by row on the same handbook and the same query set, with this table as the baseline. A hit only says the annotated section made the list, not that a later answer used it correctly. Change the handbook or the query set and the versions change, so an old table can no longer be compared directly.",
+      "source": "4a66d5b5faa9"
+    },
+    "misconception-hit-rate.claim": {
+      "text": "A hit rate of 0.75 means three questions out of four will be answered correctly.",
+      "source": "76bd936d601f"
+    },
+    "misconception-hit-rate.correction": {
+      "text": "The hit rate only counts whether an annotated section made it into the first `top_k` results. Once on the list, a later step may ignore it, or be misled by an old version or a reader comment retrieved alongside; a multi-hop query that finds only its first hop still counts as a hit. Unanswerable queries are not covered either, since they should have no hit at all. Whether an answer is correct has to be checked separately.",
+      "source": "df8396a05056"
+    },
+    "mq-complete.complete.prompt": {
+      "text": "`q13` asks when the library closes on Sunday, annotated with the weekend sections of both the 2026 and the 2025 version. With `top_k = 1` the only result is a chunk of one of the two versions. What does `judge` return?",
+      "source": "5e54a77c9fbd"
+    },
+    "mq-complete.complete.a.text": {
+      "text": "`hit` true, `complete` false, `first_rank` 1",
+      "source": "318ad94c65fb"
+    },
+    "mq-complete.complete.a.feedback": {
+      "text": "Right. One annotated section is covered and the other is missing.",
+      "source": "06ace53ef1e3"
+    },
+    "mq-complete.complete.b.text": {
+      "text": "`hit` false, because the other version is missing",
+      "source": "1ebad55afd95"
+    },
+    "mq-complete.complete.b.feedback": {
+      "text": "No. Covering any annotated section counts as a `hit`.",
+      "source": "bb6b03bc93b2"
+    },
+    "mq-complete.complete.c.text": {
+      "text": "Both `hit` and `complete` are `None`",
+      "source": "6a4e829d3169"
+    },
+    "mq-complete.complete.c.feedback": {
+      "text": "No. `None` is reserved for unanswerable queries, which have no annotations.",
+      "source": "6be574e4a68e"
+    },
+    "mq-complete.complete.explanation": {
+      "text": "Cross-section, multi-hop and conflict queries need two or more sections; only `complete` tells you whether all of them arrived.",
+      "source": "35773beba6be"
+    },
+    "section-5.title": {
+      "text": "Where misses come from",
+      "source": "6f50a4b0d0fb"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Queries that reword the question or use a synonym miss, and that is the problem {{lesson:embedding-retrieval}} solves by matching on meaning. `q04` asks about a \"late fee\" where the handbook says \"overdue charge\"; `q05` asks how to \"renew\" where the handbook says \"extended\"; `q06` asks where to \"drop off\" books where the handbook says \"return\". The annotated chunks of the first two contain no query term at all; BM25 gives them 0 and they never enter the ranking. Not finding what should be found is a retrieval miss, and this lesson first learns to give each miss its reason.",
+      "source": "e1582fa8b968"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The \"Misses and unanswerable queries\" exercise looks straight at the annotated chunks of each miss: which terms they share with the query, and where they rank among all results. There are only two reasons, recorded as `reason` in `lesson.miss`. `no_shared_terms` means not a single shared term, which no parameter can fix; `outranked` means some shared terms, all weak, pushed outside the first `top_k` by other chunks. All three Chinese queries are of the first kind; the English `q06` is of the second: it shares only `after` with its annotated chunk, which ranks 9th. Set `top_k` to 10 and the English `q06` hits.",
+      "source": "029081befa6b"
+    },
+    "section-5.paragraphs.2": {
+      "text": "To confirm a reason, ask again in the handbook's own words: \"What is the overdue charge for returning an item late?\", \"How many times can an item be extended?\", \"Where can I return items after the library shuts?\". All three put an annotated chunk first. A hit on the rewrite means the handbook has the passage and the miss came from the wording. A person can rewrite like this only by knowing how the handbook is worded; {{lesson:agentic-rag}} lets the model rewrite its own query and search again, and {{lesson:embedding-retrieval}} brings a way of matching that does not depend on literal words. Rewriting has a cost too: every extra question is another search, and the more phrasings you try, the more unrelated chunks slip in.",
+      "source": "792f45cc1cba"
+    },
+    "section-5.paragraphs.3": {
+      "text": "A subtler kind: the handbook simply has no answer. `q07` asks about a car park, which the handbook never mentions, yet BM25 returns 5 results anyway, on the strength of \"library\", a word found everywhere, with a top score of 1.4452, recorded in the lesson.no_answer event. BM25 has no output that means \"not found\"; any shared term earns a score and a rank. A score threshold is no fix either: scores shift with query length and wording and have no fixed scale. Stopping such results falls to the answering step, which must see that the evidence is not enough and say plainly that the handbook does not cover it. A safer practice is to require every claim in the answer to point back to retrieved text.",
+      "source": "b6c9a63870ca"
+    },
+    "deep-dive-systems.title": {
+      "text": "From a hit table to real systems",
+      "source": "bae129f2fa1b"
+    },
+    "deep-dive-systems.summary": {
+      "text": "How real systems measure and speed up retrieval, and where keyword retrieval fits.",
+      "source": "2d38ee84de97"
+    },
+    "deep-dive-systems.paragraphs.0": {
+      "text": "This lesson's hit rate is what the reference book writes as `recall@k`, and its footnote points out that it is really a hit rate: one relevant result in the first `k` is enough. `recall@k` in the academic sense is the share of relevant chunks found; a query with two annotated sections that finds one scores 0.5. This lesson approximates that with the `complete` column: true when all are found. The book's other two common measures are mean reciprocal rank, which looks at how high the first relevant result sits, and normalized discounted cumulative gain, which looks at the ranks of all relevant results.",
+      "source": "a7b13cbd6e97"
+    },
+    "deep-dive-systems.paragraphs.1": {
+      "text": "This lesson's index scores all 38 chunks for every query. With more material that is too slow, so real engines use an inverted index: a reverse map from each term to the list of chunks containing it, like the index at the back of a book, so a search jumps straight to those pages and scores only those chunks. The reference implementation `sparse-embedding` works this way and logs the document frequency, term frequency and contribution at every step, field for field what this lesson's `explain` returns.",
+      "source": "69741eed8013"
+    },
+    "deep-dive-systems.paragraphs.2": {
+      "text": "Keyword retrieval is rarely used alone in production, but it is almost always there. The reference book's pipeline runs keyword matching and matching by meaning side by side, merges the two rankings, and reranks the result with a slower, more accurate model. Another technique prepends a line of context to each chunk, such as \"this passage comes from the overdue section of the Bluestone Library charges document\", and the prefix brings new words to match. The figure the book cites is that adding such prefixes alongside BM25 cuts the retrieval failure rate roughly in half. Every such improvement has to be compared on the same query set to show it really helps.",
+      "source": "cfc56b86eca4"
+    },
+    "mq-no-answer.no-answer.prompt": {
+      "text": "`q07` asks about a car park, which the handbook does not mention. What does BM25 return?",
+      "source": "29553ea6548d"
+    },
+    "mq-no-answer.no-answer.a.text": {
+      "text": "A few low-scoring chunks, matched on common words found everywhere",
+      "source": "23d917e09225"
+    },
+    "mq-no-answer.no-answer.a.feedback": {
+      "text": "Right. One shared term is enough for a score; BM25 has no output meaning \"not found\".",
+      "source": "479c88715731"
+    },
+    "mq-no-answer.no-answer.b.text": {
+      "text": "An empty list, since nothing is relevant",
+      "source": "fded8e0a2363"
+    },
+    "mq-no-answer.no-answer.b.feedback": {
+      "text": "No. BM25 does not judge relevance, only shared terms. It returns an empty list only when no chunk shares a single term.",
+      "source": "b53ef4fc9b87"
+    },
+    "mq-no-answer.no-answer.c.text": {
+      "text": "An explicit \"not enough information\" message",
+      "source": "9ee31482ba9d"
+    },
+    "mq-no-answer.no-answer.c.feedback": {
+      "text": "No. Saying the material is insufficient is the answering step's job; retrieval cannot reach that conclusion.",
+      "source": "8bf1b31493c8"
+    },
+    "mq-no-answer.no-answer.explanation": {
+      "text": "Unanswerable queries still get results. Having results does not mean having an answer, and no fixed score cut-off can be relied on to stop them.",
+      "source": "5fd9c7a34feb"
+    },
+    "references.ai-agent-book-sparse.title": {
+      "text": "Sparse embeddings: from TF-IDF to BM25, and how retrieval is measured (AI Agents in Depth (深入理解 AI Agent), Chapter 3)",
+      "source": "91249ce74fae"
+    },
+    "references.ai-agent-book-bm25-engine.title": {
+      "text": "A teaching BM25 engine: tokenizing, inverted index, per-term scores and offline evaluation (AI Agents in Depth (深入理解 AI Agent), Experiment 3-5)",
+      "source": "03edf12d4e16"
+    },
+    "references.hf-llamaindex-components.title": {
+      "text": "The five stages of a retrieval pipeline: loading, indexing, storing, querying and evaluation (Hugging Face Agents Course)",
+      "source": "cb195358ecc7"
+    },
+    "references.ms-agentic-rag.title": {
+      "text": "The loop of retrieving, judging results, rewriting the query and retrieving again (Microsoft AI Agents for Beginners)",
+      "source": "4cd32ae8f839"
+    },
+    "code-tokenize.n18.text": {
+      "text": "Stop words live in stopwords.json, so the code holds no language's word list; Chinese has a word list and a character list.",
+      "source": "7048bef6e9cb"
+    },
+    "code-tokenize.n19.text": {
+      "text": "Section anchors are markers for the annotations, not text; they are removed first so `overdue` in an anchor is not counted as a term.",
+      "source": "ed5cd7a51b00"
+    },
+    "code-tokenize.n21.text": {
+      "text": "Words and codes: a hyphen, dot or colon inside R-305, 0.5 or 20:00 does not split it; each is one term.",
+      "source": "23bdc0e76c5f"
+    },
+    "code-tokenize.n22.text": {
+      "text": "A run of Chinese characters is one piece, cut into bigrams later.",
+      "source": "325c15287db8"
+    },
+    "code-tokenize.n29.text": {
+      "text": "Indexing and querying use this same function: the words can only match if both sides are cut alike.",
+      "source": "6bc3f638caac"
+    },
+    "code-tokenize.n31.text": {
+      "text": "Everything is lowercased: `B2` and `b2` are the same term.",
+      "source": "9b387932fb2b"
+    },
+    "code-tokenize.n36.text": {
+      "text": "English runs drop words such as `the` and `how`; in Chinese runs, Latin words and codes are all kept.",
+      "source": "d11705810f0e"
+    },
+    "code-tokenize.n38.text": {
+      "text": "English runs skip Chinese characters: the English handbook has none, so they could never match.",
+      "source": "15a30b5f85e5"
+    },
+    "code-tokenize.n43.text": {
+      "text": "Cuts a run of characters into overlapping pairs: no segmentation library needed, and a four-character phrase yields three pieces.",
+      "source": "80a6f859d5ef"
+    },
+    "code-tokenize.n45.text": {
+      "text": "Stop words go first, longest first, so a short one never breaks up a longer one.",
+      "source": "d57d756b223a"
+    },
+    "code-tokenize.n47.text": {
+      "text": "Stop characters become spaces, acting as separators: no bigram spans a removed character.",
+      "source": "7b597caeb0e4"
+    },
+    "code-tokenize.n51.text": {
+      "text": "A piece of one character is kept as is; since the index holds only pairs it almost never matches, as with the lone character in the Chinese `q05`.",
+      "source": "ea41e5618eaf"
+    },
+    "code-tokenize.n54.text": {
+      "text": "A sliding window of two: five characters give four bigrams.",
+      "source": "00a3d9d71297"
+    },
+    "code-tokenize.fold-idf-floor.label": {
+      "text": "IDF_FLOOR, used for scoring; covered in the next block",
+      "source": "088729780886"
+    },
+    "code-score.n66.text": {
+      "text": "The index is a term count table per chunk plus a few global statistics; with few chunks every chunk is scored per query, no inverted index.",
+      "source": "f0d552c31fe8"
+    },
+    "code-score.n67.text": {
+      "text": "The defaults `k1` 1.5 and `b` 0.75 are the starting values of the reference engine and most textbooks.",
+      "source": "65aa7064ab50"
+    },
+    "code-score.n72.text": {
+      "text": "Each chunk's term frequencies: which term occurs how often, regardless of order.",
+      "source": "4c74b423aa0b"
+    },
+    "code-score.n73.text": {
+      "text": "Chunk length counts terms, not characters.",
+      "source": "b11b8baab087"
+    },
+    "code-score.n74.text": {
+      "text": "The average length is the reference point for length normalization.",
+      "source": "fd42ff2961a4"
+    },
+    "code-score.n75.text": {
+      "text": "Document frequency: how many chunks contain each term; several occurrences in one chunk count once.",
+      "source": "02f33fb6ce80"
+    },
+    "code-score.n78.text": {
+      "text": "The raw inverse document frequency `ln((N − df + 0.5) / (df + 0.5))`, the \"raw\" column of the report.",
+      "source": "3172125a532b"
+    },
+    "code-score.n83.text": {
+      "text": "A term in more than half of the chunks has a negative raw value; a tiny floor stops it from costing points.",
+      "source": "03c9f24612a6"
+    },
+    "code-score.n85.text": {
+      "text": "The length normalization factor: 1 for an average chunk, larger for longer ones.",
+      "source": "55f62a5733e3"
+    },
+    "code-score.n89.text": {
+      "text": "At `b = 0` it is always 1 and length is ignored; at `b = 1` it is the ratio of length to average.",
+      "source": "cca76b907f41"
+    },
+    "code-score.n93.text": {
+      "text": "If the chunk lacks the term, it contributes 0, however rare the term is.",
+      "source": "fcce087befa2"
+    },
+    "code-score.n95.text": {
+      "text": "One term's contribution: inverse document frequency times saturated term frequency; however large the term frequency gets, the second factor never reaches `k1 + 1`.",
+      "source": "c7f03156e5f4"
+    },
+    "code-score.n99.text": {
+      "text": "A repeated query term counts once, so each term's share can be read directly.",
+      "source": "7d2f02737571"
+    },
+    "code-score.n101.text": {
+      "text": "Returns the first `top_k` results; there may be fewer than `top_k`, or none.",
+      "source": "85718e212dbf"
+    },
+    "code-score.n109.text": {
+      "text": "Only terms with a positive contribution remain; a chunk sharing no term never enters the list.",
+      "source": "3635cf2891c2"
+    },
+    "code-score.n112.text": {
+      "text": "Descending total score, ties in corpus order, so a rerun matches row for row.",
+      "source": "ce1e7a05f556"
+    },
+    "code-score.n113.text": {
+      "text": "`detail` keeps every term's contribution; the hit table and the report read it from here.",
+      "source": "beee07a4cdf8"
+    },
+    "code-misses.n118.text": {
+      "text": "The miss analysis looks at two kinds only: reworded and unanswerable queries.",
+      "source": "8552a9608f21"
+    },
+    "code-misses.n123.text": {
+      "text": "The three reworded queries, one at a time.",
+      "source": "fa4e0143f0a2"
+    },
+    "code-misses.n124.text": {
+      "text": "Checks for a stop request before each query.",
+      "source": "80a6513b2ce9"
+    },
+    "code-misses.n126.text": {
+      "text": "`judge` compares the sections the results cover with the annotations: `hit` for any, `complete` for all.",
+      "source": "f1d709488a61"
+    },
+    "code-misses.n128.text": {
+      "text": "Look straight at the chunks holding the annotated sections: which terms they share with the query, and their rank among all results.",
+      "source": "598b0ce913f3"
+    },
+    "code-misses.n130.text": {
+      "text": "Two reasons: no shared term at all, or some shared terms but a rank outside the first `top_k`.",
+      "source": "d534923075bb"
+    },
+    "code-misses.n132.text": {
+      "text": "Ask again in the handbook's wording; the rewrites are runtime text, one per language.",
+      "source": "b02d081c28f0"
+    },
+    "code-misses.n134.text": {
+      "text": "A hit on the rewrite means the passage exists and the miss came from the wording.",
+      "source": "318da6892440"
+    },
+    "code-misses.n140.text": {
+      "text": "One lesson.miss event each: query, reason, annotated chunks and rewrite result.",
+      "source": "780d0952ffd9"
+    },
+    "code-misses.n142.text": {
+      "text": "Unanswerable queries have no annotations and are handled on their own.",
+      "source": "793f82ccfa0c"
+    },
+    "code-misses.n145.text": {
+      "text": "Searched all the same: one shared term is enough for a result.",
+      "source": "84a7b922db4e"
+    },
+    "code-misses.n147.text": {
+      "text": "Records how many came back and the top score; BM25 has no \"not found\" output.",
+      "source": "b0d96aadb376"
+    },
+    "code-misses.n151.text": {
+      "text": "The report puts miss reasons, rewrite ranks and unanswerable results in one table.",
+      "source": "d6510c9dd0f6"
+    },
+    "code-misses.fold-miss-record.label": {
+      "text": "Evidence: assemble the lesson.miss data (query, results, annotated chunks, rewrite)",
+      "source": "c18ce33597ea"
+    },
+    "code-decision.title": {
+      "text": "Hand-written BM25, Chinese cut into bigrams, annotations at section level",
+      "source": "f06578d54e01"
+    },
+    "code-decision.chosen": {
+      "text": "bm25.py implements BM25 with the standard library, and `explain` reports document frequency, inverse document frequency, term frequency and contribution for every term; Chinese is cut into character bigrams with stop words kept in a data file; the query set's annotations name section anchors, and `judge` decides a hit from the sections a chunk covers, whatever the chunking.",
+      "source": "ee207782333e"
+    },
+    "code-decision.library.title": {
+      "text": "Use a ready-made BM25 library or search engine",
+      "source": "376ea3592851"
+    },
+    "code-decision.library.why_not": {
+      "text": "That is the right call in production, but they usually report only a total; this lesson needs every factor visible so the sum can be checked.",
+      "source": "245cbd1f5520"
+    },
+    "code-decision.segmenter.title": {
+      "text": "Use a Chinese word segmentation library",
+      "source": "dff8c6782ed4"
+    },
+    "code-decision.segmenter.why_not": {
+      "text": "Its words look more natural, but it adds a dependency and a dictionary, and when it mis-cuts a new word, query and handbook may be cut differently.",
+      "source": "c04b5782f30a"
+    },
+    "code-decision.chunk-labels.title": {
+      "text": "Annotate with chunk ids directly",
+      "source": "d5dff4aa7b1d"
+    },
+    "code-decision.chunk-labels.why_not": {
+      "text": "Chunk ids change with the chunking; one change of parameters would void every annotation.",
+      "source": "affdc10f2106"
+    },
+    "code-decision.threshold.title": {
+      "text": "Set a score cut-off below which nothing counts as found",
+      "source": "688c83fcf741"
+    },
+    "code-decision.threshold.why_not": {
+      "text": "Scores move with query length and wording and have no fixed scale; one cut-off is too strict for one query and too loose for another.",
+      "source": "78cf73bdc900"
+    },
+    "hit-table.title": {
+      "text": "Keyword retrieval on one query set",
+      "source": "20f799b9a5d1"
+    },
+    "hit-table.hypothesis": {
+      "text": "Exact-name queries rank an annotated section first; reworded queries miss; lowering `top_k` from 5 to 1 leaves the hit count unchanged while most queries that need two chunks become incomplete.",
+      "source": "1ac8a2895460"
+    },
+    "hit-table.top5.label": {
+      "text": "Top 5 (default)",
+      "source": "c1547fdd6125"
+    },
+    "hit-table.top1.label": {
+      "text": "Top 1 only",
+      "source": "acf29a62fed7"
+    },
+    "hit-table.versions.text": {
+      "text": "The corpus version behind the index: check it first when rerunning.",
+      "source": "dc95fd682e5e"
+    },
+    "hit-table.terms.text": {
+      "text": "The terms the first query was cut into.",
+      "source": "a720cdd08c77"
+    },
+    "hit-table.top-hit.text": {
+      "text": "The top result's chunk id, score and covered sections.",
+      "source": "48b6a81cfa35"
+    },
+    "hit-table.judge.text": {
+      "text": "The verdict against the annotations: hit, complete and first_rank.",
+      "source": "bfaad6632bec"
+    },
+    "hit-table.table.text": {
+      "text": "The hit table: one row per query, 14 in all.",
+      "source": "ce14cfc65b9b"
+    },
+    "hit-table.hit-rate.text": {
+      "text": "Hit rate: only the 12 annotated queries count.",
+      "source": "0a5d27518418"
+    },
+    "hit-table.complete-rate.text": {
+      "text": "Full coverage rate: the number that moves most between the two arms.",
+      "source": "26a0001a1343"
+    },
+    "hit-table.rerun.text": {
+      "text": "A rebuilt index gives the same results, row by row.",
+      "source": "412a9af5029f"
+    },
+    "hit-table.guide.0.text": {
+      "text": "This experiment calls no model. One query set; see what each of the 14 queries finds.",
+      "source": "c72134ceba17"
+    },
+    "hit-table.guide.1.text": {
+      "text": "First the corpus version recorded with the index; the query set version and parameters are in the same event.",
+      "source": "3bb1a4153c91"
+    },
+    "hit-table.guide.2.text": {
+      "text": "The first query was cut into these terms; the code stays whole.",
+      "source": "ad4466d86119"
+    },
+    "hit-table.guide.3.text": {
+      "text": "Which chunk ranks first, with what score, covering which sections.",
+      "source": "353dadbf7cbd"
+    },
+    "hit-table.guide.4.text": {
+      "text": "Compared with the annotations, this gives hit, complete and the first hit rank.",
+      "source": "9b946a3d3de1"
+    },
+    "hit-table.guide.5.text": {
+      "text": "The report lays all 14 out in a table, where the misses stand out.",
+      "source": "4c31fc509804"
+    },
+    "hit-table.guide.6.text": {
+      "text": "The hit rate counts only annotated queries; the two unanswerable ones are not in the denominator.",
+      "source": "62c50bfb5ef6"
+    },
+    "hit-table.guide.7.text": {
+      "text": "Run \"Top 1 only\": the hit rate holds, full coverage falls clearly.",
+      "source": "3da64563e144"
+    },
+    "hit-table.guide.8.text": {
+      "text": "The last check rebuilt the index and ran again with identical results: the table is reproducible.",
+      "source": "c97a9c87ac9b"
+    },
+    "hit-table.conclusion.proves.0": {
+      "text": "For this corpus, query set and parameters, which queries hit and at what rank, each row traced to a chunk id and score.",
+      "source": "36ebd5b2ccee"
+    },
+    "hit-table.conclusion.proves.1": {
+      "text": "`top_k` only sets the list length: it does not change the order, but it decides whether multi-chunk queries are complete.",
+      "source": "5a66e759ff08"
+    },
+    "hit-table.conclusion.does_not_prove.0": {
+      "text": "A hit is not a correct answer; this lesson generates no answers.",
+      "source": "5f882bb4c0db"
+    },
+    "hit-table.conclusion.does_not_prove.1": {
+      "text": "14 queries are too few; a hit rate of 0.75 does not carry over to other material or other phrasing.",
+      "source": "4c120b1b6907"
+    },
+    "hit-table.conclusion.does_not_prove.2": {
+      "text": "A matching rerun shows the program is deterministic, not that these parameters are best.",
+      "source": "47907f0e8588"
+    },
+    "explain-score.title": {
+      "text": "Take one result's score apart",
+      "source": "d1e558f1f773"
+    },
+    "explain-score.hypothesis": {
+      "text": "The top score for `q03` equals the sum of its terms' contributions; switching off length normalization or raising `k1` moves it the way the formula predicts.",
+      "source": "638728d7c538"
+    },
+    "explain-score.default.label": {
+      "text": "Default parameters (k1=1.5, b=0.75)",
+      "source": "d5858242ce99"
+    },
+    "explain-score.b0.label": {
+      "text": "Length normalization off (b=0)",
+      "source": "3c2f9b062470"
+    },
+    "explain-score.k3.label": {
+      "text": "Later saturation (k1=3)",
+      "source": "b510607079a7"
+    },
+    "explain-score.term-table.text": {
+      "text": "Per term: document frequency, inverse document frequency, term frequency, its part and the contribution.",
+      "source": "3753a564b129"
+    },
+    "explain-score.length-norm.text": {
+      "text": "The length normalization factor: below 1 for chunks shorter than average, above 1 for longer ones.",
+      "source": "64ab66bd05eb"
+    },
+    "explain-score.score.text": {
+      "text": "The result's total score.",
+      "source": "f89ab3c05740"
+    },
+    "explain-score.sum-check.text": {
+      "text": "Check: the term contributions add up to the result's score.",
+      "source": "682b36d5b923"
+    },
+    "explain-score.baseline.text": {
+      "text": "The same chunk's score under default parameters, for comparison with changed ones.",
+      "source": "d91c8f0bdc9f"
+    },
+    "explain-score.guide.0.text": {
+      "text": "This experiment calls no model. One query, one chunk, a score taken apart to every term.",
+      "source": "a6c68ccbb4d8"
+    },
+    "explain-score.guide.1.text": {
+      "text": "One row per query term: a term the chunk lacks has frequency 0 and contributes 0.",
+      "source": "b4744bc13fb5"
+    },
+    "explain-score.guide.2.text": {
+      "text": "All terms share one length normalization factor, set by chunk length and average length.",
+      "source": "cdfffe89b879"
+    },
+    "explain-score.guide.3.text": {
+      "text": "The total is the sum of the contribution column.",
+      "source": "bda169405f85"
+    },
+    "explain-score.guide.4.text": {
+      "text": "The report checks that sum, and checks it against the score in the result list.",
+      "source": "feb609724b54"
+    },
+    "explain-score.guide.5.text": {
+      "text": "Switch to an arm with changed parameters and compare with the default score: does it move the way the formula says?",
+      "source": "876271f178de"
+    },
+    "explain-score.conclusion.proves.0": {
+      "text": "A BM25 score is the sum of per-term contributions, each computable by hand from document frequency, term frequency and length.",
+      "source": "39937f2b904a"
+    },
+    "explain-score.conclusion.proves.1": {
+      "text": "`b` acts only through the length normalization factor, `k1` only through the term frequency part.",
+      "source": "96db93ae8dd9"
+    },
+    "explain-score.conclusion.does_not_prove.0": {
+      "text": "A parameter's effect on one query does not show it is better across the query set; that takes a hit table comparison.",
+      "source": "85a6aae63f51"
+    },
+    "explain-score.conclusion.does_not_prove.1": {
+      "text": "A high score means a high rank under this query, not that the chunk answers the question.",
+      "source": "776e6cf1afc7"
+    },
+    "misses.title": {
+      "text": "Where misses come from",
+      "source": "6f50a4b0d0fb"
+    },
+    "misses.hypothesis": {
+      "text": "Reworded queries miss because the annotated chunks contain no query term, or only weak ones; asking in the handbook's words hits; unanswerable queries still return results.",
+      "source": "bd574e10e0ee"
+    },
+    "misses.misses.label": {
+      "text": "Reworded and unanswerable queries",
+      "source": "ab91b0122a50"
+    },
+    "misses.reason.text": {
+      "text": "The reason for the first miss.",
+      "source": "698ab94b8daf"
+    },
+    "misses.shared.text": {
+      "text": "The terms the annotated chunk shares with the query.",
+      "source": "df57ed63f5ef"
+    },
+    "misses.rewrite.text": {
+      "text": "The first hit rank after asking in the handbook's words.",
+      "source": "df0f94b1b79f"
+    },
+    "misses.no-answer-returned.text": {
+      "text": "How many results an unanswerable query returned.",
+      "source": "f76576b6ec71"
+    },
+    "misses.no-answer-top.text": {
+      "text": "The top score of an unanswerable query.",
+      "source": "9899fe9036a6"
+    },
+    "misses.misses-table.text": {
+      "text": "The report table: each miss's reason, shared terms and rewrite rank.",
+      "source": "0ffc686c01ac"
+    },
+    "misses.guide.0.text": {
+      "text": "This experiment calls no model. First, why reworded queries find nothing.",
+      "source": "79cbcb9a24d4"
+    },
+    "misses.guide.1.text": {
+      "text": "The reason is here: no shared term, or shared terms too weak.",
+      "source": "85a90090d306"
+    },
+    "misses.guide.2.text": {
+      "text": "The terms the annotated chunk shares with the query; an empty list means none.",
+      "source": "ad3a224131c7"
+    },
+    "misses.guide.3.text": {
+      "text": "Asked in the handbook's words, the annotated chunk moves to the top.",
+      "source": "dc1a3d3f8b78"
+    },
+    "misses.guide.4.text": {
+      "text": "Now the unanswerable queries: nothing in the handbook, yet the results are not empty.",
+      "source": "d386a1f357b6"
+    },
+    "misses.guide.5.text": {
+      "text": "The top score is not low enough to spot at a glance; a cut-off would not stop it.",
+      "source": "d6ea6ce167a8"
+    },
+    "misses.guide.6.text": {
+      "text": "The report lists each miss's reason, shared terms and rewrite rank side by side.",
+      "source": "3944102fb997"
+    },
+    "misses.conclusion.proves.0": {
+      "text": "The annotated chunks of these misses do exist and are found once the handbook's wording is used: the misses come from wording.",
+      "source": "ad1720e5bec3"
+    },
+    "misses.conclusion.proves.1": {
+      "text": "BM25 returns results for unanswerable queries as long as one term is shared.",
+      "source": "8b1e7887cc40"
+    },
+    "misses.conclusion.does_not_prove.0": {
+      "text": "The rewrites were written by a person who knew the handbook; users or models will not necessarily ask this way.",
+      "source": "95dfbdf94228"
+    },
+    "misses.conclusion.does_not_prove.1": {
+      "text": "This lesson does not show that matching by meaning recovers these queries; that is the experiment of {{lesson:embedding-retrieval}}.",
+      "source": "2315895a858e"
+    },
+    "inputs.scenario.label": {
+      "text": "Exercise",
+      "source": "3cae1f75ef71"
+    },
+    "inputs.scenario.options.query_table.label": {
+      "text": "Hit table for the whole query set",
+      "source": "2424a9eec114"
+    },
+    "inputs.scenario.options.explain.label": {
+      "text": "Take one result's score apart",
+      "source": "d1e558f1f773"
+    },
+    "inputs.scenario.options.misses.label": {
+      "text": "Misses and unanswerable queries",
+      "source": "112cb44a6d80"
+    },
+    "inputs.top_k.label": {
+      "text": "Results kept (top_k)",
+      "source": "ded7866d2a99"
+    },
+    "inputs.top_k.help": {
+      "text": "How many results to keep per query, 1 to 10. It changes the list length, not the order.",
+      "source": "81cba18fafa6"
+    },
+    "inputs.k1.label": {
+      "text": "Saturation parameter k1",
+      "source": "b91be66d042d"
+    },
+    "inputs.k1.help": {
+      "text": "0 to 3. Larger means repeats count closer to linearly; 0 means only presence counts.",
+      "source": "0408e43f4b5a"
+    },
+    "inputs.b.label": {
+      "text": "Length normalization b",
+      "source": "8f6e6ee5206a"
+    },
+    "inputs.b.help": {
+      "text": "0 to 1. At 0 chunk length is ignored; at 1 the discount is fully proportional to length.",
+      "source": "4894b61ba367"
+    },
+    "inputs.query_id.label": {
+      "text": "Query from the query set",
+      "source": "62ba78ea44ba"
+    },
+    "inputs.query_id.help": {
+      "text": "Only for \"Take one result's score apart\": which query's result to take apart; q03 by default.",
+      "source": "2dbcc7fcc4a6"
+    },
+    "inputs.query_id.options.q01.label": {
+      "text": "q01 · How many items can I borrow on a B2 research card?",
+      "source": "7d26a7f257a1"
+    },
+    "inputs.query_id.options.q02.label": {
+      "text": "q02 · How many seats does R-305 have?",
+      "source": "2dbb5908d7fc"
+    },
+    "inputs.query_id.options.q03.label": {
+      "text": "q03 · What is the maximum overdue charge per item?",
+      "source": "56928c16d586"
+    },
+    "inputs.query_id.options.q04.label": {
+      "text": "q04 · How much is the late fee for returning a book late?",
+      "source": "d895b3549dfa"
+    },
+    "inputs.query_id.options.q05.label": {
+      "text": "q05 · How do I renew a book?",
+      "source": "78082758ce28"
+    },
+    "inputs.query_id.options.q06.label": {
+      "text": "q06 · Where can I drop off books after closing time?",
+      "source": "677ee2461f47"
+    },
+    "inputs.query_id.options.q07.label": {
+      "text": "q07 · Does the library have a car park?",
+      "source": "42beae7c83c3"
+    },
+    "inputs.query_id.options.q08.label": {
+      "text": "q08 · How do I rent a locker in the library?",
+      "source": "bf1e68799846"
+    },
+    "inputs.query_id.options.q09.label": {
+      "text": "q09 · What happens if I am late for a study room booking?",
+      "source": "8a59acc5e65d"
+    },
+    "inputs.query_id.options.q10.label": {
+      "text": "q10 · How long can a reserved item wait for me once it arrives?",
+      "source": "7694f3facbff"
+    },
+    "inputs.query_id.options.q11.label": {
+      "text": "q11 · Which floor are the study rooms that B2 cardholders can book, and what time does that floor close?",
+      "source": "f0578dccb946"
+    },
+    "inputs.query_id.options.q12.label": {
+      "text": "q12 · How can I pay the replacement fee for a lost library card?",
+      "source": "131c4133e7c5"
+    },
+    "inputs.query_id.options.q13.label": {
+      "text": "q13 · What time does the library close on Sunday?",
+      "source": "8e9c1c3b949f"
+    },
+    "inputs.query_id.options.q14.label": {
+      "text": "q14 · What are the opening hours from Monday to Friday?",
+      "source": "0331b68cea61"
+    },
+    "inputs.query.label": {
+      "text": "Your own query",
+      "source": "a834c7b27b95"
+    },
+    "inputs.query.help": {
+      "text": "Only for \"Take one result's score apart\": when filled in, it replaces the query set query; write it in the run's language.",
+      "source": "88f2afda066d"
+    },
+    "inputs.chunk_id.label": {
+      "text": "Chunk to take apart",
+      "source": "660ccaad7035"
+    },
+    "inputs.chunk_id.help": {
+      "text": "Only for \"Take one result's score apart\": leave empty for the top result; written like `rooms:7-11`, copy one from the hit table.",
+      "source": "2557abb8af4d"
+    },
+    "quiz.why-rare.prompt": {
+      "text": "In the query about how many items a B2 research card allows, why does \"borrow\" contribute more than \"research\"?",
+      "source": "3b5d1761dd4c"
+    },
+    "quiz.why-rare.a.text": {
+      "text": "It appears in fewer chunks, so its inverse document frequency is higher",
+      "source": "3cc996659d02"
+    },
+    "quiz.why-rare.a.feedback": {
+      "text": "Right. Fewer chunks contain it, so each occurrence is worth more.",
+      "source": "0b0967476ede"
+    },
+    "quiz.why-rare.b.text": {
+      "text": "It comes earlier in the query",
+      "source": "afc6d6375306"
+    },
+    "quiz.why-rare.b.feedback": {
+      "text": "No. BM25 ignores word order.",
+      "source": "22a8d5f4685e"
+    },
+    "quiz.why-rare.c.text": {
+      "text": "\"research\" is a stop word and was removed",
+      "source": "0bc65ed8c815"
+    },
+    "quiz.why-rare.c.feedback": {
+      "text": "No. It stays in the query; it is just found in 12 chunks, so it weighs little.",
+      "source": "c7ad6de7761c"
+    },
+    "quiz.why-rare.explanation": {
+      "text": "A contribution depends on rarity, repetition and chunk length; a term's position in the query does not matter.",
+      "source": "c64fb954f6e5"
+    },
+    "quiz.saturation.prompt": {
+      "text": "A chunk repeats \"overdue\" 20 times. What happens to that term's contribution?",
+      "source": "14ade4d4d35d"
+    },
+    "quiz.saturation.a.text": {
+      "text": "It approaches the ceiling `idf × (k1 + 1)`, nowhere near 20 times a single occurrence",
+      "source": "9880c1a5d11a"
+    },
+    "quiz.saturation.a.feedback": {
+      "text": "Right. The term frequency part saturates; with `k1 = 1.5` its ceiling is 2.5.",
+      "source": "d25dc06b3c7e"
+    },
+    "quiz.saturation.b.text": {
+      "text": "It becomes 20 times a single occurrence",
+      "source": "33789ab40d6b"
+    },
+    "quiz.saturation.b.feedback": {
+      "text": "No. That is naive term frequency; BM25 added saturation to prevent exactly this.",
+      "source": "ddf87bb6f2d9"
+    },
+    "quiz.saturation.c.text": {
+      "text": "It drops to 0; too many repeats count as cheating",
+      "source": "f61f5ce2d386"
+    },
+    "quiz.saturation.c.feedback": {
+      "text": "No. BM25 does not punish repetition; it just makes each repeat worth less.",
+      "source": "0b079641915e"
+    },
+    "quiz.saturation.explanation": {
+      "text": "`k1` sets how fast saturation comes; repetition only pushes the term toward its ceiling, never past it.",
+      "source": "cb481b9b5283"
+    },
+    "quiz.gold-anchor.prompt": {
+      "text": "Why does the query set annotate with section anchors such as `fees#overdue` rather than chunk ids?",
+      "source": "ef3ab2f77deb"
+    },
+    "quiz.gold-anchor.a.text": {
+      "text": "Chunk ids change with the chunking while anchors do not, so one set of annotations can test any chunking",
+      "source": "30b07f6f8304"
+    },
+    "quiz.gold-anchor.a.feedback": {
+      "text": "Right. Changing the chunking parameters does not require new annotations.",
+      "source": "3a565e7422b0"
+    },
+    "quiz.gold-anchor.b.text": {
+      "text": "Anchors are shorter and save space",
+      "source": "415950def1b6"
+    },
+    "quiz.gold-anchor.b.feedback": {
+      "text": "No. Length is not the point; stability is.",
+      "source": "d4d60065a6a5"
+    },
+    "quiz.gold-anchor.c.text": {
+      "text": "BM25 can only search anchors",
+      "source": "d02134d31e7f"
+    },
+    "quiz.gold-anchor.c.feedback": {
+      "text": "No. BM25 searches chunk text; anchors are removed before tokenizing.",
+      "source": "0024d51d08f9"
+    },
+    "quiz.gold-anchor.explanation": {
+      "text": "`judge` looks at which sections a chunk covers, regardless of how it was cut.",
+      "source": "1a62f836dc9b"
+    },
+    "quiz.miss-reason.prompt": {
+      "text": "In the English run, `q06`'s annotated chunk shares one term, `after`, with the query, yet ranks 9th. Which kind of miss is this?",
+      "source": "eb92a453a13d"
+    },
+    "quiz.miss-reason.a.text": {
+      "text": "`outranked`: the shared term is too weak and the chunk is pushed outside the first `top_k`",
+      "source": "1e9bfe38ecb5"
+    },
+    "quiz.miss-reason.a.feedback": {
+      "text": "Right. Raising `top_k` to 10 makes it hit, though the root cause is still the wording.",
+      "source": "839bb8f6f7f6"
+    },
+    "quiz.miss-reason.b.text": {
+      "text": "`no_shared_terms`: not a single shared term",
+      "source": "5d04317599f0"
+    },
+    "quiz.miss-reason.b.feedback": {
+      "text": "No. It shares `after`; `after` is common and scores little.",
+      "source": "bca6f79caa62"
+    },
+    "quiz.miss-reason.c.text": {
+      "text": "The handbook lacks the passage",
+      "source": "37aa2b2a726a"
+    },
+    "quiz.miss-reason.c.feedback": {
+      "text": "No. Asked in the handbook's words it ranks first, so the passage exists.",
+      "source": "8953a8d427d6"
+    },
+    "quiz.miss-reason.explanation": {
+      "text": "Look first at the terms the annotated chunk shares with the query: none means no parameter helps; weak ones can be recovered with a larger `top_k`, but rewording is the real fix.",
+      "source": "b66f5fa35254"
+    },
+    "quiz.no-answer-score.prompt": {
+      "text": "Could you set a cut-off, say 3 points, and treat anything below it as \"not in the handbook\"?",
+      "source": "89586ef56f61"
+    },
+    "quiz.no-answer-score.a.text": {
+      "text": "Not reliably: scores move with query length and wording and have no fixed scale",
+      "source": "744fffec7f57"
+    },
+    "quiz.no-answer-score.a.feedback": {
+      "text": "Right. Long queries score high and short ones low by nature; one line cannot serve every query.",
+      "source": "39492b87f850"
+    },
+    "quiz.no-answer-score.b.text": {
+      "text": "Yes; anything under 3 points is certainly irrelevant",
+      "source": "644aee90e2e6"
+    },
+    "quiz.no-answer-score.b.feedback": {
+      "text": "No. A correct result can score under 3 and an irrelevant one over it.",
+      "source": "51a5ad4efaf7"
+    },
+    "quiz.no-answer-score.c.text": {
+      "text": "Yes; a BM25 score is the probability of relevance",
+      "source": "755a60800181"
+    },
+    "quiz.no-answer-score.c.feedback": {
+      "text": "No. A BM25 score is not a probability and cannot be compared across queries.",
+      "source": "c61bd4af5635"
+    },
+    "quiz.no-answer-score.explanation": {
+      "text": "\"Not in the handbook\" has to be judged from the evidence by the answering step, not by a fixed cut-off.",
+      "source": "96a4666201f9"
+    },
+    "quiz.rerun.prompt": {
+      "text": "Why does the hit table report record the corpus version, query set version and parameters?",
+      "source": "780908532c5b"
+    },
+    "quiz.rerun.a.text": {
+      "text": "So the next retrieval method can be compared row by row under exactly the same conditions",
+      "source": "9804c4f573f4"
+    },
+    "quiz.rerun.a.feedback": {
+      "text": "Right. If the material or query set changed, the two tables cannot be compared.",
+      "source": "d8e8977c31be"
+    },
+    "quiz.rerun.b.text": {
+      "text": "To raise the scores",
+      "source": "68e9bcfa71be"
+    },
+    "quiz.rerun.b.feedback": {
+      "text": "No. Recording versions changes no score.",
+      "source": "d6d3a60f769f"
+    },
+    "quiz.rerun.c.text": {
+      "text": "The provider requires it",
+      "source": "4fbf5543560c"
+    },
+    "quiz.rerun.c.feedback": {
+      "text": "No. This lesson calls no model; no provider is involved.",
+      "source": "59d4df050c16"
+    },
+    "quiz.rerun.explanation": {
+      "text": "This table is the baseline for the next lessons; only under the same conditions does a difference speak to the retrieval method itself.",
+      "source": "a239d6b6e53e"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Misses and unanswerable queries\" and find the step where the first miss is given its reason.",
+      "source": "58779620ad3a"
+    },
+    "check-hunt.explanation": {
+      "text": "The first lesson.miss event is `q04`: `hit` is false, `reason` is `no_shared_terms`, the annotated chunk in `gold_chunks` has an empty `shared_terms` list, and in `rewrite` the handbook-worded question has a `first_rank` of 1.",
+      "source": "a426feeb4396"
+    },
+    "check-points.title": {
+      "text": "Hands-on check",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Check against your own runs and this lesson's source; tick only what you have done.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I found the three missed queries in the hit table and can name their annotated sections.",
+      "source": "9b8c5b56a40a"
+    },
+    "check-points.item-2.text": {
+      "text": "Following the report table, I computed one term's inverse document frequency and contribution by hand, matching the table.",
+      "source": "a69e3516a91a"
+    },
+    "check-points.item-3.text": {
+      "text": "I ran \"Take one result's score apart\" with `b` set to 0 and can explain why the score moved the way it did.",
+      "source": "f28a7ebf0a31"
+    },
+    "check-points.item-4.text": {
+      "text": "I can explain the difference between `hit` and `complete` and name a query that hits but is incomplete.",
+      "source": "adea1a1b8410"
+    },
+    "check-points.item-5.text": {
+      "text": "I can explain why unanswerable queries still get results and why a cut-off cannot stop them.",
+      "source": "40339596d50c"
+    },
+    "check-points.item-6.text": {
+      "text": "I can say which versions and parameters the hit table report records, and why the next lesson needs them.",
+      "source": "d4505e2bc7b7"
+    },
+    "code_notes.BM25Index.note": {
+      "text": "This lesson's index: per-chunk term counts, document frequencies and average length; `search` ranks, `explain` breaks a score down.",
+      "source": "3d5d04cad93e"
+    },
+    "code_notes.cjk_bigrams.note": {
+      "text": "Cuts a run of Chinese characters into overlapping pairs, with stop characters as separators.",
+      "source": "69b910262de5"
+    },
+    "code_notes.judge.note": {
+      "text": "Compares the sections the results cover with the annotations: hit, complete, first hit rank.",
+      "source": "303e8fad92ef"
+    },
+    "code_notes.first_rank.note": {
+      "text": "The rank of the first result covering an annotated section; empty when nothing hit.",
+      "source": "39ade0520e7d"
+    },
+    "code_notes.complete.note": {
+      "text": "Whether every annotated section appears in the results; what cross-section, multi-hop and conflict queries need.",
+      "source": "d4377e4dae84"
+    },
+    "code_notes.IDF_FLOOR.note": {
+      "text": "The floor 0.000001 for inverse document frequency: a term in over half the chunks no longer costs points.",
+      "source": "27db22100e5f"
+    },
+    "code_notes.lesson.search.note": {
+      "text": "Lesson event: one query's terms, its first `top_k` results and the verdict against the annotations.",
+      "source": "ec15433f608f"
+    },
+    "code_notes.lesson.score.note": {
+      "text": "Lesson event: one result's score broken down by term; carries a structured error when `ok` is false.",
+      "source": "d13108254aa6"
+    },
+    "code_notes.lesson.miss.note": {
+      "text": "Lesson event: a reworded query's miss reason, annotated chunks and rewrite result.",
+      "source": "606f10a86eab"
+    },
+    "code_notes.lesson.no_answer.note": {
+      "text": "Lesson event: how many results an unanswerable query returned and its top score.",
+      "source": "8f44f86215bf"
+    },
+    "code_notes.lesson.index.note": {
+      "text": "Lesson event: corpus version, query set version, chunking parameters and `k1`, `b`; what a rerun relies on.",
+      "source": "642396543e4f"
+    },
+    "code_notes.reason.note": {
+      "text": "Why a query missed: `no_shared_terms` shares nothing, `outranked` shares only weak terms.",
+      "source": "e391e846ff4e"
+    }
+  }
+}

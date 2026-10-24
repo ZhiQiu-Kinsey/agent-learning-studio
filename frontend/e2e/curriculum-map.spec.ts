@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { CurriculumData, Detail } from "../src/types";
 import { isRunCreation, runOffline } from "./runs";
+import { routePlannedLesson, withPlannedLesson } from "./catalog";
 
 // 课程地图：领域卡片与先修路线图。进度标记只来自本机真实记录（打开、完成运行、自测）。
 const progressOf = (page: Page) =>
@@ -24,12 +25,13 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await runOffline(page);
+  await routePlannedLesson(page);
 });
 
 async function load(request: import("@playwright/test").APIRequestContext) {
-  const catalog: CurriculumData = await (
-    await request.get("/api/curriculum")
-  ).json();
+  const catalog: CurriculumData = withPlannedLesson(
+    await (await request.get("/api/curriculum")).json(),
+  );
   const first: Detail = await (
     await request.get("/api/lessons/chat-request")
   ).json();

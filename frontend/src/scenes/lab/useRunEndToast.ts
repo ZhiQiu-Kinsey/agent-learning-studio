@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { StudioState } from "../../hooks/useStudio";
 import { notify } from "../../components/toast/toast";
+import { errorMessage } from "../../i18n/errors";
 
 /** Reports how a live run really ended, once, when it stops running. */
 export function useRunEndToast(studio: StudioState) {
@@ -32,10 +33,16 @@ export function useRunEndToast(studio: StudioState) {
       notify({
         tone: "error",
         title: t("error"),
-        description:
-          typeof error.data.message === "string" && error.data.message
-            ? error.data.message
-            : t("errorFallback"),
+        // A coded error (e.g. embedding_model_missing) is explained in the UI
+        // language with what to configure; others show the recorded message.
+        description: errorMessage(
+          typeof error.data.code === "string" ? error.data.code : undefined,
+          error.data.params && typeof error.data.params === "object"
+            ? (error.data.params as Record<string, unknown>)
+            : undefined,
+          typeof error.data.message === "string" ? error.data.message : "",
+          t("errorFallback"),
+        ),
       });
     }
     // Only the running edge matters; events are read at that moment.

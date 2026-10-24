@@ -10,7 +10,7 @@
 
 复用优先：平台基础设施采用成熟依赖；新增编辑器、流程图、持久化或框架能力时，先评估现有组件与官方适配器。手写原生循环承担教学职责，业务界面不重复实现 Markdown、代码高亮或 SSE 语法解析。
 
-模型调用基础、工具调用、任务与接口、上下文与状态（含提示缓存与 Skills）和推理与控制模式已有 24 门可运行课。后续阶段继续加入检索、框架和系统评估；目录中仍为 planned 的课程不能运行，也不计作已完成课程。
+模型调用基础、工具调用、任务与接口、上下文与状态（含提示缓存与 Skills）和推理与控制模式、检索、框架、质量与可靠性、协议和综合实践，共 53 门可运行课。其中 29 门新课只做过一轮真实模型运行（2026-10-21，见 [验证记录](../verification/live-runs-2026-10-21.md)），`embedding-retrieval` 与 `hybrid-retrieval` 没有真实模型运行过。目录中标为 planned 的课程不能运行，也不计作已完成课程。
 
 ## 技术选择
 
@@ -55,17 +55,31 @@ flowchart LR
 | 类型 | 教学意义 | data 的主要字段 |
 | --- | --- | --- |
 | `run_start` | 执行来源、课程与模式 | 运行元数据 |
-| `request` | 实际准备发送的完整请求体 | `body` |
-| `response` | 模型返回的原始响应 | `body`、`duration_ms` |
+| `request` | 实际准备发送的完整请求体 | `body`；Embedding 请求另有 `endpoint: "embeddings"` |
+| `response` | 模型返回的原始响应 | `body`、`duration_ms`；Embedding 响应另有 `endpoint`；流式请求的 `response` 是平台按分块拼合的，带 `stream` |
+| `response_delta` | 流式响应真实到达的一组分块 | `chunks`、`chunk_range`、`received_ms`、`text` |
+| `approval_requested` / `approval_resolved` | 运行停在审批点 / 审批结果 | `approval_id`、`summary`、`payload`、`payload_digest` / `outcome`、`decided_by`、`note` |
+| `checkpoint` | 课程保存的执行位置 | `checkpoint_id`、`name`、`state`、`state_digest` |
 | `tool_call` | 模型提出的函数调用 | `id`、`function` |
 | `tool_result` | 本机 Python 执行结果 | `tool_call_id`、`name`、`result` |
 | `answer` | 最终回答 | `content` |
 | `error` | 执行错误 | `message` |
 | `done` | 结束状态 | `status`、`duration_ms` |
 
+Embedding 请求由 `RunContext.embed` 发出（百炼走原生 HTTP 的 `/embeddings`，其他服务商走 `litellm.embedding`），与聊天请求共用调用预算和表示层级；向量完整记录，只在界面显示时截断。所选服务商没有 Embedding 模型时，平台用错误码 `embedding_model_missing` 明确拒绝，不改用别的模型。格式见 [事件信封 v2](event-envelope-v2.md) 的“Embedding 请求”。
+
 请求事件保存当时的消息快照，不能随着下一轮追加消息而变化。完整 JSON 指请求体与响应体，认证密钥不属于教学记录。后端对事件中的实际密钥做脱敏。
 
 中止会阻止后续轮次与工具执行；已经发送的上游 HTTP 请求可能继续直到返回或超时。网页回放不调用模型，也不重新执行工具。
+
+### 流式、审批与检查点
+
+后续课程（流式输出与取消、Hooks 与审批闸门、人工介入与恢复，以及编码 Agent、后台任务和综合项目）需要的三项平台能力都在 `RunContext` 上，事件格式见 [事件信封 v2](event-envelope-v2.md) 第 7 节，用法见 [新增课程](adding-lessons.md) 的“流式、审批与检查点怎么用”：
+
+- **流式**：`context.complete_stream(...)`。百炼原生 HTTP 发 `stream: true`（默认带 `stream_options.include_usage`），按 SSE 的 data 行逐块解析；LiteLLM 用 `stream=True`，记录 SDK 的分块对象。分块在单独的读线程里读取，运行线程每 50 毫秒检查一次停止，所以没有新分块时也能及时停下。分块原样记录，按时间（默认 0.25 秒）或块数（默认 40）合并成 `response_delta`，第一块单独一条；结束时平台把分块拼成一条 `response`，标明 `assembled_from_chunks`、结束方式和停止原因。网页把已经到达的文字按事件原样拼出来，没有打字机效果。
+- **审批**：`context.request_approval(...)` 记 `approval_requested`，运行状态变为 `paused`，网页出现批准 / 拒绝卡（可写理由，`editable` 时可改参数），`POST /api/runs/{id}/approvals` 提交，运行线程把决定记成 `approval_resolved` 后续跑；超时、停止都有明确结果。离线测试的决定来自课程夹具 `testing.approval_factory` 或测试注入的 `approval_policy`，学生网页没有模拟入口。
+- **检查点与恢复**：`context.checkpoint(name, state)` 把状态记进运行存储；`POST /api/runs/{id}/resume` 从某个检查点启动新运行（新运行记 `resumed_from` 与 `thread_id`，课程读 `context.resume_state`）。恢复不重放模型请求，之后的请求都是真实新请求；服务重启后仍可恢复。
+- **停止的原因**：`cancel` 接受 `reason`（`user_stop`、`page_closed`），写进 `done.data.cancel_reason`；读事件的连接断开不是停止，只在 `done.data.client_disconnects` 计数。
 
 ## 新增课程流程
 
@@ -84,6 +98,19 @@ flowchart LR
 LangChain 和 LangGraph 在后续课程确有需要时加入依赖。课程的执行器可以替换，前端继续消费统一事件：框架模型回调映射为 `request/response`，工具回调映射为 `tool_call/tool_result`，最终结果映射为 `answer`。若框架不能提供原始请求，则必须标注所展示的是框架输入，不能冒充 HTTP 请求体。
 
 图执行中的节点、状态和检查点可扩展事件字段，并明确版本迁移。不要为了适配基础课程的循环，隐藏图分支、并发或恢复语义。新增框架时先实现独立适配器及协议测试，再接入课程注册表。
+
+### 框架适配层与“框架输入”标注
+
+框架依赖写在 `pyproject.toml` 主依赖里（`langchain-core`、`langgraph`、`mcp`、`a2a-sdk[http-server]`，版本上下限与许可证见 `THIRD_PARTY_NOTICES.md`），不引入 `langchain` 整包和服务商集成包。适配层是 `course/frameworks.py`，协议测试是 `tests/test_frameworks.py`：
+
+- `RunContextChatModel(context=context)` 是一个 LangChain `BaseChatModel`。框架的每次模型调用都经 `RunContext.complete` 发出，所以照常记录 `request/response`、计入 `max_model_calls`、响应取消。`bind_tools` 与 `with_structured_output` 把框架工具转换成 OpenAI 兼容的工具定义。每次调用默认取本次运行的下一个轮次；调用时传 `round_number`、`branch` 可指定轮次和并行分支。LangGraph 节点直接用它。
+- 每次调用前后各多一条 lesson 事件，分开两个层级：`lesson.framework_input`（`layer: "framework_input"`）记录框架自己持有的消息、工具名和选项，是转换前的框架输入，不是请求体；`lesson.framework_output`（`layer: "framework_output"`）记录框架从响应构造出的 AIMessage。夹在中间的 `request` 才是适配层转换后的请求体，它的 `representation` 仍由运行路径决定（百炼为 `http_body`，LiteLLM 为 `sdk_standardized`），不因为出自框架而改标。
+- 服务商没给调用 id 时，适配层补 `framework_call_<调用序号>_<n>`，并写进 `synthesized_call_ids`；实参不是 JSON 对象的调用进入 `invalid_tool_calls`，不丢弃。服务商没报告用量时 `usage_reported: false`，不填 0。
+- 工具用 `execute_tool_calls(context, ai_message, tools)` 执行，它逐个调用 `RunContext.execute_proposal`，产生 `tool_call/tool_result`，无效调用按原始实参提交并得到结构化错误。不要在课程运行里用 LangGraph 预置的 `ToolNode`：它直接调用工具，绕过事件记录。`tools_as_callables` 把 LangChain 工具转成允许列表，`ToolException` 变成 `ok=false` 的结果。
+- `stream_graph(context, graph, inputs, config=...)` 按步运行编译好的图，每个节点的状态更新记为 `lesson.graph_update`（`step`、`node`、`update`），步与步之间检查取消；图自身的循环上限用 `recursion_limit`。`RunContextCallbackHandler` 可选，把框架回调记为 `lesson.framework_callback`，只记名称和嵌套关系，run id 换成按出现顺序编号的 `fw-1`、`fw-2`。
+- LangSmith 追踪会把框架输入上传到外部服务。课程运行只在本机记录：框架代码放进 `local_tracing_only()`（`stream_graph` 已包好），追踪开着时模型适配器拒绝发请求。
+- 协议课（MCP、A2A）用 `course/protocols.py`（测试 `tests/test_protocols.py` 真实启动本地进程）：`run_until_cancelled(context, session)` 把运行的停止变成异步取消，SDK 随之关闭连接、回收子进程，然后抛出 `RunCancelled`；`python_module_server` 与 `spawn_local_service` 只从 `lessons.` 包下的模块启动服务，子进程只继承 SDK 的安全环境变量列表，拿不到父进程里的密钥；A2A 服务自己绑定 127.0.0.1 的空闲端口。`recording_stdio` 把 MCP 的每条 JSON-RPC 消息记为 `lesson.mcp_message`，`captured: "sdk_session_message"` 说明它是 SDK 消息对象按协议字段名导出的内容，不是原始字节流。协议消息不写进 `request/response`，那两种事件只用于模型调用。
+- 这些都是 lesson 事件和数据字段，没有修改信封常量；回放与录制按普通 `lesson.*` 事件处理。
 
 ## 建议课程路径
 

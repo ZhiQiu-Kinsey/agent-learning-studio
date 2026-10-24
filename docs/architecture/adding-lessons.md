@@ -8,7 +8,7 @@
 
 `curriculum/catalog.json` 是课程 ID、别名、标题、简介、学习目标、层级、先修和状态的唯一来源；显示课号由它的目录顺序计算（见下一节）。`lessons/lesson_*/lesson.json` 描述实现位置；后端自动发现清单，不再编辑 `server/catalog.py` 加分支。
 
-以下使用仍处于规划中的 `document-loading` 演示命令，按实际课程替换。`--id` 接受课程 slug（或改名前的旧 slug 别名）；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
+以下用 `document-loading` 演示命令（它已开放，这里只当命令示例），按实际课程替换。`--id` 接受课程 slug（或改名前的旧 slug 别名）；`--slug` 可以省略，提供时必须与目录中的 slug 一致（可写成 `document_loading`），只为兼容旧命令保留。生成器只接受目录中已有的 `planned` 课，先验证参数、路径和重复清单，再创建文件；不会覆盖已有目录，也不会自动开放课程。
 
 ```powershell
 # 先预览文件清单，不写文件
@@ -137,6 +137,10 @@
 `main.py` 导出 `setup(locale)`，返回 `course.runner.AgentSetup(system_prompt, tools, available_tools)`，即可复用原生工具循环；它按运行语言给出系统提示词与工具定义（见下文“多语言运行时”）。每课可以引用已经存在的无副作用工具；源码清单应展示真实引用的实现。通用循环处理模型请求、工具调用与结果、错误和轮数上限。
 
 确定性 fixture 是课程内的 `create_completion(exercise_id, inputs=None, locale="zh-CN")` 工厂，返回 `completion(body, api_key)`；支持多种运行语言的课按 `locale` 给出该语言的确定性回答。测试响应可以模拟模型决策，Python 工具必须实际执行；fixture 不作为学生网页的模型替代，也不解释自由输入。需要输入注入的测试练习可设 `offline_only: true`（网页不能真实运行它）。要让学习者在网页上亲手检验失败路径，优先改成本地练习：在 custom 运行器里让运行器构造有问题的调用（`context.submit_call`），并给这个练习声明 `requires_model: false`，例如 `fail-safely` 的两组故障注入。
+
+用到 Embedding 请求的课再声明 `"testing": {"embedding_factory": "fixtures:create_embedding"}`：`create_embedding(exercise_id, inputs=None, locale="zh-CN")` 返回 `embedding(body, api_key)`，按 OpenAI 格式返回 `{"data": [{"index": i, "embedding": [...]}], "model": ..., "usage": ...}`，向量条数与 `body["input"]` 相同。确定性测试向量（例如按人工概念词表构造的小维度向量）只服务测试，在夹具注释里写明怎么构造。只发 Embedding 请求、不调聊天模型的课可以只声明 `embedding_factory`。声明了它的课，调用模型的练习默认都要 Embedding：真实模式下所选服务商没有 Embedding 模型时，平台在开始前拒绝运行（错误码 `embedding_model_missing`，前端翻译并引导去模型设置），不悄悄换模型；不发 Embedding 请求的练习写 `requires_embedding: false`，不调用模型的练习（`requires_model: false`）不需要写。
+
+发流式请求（`context.complete_stream`）的课声明 `"stream_factory": "fixtures:create_stream"`：`create_stream(exercise_id, inputs=None, locale="zh-CN")` 返回 `stream(body, api_key)`，后者返回分块字典的可迭代对象（`chat.completion.chunk` 形状：`choices[].delta.content`、`delta.tool_calls` 片段、最后一块 `choices: []` 加 `usage`）。夹具可以是生成器，在分块之间 `time.sleep` 或等待一个事件，用来测试中途取消。请求审批（`context.request_approval`）的课可以声明 `"approval_factory": "fixtures:create_approval_policy"`：`create_approval_policy(exercise_id, inputs=None, locale="zh-CN")` 返回 `policy(request)`，按请求给出确定性决定 `{"decision": "approve" | "reject" | "timeout", "note"?, "edited_payload"?}`，事件里记为 `decided_by: "offline_fixture"`；返回 `None` 时这条审批照常等接口提交。这两个夹具只在离线测试模式加载，真实模式的流式走服务商连接，审批只接受页面（或 `run_live.py --ask-approvals`）提交的人的决定。
 
 ## 教学内容（content v2）
 
@@ -299,6 +303,10 @@ def run(context: RunContext):
 | `context.execute_proposal(tool_call, available_tools)` | 执行模型提出的一次调用：记录调用提议与工具结果，用同一个调用 id 配对。服务商漏发或发空调用 id 时，平台补一个本次运行内确定的 `synthesized_call_<轮次>_<序号>`，写回调用本身（课程放回历史的助手消息与工具消息因此用同一个 id，下一轮请求格式正确），`tool_call` 事件标 `id_synthesized: true`；记录的 `response` 保持服务商原样。不拒绝这类调用，是因为模型确实提出了它，拒绝会藏起真实的提议。事件挂在最近一次 `complete` 的轮次上，不分分支：目前没有课程在并行分支里执行调用提议，要这样做先给它加上显式的轮次与分支参数 |
 | `context.call_tool(name, arguments, available_tools, round_number=1)` | 由运行器（不是模型）发起一次登记过的工具调用，并记录调用与结果 |
 | `context.submit_call(name, raw_arguments, available_tools, round_number=1)` | 运行器原样提交一条调用（名字可以未登记，参数是原样的 JSON 字符串、可以是坏的），走与模型提议相同的检查；用于演示拒绝路径，事件标为运行器发起（`origin: course_program`，界面显示“运行器调用工具”） |
+| `context.embed(texts, round_number=1, *, branch=None, dimensions=None)` | 发一次 Embedding 请求，返回 OpenAI 格式的响应。`request` / `response` 事件带 `endpoint: "embeddings"`，请求体与响应体如实记录（含完整向量），计入 `max_rounds` 预算。一次最多 `context.embedding_batch_limit` 条非空文本（百炼 10），课程自己分批，让每一批都是学习者看得到的请求；`context.embedding_model` 是这次运行的 Embedding 模型。格式见 [事件信封 v2](event-envelope-v2.md) 的“Embedding 请求” |
+| `context.complete_stream(body, round_number=1, *, branch=None, include_usage=True, flush_interval_s=0.25, flush_max_chunks=40, stop_when=None)` | 发一次流式请求，返回 `StreamResult`（`response` 是平台按分块拼成的、与非流式同形的响应，另有 `status`、`text`、`chunk_count`、`first_chunk_ms`、`first_token_ms`、`duration_ms`）。请求体由平台加上 `stream: true` 和（默认）`stream_options.include_usage`，课程不要自己写这两个字段。事件：`request`（`data.stream: true`）→ 若干 `response_delta`（原样分块，第一块单独一条，之后按时间或块数合并）→ 一条 `response`（`data.stream` 写拼合信息与结束方式）。`stop_when(view)` 返回真时课程提前结束接收（`status: "stopped"`）；运行被停止时记下已收到的分块后抛出 `RunCancelled`；断流或服务商在流里报错时记下已收到的分块后抛出。计一次模型调用 |
+| `context.request_approval(kind, summary, payload, *, timeout_s=300, risk=None, editable=False)` | 运行停在审批点（运行状态 `paused`），等人决定，返回 `ApprovalDecision`（`outcome`：`approved`、`rejected`、`timeout`；`approved`、`payload`、`payload_digest`、`note`、`decided_by`、`edited`、`matches(payload)`）。`approval_requested` 记录摘要、完整参数和参数摘要（规范化 JSON 的 sha256），`approval_resolved` 记录结果；等待中被停止时记 `cancelled` 后抛出 `RunCancelled`。`editable=True` 允许人批准修改后的参数，修改记进事件。拒绝和超时不抛异常，由课程如实结束 |
+| `context.checkpoint(name, state)` | 把可 JSON 序列化的执行位置存进运行记录（`checkpoint` 事件），返回 `cp-<n>`。之后可以从它启动新运行（`POST /api/runs/{run_id}/resume`），新运行用 `context.resume_state` 读到这份状态，`context.resumed_from` 说明来自哪次运行的哪个检查点，`context.thread_id` 是这条恢复链共用的编号 |
 | `context.run_native(module, max_rounds=3)` | 复用原生子流程；其回答记为 `lesson.stage_result`，返回字符串由外层组织最终回答 |
 | `context.emit("lesson.step", data)` | 记录课程特有的 JSON 证据；自定义事件使用 `lesson.` 前缀 |
 | `context.check_cancelled()` | 在阶段与副作用操作前响应平台停止请求 |
@@ -306,7 +314,14 @@ def run(context: RunContext):
 
 运行器可以是同步或异步函数。返回字符串时平台自动记录最终回答；也可以自行发布 `answer` 后返回 `None`。开始、结束和执行锁由平台管理，课程不能自行伪造生命周期事件。共享服务统一保留模型连接、事件快照、脱敏与回放；不要从课程另建 SSE、绕过连接管理直读密钥，或从回放触发执行。
 
-停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。`lessons/lesson_10_persistent_memory/store.py` 提供教学用 SQLite 持久记忆实现（`persistent-memory` 讲保存、重开与召回，`memory-lifecycle` 讲版本冲突、过期与范围），可参考；共享扩展接口本身不提供通用记忆服务。
+### 流式、审批与检查点怎么用
+
+- **流式**：首块延迟用 `first_chunk_ms` / `first_token_ms`，它们是平台在本进程里测的真实时间（从请求发出前到传输层交出第一块），不要自己估算。取消的语义：停止请求到达后，平台不再记录新分块，已经收到但还没交给运行的分块只计数（`discarded_after_cancel`）；上游连接在下一块到达或网络超时后关闭。`response` 的 `body` 是平台拼合的，正文里不要把它说成服务商发来的响应体；每个原始分块在 `response_delta.data.chunks` 里。
+- **停止、断开与终态**：停止按钮发 `cancel`（`reason: user_stop`），页面关闭发 `page_closed`，其他调用方没有原因时记 `api`；结果写在 `done.data.cancel_reason`。只断开事件连接（网页的“断开事件连接”、断网、读者关闭 SSE）不会停止运行，运行结束时 `done.data.client_disconnects` 记下断开了几次。注意本平台在页面关闭时会主动发停止请求，所以“关掉页面”会停止运行，原因是 `page_closed`；要演示“断开不等于停止”，用断开事件连接。
+- **审批**：先审批、后执行。课程拿到决定后用 `decision.payload` 执行，执行前用 `decision.matches(payload)` 再核对一次实际参数；拒绝或超时时不执行，并在回答里写明原因。审批卡只在网页上当前这次运行里可交互，回放、录制和“上次的运行”只读；后端也只接受当前运行、当前待决请求、参数摘要一致的提交，同一请求只接受一次。
+- **检查点与恢复**：检查点只保存课程交给它的状态，不让外部动作天然幂等。有副作用的步骤要在状态里带操作标识，恢复后先查这个标识是否已经完成。恢复用来源运行的课程、练习、问题、输入、模式和运行语言启动新运行，不重放来源运行的任何请求或工具调用；源码变了（与录制同一规则的源码哈希不一致）时拒绝恢复（`checkpoint_stale`），来源运行还没结束时拒绝（`run_still_active`）。服务重启后检查点仍在运行存储里；被中断（`interrupted`）的运行同样可以从最后一个检查点恢复。
+
+停止是协作式的：长循环需要插入检查，已发出的网络请求仍受传输超时约束。本地进程中的可信课程代码不是沙箱。接入数据库、持久记忆、检索或框架时，仍需为该能力实现清楚的状态生命周期、适配与测试。`lessons/lesson_10_persistent_memory/store.py` 提供教学用 SQLite 持久记忆实现（`persistent-memory` 讲保存、重开与召回，`memory-lifecycle` 讲版本冲突、过期与范围），可参考；共享扩展接口本身不提供通用记忆服务。框架课（LangChain、LangGraph）用 `course/frameworks.py` 的 `RunContextChatModel`、`execute_tool_calls` 和 `stream_graph`，模型调用、工具调用和图的每一步都经 `RunContext` 记录，框架输入单独记为 `lesson.framework_input`，协议课（MCP、A2A）用 `course/protocols.py` 启动本地服务进程并在停止时回收；两者都见 [架构说明](platform.md) 的“框架适配层与‘框架输入’标注”。
 
 ## 独立页面与可视化
 

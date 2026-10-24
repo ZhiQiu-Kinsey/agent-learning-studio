@@ -1,0 +1,1386 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "TOOLS / RELIABILITY",
+      "source": "9fcc81598356"
+    },
+    "hero.headline": {
+      "text": "Tools time out, retries repeat,",
+      "source": "6dbe801b9c6f"
+    },
+    "hero.highlight": {
+      "text": "and a write may take effect only once.",
+      "source": "879e0a6e6f59"
+    },
+    "hero.takeaway": {
+      "text": "A read that fails can simply run again; before a write runs again, ask one question: will it take the credit twice? This lesson makes lock waits time out, holds the outbox folder and loses results on a real local database and real files, and shows how retrying, deduplicating and undoing keep the store correct. This lesson calls no model.",
+      "source": "833f61f01100"
+    },
+    "concepts.01-read-write.label": {
+      "text": "01 / READ · WRITE",
+      "source": "8ee03ddf6523"
+    },
+    "concepts.01-read-write.title": {
+      "text": "Treat reads and writes differently",
+      "source": "67edf6433398"
+    },
+    "concepts.01-read-write.description": {
+      "text": "A read-only query changes nothing however often it runs, so after a failure it can simply run again. Before retrying a write that changes the store, check whether running it again would take effect twice.",
+      "source": "74058724f770"
+    },
+    "concepts.02-classify.label": {
+      "text": "02 / CLASSIFY",
+      "source": "650bbbd2a110"
+    },
+    "concepts.02-classify.title": {
+      "text": "Classify first, then decide to retry",
+      "source": "c91014fb3550"
+    },
+    "concepts.02-classify.description": {
+      "text": "A transient failure is one that may succeed on the next try, such as a lock wait that timed out; invalid arguments and business-rule refusals fail the same way however many times you retry.",
+      "source": "f816a64fb31d"
+    },
+    "concepts.03-backoff.label": {
+      "text": "03 / BACKOFF",
+      "source": "e7a84b06aba2"
+    },
+    "concepts.03-backoff.title": {
+      "text": "Retries have limits",
+      "source": "9c7828150139"
+    },
+    "concepts.03-backoff.description": {
+      "text": "Waiting a little after a failure before trying again is called backoff; when the wait grows 1x, 2x, 4x, it is exponential backoff. Both the number of attempts and the total time are capped, and every attempt is recorded as an event.",
+      "source": "e07d5b1afee5"
+    },
+    "concepts.04-key.label": {
+      "text": "04 / KEY",
+      "source": "f0892aaac817"
+    },
+    "concepts.04-key.title": {
+      "text": "One operation, one key",
+      "source": "1dbd845df0db"
+    },
+    "concepts.04-key.description": {
+      "text": "Before the first attempt the caller creates an idempotency key and sends it unchanged with every retry; a store that has seen the key hands back the first result instead of writing again.",
+      "source": "56faa7fea9bd"
+    },
+    "section-1.title": {
+      "text": "Reads and writes need different treatment",
+      "source": "5002c0bb29a6"
+    },
+    "section-1.paragraphs.0": {
+      "text": "A read can be retried freely; before retrying a write, make sure it will not run twice. {{lesson:fail-safely}} made a failing tool hand back a structured error, so both the model and the runner can see why it failed; what to do next got a single sentence there: some failures are worth retrying and some are not. This lesson turns that sentence into a program. The scene is a practice-submission tool: a learner hands in an answer, the tool takes one grading credit and records one submission in the database.",
+      "source": "9cedda485d11"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Start with the naive approach: on any error, call again. For read_account, which looks up the credits, that is fine; ten lookups or one, the store still holds 3 credits. submit_practice is different. Suppose the first call already wrote to the store and only its result failed to come back: the program thinks it failed and calls again, the store gains a second submission, and the credits drop from 3 to 1 although the learner handed in one answer. Running a read again changes nothing; every run of a write changes the store again.",
+      "source": "542a996418d7"
+    },
+    "section-1.paragraphs.2": {
+      "text": "This lesson's retry function, call_with_retry, does not guess. It asks the caller to state one thing explicitly: would repeating this call make its effect happen twice? The answer goes in the repeatable argument. read_account passes True; submit_practice with an idempotency key also passes True, because a store that has seen the key will not write again; a write without a key passes False. Every attempt goes through context.call_tool, so the events hold a real tool_call and tool_result pair marked as runner-initiated. The caller has to answer, because the retry function only sees one failure, not whether the store behind it would gain an extra row.",
+      "source": "8edfee850244"
+    },
+    "section-1.paragraphs.3": {
+      "text": "This lesson calls no model. In all four exercises the runner calls the tools itself, and every run creates a fresh temporary database and outbox folder; real runs and offline test mode run the same code from exactly the same starting point. The faults are made on purpose by the runner too: another database connection locks the store, or someone else's lock file is placed in the outbox. Each fault is preceded by a lesson.fault event whose source is fault_injection, so nobody mistakes it for an error that happened on its own.",
+      "source": "34b2c9341727"
+    },
+    "section-2.title": {
+      "text": "Timeouts and error classification",
+      "source": "80e775e65477"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Classify an error before retrying: transient failures may be retried; invalid arguments and business refusals should not be. Whether sending the call again helps depends on whether the cause goes away by itself. A database locked by another program is released after a while; an exercise id written as the nonexistent speed-typing, or a learner with 0 credits left, gets the same refusal a hundred times over and only wastes time. And time is not the only cost: every attempt holds a connection and a lock, and it delays the moment the real error gets reported.",
+      "source": "5ad23edd0d52"
+    },
+    "section-2.paragraphs.1": {
+      "text": "A timeout is the most common transient failure. In this lesson the timeout is real: PracticeStore opens the database with a limit on how long to wait for a lock, the fault injection lets another connection take an exclusive lock first, and the tool's query can only wait; when the limit passes without the lock, it gives up and raises StoreTimeout. The default limit is 200 milliseconds, so in the report table the locked attempts each took about 200 milliseconds. StoreTimeout means something precise: the lock was never acquired, the transaction never started, and nothing happened in the store.",
+      "source": "bd7bd0a9ed0b"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Classification looks at one thing only: the error_type in the tool result, which is the exception's class name. The CATEGORIES table in retry.py maps it to a category: StoreTimeout and OutboxBusy are transient failures; InvalidArgument, and the TypeError Python raises when an argument is missing, are invalid arguments; BusinessRejected and KeyConflict are business refusals; ResponseLost is a category of its own, outcome unknown. Any type not in the table is recorded as unclassified and treated as not retryable: treating an unknown error as transient may mean running a write twice.",
+      "source": "173ed97a912f"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The exercise “Error classification: which failures are worth retrying” puts four cases into one run: a submission to an exercise that does not exist, a submission for a learner with 0 credits, a normal submission whose first attempt meets a lock, and an outbox write whose first attempt meets a lock. The first two stop after one attempt each, and their lesson.retry events state the category and why they stopped; the other two wait a moment and succeed on the second attempt. The classification table is written by people and only covers the errors they thought of; a new error type from a tool counts as not retryable until it is added.",
+      "source": "c7da0c99b6f2"
+    },
+    "deep-dive-timeout.title": {
+      "text": "After a timeout, did the operation happen or not?",
+      "source": "66af6934056c"
+    },
+    "deep-dive-timeout.summary": {
+      "text": "A timeout only says the caller stopped waiting; why this lesson can tell “never started” from “outcome unknown”.",
+      "source": "043daf6918a4"
+    },
+    "deep-dive-timeout.paragraphs.0": {
+      "text": "A timeout only says the caller could not wait any longer, not that the other side did nothing. Once a write request has been sent, it may be stuck in one of three places: it has not reached the other side yet; the other side received and finished it, and the result got lost on the way back; or the other side is still working on it. The caller sees the same timeout in every case. Understanding AI Agents in Depth (深入理解 AI Agent) uses a transfer as its example: after a network timeout reports failure, the money may or may not have left the account, and retrying without checking may send it twice.",
+      "source": "d213ffac9850"
+    },
+    "deep-dive-timeout.paragraphs.1": {
+      "text": "This lesson splits these cases in its classification table. StoreTimeout happens while taking the lock, before the transaction even starts, which is the first case, so even a write can be retried safely: in the exercise “Error classification: which failures are worth retrying”, the normal submission meets a lock on the first attempt, succeeds on the second, and the store holds one record. ResponseLost is the second case: the tool has committed its transaction and the fault injection throws the result away. The caller cannot tell the second case from the third, so all it can say is that the outcome is unknown.",
+      "source": "5864b8256b5a"
+    },
+    "deep-dive-timeout.paragraphs.2": {
+      "text": "The split is possible because this lesson's tools and store are on the same machine, so it is clear at which step an error happened. Calling a remote service usually gives you no such view: when a connection breaks halfway, you do not know whether the request was processed. So in real systems a write that timed out is normally treated as outcome unknown, and it either carries an idempotency key or checks the state before deciding. Understanding AI Agents in Depth (深入理解 AI Agent) also mentions a sneakier fault: the connection stays open but data stops flowing; a connection timeout never notices it, so a separate timer that declares the call stuck after a period without progress is needed.",
+      "source": "e2a042776879"
+    },
+    "predict-tool-calls.prompt": {
+      "text": "Before you run “Read-only query: locked twice” in the lab, guess: the database is locked for the first two attempts and at most 4 attempts are allowed by default. How many tool_call events will this run produce?",
+      "source": "d1e0f7fdcfce"
+    },
+    "mq-classify.rejected-retry.prompt": {
+      "text": "In the tool result of submit_practice, error_type is BusinessRejected (no credits left). What does call_with_retry do?",
+      "source": "cd1a40a4c47e"
+    },
+    "mq-classify.rejected-retry.a.text": {
+      "text": "Stops at once; this operation gets a single attempt",
+      "source": "85b4ea855d7a"
+    },
+    "mq-classify.rejected-retry.a.feedback": {
+      "text": "Right. Waiting a while does not create new credits.",
+      "source": "998ddab9ff12"
+    },
+    "mq-classify.rejected-retry.b.text": {
+      "text": "Waits and retries until the attempt limit is reached",
+      "source": "4f9dd28452b2"
+    },
+    "mq-classify.rejected-retry.b.feedback": {
+      "text": "Not quite. A business refusal follows from the input and the current state; a retry only gets the same refusal.",
+      "source": "48a32d699630"
+    },
+    "mq-classify.rejected-retry.c.text": {
+      "text": "Tries again with a new idempotency key",
+      "source": "67f38a61c926"
+    },
+    "mq-classify.rejected-retry.c.feedback": {
+      "text": "Not quite. An idempotency key prevents running twice; it does not get around a business rule.",
+      "source": "37347414b510"
+    },
+    "mq-classify.rejected-retry.explanation": {
+      "text": "Business refusals and invalid arguments are not retried: sending the same call again cannot change the result.",
+      "source": "781c11aa5380"
+    },
+    "section-3.title": {
+      "text": "Bounded retries and backoff",
+      "source": "5f417bd025df"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Both the number of retries and the waits need limits, and every attempt must leave a record. Retrying without limits amplifies a brief fault: if the lock never goes away, the loop never ends; if many callers do the same, they all rush back the moment the other side recovers and knock it over again. {{lesson:fail-safely}} gave the agent loop a round limit, and a retry loop needs its own stop condition just as much. So retries in this lesson are made of three things: classification decides whether to try again, the attempt limit and the time budget decide how far to go, and the event records decide whether you can find out afterwards what happened each time.",
+      "source": "8971824f7608"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Work through the defaults by hand. max_attempts is 4, base_delay_ms is 100, and a single wait is at most 1 second. After the 1st failure the wait is at most 100 milliseconds, after the 2nd at most 200, after the 3rd at most 400; the 4th failure stops without waiting. backoff_delay then multiplies each wait by a random factor between 0.5 and 1, called jitter, so with the defaults the report shows waits such as 66 and 115 milliseconds rather than a neat 100 and 200. The random numbers come from a fixed seed, so the same inputs wait the same amounts on every run.",
+      "source": "7da1e780337b"
+    },
+    "section-3.paragraphs.2": {
+      "text": "An attempt limit alone is not enough; there is a time budget too. After each failure, call_with_retry does the arithmetic: the time already spent, plus this wait, plus the longest the next attempt may take; if that exceeds budget_ms, it stops retrying and records the reason as “another attempt would exceed the time budget”. The next attempt's limit counts because, once started, it may run to the full limit. Every failure produces a lesson.retry event: which attempt, error type, category, decision, reason, how long it waited and how much time has been used.",
+      "source": "0c4cd30bc901"
+    },
+    "section-3.paragraphs.3": {
+      "text": "A retry can only wait for a brief fault to pass; it cannot repair something broken. If the lock is never released, all four attempts fail, and the runner stops and reports it as it is: the credits were not read, and the answer contains no number. This is the simplest form of degradation: when you cannot get a result, say so, rather than substituting the last value or an estimate. There is no standard answer for the limits either. Understanding AI Agents in Depth (深入理解 AI Agent) notes that Claude Code abandons context compression after 3 consecutive failures, a number taken from statistics on real sessions rather than picked at random.",
+      "source": "0767c868a0f3"
+    },
+    "deep-dive-backoff.title": {
+      "text": "Why exponential backoff also needs randomness",
+      "source": "d194c19ee92a"
+    },
+    "deep-dive-backoff.summary": {
+      "text": "What happens after a hundred callers fail at once; two common kinds of jitter; why this lesson fixes the seed.",
+      "source": "f86f453ef410"
+    },
+    "deep-dive-backoff.paragraphs.0": {
+      "text": "Picture a service that is briefly overloaded, and a hundred callers that get a failure at the same moment. If they all wait exactly 1 second, a hundred requests arrive together a second later and overload it again. Exponential backoff makes the waits grow and gives the service time to recover; but without randomness the hundred callers still wait 1, 2, 4 seconds together and come back together. Jitter scatters them: each caller picks a random wait under the cap, and their returns no longer line up.",
+      "source": "9a5e33dc6632"
+    },
+    "deep-dive-backoff.paragraphs.1": {
+      "text": "Two kinds of jitter are common. One picks a random value between 0 and the cap, which scatters callers best but sometimes hardly waits at all; this lesson uses “half fixed, half random”: the wait lands between half the cap and the cap, so it always waits at least a little. The full harness in Learn Claude Code does the same thing for rate-limit and overload errors: the wait grows by powers of 2, is capped at 32 seconds, and gets up to a quarter extra at random.",
+      "source": "b3cc1ccf5ec2"
+    },
+    "deep-dive-backoff.paragraphs.2": {
+      "text": "This lesson has a single caller, so the scattering effect of jitter cannot be seen; it is kept so the code shows the complete formula. In real systems each caller draws its own random numbers; this lesson fixes the seed only so that runs with the same inputs can be reproduced. One more point is easy to miss: if the other side suggests a wait when it refuses, such as a retry interval in a rate-limit response, follow it instead of your own calculation. And when an auxiliary background call fails, do not retry it at all, so it does not eat into the main flow's quota.",
+      "source": "a38e999ef60d"
+    },
+    "mq-budget.budget-stop.prompt": {
+      "text": "max_attempts is 6, budget_ms is 2000, and the per-attempt limit is 200 milliseconds. 1500 milliseconds have been used, and this backoff wait comes out at 400 milliseconds. Will there be another attempt?",
+      "source": "8133bb20c7b8"
+    },
+    "mq-budget.budget-stop.a.text": {
+      "text": "No: 1500 + 400 + 200 exceeds 2000, and the reason is the time budget",
+      "source": "280b1048d593"
+    },
+    "mq-budget.budget-stop.a.feedback": {
+      "text": "Right. The next attempt may run to its full limit, so it is counted too.",
+      "source": "e094910aa01e"
+    },
+    "mq-budget.budget-stop.b.text": {
+      "text": "Yes: the 6 attempts are not used up",
+      "source": "37d9692d96fb"
+    },
+    "mq-budget.budget-stop.b.feedback": {
+      "text": "Not quite. Attempts and time are two independent limits, and whichever comes first stops the retries.",
+      "source": "5061b73a5a03"
+    },
+    "mq-budget.budget-stop.c.text": {
+      "text": "Yes: 1500 + 400 does not exceed 2000",
+      "source": "2617b4c617e8"
+    },
+    "mq-budget.budget-stop.c.feedback": {
+      "text": "Not quite. That leaves out the up to 200 milliseconds the next attempt itself may take.",
+      "source": "0cc31eb683d8"
+    },
+    "mq-budget.budget-stop.explanation": {
+      "text": "Whichever of the attempt limit and the time budget comes first stops the retries; the budget includes the next attempt's limit.",
+      "source": "2f7688f3c613"
+    },
+    "section-4.title": {
+      "text": "Idempotency keys",
+      "source": "2af59f5b4dc5"
+    },
+    "section-4.paragraphs.0": {
+      "text": "The same operation with the same idempotency key runs only once in the store, however many times it is submitted. Idempotent means that running something once or many times has the same effect on the outside world. Reads are idempotent by nature; writes such as taking a credit and recording a submission are not, and a key makes up for it: the caller gives this operation a unique name, the first run stores the name together with its result, and whenever the same name shows up again, the stored result is handed back. That name is the idempotency key. The caller must create it, because only the caller knows whether two calls are the same thing.",
+      "source": "0e544516c7f1"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The exercise “A write takes effect, its result is lost” puts the same fault into three fresh stores: the first submission is already in the store, its result is thrown away on the way back, and the caller gets ResponseLost. Blind retry treats it as a transient failure and calls again: the store ends up with two submissions and the credits drop from 3 to 1. Stop when unknown does not retry: the store holds one submission, but all the caller knows is “outcome unknown”. Retry with an idempotency key calls again: the store still holds one, the credits are 2, and the result of the second attempt has replayed set to true.",
+      "source": "4b6982ca9bd4"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The key must be created before the first attempt and sent unchanged with every retry; new_key does exactly that. On the store side, submit_practice takes the write lock first and then looks the key up in the operations table: if it is there, the stored result goes straight back; only if it is not does the tool take the credit, insert the submission, and write the key, the request fingerprint and the result into operations. These steps share one transaction, so they all commit or all roll back. If the effect committed first and the key was written afterwards, a fault between the two would leave no key for the next retry to find, and it would write again.",
+      "source": "f835da2f8483"
+    },
+    "section-4.paragraphs.3": {
+      "text": "A key stands for exactly one request. Submit a different answer with the same key, and the fingerprints do not match: the tool raises KeyConflict, classified as a business refusal and not retried, because it most likely means a bug in the caller, and quietly handing back the old result would hide it. A key also guards against repeats only, not against mistakes: with 0 credits left, the submission is refused with or without a key. The evidence for idempotency must be visible in the store; the last check in the report reads the operations table and lists the key, instead of inferring it from tool results.",
+      "source": "27f58beb6aba"
+    },
+    "deep-dive-keys.title": {
+      "text": "Where keys live, how long they last, and dedup without a key",
+      "source": "2c06ed5ab9b0"
+    },
+    "deep-dive-keys.summary": {
+      "text": "How remote services deduplicate, when to check the state before changing it, and which operations can never be idempotent.",
+      "source": "79e6c429f428"
+    },
+    "deep-dive-keys.paragraphs.0": {
+      "text": "This lesson keeps the idempotency records in the same SQLite file as the business data, which is what lets one transaction write both. In real systems the two are often apart: when you call a remote payment or ordering API, the caller generates the key and puts it in the request, the service deduplicates, and the caller only has to send the same key with every retry. Services usually keep keys for a limited time, say a day; after that the same key counts as a new request, so retrying a day later is outside the protection.",
+      "source": "69c587a99820"
+    },
+    "deep-dive-keys.paragraphs.1": {
+      "text": "Another way to deduplicate is to check before changing: before retrying, look up the state of the target, and only act if the work has not been done yet. cancel_submission, which this lesson uses to undo a submission, works this way: inside its transaction it first checks whether the submission is already cancelled, and if it is, does nothing. This needs no key, but you must be able to recognise from the state that the work was done. Submitting an answer cannot do that: the same learner sending the same answer twice may be a repeated request or two real submissions; only the caller knows, so the caller brings the key.",
+      "source": "684a76ab9e50"
+    },
+    "deep-dive-keys.paragraphs.2": {
+      "text": "Some operations can never be made idempotent: sending an email, making a phone call, transferring money out; each run leaves a real event that cannot be taken back. Understanding AI Agents in Depth (深入理解 AI Agent) recommends checking first, confirming second and executing last for these, and when execution fails, returning the detailed error to the main model to replan instead of retrying automatically. This lesson's outbox file is a different case: writing the same submission twice gives the same file name and the same content, so write_outbox can be retried safely.",
+      "source": "1851f8f33bbd"
+    },
+    "mq-key.keyed-replay.prompt": {
+      "text": "A submit_practice call with an idempotency key already wrote successfully the first time, but the result was lost. The caller retries with the same key and the same content. What does the store do?",
+      "source": "5e613b21aa5b"
+    },
+    "mq-key.keyed-replay.a.text": {
+      "text": "Does not write again and hands back the stored first result, with replayed set to true",
+      "source": "48743b533ee8"
+    },
+    "mq-key.keyed-replay.a.feedback": {
+      "text": "Right. The store has seen this key and only hands back the first result.",
+      "source": "7a3763a1bffa"
+    },
+    "mq-key.keyed-replay.b.text": {
+      "text": "Writes another submission and takes another credit",
+      "source": "5d0bcd37b257"
+    },
+    "mq-key.keyed-replay.b.feedback": {
+      "text": "Not quite. That is what a blind retry without a key does.",
+      "source": "135cf91d2fe7"
+    },
+    "mq-key.keyed-replay.c.text": {
+      "text": "Refuses the retry with KeyConflict",
+      "source": "cf3eab74d7d7"
+    },
+    "mq-key.keyed-replay.c.feedback": {
+      "text": "Not quite. KeyConflict appears only when the same key comes with different content.",
+      "source": "a52be0c0bbdd"
+    },
+    "mq-key.keyed-replay.explanation": {
+      "text": "Same key and same content: the second run just hands back the first result.",
+      "source": "187d1677bcec"
+    },
+    "misconception-answer.claim": {
+      "text": "If the final answer says “submission succeeded”, the write must have succeeded, and exactly once.",
+      "source": "0ff6ad789369"
+    },
+    "misconception-answer.correction": {
+      "text": "The answer is just a sentence written by a program or a model. In the blind-retry arm, the last tool result the caller got is a success and the answer may well say so, yet the store holds two submissions and two credits were taken; in the stop-when-unknown arm, the write actually succeeded but the caller cannot say so. How many times a write happened has to be read from the store: before each run ends, this lesson emits a lesson.storage event that reads the actual state straight from the database and the outbox, and every check in the report is based on it.",
+      "source": "491e06f6c924"
+    },
+    "section-5.title": {
+      "text": "Partial completion and compensation",
+      "source": "9d0e42a3033e"
+    },
+    "section-5.paragraphs.0": {
+      "text": "When a multi-step write fails halfway, say clearly which steps have already taken effect, then undo them with compensation. Submitting an answer actually takes two steps: step 1 takes a credit and records the submission in the database; step 2 writes the answer as a file into the outbox, where the grader picks it up. A database transaction covers the database only, not the folder, so the two steps share no transaction. When step 2 fails, step 1 has already committed and the credit has been taken.",
+      "source": "82b90e43a856"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The exercise “Two-step write: failure halfway and compensation” keeps the outbox held by someone else's lock file. write_outbox raises OutboxBusy every time; that is a transient failure, retried with backoff, and after 4 attempts it gives up. Step 1 has taken effect by then, so the runner calls cancel_submission: it marks the submission cancelled and refunds 1 credit. The final lesson.storage shows the submission row still there with status cancelled, the credits back at 3, and no file in the outbox. The report's final status reads “not completed, compensated”. The four failed attempts are the lesson.retry events of round 2, and the compensation call is in round 3.",
+      "source": "d0124e9f7c2c"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Compensation does not turn back time; it is one more write in the opposite direction. It does not delete the submission row, it changes the status and refunds the credit, so the history stays visible: the charge and the refund are both there. Compensation is itself a write, it can fail and be retried too, so it must be safe to repeat: cancel_submission checks the status inside its transaction and refunds nothing if the submission is already cancelled. If compensation fails as well, the report says “partly completed, compensation failed” and the answer says plainly that a person needs to handle it, instead of pretending all is well.",
+      "source": "ab5b6edc2d47"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Not every step can be compensated. Once a file is in the outbox, the grader may already have started grading; an email that has been sent cannot be recalled. So when arranging a multi-step write, put the steps that are hard to undo last and give every earlier step a compensation. Change outbox_busy_attempts to 1 and run again: step 2 succeeds on its second attempt, there is no compensation, and the final status is “both steps completed”. Whatever the ending, the report's conclusion comes from the store, not from the final answer.",
+      "source": "aa51ae033645"
+    },
+    "walkthrough.title": {
+      "text": "What happens in a two-step submission",
+      "source": "5c55e3b6c772"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, what “Two-step write: failure halfway and compensation” does. The code is a simplified sketch, not a run record; the actual values are in the tool_result, lesson.retry and lesson.storage events.",
+      "source": "2ef4ca7e37f6"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Create the idempotency key first",
+      "source": "6a4d41aa94f4"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Created before the first attempt; every later retry carries it.",
+      "source": "dd6312c43399"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "The idempotency_key argument of tool_call",
+      "source": "7bf5f8e3ec5b"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "SQLite",
+      "source": "2d2eef3e092a"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Step 1: take a credit and record the submission",
+      "source": "7b4f0e3f9493"
+    },
+    "walkthrough.step-2.body": {
+      "text": "One transaction takes 1 credit, inserts the submission and writes the idempotency record.",
+      "source": "d55439e4f1cb"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "The tool_result of round 1",
+      "source": "5112b62734c9"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Fault injection",
+      "source": "35a89cb0cf26"
+    },
+    "walkthrough.step-3.title": {
+      "text": "The outbox is held",
+      "source": "7cadc37ad7ed"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Before every outbox write, someone else's lock file is put in place.",
+      "source": "07629ac6645e"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.fault",
+      "source": "89ee3a071fa7"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Back off and retry, give up when attempts run out",
+      "source": "880afb19b554"
+    },
+    "walkthrough.step-4.body": {
+      "text": "OutboxBusy is a transient failure; the 4th failure stops it.",
+      "source": "7cb35121fa9e"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "The lesson.retry events of round 2",
+      "source": "2d20a0988125"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Compensate step 1",
+      "source": "d52cdb556a9a"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Refund the credit and mark the submission cancelled; the row stays.",
+      "source": "bb52aaf637b0"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "The tool_call of round 3",
+      "source": "083888804228"
+    },
+    "walkthrough.step-6.label": {
+      "text": "06",
+      "source": "aacd834b5cdc"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Read the store to check",
+      "source": "c188dd71b7e7"
+    },
+    "walkthrough.step-6.body": {
+      "text": "The conclusion comes from the database and the outbox, not from tool results.",
+      "source": "3beb161dfae5"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "lesson.storage and lesson.report",
+      "source": "75fe84814ec7"
+    },
+    "mq-compensate.after-compensation.prompt": {
+      "text": "Step 2 failed to write the outbox and the compensation succeeded. What should the store look like now?",
+      "source": "5861aff24a43"
+    },
+    "mq-compensate.after-compensation.a.text": {
+      "text": "The submission row is still there with status cancelled, the credits are back at 3, and the outbox has no file",
+      "source": "311c06954a9c"
+    },
+    "mq-compensate.after-compensation.a.feedback": {
+      "text": "Right. Compensation is a reverse write, and the history stays.",
+      "source": "64fdda599294"
+    },
+    "mq-compensate.after-compensation.b.text": {
+      "text": "The submission row is deleted, as if it never happened",
+      "source": "d47ad7ddfc77"
+    },
+    "mq-compensate.after-compensation.b.feedback": {
+      "text": "Not quite. Deleting the row hides that a credit was taken and refunded.",
+      "source": "14414b6a13fb"
+    },
+    "mq-compensate.after-compensation.c.text": {
+      "text": "The credits stay at 2 until the outbox frees up",
+      "source": "0b4137222674"
+    },
+    "mq-compensate.after-compensation.c.feedback": {
+      "text": "Not quite. Step 2 has been given up; without undoing step 1 the learner simply loses a credit.",
+      "source": "50c8155c00bb"
+    },
+    "mq-compensate.after-compensation.explanation": {
+      "text": "On partial completion, first say what took effect, then undo it with a compensation that is safe to repeat.",
+      "source": "38d1497acc66"
+    },
+    "wrap-up.title": {
+      "text": "Summary",
+      "source": "6bf8bdb1f6ee"
+    },
+    "wrap-up.paragraphs.0": {
+      "text": "Looking back, this lesson has three threads: separating reads from writes decides whether a retry is allowed; classifying first and backing off within limits on attempts and time decides how to retry; idempotency keys and compensation make sure that neither retries nor a failure halfway leave the store with something extra or something that should not be there. They share one thing: every conclusion rests on the store. How many writes happened, how many credits are left, whether the file exists, all of it is read out by lesson.storage. The next lesson, {{lesson:prompt-injection}}, looks at another risk: material read back by a tool carries instructions, and the executing side has to control tools, paths and side effects.",
+      "source": "18760d5d7c8f"
+    },
+    "references.book-ch4.title": {
+      "text": "Tools: idempotency and cancellation semantics in the section on execution tools (Understanding AI Agents in Depth (深入理解 AI Agent))",
+      "source": "d1894fc938ce"
+    },
+    "references.book-ch5.title": {
+      "text": "Coding agents: faults and error recovery, classify before counting, tiered recovery and circuit-breaker limits (Understanding AI Agents in Depth (深入理解 AI Agent))",
+      "source": "2b73d82f2ac5"
+    },
+    "references.ms-tool-use.title": {
+      "text": "The tool use design pattern: the error handling and validation building block (Microsoft AI Agents for Beginners)",
+      "source": "870026e5edfa"
+    },
+    "references.ms-trustworthy.title": {
+      "text": "Building trustworthy agents: guarding against resource overloading and cascading errors (Microsoft AI Agents for Beginners)",
+      "source": "a94fb1b76dc9"
+    },
+    "references.lcc-s15.title": {
+      "text": "The integrated harness: exponential backoff retries on rate limits and overload (Learn Claude Code)",
+      "source": "1a4ad86c2b31"
+    },
+    "references.cookbook-sre.title": {
+      "text": "The SRE incident response agent: separate constraints for read tools and write tools (Claude Cookbooks)",
+      "source": "658b9a2cf163"
+    },
+    "code-classify.n7.text": {
+      "text": "Classification looks only at the error_type in the tool result, which is the exception's class name.",
+      "source": "11bff83823b9"
+    },
+    "code-classify.n9.text": {
+      "text": "The lock was never acquired and the transaction never started: transient, so even a write can be retried safely.",
+      "source": "eed5f2392d80"
+    },
+    "code-classify.n11.text": {
+      "text": "The tool may already have run: outcome unknown, and whether to retry depends on whether repeating would take effect twice.",
+      "source": "dcbe2b65f01c"
+    },
+    "code-classify.n13.text": {
+      "text": "A missing or extra argument makes Python raise TypeError, which counts as an invalid argument.",
+      "source": "c01d128c6f2e"
+    },
+    "code-classify.n14.text": {
+      "text": "Refused by a business rule: sending the same call again gives the same result.",
+      "source": "18840f8a9e44"
+    },
+    "code-classify.n19.text": {
+      "text": "A table lookup gives the category; the error text is never parsed.",
+      "source": "8c56cb5dbd8a"
+    },
+    "code-classify.n21.text": {
+      "text": "An error not in the table is not guessed at: it is unclassified and always stops.",
+      "source": "c1b84a03eb19"
+    },
+    "code-classify.n24.text": {
+      "text": "The caller supplies repeatable: whether repeating this call would make its effect happen twice.",
+      "source": "ac3cfe6528ec"
+    },
+    "code-classify.n31.text": {
+      "text": "Transient failure: reads and writes may both be retried.",
+      "source": "7994f928cc2d"
+    },
+    "code-classify.n33.text": {
+      "text": "With an unknown outcome, only calls that are safe to repeat are retried; blind is the blind-retry control arm.",
+      "source": "84591fa16bc1"
+    },
+    "code-classify.n35.text": {
+      "text": "A write without a key and an unknown outcome: stop and report it honestly, no blind retry.",
+      "source": "a339db94aca6"
+    },
+    "code-classify.n36.text": {
+      "text": "Invalid argument, business refusal, unclassified: always stop.",
+      "source": "96010752a205"
+    },
+    "code-classify.n48.text": {
+      "text": "The wait is computed from the number of the failed attempt.",
+      "source": "df71a99b0f97"
+    },
+    "code-classify.n50.text": {
+      "text": "The base wait times a power of 2: 100, 200, 400 milliseconds, capped at 1 second.",
+      "source": "f4e2131f8696"
+    },
+    "code-classify.n51.text": {
+      "text": "Then times a random factor between 0.5 and 1: the jitter.",
+      "source": "455b37968660"
+    },
+    "code-classify.fold-policy.label": {
+      "text": "Retry settings: attempt limit, per-attempt limit, base wait, time budget, wait cap",
+      "source": "4eb7cf114243"
+    },
+    "code-retry-loop.n67.text": {
+      "text": "Called once per logical operation; operation is its name in the events.",
+      "source": "6a8ab723fd51"
+    },
+    "code-retry-loop.n69.text": {
+      "text": "The time budget starts counting before the first attempt.",
+      "source": "4be2e8182297"
+    },
+    "code-retry-loop.n71.text": {
+      "text": "The loop itself has no fixed count: only the classification decision and the two limits below stop it.",
+      "source": "ac38c46640c1"
+    },
+    "code-retry-loop.n74.text": {
+      "text": "The fault injection sets up this attempt's planned fault and removes it when the attempt ends.",
+      "source": "ca44a934f6e9"
+    },
+    "code-retry-loop.n76.text": {
+      "text": "A real tool call: the events hold a tool_call and tool_result pair.",
+      "source": "377f70c5d8ec"
+    },
+    "code-retry-loop.n78.text": {
+      "text": "On success, return and record how long this attempt took.",
+      "source": "3b26d3258098"
+    },
+    "code-retry-loop.n82.text": {
+      "text": "Classify from error_type alone.",
+      "source": "51ad7943300f"
+    },
+    "code-retry-loop.n84.text": {
+      "text": "The backoff wait is computed only when the decision is to retry.",
+      "source": "c87e10703815"
+    },
+    "code-retry-loop.n87.text": {
+      "text": "The attempt limit: no wait after the last failure.",
+      "source": "56dc1e18d563"
+    },
+    "code-retry-loop.n89.text": {
+      "text": "The time budget: time used, the wait, and the next attempt's limit, added together.",
+      "source": "38ea61550ea8"
+    },
+    "code-retry-loop.n95.text": {
+      "text": "Every failure emits a lesson.retry with the category, decision, reason and timings.",
+      "source": "98296b06153d"
+    },
+    "code-retry-loop.n97.text": {
+      "text": "When stopping, tell failure from outcome unknown: outcome unknown only happens to writes.",
+      "source": "39aaba7a5c27"
+    },
+    "code-retry-loop.n100.text": {
+      "text": "Before waiting, honour a stop request first, then wait the computed time.",
+      "source": "77588ceda80c"
+    },
+    "code-retry-loop.n102.text": {
+      "text": "Wait through a replaceable clock: the tests swap in a fake clock and never really sleep.",
+      "source": "4dee208d4264"
+    },
+    "code-retry-loop.fold-record.label": {
+      "text": "Fields of the lesson.retry event: attempt, error type, category, decision, reason, time taken, wait, time used",
+      "source": "a5906741f345"
+    },
+    "code-submit.n114.text": {
+      "text": "A write: take 1 credit and record 1 submission; idempotency_key is optional.",
+      "source": "42c1fdd5b3e6"
+    },
+    "code-submit.n117.text": {
+      "text": "An exercise id the tool never accepts: InvalidArgument before the store is touched.",
+      "source": "c63801984164"
+    },
+    "code-submit.n119.text": {
+      "text": "An empty or overlong answer is an invalid argument too.",
+      "source": "ad2271dd0d64"
+    },
+    "code-submit.n121.text": {
+      "text": "The request fingerprint records which content this key stands for.",
+      "source": "53b7b4cf1b92"
+    },
+    "code-submit.n123.text": {
+      "text": "Take the write lock first; failing to get it is StoreTimeout, and the transaction never started.",
+      "source": "e0f682195d61"
+    },
+    "code-submit.n126.text": {
+      "text": "Look up in the same transaction whether this key has been used.",
+      "source": "032eb1c3a11c"
+    },
+    "code-submit.n128.text": {
+      "text": "Same key, different content: refuse instead of quietly handing back the old result.",
+      "source": "11fc7ca4cff7"
+    },
+    "code-submit.n131.text": {
+      "text": "A key seen before: hand back the first result directly and take no credit.",
+      "source": "433a740985bb"
+    },
+    "code-submit.n136.text": {
+      "text": "No credits left is a business refusal; the exception rolls back the whole transaction.",
+      "source": "1ead12001312"
+    },
+    "code-submit.n139.text": {
+      "text": "Take the credit.",
+      "source": "61a4b3d4fec1"
+    },
+    "code-submit.n140.text": {
+      "text": "Record the submission.",
+      "source": "78a6c8db276c"
+    },
+    "code-submit.n144.text": {
+      "text": "Write the key, fingerprint and result into operations, in the same transaction as the two steps above.",
+      "source": "41d9a3d80c79"
+    },
+    "code-submit.n146.text": {
+      "text": "First run: replayed is false.",
+      "source": "52e3fdc1a771"
+    },
+    "code-decision.title": {
+      "text": "Retry by category, deduplicate writes with keys, compensate multi-step failures",
+      "source": "b5b051f0fbb5"
+    },
+    "code-decision.chosen": {
+      "text": "call_with_retry decides from error_type alone, with limits on attempts and time; the caller declares with repeatable whether repeating is safe; submit_practice checks the idempotency key, writes the effect and records the operation in one transaction; the database and the outbox share no transaction, so when step 2 gives up, cancel_submission compensates; every conclusion is read from the store.",
+      "source": "ad782d2db2d9"
+    },
+    "code-decision.retry-everything.title": {
+      "text": "Retry on any error, a fixed 3 times",
+      "source": "59f971352a4a"
+    },
+    "code-decision.retry-everything.why_not": {
+      "text": "Invalid arguments and business refusals get retried for nothing, and a write with an unknown outcome runs again: that is how the blind-retry arm took an extra credit.",
+      "source": "011b20be7591"
+    },
+    "code-decision.never-retry.title": {
+      "text": "Never retry; hand every failure to the model",
+      "source": "878061bc5c56"
+    },
+    "code-decision.never-retry.why_not": {
+      "text": "One lock timeout fails the task and the model spends another round re-issuing the call; retrying transient failures within limits in the runner costs less.",
+      "source": "2b5c00ffb14c"
+    },
+    "code-decision.dedupe-by-content.title": {
+      "text": "Deduplicate by content: accept the same answer only once",
+      "source": "9a7023f8f649"
+    },
+    "code-decision.dedupe-by-content.why_not": {
+      "text": "It cannot tell a repeated request from a learner who really submitted twice; only the caller knows whether it is the same operation, so the caller brings the key.",
+      "source": "3dbd63f6072f"
+    },
+    "code-decision.key-after-commit.title": {
+      "text": "Commit the effect first, write the idempotency record separately",
+      "source": "2db255f0f8dc"
+    },
+    "code-decision.key-after-commit.why_not": {
+      "text": "A fault between the two commits leaves no key, and the next retry runs again; the effect and the record must share one transaction.",
+      "source": "b903d1580e42"
+    },
+    "code-decision.delete-on-compensate.title": {
+      "text": "Delete the submission row when compensating",
+      "source": "7bfc20970aad"
+    },
+    "code-decision.delete-on-compensate.why_not": {
+      "text": "The history is lost and nobody can see that a credit was taken and refunded; changing the status and refunding keeps both entries.",
+      "source": "5af295d5b520"
+    },
+    "read-and-classify.title": {
+      "text": "Reads and error classification",
+      "source": "9a9b086b2e86"
+    },
+    "read-and-classify.hypothesis": {
+      "text": "When a read-only query meets a transient failure, the runner backs off and retries until it succeeds or hits the attempt or time limit, and the store is the same before and after; invalid arguments and business refusals stop after one attempt, while transient failures succeed after a retry.",
+      "source": "03658c65faa9"
+    },
+    "read-and-classify.read-timeout.label": {
+      "text": "Read-only query: locked twice",
+      "source": "c9234b98cccf"
+    },
+    "read-and-classify.classify.label": {
+      "text": "Four operations: three kinds of failure",
+      "source": "6d2bf2a66ae0"
+    },
+    "read-and-classify.fault-source.text": {
+      "text": "Where the fault comes from: source says fault_injection.",
+      "source": "20e246d76d0e"
+    },
+    "read-and-classify.error-type.text": {
+      "text": "The error type in the tool result; classification looks only at it.",
+      "source": "028c035c4484"
+    },
+    "read-and-classify.category.text": {
+      "text": "The category this failure falls into.",
+      "source": "7d7ef48171d6"
+    },
+    "read-and-classify.decision.text": {
+      "text": "The decision that follows: wait and retry, or stop.",
+      "source": "83cc0f653104"
+    },
+    "read-and-classify.wait.text": {
+      "text": "How long to wait before the next try: milliseconds after backoff and jitter.",
+      "source": "0f0d159096c7"
+    },
+    "read-and-classify.attempt-table.text": {
+      "text": "Report table: the result of each attempt or each operation.",
+      "source": "5ab7f02b734b"
+    },
+    "read-and-classify.unchanged.text": {
+      "text": "The store is identical before and after the read-only query's retries.",
+      "source": "66ba2f8dcf21"
+    },
+    "read-and-classify.guide.0.text": {
+      "text": "This experiment calls no model. The runner calls the tools itself, and it also makes the faults on purpose.",
+      "source": "c299531269ca"
+    },
+    "read-and-classify.guide.1.text": {
+      "text": "Each fault is preceded by a lesson.fault whose source says it is fault injection.",
+      "source": "4c41db4bc9ca"
+    },
+    "read-and-classify.guide.2.text": {
+      "text": "The tool result has ok set to false, and error_type is the exception's class name.",
+      "source": "da2e7b0f8915"
+    },
+    "read-and-classify.guide.3.text": {
+      "text": "The runner looks error_type up in a table and gets the category.",
+      "source": "0b92bd4218a0"
+    },
+    "read-and-classify.guide.4.text": {
+      "text": "The category decides the next step: transient failures wait and retry, invalid arguments and business refusals stop.",
+      "source": "8a402b933eda"
+    },
+    "read-and-classify.guide.5.text": {
+      "text": "The wait doubles with each attempt and is scaled by a random factor.",
+      "source": "c6bdfac19a35"
+    },
+    "read-and-classify.guide.6.text": {
+      "text": "The report puts each attempt on its own row; the attempt limit was not exceeded.",
+      "source": "e5e1a4d324ea"
+    },
+    "read-and-classify.guide.7.text": {
+      "text": "However many times the read-only query retried, the store did not change at all.",
+      "source": "09ce8911d3ac"
+    },
+    "read-and-classify.conclusion.proves.0": {
+      "text": "After real lock-wait timeouts, the read-only query retried with backoff within the attempt and time limits, and the store was the same before and after.",
+      "source": "14c24931f4b9"
+    },
+    "read-and-classify.conclusion.proves.1": {
+      "text": "The invalid argument and the business refusal got one attempt each; the transient failures succeeded after a retry, and the store holds one submission.",
+      "source": "aa8e96864061"
+    },
+    "read-and-classify.conclusion.does_not_prove.0": {
+      "text": "The classification table only covers the error types this lesson lists; other tools need their own classification, and unclassified errors are never retried here.",
+      "source": "252145b7da25"
+    },
+    "read-and-classify.conclusion.does_not_prove.1": {
+      "text": "With a single caller, this lesson cannot show how jitter spreads out many callers.",
+      "source": "88568155e99b"
+    },
+    "lost-response.title": {
+      "text": "How many retries after a lost result",
+      "source": "2fdb633660df"
+    },
+    "lost-response.hypothesis": {
+      "text": "When the first submission has been written but its result is lost: blind retry writes twice; stop when unknown writes once but the caller does not know the result; retry with an idempotency key writes once and gets the first result back.",
+      "source": "22a406655176"
+    },
+    "lost-response.lost-response.label": {
+      "text": "Three approaches, one fault",
+      "source": "9e4fe30a5cec"
+    },
+    "lost-response.lost.text": {
+      "text": "The fault: the first submission's result is thrown away.",
+      "source": "020a516c9834"
+    },
+    "lost-response.blind.text": {
+      "text": "The blind-retry arm: it retries regardless of duplicates.",
+      "source": "58517d224fd0"
+    },
+    "lost-response.duplicate.text": {
+      "text": "After the blind retry, the store holds a second submission.",
+      "source": "5b1ce648181f"
+    },
+    "lost-response.stop.text": {
+      "text": "The stop-when-unknown arm: a write without a key is not retried.",
+      "source": "703a5e69605e"
+    },
+    "lost-response.replayed.text": {
+      "text": "The idempotency-key arm: the retry gets the first result back, with replayed set to true.",
+      "source": "ca6fa1bb7d0f"
+    },
+    "lost-response.key.text": {
+      "text": "The evidence for idempotency: the key in the operations table.",
+      "source": "e560bbc191f6"
+    },
+    "lost-response.checks.text": {
+      "text": "The report checks, arm by arm, how many times the store was actually written.",
+      "source": "47c908048fb0"
+    },
+    "lost-response.guide.0.text": {
+      "text": "Each of the three approaches gets a fresh store and meets the same fault.",
+      "source": "16d541697c40"
+    },
+    "lost-response.guide.1.text": {
+      "text": "The first submission is already in the store; its result is thrown away on the way back.",
+      "source": "00155bfa553a"
+    },
+    "lost-response.guide.2.text": {
+      "text": "Blind retry treats the unknown outcome as a transient failure and calls again.",
+      "source": "971fe0f46a47"
+    },
+    "lost-response.guide.3.text": {
+      "text": "So the store gains a second submission, and two credits are taken.",
+      "source": "a116870e1888"
+    },
+    "lost-response.guide.4.text": {
+      "text": "Without a key, the safer choice is to stop and say honestly that the outcome is unknown.",
+      "source": "d2b906ab6019"
+    },
+    "lost-response.guide.5.text": {
+      "text": "When the retry carries the key, the store recognises it and only hands back the first result.",
+      "source": "e2e4c6bfc0af"
+    },
+    "lost-response.guide.6.text": {
+      "text": "The key sits in the operations table, where anyone can look it up.",
+      "source": "a45e9e43e0bf"
+    },
+    "lost-response.guide.7.text": {
+      "text": "The report's checks read the store, not the tool results.",
+      "source": "9c1742596745"
+    },
+    "lost-response.conclusion.proves.0": {
+      "text": "When a write has taken effect and its result is lost, a blind retry without a key writes twice and a retry with an idempotency key does not.",
+      "source": "aab91b706fdd"
+    },
+    "lost-response.conclusion.proves.1": {
+      "text": "The idempotency evidence can be looked up directly in the operations table, in the same store as the submissions.",
+      "source": "27c6db0957ee"
+    },
+    "lost-response.conclusion.does_not_prove.0": {
+      "text": "The lost result here is made by fault injection; how results get lost in a remote service, and how long it keeps keys, depends on that service.",
+      "source": "a02166b208b5"
+    },
+    "lost-response.conclusion.does_not_prove.1": {
+      "text": "An idempotency key only prevents repeats; it does not judge whether the submission should happen at all.",
+      "source": "5d6005c7a4ac"
+    },
+    "partial-write.title": {
+      "text": "Partial completion and compensation in a two-step write",
+      "source": "778cbe56ec23"
+    },
+    "partial-write.hypothesis": {
+      "text": "After step 1 has written the database, step 2 keeps finding the outbox held; once the retries run out, the runner calls the compensating action to undo step 1: the submission row stays with status cancelled, the credit is refunded, and the outbox has no file.",
+      "source": "d6c439f1c291"
+    },
+    "partial-write.partial-write.label": {
+      "text": "The outbox stays held",
+      "source": "5fbdb4af55af"
+    },
+    "partial-write.step-one.text": {
+      "text": "Step 1 succeeds: the credit is taken and the submission recorded.",
+      "source": "52e09865f442"
+    },
+    "partial-write.busy.text": {
+      "text": "Every attempt at step 2 finds the outbox held.",
+      "source": "90d51eff420a"
+    },
+    "partial-write.give-up.text": {
+      "text": "It stops after the 4th failure; the reason is the attempt limit.",
+      "source": "855965b917a6"
+    },
+    "partial-write.compensate.text": {
+      "text": "The compensation call: cancel_submission.",
+      "source": "3d240ea69b63"
+    },
+    "partial-write.status.text": {
+      "text": "The submission status in the store: cancelled.",
+      "source": "42ffdbfd17d2"
+    },
+    "partial-write.final.text": {
+      "text": "The final status in the report.",
+      "source": "7c9bc3df54a1"
+    },
+    "partial-write.guide.0.text": {
+      "text": "A submission takes two steps: write the database, then the outbox. They share no transaction.",
+      "source": "d5aea061c15f"
+    },
+    "partial-write.guide.1.text": {
+      "text": "Step 1 succeeds and the credits go from 3 to 2.",
+      "source": "1b258433c3a8"
+    },
+    "partial-write.guide.2.text": {
+      "text": "Every attempt at step 2 runs into someone else's lock file, a transient failure.",
+      "source": "44614693ee57"
+    },
+    "partial-write.guide.3.text": {
+      "text": "With the attempts used up, the runner gives up on step 2.",
+      "source": "3fe0f7c4dee5"
+    },
+    "partial-write.guide.4.text": {
+      "text": "Step 1 has already taken effect, so a compensation call undoes it.",
+      "source": "058feaaae6e8"
+    },
+    "partial-write.guide.5.text": {
+      "text": "The submission row is still there; only its status has become cancelled.",
+      "source": "ad3e24b0b415"
+    },
+    "partial-write.guide.6.text": {
+      "text": "The final status says honestly: not completed, compensated.",
+      "source": "116f44be50bb"
+    },
+    "partial-write.conclusion.proves.0": {
+      "text": "After step 2 gave up, compensation undid step 1: the credit was refunded, the outbox has no file, and the submission row is kept as cancelled.",
+      "source": "c5df288a3227"
+    },
+    "partial-write.conclusion.proves.1": {
+      "text": "The final status was checked against the store and stated honestly in the report and the answer.",
+      "source": "5a6f76fde38f"
+    },
+    "partial-write.conclusion.does_not_prove.0": {
+      "text": "The compensation succeeded this time; this lesson does not show a failing compensation, it only reserves “partly completed, compensation failed” in the report.",
+      "source": "dc79f6e65851"
+    },
+    "partial-write.conclusion.does_not_prove.1": {
+      "text": "Some steps in real systems cannot be compensated, such as an email already sent; this lesson's outbox file does not stand for that kind of operation.",
+      "source": "6d9d8b83e4d5"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.options.read_timeout.label": {
+      "text": "Read-only query: locked a few times",
+      "source": "028343e79854"
+    },
+    "inputs.scenario.options.classify.label": {
+      "text": "Error classification: four operations",
+      "source": "ae5106131126"
+    },
+    "inputs.scenario.options.lost_response.label": {
+      "text": "A write takes effect, its result is lost (three approaches)",
+      "source": "90f72f8001a2"
+    },
+    "inputs.scenario.options.partial_write.label": {
+      "text": "Two-step write: failure halfway and compensation",
+      "source": "9529f33363ed"
+    },
+    "inputs.locked_attempts.label": {
+      "text": "Attempts that find the database locked",
+      "source": "4ca03c59b386"
+    },
+    "inputs.locked_attempts.help": {
+      "text": "Read-only query only: for the first few attempts another connection locks the database. At or above the attempt limit, the query fails in the end.",
+      "source": "c3f74f01329f"
+    },
+    "inputs.outbox_busy_attempts.label": {
+      "text": "Attempts that find the outbox held",
+      "source": "01e247102214"
+    },
+    "inputs.outbox_busy_attempts.help": {
+      "text": "Two-step write only: below the attempt limit, step 2 succeeds in the end; otherwise it gives up and compensates.",
+      "source": "e085e6248142"
+    },
+    "inputs.max_attempts.label": {
+      "text": "Attempt limit",
+      "source": "dc81845d0048"
+    },
+    "inputs.max_attempts.help": {
+      "text": "The most attempts per operation, including the first.",
+      "source": "ed8f3cf1ac83"
+    },
+    "inputs.timeout_ms.label": {
+      "text": "Lock wait limit per attempt (ms)",
+      "source": "3e62c6aa1735"
+    },
+    "inputs.timeout_ms.help": {
+      "text": "The longest the tool waits for the database lock before raising StoreTimeout; it also counts toward the time budget.",
+      "source": "38ede73ce624"
+    },
+    "inputs.base_delay_ms.label": {
+      "text": "Base backoff wait (ms)",
+      "source": "1dd824083e03"
+    },
+    "inputs.base_delay_ms.help": {
+      "text": "The cap on the wait after the 1st failure; it doubles after each further failure up to 1 second, then is scaled by a random factor between 0.5 and 1.",
+      "source": "07dceaa77cca"
+    },
+    "inputs.budget_ms.label": {
+      "text": "Time budget (ms)",
+      "source": "89f95d83eee0"
+    },
+    "inputs.budget_ms.help": {
+      "text": "All attempts and waits of one operation together must stay within it.",
+      "source": "2f3db3299f23"
+    },
+    "quiz.read-safe.prompt": {
+      "text": "Why can read_account simply be retried after a failure?",
+      "source": "3c7d25694d3e"
+    },
+    "quiz.read-safe.a.text": {
+      "text": "It only reads, so running it again does not change the store",
+      "source": "ac49e23357d8"
+    },
+    "quiz.read-safe.a.feedback": {
+      "text": "Right. Reads are idempotent by nature.",
+      "source": "4f40487c97bf"
+    },
+    "quiz.read-safe.b.text": {
+      "text": "It is fast, so repeats do not matter",
+      "source": "3e7390e56d65"
+    },
+    "quiz.read-safe.b.feedback": {
+      "text": "Not quite. Speed has nothing to do with whether a repeat takes effect twice.",
+      "source": "e7f1c29afa5f"
+    },
+    "quiz.read-safe.c.text": {
+      "text": "All its errors are transient failures",
+      "source": "2bc14cf8d1a0"
+    },
+    "quiz.read-safe.c.feedback": {
+      "text": "Not quite. Looking up a learner who does not exist gives InvalidArgument, which should not be retried.",
+      "source": "ba86d5a2281a"
+    },
+    "quiz.read-safe.explanation": {
+      "text": "Whether to retry depends first on whether a repeat changes the store, then on the error category.",
+      "source": "cf861b817907"
+    },
+    "quiz.timeout-before-write.prompt": {
+      "text": "submit_practice raises StoreTimeout. Without an idempotency key, is it safe to retry?",
+      "source": "cfaec3408b5a"
+    },
+    "quiz.timeout-before-write.a.text": {
+      "text": "Yes: StoreTimeout happens while taking the write lock, before the transaction starts, so nothing was written",
+      "source": "e16e9096109d"
+    },
+    "quiz.timeout-before-write.a.feedback": {
+      "text": "Right. That is why this lesson can classify it as a transient failure.",
+      "source": "b34e86ad0c83"
+    },
+    "quiz.timeout-before-write.b.text": {
+      "text": "No: every timeout counts as outcome unknown",
+      "source": "1756253457bc"
+    },
+    "quiz.timeout-before-write.b.feedback": {
+      "text": "Not quite. Timeouts of remote calls often have to be treated that way, but this lesson's StoreTimeout clearly happens before the transaction starts.",
+      "source": "bca2fc4a09e1"
+    },
+    "quiz.timeout-before-write.c.text": {
+      "text": "No: writes can never be retried",
+      "source": "a5afa2b2bd73"
+    },
+    "quiz.timeout-before-write.c.feedback": {
+      "text": "Not quite. A write known not to have taken effect can be retried.",
+      "source": "fb6ffa74ae42"
+    },
+    "quiz.timeout-before-write.explanation": {
+      "text": "Classification depends on the step where the error happened: a write that never started can be retried, a write with an unknown outcome needs a key.",
+      "source": "f8656f676ac6"
+    },
+    "quiz.unknown-write.prompt": {
+      "text": "A write without an idempotency key meets ResponseLost. What does call_with_retry do by default?",
+      "source": "182f68930c92"
+    },
+    "quiz.unknown-write.a.text": {
+      "text": "Stops, records the status as outcome unknown, and reports it honestly",
+      "source": "3014d2ca29d3"
+    },
+    "quiz.unknown-write.a.feedback": {
+      "text": "Right. A retry at this point might write twice.",
+      "source": "772e294bcf53"
+    },
+    "quiz.unknown-write.b.text": {
+      "text": "Retries it as a transient failure",
+      "source": "54cfde74b24f"
+    },
+    "quiz.unknown-write.b.feedback": {
+      "text": "Not quite. That is the blind-retry control arm, which leaves an extra submission in the store.",
+      "source": "59f41598b9a0"
+    },
+    "quiz.unknown-write.c.text": {
+      "text": "Treats it as a success and moves on",
+      "source": "213afb326a1e"
+    },
+    "quiz.unknown-write.c.feedback": {
+      "text": "Not quite. The caller never saw a result, so it cannot count as a success.",
+      "source": "8ede37e66538"
+    },
+    "quiz.unknown-write.explanation": {
+      "text": "A write with an unknown outcome and no key stops and explains the situation.",
+      "source": "0b2dff797521"
+    },
+    "quiz.budget-first.prompt": {
+      "text": "max_attempts is 6, base_delay_ms is 1000, and budget_ms is only 2000. If the lock is never released, how does the run stop?",
+      "source": "01361ce6112d"
+    },
+    "quiz.budget-first.a.text": {
+      "text": "Most likely at the time budget, with the reason “another attempt would exceed the time budget”",
+      "source": "06d0cf651915"
+    },
+    "quiz.budget-first.a.feedback": {
+      "text": "Right. With long waits and a small budget, the budget comes first.",
+      "source": "ac6fea00980d"
+    },
+    "quiz.budget-first.b.text": {
+      "text": "It always makes all 6 attempts",
+      "source": "d3fd0aa91c2c"
+    },
+    "quiz.budget-first.b.feedback": {
+      "text": "Not quite. Whichever of the attempt limit and the time budget comes first stops it.",
+      "source": "fe8d716f2d94"
+    },
+    "quiz.budget-first.c.text": {
+      "text": "It waits until the lock is released",
+      "source": "c4eca0d32ab7"
+    },
+    "quiz.budget-first.c.feedback": {
+      "text": "Not quite. A retry loop must have limits.",
+      "source": "893afaab8325"
+    },
+    "quiz.budget-first.explanation": {
+      "text": "The two limits work independently, and the reason in lesson.retry says which one stopped it.",
+      "source": "876bd161423d"
+    },
+    "quiz.key-transaction.prompt": {
+      "text": "Why must the idempotency record be written in the same transaction as taking the credit and recording the submission?",
+      "source": "7cc65dca7a59"
+    },
+    "quiz.key-transaction.a.text": {
+      "text": "Otherwise a fault after the effect commits but before the key is written leaves the retry nothing to find, and it writes again",
+      "source": "2c6dc7202b2f"
+    },
+    "quiz.key-transaction.a.feedback": {
+      "text": "Right. They must commit together or roll back together.",
+      "source": "1cc00b453ad1"
+    },
+    "quiz.key-transaction.b.text": {
+      "text": "Because it runs faster that way",
+      "source": "e69efea97821"
+    },
+    "quiz.key-transaction.b.feedback": {
+      "text": "Not quite. This is about correctness, not speed.",
+      "source": "b0b9ad4ea358"
+    },
+    "quiz.key-transaction.c.text": {
+      "text": "Because SQLite does not allow writing them separately",
+      "source": "7dd3ed9c2bb1"
+    },
+    "quiz.key-transaction.c.feedback": {
+      "text": "Not quite. SQLite allows it; this lesson's design requires them together.",
+      "source": "4324e90eac0d"
+    },
+    "quiz.key-transaction.explanation": {
+      "text": "The idempotency record and the effect it protects must be written atomically.",
+      "source": "4fa0d9d7f857"
+    },
+    "quiz.compensation-history.prompt": {
+      "text": "Why does the compensating action cancel_submission not delete the submission row?",
+      "source": "8102a107c8a5"
+    },
+    "quiz.compensation-history.a.text": {
+      "text": "Compensation is a reverse write: it keeps the history and marks the undo with status cancelled",
+      "source": "5bd2dac3a19a"
+    },
+    "quiz.compensation-history.a.feedback": {
+      "text": "Right. The charge and the refund can both be looked up.",
+      "source": "a3e2cde134f9"
+    },
+    "quiz.compensation-history.b.text": {
+      "text": "Because deleting is slower than updating",
+      "source": "ba047e812e6d"
+    },
+    "quiz.compensation-history.b.feedback": {
+      "text": "Not quite. Speed has nothing to do with it.",
+      "source": "9145dbfb6d63"
+    },
+    "quiz.compensation-history.c.text": {
+      "text": "Because it will be restored to active later",
+      "source": "41e831f22f62"
+    },
+    "quiz.compensation-history.c.feedback": {
+      "text": "Not quite. Submitting again after an undo creates a new submission.",
+      "source": "3bea63d24930"
+    },
+    "quiz.compensation-history.explanation": {
+      "text": "Compensation changes the state, keeps the history, and is safe to repeat.",
+      "source": "18d7c5428ada"
+    },
+    "quiz.evidence.prompt": {
+      "text": "How do you confirm how many times a submission was actually written?",
+      "source": "c314347b6511"
+    },
+    "quiz.evidence.a.text": {
+      "text": "Read the actual state of the database and the outbox in lesson.storage",
+      "source": "0546c1242f3a"
+    },
+    "quiz.evidence.a.feedback": {
+      "text": "Right. The report's checks are based on it too.",
+      "source": "ae06e35310b0"
+    },
+    "quiz.evidence.b.text": {
+      "text": "See what the final answer says",
+      "source": "9be637196ee6"
+    },
+    "quiz.evidence.b.feedback": {
+      "text": "Not quite. In the blind-retry arm the answer can say success while the store holds two submissions.",
+      "source": "add08faf4fc6"
+    },
+    "quiz.evidence.c.text": {
+      "text": "Look at ok in the last tool_result",
+      "source": "27f31832bedf"
+    },
+    "quiz.evidence.c.feedback": {
+      "text": "Not quite. ok only describes that one attempt, not whether earlier attempts took effect.",
+      "source": "1b39bf52c6c6"
+    },
+    "quiz.evidence.explanation": {
+      "text": "Whether a write succeeded, and how many times, is decided by the store.",
+      "source": "4ffa6de54d9a"
+    },
+    "check-hunt.prompt": {
+      "text": "Run “A write takes effect, its result is lost” and find the tool result that was replayed for the retry with an idempotency key.",
+      "source": "525873e5e5e3"
+    },
+    "check-hunt.explanation": {
+      "text": "Round 3 is the idempotency-key arm. The tool result of its first attempt is ResponseLost; the tool result of the second attempt has ok set to true, replayed set to true, and the same submission_id as the first write. The lesson.storage of the same round holds one submission, and the operations table holds this key.",
+      "source": "3b56b9e62c86"
+    },
+    "check-points.title": {
+      "text": "Hands-on checks",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and this lesson's source code; tick an item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In the report table of “Read-only query: locked twice” I found two StoreTimeout attempts, each taking about 200 milliseconds.",
+      "source": "2f227551bf8d"
+    },
+    "check-points.item-2.text": {
+      "text": "I changed locked_attempts to 6 and ran again: it stopped after the 4th failure because of the attempt limit, and the answer gave no credit number.",
+      "source": "174ade43a708"
+    },
+    "check-points.item-3.text": {
+      "text": "I can explain why StoreTimeout and ResponseLost are in different categories.",
+      "source": "46972736db94"
+    },
+    "check-points.item-4.text": {
+      "text": "In the lesson.storage events of “A write takes effect, its result is lost” I counted how many times each arm wrote, and found the key in the operations table.",
+      "source": "130747bfe0f3"
+    },
+    "check-points.item-5.text": {
+      "text": "I changed outbox_busy_attempts to 1 and ran again: there was no compensation, and the final status was “both steps completed”.",
+      "source": "eaf79dbcdb88"
+    },
+    "code_notes.repeatable.note": {
+      "text": "An argument of call_with_retry: repeating this call cannot take effect twice, as for reads and keyed writes.",
+      "source": "d49c8920f6ba"
+    },
+    "code_notes.idempotency_key.note": {
+      "text": "Shared by all attempts of one operation; a store that has seen it hands back the first result.",
+      "source": "82e223527d46"
+    },
+    "code_notes.StoreTimeout.note": {
+      "text": "Raised when the lock wait passes its limit: the transaction never started and nothing was written; transient.",
+      "source": "04d51e10ccf4"
+    },
+    "code_notes.ResponseLost.note": {
+      "text": "Fault injection: the tool ran, then its result was dropped on the way back; outcome unknown.",
+      "source": "1ea4f999e138"
+    },
+    "code_notes.CATEGORIES.note": {
+      "text": "The table from error_type to error category; types not in it are unclassified and never retried.",
+      "source": "45e9d10b1ef4"
+    },
+    "code_notes.operations.note": {
+      "text": "The table of idempotency keys, request fingerprints and first results, written in the submission's transaction.",
+      "source": "efc8be171021"
+    },
+    "code_notes.cancel_submission.note": {
+      "text": "The compensation for submit_practice: refunds the credit and marks it cancelled; a repeat refunds nothing.",
+      "source": "9bafc92bb907"
+    },
+    "code_notes.lesson.fault.note": {
+      "text": "Lesson event: a fault the runner made on purpose; source is fault_injection.",
+      "source": "9f52f86d818c"
+    },
+    "code_notes.lesson.retry.note": {
+      "text": "Lesson event: one per failure, with category, decision, reason, wait and time used.",
+      "source": "6d9f5c567073"
+    },
+    "code_notes.lesson.storage.note": {
+      "text": "Lesson event: the database and outbox state read directly before the run ends.",
+      "source": "e86d05379d2f"
+    },
+    "code_notes.replayed.note": {
+      "text": "A field in the submit_practice result: true means nothing was written and the first result came back.",
+      "source": "127fbd11e3f4"
+    }
+  }
+}

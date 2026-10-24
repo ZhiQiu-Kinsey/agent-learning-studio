@@ -1,0 +1,1503 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "local-delivery",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "DELIVERY / LOCAL",
+          "headline": "能启动、能配置、坏了能说清，才算交付。",
+          "highlight": "密钥永远不出现在输出里。",
+          "takeaway": "本课不调用模型。它把一个小型本地服务真的启动起来：解析三层配置，探测存活和就绪，停止后确认没有残留进程，读回日志找泄漏，再模拟一次崩溃重启和一次失败的配置升级。每个结论都来自真实的子进程。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-layers",
+              "label": "01 / LAYERS",
+              "title": "配置有三层，值有来源",
+              "description": "默认值写在代码里，配置文件覆盖默认值，环境变量覆盖配置文件。每个值都能说出自己来自哪一层。",
+              "token": "default < file < env"
+            },
+            {
+              "id": "02-probes",
+              "label": "02 / PROBES",
+              "title": "两个探针，问两件事",
+              "description": "`/health` 问进程是否还在回应，`/ready` 问服务是否已经准备好。预热期间前者是 200，后者是 503。",
+              "token": "/health · /ready"
+            },
+            {
+              "id": "03-reap",
+              "label": "03 / REAP",
+              "title": "停止要回收干净",
+              "description": "先发 SIGTERM，等进程自己收尾；超时再杀整个进程组。停止之后确认主进程和后台工作进程都消失了。",
+              "token": "SIGTERM · killpg"
+            },
+            {
+              "id": "04-redact",
+              "label": "04 / REDACT",
+              "title": "凭据不进输出",
+              "description": "日志逐行是 JSON；凭据只报“已设置”和来源；交付前用已知的假密钥扫描每一行。",
+              "token": "[REDACTED:api_key]"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "从能跑到能交付",
+          "paragraphs": [
+            "换一台机器也能按说明启动，是交付的最低要求。前面几课都在你自己的机器上跑：依赖装好了，环境变量是现成的，数据文件就在手边。把工具交给别人，缺的东西才一件件露出来。同事拉下代码，照说明敲了启动命令，终端安静了三秒，什么也没发生。进程在跑吗？卡在哪一步？该看哪个文件？这就是“能跑”和“能交付”的距离。本仓库的说明只有四步：`uv sync --dev`、`npm ci`、`npm run build` 和 `run_web.py`；说明短，是因为每一步失败时都有明确的信号可看。",
+            "本课不调用模型。案例是课程目录里的一个小型本地服务 `notes_app`（笔记应用）：有配置、数据文件、`/health` 和 `/ready`、JSON 日志，还有一个后台工作进程，和本平台一样只绑定 127.0.0.1。本平台自己也是这样的交付物：`run_web.py` 把服务绑在 127.0.0.1 的 8765 端口，服务商的密钥来自环境变量，接口只回答“密钥是否已配置”。",
+            "交付检查不是“我这里能跑”，而是五个能被真实运行证实或推翻的问题：配置从哪来、缺了怎么办；起来了没有、准备好了没有；停下来干净不干净；出了事日志里有什么、不该有什么；被杀之后数据在不在。每个问题本课都有一个检查，检查读的是真实进程的退出码、端口、日志和文件。",
+            "这些检查只证明本机上一个小服务的行为，不证明云端部署，也不证明多人同时使用。{{lesson:observability-cost}}的账本记录模型请求的每一步，本课记录的是进程自己的日志和探针；{{lesson:reliable-tools}}的幂等键，会在“重启、备份与回退”一节以文件的形式再出现一次。{{lesson:mcp-basics}}启动的 MCP 服务也是子进程，同样需要就绪判断和停止回收，本课的写法可以照搬过去。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "依赖锁定与配置",
+          "paragraphs": [
+            "锁定依赖版本，配置与密钥分开放，密钥只在后端。先说依赖：`pyproject.toml` 里写的是版本范围，范围里的“最新版”每周都在变；`uv.lock` 记下实际装过的每个包的版本和哈希，前端的 `package-lock.json` 同理。本仓库用 `uv sync` 和 `npm ci` 按锁文件安装，换一台机器装出来的是同一套依赖。上周能跑、这周不能跑，多半是锁文件没有跟着走。",
+            "再说配置。同一个值可能写在三个地方：代码里的默认值，随项目走的配置文件，运行时的环境变量。配置分层（Configuration Layering）规定谁覆盖谁：默认值最低，配置文件覆盖默认值，环境变量最高。举个例子：模型名没有默认值，文件里写 `file-model`，环境变量里写 `env-model`，最终用 `env-model`，来源是 `env`。每个值都要说得出来自哪一层，排错时第一个问题就是“这个值是谁设的”。",
+            "凭据要和配置分开。配置文件会被复制、提交、贴进问题单，环境变量只活在进程里。`notes_app` 的规则有三条：凭据只从环境变量读；配置文件里出现 `api_key` 一律拒绝，问题代码是 `secret_in_file`；`/config` 只回答“已设置”和来源，不回答值。本平台的做法一致：`local_config.py` 只放接口地址和模型名，并被 `.gitignore` 排除，密钥来自环境变量，网页里填的密钥只留在后端内存。",
+            "缺必填配置时，应用要在绑定端口、打开数据文件之前就退出，这叫快速失败（Fail Fast）。它一次说出全部问题，只说设置项的名字和问题类型，不说值。一次说全，是因为一个个改、一次次重启，三个问题就要启动三遍；不说值，是因为写错的那个值可能正好是密钥。快速失败只管“配置写得对不对”，不管“配置指向的服务连不连得通”，后者是探针的事。配置文件里写错一个键也一样：把 `log_level` 写成 `log_lvl`，如果被悄悄忽略，应用用默认的日志级别照常运行，你却以为已经改过了，所以未知的键同样被拒绝。拼错的环境变量名只给警告，因为环境里本来就有大量无关的名字。"
+          ]
+        },
+        {
+          "id": "deep-dive-env",
+          "type": "deep-dive",
+          "title": "凭据放哪里：配置文件、`.env` 和密钥管理",
+          "summary": "三种做法各有取舍；参考书的部署说明、本仓库和本课练习分别怎么选。",
+          "paragraphs": [
+            "常见做法有三种。写进配置文件最方便，也最容易被提交；`.env` 文件把凭据集中在一个不提交的文件里，再由启动脚本导成环境变量；生产环境用专门的密钥管理服务，进程启动时去取。《深入理解 AI Agent》配套的 Docker 部署说明走的是第二种：复制 `.env.example` 为 `.env`，填入各家的 API Key，并提醒不要提交带真实 Key 的 `.env`；到了生产部署，再换成外部的密钥存储。",
+            "本仓库的 `.gitignore` 排除 `.env` 和 `.env.*`，只放行 `.env.example` 和 `.env.sample` 两个模板，思路相同：模板进仓库，真值留在本机。环境变量也不是保险箱：它会被子进程继承，在多数系统里同一用户的其他进程也有机会读到。所以运行器给子进程的是一份白名单环境，只含 `PATH` 这类运行必需的变量，再加这次要用的 `NOTES_*`，本机上别家服务商的密钥不会传下去。",
+            "这本书讲内部评估基础设施时还提过一个细节：消融开关必须在启动路径的最早期注入，早于任何读取配置的模块级常量，否则开关不生效。读配置的位置和时机，本身就是要设计的事。`notes_app` 把 `load_settings` 放在 `main` 的第一步，也是这个道理。本课练习里的密钥是每次运行现编的假密钥，形如 `sk-demo-` 加随机字符，不会读取你真实的 Key；检查要证明的是“这个值没有出现在任何输出里”，用假值和用真值，检查的逻辑一样。"
+          ]
+        },
+        {
+          "id": "predict-start",
+          "type": "predict",
+          "prompt": "去实验台运行“配置分层：缺失、来源与凭据”之前先猜：这次运行里，应用会有几次因为配置问题拒绝启动？（数 lesson.start_failed 事件）",
+          "experiment": "exp-config",
+          "arm": "config-layers",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.start_failed"
+          }
+        },
+        {
+          "id": "mq-layers",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-layers",
+            "prompt": "文件里写 `model` 为 `file-model`，环境变量 `NOTES_MODEL` 是 `env-model`。最终取哪个，来源是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`env-model`，来源是 `env`",
+                "feedback": "对。三层里环境变量最高，来源要和值一起记下。"
+              },
+              {
+                "id": "b",
+                "text": "`file-model`，来源是 `file`",
+                "feedback": "不对。配置文件比默认值高，但比环境变量低。"
+              },
+              {
+                "id": "c",
+                "text": "两个值冲突，应用拒绝启动",
+                "feedback": "不对。覆盖顺序是固定的，不算冲突；只有值写坏了才会被拒绝。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "三层按固定顺序覆盖，最高一层的值胜出，并且每个值都带着来源，排错时才知道该去改哪里。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "启动、停止与探测",
+          "paragraphs": [
+            "提供启动脚本和健康检查，确认服务真的可用。启动命令返回了，不等于服务可用。“没起来”至少有三种：进程已经退出，原因多半是配置错或端口被占；进程活着但从不监听，卡在初始化里；已经在监听，但还没准备好，比如在预热，或者连不上依赖。三种情况从外面看都是“请求没有回应”，要分开查。",
+            "两个探针分别回答两件事。存活探针（Liveness Probe）是 `/health`：进程在，会回话，不检查任何依赖。就绪探针（Readiness Probe）是 `/ready`：配置、数据、预热都完成才返回 200，否则返回 503，回应里逐项列出检查结果，一眼看出卡在哪一项。`notes_app` 默认预热 400 毫秒：监听之后 `/health` 立刻是 200，`/ready` 先是 503，约 0.4 秒后变成 200。启动脚本应该等 `/ready`，而不是等端口，更不是 `sleep` 几秒碰运气。",
+            "每个等待都要有上限，到了上限就写清：等的是什么、等了多久、最后看到什么，不能无限等，也不能悄悄当作成功。本课的运行器在监听前最多等 1200 毫秒：进程已退出就读退出码；进程活着却没有端口，是卡住；监听了但 `/ready` 一直是 503，是存活但不就绪。端口被占用时应用要明确失败，不能换一个端口，别的客户端还按旧端口在连。监听地址只能是 127.0.0.1，绑在 0.0.0.0 上，同一网络里的人都能连进来。端口默认填 0，让系统分配空闲端口，应用把实际号码写进端口文件，永远不会和你自己开着的服务撞车；文件先写临时文件再改名，读的人看到的要么是完整的号码，要么没有这个文件。",
+            "停止分两步：先发 SIGTERM，让进程自己收尾，拒绝新连接、停掉后台工作进程、写下 `stopped` 日志；超过宽限期再杀整个进程组。只杀主进程会留下孤儿进程（Orphan Process）：后台工作进程还在跑，占着资源，下次启动时撞上它。验证“没有残留”要看进程号是否真的消失，不能只看命令返回了。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "从启动命令到第一次成功请求",
+          "description": "按步骤说明一次正常启动。这是作者写的示意，非运行记录；实际的时间和端口以你运行里的事件为准。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "01",
+              "actor": "运行器",
+              "title": "拉起子进程",
+              "body": "给子进程一份只含必需变量和 NOTES_* 的环境，标准错误接到日志文件，让它成为自己进程组的组长。",
+              "code": "python -m lessons.lesson_local_delivery.notes_app --workdir <tmp>",
+              "language": "bash",
+              "evidence": "lesson.process 的 spawned"
+            },
+            {
+              "id": "step-2",
+              "label": "02",
+              "actor": "应用",
+              "title": "解析配置",
+              "body": "按三层规则解析；缺项或值不合法，就在这里退出。",
+              "code": "load_settings(config_file, os.environ)",
+              "language": "python",
+              "evidence": "日志的 config_loaded"
+            },
+            {
+              "id": "step-3",
+              "label": "03",
+              "actor": "应用",
+              "title": "先监听，再写端口文件",
+              "body": "系统分配一个空闲端口；端口文件写好，运行器才知道可以探测。",
+              "code": "listening host=127.0.0.1 port=<随机端口>",
+              "evidence": "lesson.process 的 listening"
+            },
+            {
+              "id": "step-4",
+              "label": "04",
+              "actor": "运行器",
+              "title": "探 `/health`",
+              "body": "存活探针立刻返回 200。",
+              "code": "GET /health -> 200",
+              "evidence": "lesson.probe"
+            },
+            {
+              "id": "step-5",
+              "label": "05",
+              "actor": "运行器",
+              "title": "探 `/ready`",
+              "body": "预热期间返回 503，并列出没通过的检查项。",
+              "code": "GET /ready -> 503",
+              "evidence": "lesson.probe"
+            },
+            {
+              "id": "step-6",
+              "label": "06",
+              "actor": "应用",
+              "title": "预热结束",
+              "body": "就绪标志置位，日志记下 ready；运行器的下一次探测得到 200。",
+              "code": "GET /ready -> 200",
+              "evidence": "lesson.process 的 ready"
+            },
+            {
+              "id": "step-7",
+              "label": "07",
+              "actor": "运行器",
+              "title": "第一次业务请求",
+              "body": "就绪之后才发写入请求，应用返回 201。",
+              "code": "POST /notes -> 201",
+              "evidence": "报告里的写入记录"
+            }
+          ]
+        },
+        {
+          "id": "deep-dive-probes",
+          "type": "deep-dive",
+          "title": "探针在别的系统里：Kubernetes、Docker 与冒烟测试",
+          "summary": "存活、就绪和冒烟测试分别在什么时候问什么。",
+          "paragraphs": [
+            "Kubernetes 把探针分成三类：存活探针失败，平台重启容器；就绪探针失败，平台把实例从流量里摘掉，但不重启；启动探针给慢启动的程序更长的宽限，期间先不做存活检查。两种探针分开，是因为“该重启”和“暂时别给流量”是两个决定：还在预热的实例被重启，只会更慢。Docker 的 HEALTHCHECK 和 `docker compose` 里的健康检查是同一类做法，参考书的部署说明里也配置了健康检查和自动重启。探针本身要便宜、没有副作用：存活探针如果去查数据库，数据库一抖，所有实例的存活探针同时失败，平台把它们全部重启，小故障就被放大成大故障。",
+            "Microsoft 的《面向初学者的 AI Agent》在“部署可扩展的 Agent”一课里加了一层更便宜的检查：冒烟测试。它指出部署“成功”只说明控制面接受了定义，不说明 Agent 真的在回答；缺依赖、模型配置错、连接过期，都可能留下一个绿色却没有回应的部署。冒烟测试每次部署都跑，几秒钟，用几个固定的提示词和断言去问已部署的端点。它和离线评估、线上评估叠成一个金字塔：冒烟测试问“有没有回应”，离线评估问“够不够好”，线上评估问“真实流量里表现如何”。讲生产中的 Agent 那一课也建议两者搭配：小的冒烟用例做快速检查，大的评估集做全面评估。",
+            "本课的 `/ready` 就是本地版的冒烟测试：它只问服务能不能做事，不问做得好不好。模型是否可用的冒烟测试要发真实请求，需要真实服务商，本课不做。本地运行也不等于安全：同一套教程讲本地 Agent 的那一课提醒，本地的 MCP 服务仍然以你的用户权限运行，要把它能访问的范围限定在项目目录里。"
+          ]
+        },
+        {
+          "id": "deep-dive-groups",
+          "type": "deep-dive",
+          "title": "进程组与孤儿进程到底怎么回事",
+          "summary": "子进程不会随父进程自动退出；进程组让一次信号能覆盖一批进程。",
+          "paragraphs": [
+            "在类 Unix 系统里，父进程退出不会带走子进程：子进程被过继给初始进程，照常运行，成了孤儿进程。本课的运行器用新会话拉起应用，`setsid` 的效果是应用成为新进程组的组长，组号等于它的进程号；它自己再启动的后台工作进程默认留在同一个组里。",
+            "所以运行器有三种停法。`SIGTERM` 发给主进程：应用自己收尾，顺手停掉工作进程，退出码 0。`SIGKILL` 只发给主进程：应用来不及做任何事，工作进程成了孤儿，练习里能看到残留 1 个进程。向进程组发 `SIGKILL`：一条命令带走组里所有进程，这是兜底，不是常规做法，因为它不给任何进程收尾的机会。",
+            "还有一个坑：被杀的孤儿如果没人回收，会以僵尸进程的形式留在进程表里，用信号 0 探测它仍然“存在”。本课的 `pid_alive` 因此读 `/proc/<pid>/stat` 里的状态，是 Z 就算已经消失。Windows 没有进程组信号，本课在那里改用 `taskkill /T` 终止整棵进程树。Learn Claude Code 的完整运行层也是同样的思路：每条命令放进自己的进程组，退出时发信号清理，并且提醒自己再开新会话的进程会逃出这个组。想自己看一眼，Linux 上可以运行 `ps -o pid,pgid,ppid,stat,cmd`：每个进程的组号、父进程号和状态一目了然，孤儿的父进程号会变成 1 或收养它的进程。"
+          ]
+        },
+        {
+          "id": "mq-probes",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-probes",
+            "prompt": "`/health` 一直返回 200，`/ready` 一直返回 503。启动脚本应该怎么报告？",
+            "options": [
+              {
+                "id": "a",
+                "text": "服务可用，因为进程在回应",
+                "feedback": "不对。`/health` 只说明进程活着，预热没完成时它照样是 200。"
+              },
+              {
+                "id": "b",
+                "text": "存活但不就绪：等到上限后报告，并写出未通过的检查项",
+                "feedback": "对。两个探针答的是两件事，报告要说清卡在哪一项。"
+              },
+              {
+                "id": "c",
+                "text": "进程已经坏了，立刻重启",
+                "feedback": "不对。存活探针是通过的；重启一个还在预热的实例，只会更慢。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "存活探针通过不等于可用。就绪探针到上限仍不通过时，如实报告“不就绪”和没通过的检查项。"
+          }
+        },
+        {
+          "id": "misconception-health",
+          "type": "misconception",
+          "claim": "`/health` 返回 200，服务就可以用了。",
+          "correction": "`/health` 只说明进程活着、在回应。预热没完成、依赖没连上时，它照样是 200。可用要看 `/ready`。在“存活但不就绪”这份报告里，`/health` 一直是 200，`/ready` 一直是 503：服务其实用不了，运行器等到上限，如实报告了这件事。"
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "日志与敏感数据",
+          "paragraphs": [
+            "错误日志要能定位问题，但不能写出密钥和个人数据。同事说“起不来”，你问“日志呢”，对方贴来一屏文字：没有时间，没有级别，看不出哪个设置项出了问题。更糟的是，那一屏里夹着 API Key，被贴进公开的问题单，这把密钥就只能作废重发。好日志是另一个样子：一行一个事件，带时间和级别，一眼看出是哪个设置项、什么问题。",
+            "日志要结构化：每行一个 JSON 对象，固定有 `ts`、`level`、`event`，其余字段随事件变化。这样“只看错误”“数一数启动耗时”都是一行命令的事。最小的可观测性只要三样：启动耗时、版本、配置来源。`notes_app` 的日志依次记 `start`、`config_loaded`、`listening`、`ready`、`shutdown_requested`、`stopped`。启动耗时有两个数：应用自己报告的 `startup_ms`，从 `main` 开始到监听；运行器测到的，从拉起进程开始，多出解释器启动和导入的时间。两个数回答的问题不同，不能互相代替。日志级别也是一项配置：默认的 `info` 不记每个请求，`debug` 才记，运行器的每一次探测都会出现在 `debug` 日志里。",
+            "凭据靠两道防线不进日志：构造上，日志函数只收名字和来源；检查上，交付前拿已知的密钥值去搜每一行。最常见的泄漏是为了调试把整份配置打进日志，本课用 `config_dump` 事件重现它。扫描只报行号、事件名和设置项，不抄值；展示出来的行，值已经换成 `[REDACTED:api_key]` 这样的标记。本平台的后端也会对事件里的实际密钥脱敏，但它只认识自己配置过的密钥，你的小服务的密钥它不认识，要自己扫。",
+            "扫描只能找到已知的、原样出现的值：转了编码、被截断、拆在两行里的密钥找不到；姓名、邮箱这类个人数据没有固定值可搜，只能靠“不记录”。发现泄漏后，第一件事是作废那把密钥，改日志是第二件。日志和报告都会被转发、保存，所以脱敏要在写出去之前做，不能指望事后清理。"
+          ]
+        },
+        {
+          "id": "mq-leak",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-leak",
+            "prompt": "扫描发现日志第 3 行含有密钥。报告里应该怎么展示这一行？",
+            "options": [
+              {
+                "id": "a",
+                "text": "原样贴出，方便定位",
+                "feedback": "不对。报告会被转发、保存，原样贴出等于再泄漏一次。"
+              },
+              {
+                "id": "b",
+                "text": "给出行号、事件名和设置项，展示的行把值换成标记",
+                "feedback": "对。能定位，又不带值。"
+              },
+              {
+                "id": "c",
+                "text": "什么都不展示，只说“有泄漏”",
+                "feedback": "不对。没有行号和事件名，没法去修。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "报告要能定位问题又不带值：行号、事件名、设置项，加上已经脱敏的那一行。"
+          }
+        },
+        {
+          "id": "misconception-env",
+          "type": "misconception",
+          "claim": "密钥放在环境变量里就安全了。",
+          "correction": "环境变量比配置文件好，但不是保险箱。子进程默认继承全部环境变量，进程列表和崩溃转储里也可能出现它。本课的运行器只把交给它的变量传给子进程，应用启动自己的后台工作进程时，又去掉所有 `NOTES_` 开头的变量。安全靠“只给需要的人”，再加上对输出的扫描。"
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "重启、备份与回退",
+          "paragraphs": [
+            "交付还要回答：进程被杀之后，数据还在不在，写入会不会重复。本地工具总会被打断：关机、崩溃、按下 Ctrl+C。重启之后有三个问题：数据文件还完整吗？客户端没收到回应，重发一次写入，会不会多出一条？换了新配置起不来，怎么退回去？",
+            "前两个问题靠两处设计。数据文件先写同目录的临时文件，刷到磁盘，再用 `os.replace` 换名，崩溃时文件要么是旧的、要么是新的，不会只写一半。重发靠 `op_id`，它是{{lesson:reliable-tools}}里幂等键的文件版本：同一个 `op_id` 第二次到来，返回 `duplicate: true`，不再写入。手算一遍：写入 `op-1`、`op-2` 后整组进程被杀；重启读到 2 条；重发 `op-2`，还是 2 条；新写 `op-3`，变成 3 条。三个问题对应三种做法：原子写入保数据，操作标识防重复，备份和摘要管回退。",
+            "第三个问题靠备份和摘要。升级配置之前，把配置文件和数据文件各复制一份，记下 sha256 摘要的前 12 位。升级后的配置文件写成 `settings_version: 2`，还把 `model` 改名为 `model_id`，当前版本读不懂：应用在监听之前就拒绝，数据一点没动。把备份的配置放回去，摘要和备份时一致，服务重新就绪，3 条笔记还在。回退不是“应该能退回去”，而是摘要对得上、服务起得来。备份里也不能带凭据：凭据从来不在配置文件里，所以备份配置文件是安全的。",
+            "这一节的边界要说清。回退只涉及配置文件；数据格式迁移更难回退，备份要在迁移前做，并且试过能恢复。本课也不探测模型和 MCP：真实模型是否可用，要在模型连接设置里用真实请求验证，“已配置”不等于“已验证”，没验证过的服务商不能标成可用。"
+          ]
+        },
+        {
+          "id": "mq-restart",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-restart",
+            "prompt": "客户端重发 `op-2`，应用返回 `duplicate: true`。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "写入又执行了一次，笔记变成 3 条",
+                "feedback": "不对。返回 duplicate 就是没有再写。"
+              },
+              {
+                "id": "b",
+                "text": "这个操作标识已经写过，应用交回第一次的结果，没有再写",
+                "feedback": "对。重发安全，靠的是同一个 `op_id`。"
+              },
+              {
+                "id": "c",
+                "text": "写入失败了",
+                "feedback": "不对。失败会返回错误，不是 duplicate。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "同一个操作标识只写一次，重发拿回第一次的结果。换一个 `op_id` 就是一次新的写入。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "把检查写成清单",
+          "paragraphs": [
+            "交付检查要写成清单，每一行都能被真实运行证实或推翻。清单里的“通过”只表示这次真实运行里这条检查成立，不表示别的环境也成立。下表把本课的检查和它读取的证据对应起来：先看证据来自哪个进程、哪个文件，再看通过的条件。检查不通过时，报告要写明哪里不符，不要改检查让它通过。",
+            "也要分清几种结论。进程退出了，不等于服务可用；请求返回 200，不等于检查通过；本课的检查全部通过，也不等于任务验收通过。带缺陷的那次运行里，“日志里没有凭据的值”按设计不通过，答案里写明了这件事；没有执行的检查不标通过，也不省略不提。拿这份清单去检查你自己的工具时，每一行先想好“什么证据会让它不通过”，再去跑。"
+          ]
+        },
+        {
+          "id": "compare-checklist",
+          "type": "compare",
+          "title": "本课的交付检查清单",
+          "columns": [
+            "问题",
+            "怎么查",
+            "通过的证据"
+          ],
+          "rows": [
+            [
+              "配置从哪来",
+              "子进程的 `/config` 和本进程的预测对照",
+              "每个设置项的来源一致，凭据只有“已设置”"
+            ],
+            [
+              "缺配置怎么办",
+              "不给任何配置，启动子进程",
+              "监听之前退出，退出码 2，一次点名全部问题"
+            ],
+            [
+              "起来了没有",
+              "等端口文件，再探 `/health`",
+              "监听成功；超时则报告是卡住还是崩溃"
+            ],
+            [
+              "准备好了没有",
+              "探 `/ready`，直到 200 或到上限",
+              "预热期间 503，之后 200；到上限仍是 503 就如实报告"
+            ],
+            [
+              "停得干净吗",
+              "SIGTERM，等待，再看进程号",
+              "退出码 0，主进程和后台工作进程都消失，端口释放"
+            ],
+            [
+              "日志里有没有凭据",
+              "拿已知的假密钥逐行搜日志",
+              "零处命中；有命中时只报行号和设置项"
+            ],
+            [
+              "被杀之后",
+              "杀整个进程组，重启，重发写入",
+              "数据完整，重发不重复"
+            ],
+            [
+              "配置升级失败",
+              "换上读不了的配置，再放回备份",
+              "监听前拒绝，数据没变，摘要与备份一致"
+            ]
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "ms-16",
+              "title": "部署可扩展的 Agent：从原型到生产与冒烟测试（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/16-deploying-scalable-agents/README.md"
+            },
+            {
+              "id": "ms-17",
+              "title": "创建本地 AI Agent：隐私、成本、离线与本地服务的边界（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/17-creating-local-ai-agents/README.md"
+            },
+            {
+              "id": "ms-10",
+              "title": "生产中的 Agent：可观测性、关键指标与评估（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/10-ai-agents-production/README.md"
+            },
+            {
+              "id": "book-docker",
+              "title": "MCP 服务的 Docker 部署指南：环境变量、健康检查与生产注意事项（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter4/DOCKER_DEPLOYMENT.md"
+            },
+            {
+              "id": "book-ch7",
+              "title": "评估与可观测性：生产级 Agent 的评估基础设施（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter7.md"
+            },
+            {
+              "id": "lcc-s15",
+              "title": "完整运行层：进程组清理、权限与后台任务（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s15_integrated_harness/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "reliable-tools"
+        },
+        {
+          "id": "code-settings",
+          "type": "annotated-source",
+          "path": "lessons/lesson_local_delivery/settings.py",
+          "start": 138,
+          "end": 166,
+          "notes": [
+            {
+              "id": "n138",
+              "line": 138,
+              "anchor": "def load_settings(",
+              "text": "一次解析全部设置：每个问题都收集起来，最后一起报告，不在第一个错误处停下。"
+            },
+            {
+              "id": "n140",
+              "line": 140,
+              "anchor": "file_values, problems = read_file(path)",
+              "text": "先读配置文件：文件里的凭据、未知的键、不支持的版本，在这里就记成问题。"
+            },
+            {
+              "id": "n143",
+              "line": 143,
+              "anchor": "for setting in SETTINGS:",
+              "text": "逐项解析，每一项各自决定值和来源。"
+            },
+            {
+              "id": "n144",
+              "line": 144,
+              "anchor": "layers = [(\"default\"",
+              "text": "三层从低到高排队：默认值先进去。"
+            },
+            {
+              "id": "n146",
+              "line": 146,
+              "anchor": "layers.append((\"file\"",
+              "text": "配置文件是第二层。"
+            },
+            {
+              "id": "n148",
+              "line": 148,
+              "anchor": "layers.append((\"env\"",
+              "text": "环境变量最后进，优先级最高；空字符串当作没设置。"
+            },
+            {
+              "id": "n149",
+              "line": 149,
+              "anchor": "if not layers:",
+              "text": "没有任何一层给值。"
+            },
+            {
+              "id": "n151",
+              "line": 151,
+              "anchor": "if setting.required:",
+              "text": "必填项缺失：记 `missing`，值和来源都留空。"
+            },
+            {
+              "id": "n154",
+              "line": 154,
+              "anchor": "source, raw = layers[-1]",
+              "text": "最高一层的值胜出；它写坏了也不退回低层，否则会掩盖错误。"
+            },
+            {
+              "id": "n156",
+              "line": 156,
+              "anchor": "values[setting.name] = _parse(",
+              "text": "按类型、范围和可选值检查；`host` 只许回环地址。"
+            },
+            {
+              "id": "n160",
+              "line": 160,
+              "anchor": "problems.append(Problem(setting.name, \"invalid\"))",
+              "text": "问题只记名字和代码 `invalid`，不带值：值可能就是密钥。"
+            },
+            {
+              "id": "n161",
+              "line": 161,
+              "anchor": "if problems:",
+              "text": "有任何问题就抛出，调用方一次拿到完整清单。"
+            },
+            {
+              "id": "n164",
+              "line": 164,
+              "anchor": "warnings = tuple(",
+              "text": "拼错的 `NOTES_` 环境变量只给警告：环境里本来就有无关的名字，不能因此拒绝启动。"
+            }
+          ]
+        },
+        {
+          "id": "code-main",
+          "type": "annotated-source",
+          "path": "lessons/lesson_local_delivery/notes_app.py",
+          "start": 169,
+          "end": 207,
+          "notes": [
+            {
+              "id": "n169",
+              "line": 169,
+              "anchor": "# 1. Settings first",
+              "text": "配置最先解析，在打开任何东西、绑定任何端口之前。"
+            },
+            {
+              "id": "n171",
+              "line": 171,
+              "anchor": "resolved = load_settings(",
+              "text": "配置文件名来自命令行，环境变量取进程自己的；子进程的环境由运行器一手给定。"
+            },
+            {
+              "id": "n173",
+              "line": 173,
+              "anchor": "log.emit(\"error\", \"config_invalid\"",
+              "text": "拒绝时写一条日志，点名每个问题的名字和代码。"
+            },
+            {
+              "id": "n174",
+              "line": 174,
+              "anchor": "return EXIT_CONFIG",
+              "text": "退出码 2：运行器凭它认出“配置错”，此时没有端口文件。"
+            },
+            {
+              "id": "n175",
+              "line": 175,
+              "anchor": "log.threshold =",
+              "text": "日志级别也是配置：用解析好的值。"
+            },
+            {
+              "id": "n177",
+              "line": 177,
+              "anchor": "\"unknown_env\"",
+              "text": "拼错的环境变量名只警告，名字写进日志。"
+            },
+            {
+              "id": "n179",
+              "line": 179,
+              "anchor": "\"config_loaded\"",
+              "text": "把每个设置项的来源写进日志，凭据只记已设置和来源。"
+            },
+            {
+              "id": "n188",
+              "line": 188,
+              "anchor": "# 2. The data file",
+              "text": "再开数据文件，然后才绑定端口。"
+            },
+            {
+              "id": "n190",
+              "line": 190,
+              "anchor": "store = NotesStore(",
+              "text": "数据文件在数据目录里，最大条数来自配置。"
+            },
+            {
+              "id": "n192",
+              "line": 192,
+              "anchor": "\"data_corrupt\"",
+              "text": "数据文件读不懂时拒绝启动，不覆盖它，留给人检查。"
+            },
+            {
+              "id": "n197",
+              "line": 197,
+              "anchor": "app.server = Server(",
+              "text": "到这一行才真正绑定端口；地址只能是 127.0.0.1。"
+            },
+            {
+              "id": "n200",
+              "line": 200,
+              "anchor": "\"bind_failed\"",
+              "text": "端口被占用时，错误名（如 EADDRINUSE）写进日志。"
+            },
+            {
+              "id": "n202",
+              "line": 202,
+              "anchor": "return EXIT_BIND",
+              "text": "退出码 3，不换端口。"
+            },
+            {
+              "id": "n205",
+              "line": 205,
+              "anchor": "_write_port(",
+              "text": "先监听，再写端口文件：运行器看到文件，就知道可以探测了。"
+            },
+            {
+              "id": "n207",
+              "line": 207,
+              "anchor": "\"listening\"",
+              "text": "记下实际的地址、端口、启动耗时和版本。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-faults",
+              "start": 182,
+              "end": 187,
+              "label": "测试装置：故障注入，不属于应用功能"
+            }
+          ]
+        },
+        {
+          "id": "code-launcher",
+          "type": "annotated-source",
+          "path": "lessons/lesson_local_delivery/launcher.py",
+          "start": 191,
+          "end": 261,
+          "notes": [
+            {
+              "id": "n191",
+              "line": 191,
+              "anchor": "def wait_listening",
+              "text": "等的是端口文件，不是进程：应用在监听之后才写它。"
+            },
+            {
+              "id": "n195",
+              "line": 195,
+              "anchor": "check()",
+              "text": "每圈先问一次运行是否被停止：停止要在一圈之内生效。"
+            },
+            {
+              "id": "n196",
+              "line": 196,
+              "anchor": "if self.port_file.exists():",
+              "text": "端口文件在，说明应用已经监听。"
+            },
+            {
+              "id": "n201",
+              "line": 201,
+              "anchor": "code = self.process.poll()",
+              "text": "进程已经退出：配置错误、端口被占用都走这里，退出码留给报告。"
+            },
+            {
+              "id": "n204",
+              "line": 204,
+              "anchor": "if time.monotonic() >= deadline:",
+              "text": "到上限就报告超时，不继续等，也不当作成功。"
+            },
+            {
+              "id": "n206",
+              "line": 206,
+              "anchor": "time.sleep(POLL_SECONDS)",
+              "text": "轮询间隔 50 毫秒。"
+            },
+            {
+              "id": "n208",
+              "line": 208,
+              "anchor": "def wait_ready",
+              "text": "两个端点各问一次，直到 `/ready` 回答 200。"
+            },
+            {
+              "id": "n218",
+              "line": 218,
+              "anchor": "for path in (\"/health\", \"/ready\"):",
+              "text": "两个探针分开问，因为它们回答不同的问题。"
+            },
+            {
+              "id": "n221",
+              "line": 221,
+              "anchor": "if probe.status != last.get(path, -1):",
+              "text": "只保留状态变化的探测：时间线短，又有信息。"
+            },
+            {
+              "id": "n228",
+              "line": 228,
+              "anchor": "if path == \"/ready\" and probe.status == 200:",
+              "text": "只有 `/ready` 返回 200 才算就绪；`/health` 是 200 不算。"
+            },
+            {
+              "id": "n230",
+              "line": 230,
+              "anchor": "if self.process.poll() is not None:",
+              "text": "探测期间进程退出，就不再等。"
+            },
+            {
+              "id": "n232",
+              "line": 232,
+              "anchor": "if time.monotonic() >= deadline:",
+              "text": "到上限仍不就绪：如实报告 `not_ready`。"
+            },
+            {
+              "id": "n247",
+              "line": 247,
+              "anchor": "def stop(",
+              "text": "先礼后兵：先 SIGTERM，再按宽限期决定要不要强杀。"
+            },
+            {
+              "id": "n253",
+              "line": 253,
+              "anchor": "self.process.terminate()",
+              "text": "SIGTERM：让应用自己收尾。"
+            },
+            {
+              "id": "n255",
+              "line": 255,
+              "anchor": "code = self.process.wait(grace_s)",
+              "text": "给它 `grace_s` 秒；退出码 0 就是正常退出。"
+            },
+            {
+              "id": "n257",
+              "line": 257,
+              "anchor": "self._kill_group()",
+              "text": "超时才杀整个进程组，连后台工作进程一起带走。"
+            },
+            {
+              "id": "n260",
+              "line": 260,
+              "anchor": "method = \"graceful\" if code == 0 else \"terminated\"",
+              "text": "退出码 0 记为正常退出，别的记为被终止。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-wait-setup",
+              "start": 209,
+              "end": 215,
+              "label": "说明与初始化：截止时间、保留的探测列表"
+            },
+            {
+              "id": "fold-worker-pid",
+              "start": 224,
+              "end": 227,
+              "label": "记下后台工作进程的进程号，供孤儿检查使用"
+            },
+            {
+              "id": "fold-note-worker",
+              "start": 236,
+              "end": 245,
+              "label": "向 /health 询问后台工作进程的进程号"
+            },
+            {
+              "id": "fold-already-exited",
+              "start": 250,
+              "end": 252,
+              "label": "进程已经退出：直接返回"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "检查读真实进程，不读自己的预期",
+          "chosen": "交付检查把应用当成真实的子进程：用新会话拉起、给白名单环境、等端口文件、按 `/health` 和 `/ready` 分开探测、先 SIGTERM 再杀进程组，结论读退出码、日志、响应和文件。凭据是每次运行现编的假密钥，输出前统一扫描。",
+          "alternatives": [
+            {
+              "id": "in-process",
+              "title": "在本进程里用线程模拟服务",
+              "why_not": "端口被占用、进程卡住、孤儿进程都发生在进程之间，线程里测不到；模拟出来的“通过”什么也证明不了。"
+            },
+            {
+              "id": "fixed-sleep",
+              "title": "启动后固定等几秒再去请求",
+              "why_not": "慢机器上等不够会误报失败，快机器上白等；等不到时也说不清是卡住、崩溃还是没准备好。"
+            },
+            {
+              "id": "defaults-on-missing",
+              "title": "缺必填配置时用默认值继续启动",
+              "why_not": "带着问题运行，错误在别处才冒出来，更难查；快速失败把问题钉在启动那一刻。"
+            },
+            {
+              "id": "health-only",
+              "title": "只检查 /health",
+              "why_not": "卡在预热、连不上依赖的服务它照样回答 200，会被当成可用。"
+            },
+            {
+              "id": "regex-secrets",
+              "title": "用正则匹配`sk-` 开头的字符串来找密钥",
+              "why_not": "格式不同的密钥找不到，普通文字又可能误报；本课已知密钥值，精确搜索更可靠，真实流水线常把两种办法一起用。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "exp-config",
+          "title": "配置、凭据与日志",
+          "hypothesis": "三层配置按固定顺序覆盖；缺必填项和配置文件里的凭据，都在启动前被拒绝；凭据值不出现在任何输出里，带缺陷的版本把它写进日志时，扫描能定位到行号和设置项。",
+          "predict": "predict-start",
+          "arms": [
+            {
+              "id": "config-layers",
+              "exercise": "config-layers",
+              "label": "配置分层：缺失、来源与凭据"
+            },
+            {
+              "id": "logs-and-secrets",
+              "exercise": "logs-and-secrets",
+              "label": "结构化日志与凭据泄漏"
+            }
+          ],
+          "observe": [
+            {
+              "id": "layers",
+              "text": "三层各贡献了几个设置项：来自环境变量、配置文件、默认值的数量。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=sources-env]"
+              }
+            },
+            {
+              "id": "env-wins",
+              "text": "同一个设置项写了两层，环境变量胜出。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=env-beats-file]"
+              }
+            },
+            {
+              "id": "credential",
+              "text": "凭据只从环境变量读，回报里只有“已设置”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=credential-env-only]"
+              }
+            },
+            {
+              "id": "refused",
+              "text": "缺必填项、端口值又写坏时，应用拒绝启动，问题里只有设置项的名字和代码。",
+              "selector": {
+                "event": "lesson.start_failed",
+                "round": 2,
+                "path": "data.problems"
+              }
+            },
+            {
+              "id": "file-secret",
+              "text": "配置文件里的凭据同样被拒绝：api_key 的问题代码是 secret_in_file。",
+              "selector": {
+                "event": "lesson.start_failed",
+                "round": 3,
+                "path": "data.problems"
+              }
+            },
+            {
+              "id": "log-lifecycle",
+              "text": "正常运行的日志里，生命周期事件齐全且有序。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=log-lifecycle]"
+              }
+            },
+            {
+              "id": "leak",
+              "text": "带缺陷的版本把整份配置写进日志，“日志里没有凭据的值”这一项不通过。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=leak-log-clean]"
+              }
+            },
+            {
+              "id": "redacted",
+              "text": "报告里展示的日志行已经脱敏，再扫一遍没有残留。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=leak-report-clean]"
+              }
+            },
+            {
+              "id": "gate",
+              "text": "交付闸门的结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=release-gate]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。每次启动的都是真实子进程，凭据是这次运行现编的假密钥。"
+            },
+            {
+              "text": "先看三层各贡献了几个设置项。",
+              "observe": "layers",
+              "stage": "runtime"
+            },
+            {
+              "text": "同一个模型名，文件和环境变量各写一个值，环境变量胜出。",
+              "observe": "env-wins"
+            },
+            {
+              "text": "凭据的来源是环境变量，回报里只有“已设置”，没有值。",
+              "observe": "credential"
+            },
+            {
+              "text": "必填项没配、端口值又写坏时，应用在监听之前退出，一次点名全部三个问题。",
+              "observe": "refused",
+              "stage": "runtime"
+            },
+            {
+              "text": "配置文件里放凭据同样被拒绝，哪怕环境变量里有可用的。",
+              "observe": "file-secret"
+            },
+            {
+              "text": "换到日志那一组：正常运行的日志，生命周期事件齐全且有序。",
+              "observe": "log-lifecycle"
+            },
+            {
+              "text": "带缺陷的版本把配置写进了日志，这一项按设计不通过。",
+              "observe": "leak"
+            },
+            {
+              "text": "展示出来的那一行，凭据值已经换成了标记。",
+              "observe": "redacted"
+            },
+            {
+              "text": "交付闸门因此拦下。",
+              "observe": "gate"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "三层配置按默认值、配置文件、环境变量的顺序覆盖，子进程报告的来源和预测一致。",
+              "缺必填项和配置文件里的凭据，都在监听之前被拒绝，错误里只有设置项的名字和问题代码。",
+              "带缺陷的版本把配置写进日志时，逐行扫描定位到了行号和设置项，展示的内容已经脱敏。"
+            ],
+            "does_not_prove": [
+              "扫描只找得到已知的、原样出现的值，换了编码或拆开的密钥找不到。",
+              "假密钥证明的是检查的逻辑，不证明你真实的密钥管理做对了。",
+              "这里的配置规则是 `notes_app` 自己的约定，别的程序要有自己的清单。"
+            ]
+          }
+        },
+        {
+          "id": "exp-probe",
+          "title": "启动、就绪与停止",
+          "hypothesis": "存活探针立刻通过，就绪探针在预热后通过；卡住、不就绪和端口被占用，都在上限处如实报告；SIGTERM 让应用和后台工作进程一起退出，只杀主进程会留下孤儿进程。",
+          "arms": [
+            {
+              "id": "startup-probe",
+              "exercise": "startup-probe",
+              "label": "启动、就绪与停止：卡住、占用与孤儿进程"
+            }
+          ],
+          "observe": [
+            {
+              "id": "listening",
+              "text": "应用开始监听，运行器测到的启动到监听耗时。",
+              "selector": {
+                "event": "lesson.process",
+                "round": 1,
+                "path": "data.listen_ms"
+              }
+            },
+            {
+              "id": "probe-order",
+              "text": "存活先于就绪：`/health` 立刻是 200，`/ready` 在预热期间是 503。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=health-before-ready]"
+              }
+            },
+            {
+              "id": "clean-stop",
+              "text": "停止之后，服务和后台工作进程都消失了。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no-orphans]"
+              }
+            },
+            {
+              "id": "timeout",
+              "text": "启动超时：进程仍然活着，说明是卡住，不是崩溃。",
+              "selector": {
+                "event": "lesson.start_failed",
+                "round": 2,
+                "path": "data.alive"
+              }
+            },
+            {
+              "id": "not-ready",
+              "text": "到上限仍不就绪，报告写明等了多久。",
+              "selector": {
+                "event": "lesson.process",
+                "round": 3,
+                "path": "data.limit_ms"
+              }
+            },
+            {
+              "id": "busy",
+              "text": "端口被占用：应用以退出码 3 退出，没有换端口。",
+              "selector": {
+                "event": "lesson.start_failed",
+                "round": 4,
+                "path": "data.exit_code"
+              }
+            },
+            {
+              "id": "orphans",
+              "text": "只杀主进程之后，残留的进程数。",
+              "selector": {
+                "event": "lesson.process",
+                "round": 5,
+                "path": "data.orphans"
+              }
+            },
+            {
+              "id": "reaped",
+              "text": "杀整个进程组之后，残留的进程数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=orphans-after-group-kill]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验同样不调用模型。五段都是真实的子进程，每一段一份报告。"
+            },
+            {
+              "text": "应用先监听，运行器再开始探测，耗时是运行器量的。",
+              "observe": "listening",
+              "stage": "runtime"
+            },
+            {
+              "text": "探针时间线里，存活先通过，就绪等预热结束才通过。",
+              "observe": "probe-order"
+            },
+            {
+              "text": "正常停止后，两个进程都不在了。",
+              "observe": "clean-stop"
+            },
+            {
+              "text": "第二段让应用卡住：运行器在上限处报告超时，进程还活着。",
+              "observe": "timeout",
+              "stage": "runtime"
+            },
+            {
+              "text": "第三段让预热永远不结束：存活通过、就绪不通过，等到上限如实报告。",
+              "observe": "not-ready"
+            },
+            {
+              "text": "第四段占住端口：应用明确失败，没有悄悄换端口。",
+              "observe": "busy"
+            },
+            {
+              "text": "第五段先只杀主进程，工作进程成了孤儿。",
+              "observe": "orphans"
+            },
+            {
+              "text": "再杀整个进程组，才全部消失。",
+              "observe": "reaped"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "存活探针和就绪探针回答不同的问题：预热期间一个是 200，另一个是 503。",
+              "卡住、不就绪、端口被占用，三种“没起来”在运行器的报告里分得清，每一种都有上限和证据。",
+              "只杀主进程会留下后台工作进程，按进程组回收后才没有残留。"
+            ],
+            "does_not_prove": [
+              "这里的超时和预热时长是练习设定的，真实服务的预热多久要自己量。",
+              "回环地址上的探测不能代表别的机器怎么访问；是否只绑定 127.0.0.1，靠的是套接字的实际地址。",
+              "进程消失不等于它写的文件、占的外部资源都已清理。"
+            ]
+          }
+        },
+        {
+          "id": "exp-restart",
+          "title": "崩溃重启与配置回退",
+          "hypothesis": "整组被杀后数据文件完整，重启后恢复；重发的写入不重复；读不了的新配置在监听前被拒绝、数据不动；备份的配置放回去之后，服务恢复，数据仍在。",
+          "arms": [
+            {
+              "id": "restart-rollback",
+              "exercise": "restart-rollback",
+              "label": "崩溃重启、重发写入与配置回退"
+            }
+          ],
+          "observe": [
+            {
+              "id": "crashed",
+              "text": "整个进程组被杀，进程没有机会收尾。",
+              "selector": {
+                "event": "lesson.process",
+                "round": 1,
+                "path": "data.exit_code"
+              }
+            },
+            {
+              "id": "restored",
+              "text": "重启后读到崩溃前写入的两条笔记。",
+              "selector": {
+                "event": "lesson.report",
+                "round": 2,
+                "path": "data.checks[id=restart-restored]"
+              }
+            },
+            {
+              "id": "no-duplicate",
+              "text": "重发 op-2 之后，重复写入的条数。",
+              "selector": {
+                "event": "lesson.report",
+                "round": 2,
+                "path": "data.metrics[id=duplicate-writes]"
+              }
+            },
+            {
+              "id": "upgrade-refused",
+              "text": "读不了的新配置：问题清单里的三项。",
+              "selector": {
+                "event": "lesson.start_failed",
+                "round": 3,
+                "path": "data.problems"
+              }
+            },
+            {
+              "id": "digests",
+              "text": "回退之后，配置文件和数据文件的摘要对照。",
+              "selector": {
+                "event": "lesson.report",
+                "round": 4,
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "rollback-ready",
+              "text": "回退之后，服务重新就绪。",
+              "selector": {
+                "event": "lesson.report",
+                "round": 4,
+                "path": "data.checks[id=rollback-ready]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这个练习不调用模型。先写两条笔记，备份，再杀掉整个进程组。"
+            },
+            {
+              "text": "进程组被一次杀掉，没有任何收尾。",
+              "observe": "crashed",
+              "stage": "runtime"
+            },
+            {
+              "text": "新进程读到那两条笔记。",
+              "observe": "restored"
+            },
+            {
+              "text": "客户端重发 op-2：返回 duplicate，没有多写。",
+              "observe": "no-duplicate"
+            },
+            {
+              "text": "换上读不了的配置，应用在监听之前拒绝，一次点名三个问题。",
+              "observe": "upgrade-refused"
+            },
+            {
+              "text": "把备份的配置放回去，两个文件的摘要都和之前一致。",
+              "observe": "digests"
+            },
+            {
+              "text": "服务重新就绪，笔记还是三条。",
+              "observe": "rollback-ready"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "进程组被杀之后，数据文件仍然完整；重启后读到的笔记和崩溃前一致。",
+              "同一个操作标识重发，不会重复写入；换一个标识是新的写入。",
+              "读不了的新配置在监听之前被拒绝，数据文件的摘要没变；放回备份后，配置文件的摘要和备份时一致，服务恢复。"
+            ],
+            "does_not_prove": [
+              "这里杀的是应用进程组，不是断电；断电时磁盘缓存能否保证，取决于文件系统和硬件。",
+              "回退只涉及配置文件，数据格式迁移的回退没有演示。",
+              "只覆盖本机的一个小服务，不涉及模型、MCP 或任何服务商的可用性探测。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "场景",
+          "options": [
+            {
+              "value": "config_layers",
+              "label": "配置分层：缺失、来源与凭据"
+            },
+            {
+              "value": "startup_probe",
+              "label": "启动、就绪与停止"
+            },
+            {
+              "value": "logs_secrets",
+              "label": "结构化日志与凭据泄漏"
+            },
+            {
+              "value": "restart_rollback",
+              "label": "崩溃重启与配置回退"
+            }
+          ]
+        },
+        {
+          "name": "startup_timeout_ms",
+          "label": "等待监听的上限（毫秒）",
+          "help": "运行器最多等多久才报告启动超时。调得太小，正常启动也会超时。"
+        },
+        {
+          "name": "ready_timeout_ms",
+          "label": "等待就绪的上限（毫秒）",
+          "help": "监听之后，运行器最多等多久让 `/ready` 返回 200。比预热时间短时，正常启动也会被报告为不就绪。"
+        },
+        {
+          "name": "warmup_ms",
+          "label": "预热时长（毫秒）",
+          "help": "应用模拟的依赖预热：这段时间里 `/health` 是 200、`/ready` 是 503。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "配置文件里写了 `api_key`，环境变量里也有有效的凭据。`notes_app` 怎么处理？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "用环境变量里的，忽略文件里的",
+                  "feedback": "不对。文件里有凭据本身就是问题，忽略它等于默许这种写法。"
+                },
+                {
+                  "id": "b",
+                  "text": "拒绝启动，问题代码是 `secret_in_file`",
+                  "feedback": "对。凭据只能来自环境变量，写在文件里一律拒绝。"
+                },
+                {
+                  "id": "c",
+                  "text": "用文件里的，因为文件更具体",
+                  "feedback": "不对。凭据不从文件读，覆盖顺序在这里不适用。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "配置文件会被复制和提交，凭据放进去就守不住了；应用不读它，还要明确拒绝。"
+            },
+            {
+              "id": "q2",
+              "prompt": "监听超时的报告里，怎样区分“卡住”和“崩溃”？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "看超时的那一刻进程是否还活着：活着是卡住，已退出就读退出码",
+                  "feedback": "对。`lesson.start_failed` 的 `alive` 和 `exit_code` 就是这个证据。"
+                },
+                {
+                  "id": "b",
+                  "text": "看端口号的大小",
+                  "feedback": "不对。端口号和进程状态无关。"
+                },
+                {
+                  "id": "c",
+                  "text": "看日志有多少行",
+                  "feedback": "不对。行数多少说明不了进程是否还在。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "活着却不监听是卡住，最后一条日志事件说明卡在哪一步；已经退出的，退出码和日志说明原因。"
+            },
+            {
+              "id": "q3",
+              "prompt": "`/health` 返回 200，`/ready` 返回 503，说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "进程在运行，服务还没准备好；看未通过的检查项",
+                  "feedback": "对。两个探针答的是不同的问题。"
+                },
+                {
+                  "id": "b",
+                  "text": "进程已经崩溃",
+                  "feedback": "不对。崩溃的进程不会回答 200。"
+                },
+                {
+                  "id": "c",
+                  "text": "端口被占用",
+                  "feedback": "不对。端口被占用时应用根本起不来，两个探针都连不上。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "存活通过、就绪不通过，多半是预热没结束或依赖没连上，`/ready` 的回应里写着哪一项没过。"
+            },
+            {
+              "id": "q4",
+              "prompt": "只对应用主进程发 `SIGKILL` 之后，“没有孤儿进程”这项检查会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不通过：后台工作进程仍在运行",
+                  "feedback": "对。父进程被杀，子进程不会自动退出。"
+                },
+                {
+                  "id": "b",
+                  "text": "通过：子进程会随父进程一起退出",
+                  "feedback": "不对。类 Unix 系统里子进程只是被过继。"
+                },
+                {
+                  "id": "c",
+                  "text": "没法检查",
+                  "feedback": "不对。进程号是否还在，能直接查出来。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "要连后台工作进程一起带走，得先让应用自己收尾，或者向整个进程组发信号。"
+            },
+            {
+              "id": "q5",
+              "prompt": "为什么扫描日志时用已知的假密钥值，而不只匹配 `sk-` 开头的字符串？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "已知值搜索精确，不漏格式不同的密钥，也不误报；形状匹配可以作为补充",
+                  "feedback": "对。两种办法各有盲区，已知值是这里最可靠的一种。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为假密钥比真密钥更长",
+                  "feedback": "不对。长度不是理由。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为正则表达式太慢",
+                  "feedback": "不对。慢不是主要问题，漏报和误报才是。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "扫描能证明的只是“已知的这个值没有出现”，换了格式或编码的值需要别的办法。"
+            },
+            {
+              "id": "q6",
+              "prompt": "重启后重发 `op-2`，返回 `duplicate: true`，笔记仍是 2 条。这证明了什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "同一个操作标识不会重复写入",
+                  "feedback": "对。证明的范围就是同一个 `op_id`。"
+                },
+                {
+                  "id": "b",
+                  "text": "任何写入都不会重复",
+                  "feedback": "不对。换一个 `op_id` 就是新的写入，会多一条。"
+                },
+                {
+                  "id": "c",
+                  "text": "数据文件已经备份",
+                  "feedback": "不对。重发不重复和备份是两件事。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "幂等只对带同一个标识的重发成立，不能推广到所有写入。"
+            },
+            {
+              "id": "q7",
+              "prompt": "升级后的配置被拒绝，怎样证明数据文件没有被动过？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "比较 `notes.json` 在升级前后的摘要",
+                  "feedback": "对。摘要一致，文件内容就一字未改。"
+                },
+                {
+                  "id": "b",
+                  "text": "看应用有没有报错",
+                  "feedback": "不对。报错说明配置被拒绝，说明不了数据。"
+                },
+                {
+                  "id": "c",
+                  "text": "再写一条笔记试试",
+                  "feedback": "不对。这会改动数据，也不是证明。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "要证明“没变”，就拿变化之前记下的摘要去比；只看现象说明不了。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“配置分层：缺失、来源与凭据”，找出配置文件里放了凭据的那次启动被拒绝的事件。",
+          "target": {
+            "event": "lesson.start_failed",
+            "round": 3,
+            "path": "data.problems"
+          },
+          "explanation": "第 3 轮的 `lesson.start_failed`：`problems` 里有 api_key 的 secret_in_file 和 log_lvl 的 unknown_key，退出码是 2，`alive` 为 false。同一轮的报告里，“拒绝时没有把凭据写进日志”通过。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在“配置分层”的表格里找到了 model 一行，说得出三层各是什么、最终来源是哪一层。"
+            },
+            {
+              "id": "item-2",
+              "text": "我把预热时长调到 1500 毫秒（大于就绪上限 1200）再运行，看到第一份报告里“限时内就绪”不通过。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在“两种停止方式与孤儿进程”的表格里看到了残留的进程数，并能解释为什么只杀主进程会留下孤儿进程。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在“日志泄漏凭据”的报告里找到了泄漏的行号和设置项，也确认展示的行里没有密钥值。"
+            },
+            {
+              "id": "item-5",
+              "text": "我在“配置升级失败与回退”的表格里核对了两个文件的摘要，说得出它们为什么应该一致。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "load_settings",
+      "note": "按三层解析全部设置；有问题就抛出 SettingsError，列出全部问题。"
+    },
+    {
+      "name": "secret_in_file",
+      "note": "问题代码：凭据写在了配置文件里，一律拒绝。"
+    },
+    {
+      "name": "config_loaded",
+      "note": "日志事件：每个设置项的来源；凭据只记已设置和来源。"
+    },
+    {
+      "name": "startup_ms",
+      "note": "listening 日志里的字段：应用自己量的，从 main 开始到监听。"
+    },
+    {
+      "name": "config_dump",
+      "note": "带缺陷的版本写出整份配置的日志事件，用来演示泄漏。"
+    },
+    {
+      "name": "op_id",
+      "note": "写入的操作标识；同一个 op_id 重发，只返回第一次的结果。"
+    },
+    {
+      "name": "pid_alive",
+      "note": "进程号是否仍在运行；已被杀却没人回收的僵尸进程算已消失。"
+    },
+    {
+      "name": "lesson.start_failed",
+      "note": "应用没有进入监听时的事件：原因、退出码、问题清单。"
+    },
+    {
+      "name": "lesson.process",
+      "note": "运行器看到的进程阶段：拉起、监听、就绪、停止、被杀。"
+    }
+  ]
+}

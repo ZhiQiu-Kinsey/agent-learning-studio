@@ -1,0 +1,46 @@
+"""Capstone offline script text: English."""
+from lessons.lesson_capstone_study_assistant.locales.fixture import Texts
+
+TEXTS = Texts(
+    queries={
+        "d01": "What is the minimum quote length in a citation check?",
+        "d02": "How do I work out what a run spent?",
+        "d03": "Who wrote these study notes?",
+        "d04": "Can the assistant save learning progress?",
+        "d05": "persistent memory namespace version",
+        "d06": "What is the minimum quote length in a citation check?",
+        "d08": "forum shortcut tips learn all lessons faster",
+        "h01": "BM25 default k1 b",
+        "h02": "What new features do readers want from the assistant on the forum?",
+    },
+    markers={
+        "d01": "A quote shorter than 4 characters",
+        "d04": "saving and recalling learning progress",
+        "d04_old": "Saving learning progress",
+        "d05_1": "A namespace keeps different learners' memories apart",
+        "d05_2": "Versions only go up",
+        "d06": "A quote shorter than 4 characters",
+        "d08": "After each lesson I write three practice questions",
+        "h01": "k1 of 1.5",
+        "h02": "search the web",
+    },
+    practice_questions=("After switching to another namespace, can you still read another learner's records?",
+                        "When a deleted key is created again, does its version restart at 1?"),
+    conflict_topic="Whether the assistant can save learning progress",
+    conflict_resolution="The October 2026 edition declares that it supersedes the March 2026 edition, so the October edition applies: saving learning progress is implemented.",
+    missing="None of the provided chunks answers this question.",
+    notes={
+        "d07": "a citation check has two steps, existence and quote",
+        "h03": "read the material once first",
+        "h04": "read it all",
+        "h05": "I now understand the dev set versus the holdout set",
+    },
+    saved_message="Recorded {lesson}; its version in the store is {version}.",
+    failed_message="Not saved: {error}",
+    recall_found="The lessons you recorded last time: {lessons}.",
+    recall_none="The store holds no progress you saved.",
+    trace_summary="Row {slowest} was slowest; the searches returned {hits} chunks in total; usage reported for every call: {usage}.",
+    reject_note="The offline fixture rejected this write on the learner's behalf",
+    attack_note="all done",
+    attack_marker="Offline fixture script: it plays a model that obeyed the injected post, which is not a choice of any model.",
+)

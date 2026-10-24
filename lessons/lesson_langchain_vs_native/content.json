@@ -1,0 +1,1154 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "langchain-vs-native",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "FRAMEWORKS / LANGCHAIN",
+          "headline": "同一个任务交给框架，",
+          "highlight": "请求还是那个请求。",
+          "takeaway": "LangChain 替你建消息对象、生成工具定义、解析调用提议、回填工具结果；停止条件、错误怎么算、调多少次模型、怎样才算完成，仍是你的代码。本课把两种写法放进同一次运行，逐字段对照它们发出的请求。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-same-task",
+              "label": "01 / SAME TASK",
+              "title": "同一任务，同一把尺子",
+              "description": "同一个问题、系统提示词、工具函数、轮数上限和验收函数。先跑原生循环，再跑 LangChain，轮次接着编号。",
+              "token": "rounds 1–2 · 3–4"
+            },
+            {
+              "id": "02-handover",
+              "label": "02 / HANDOVER",
+              "title": "框架接手的四件事",
+              "description": "建消息对象、从函数生成工具定义、把响应解析成 AIMessage、把工具结果包成 ToolMessage 回填。",
+              "token": "bind_tools · invoke"
+            },
+            {
+              "id": "03-layers",
+              "label": "03 / LAYERS",
+              "title": "两层分开记",
+              "description": "lesson.framework_input 记的是框架输入（Framework Input），即框架手里的消息；紧接着的 request 才是转换后发给服务商的请求体。",
+              "token": "framework_input → request"
+            },
+            {
+              "id": "04-defaults",
+              "label": "04 / DEFAULTS",
+              "title": "默认值会藏起失败",
+              "description": "默认的工具校验会把字符串 \"23\" 转成 23.0；解析失败的无效调用提议（Invalid Tool Call）不在 tool_calls 里，只遍历它就会漏掉。",
+              "token": "invalid_tool_calls"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "同一任务，两种实现",
+          "paragraphs": [
+            "本课用前面原生循环做过的任务，换成 LangChain 再做一遍，放进同一次运行里对照。{{lesson:tool-selection}}的加法和{{lesson:fail-safely}}的除数为零，你已经从请求体一路读到工具结果。现在换一种写法：LangChain 这样的 Agent 框架（Agent Framework）提供现成的消息对象、工具登记和调用解析，代码短了不少。这一课不教新的循环，而是给已经会的循环换一层外壳，回答一个问题：短掉的那部分去了哪里，还在不在你的控制之内。",
+            "对照要公平，就只能改一个变量。两边用同一个问题、同一段系统提示词（直接取前两课的运行时文本）、同一份 Python 工具函数、同样最多 3 轮的轮数上限，以及同一个验收函数 accept。提示词或上限不同，差异就说不清来自写法还是来自条件；验收函数也必须共用，免得一边按回答措辞判、一边按工具结果判。运行器先跑原生循环，占第 1、2 轮；再跑 LangChain，从第 3 轮接着编号，时间线上两组请求前后排开。",
+            "原生一侧直接调用平台的 run_agent，和{{lesson:tool-selection}}读过的是同一段循环；工具定义是手写的 JSON，白名单来自 available_tools。LangChain 一侧写在 run_langchain 里：消息换成 SystemMessage、HumanMessage 这样的对象，工具用 @tool 装饰器登记，模型是平台的 RunContextChatModel。它是一个 LangChain 聊天模型，每次调用都经 RunContext 发出，所以请求照常被记录、计入模型调用数，也能被停止。两边的工具函数是同一个：LangChain 的工具只是在外面包了一层，里面调用的仍是原生课的 add_numbers。",
+            "这个对照能说明两种写法在同一次运行里各发了什么、各执行了什么；它不能说明哪种写法让模型更聪明。真实运行时两边各问一次模型，回答可能不同，这是采样带来的差异（见{{lesson:sampling-variance}}），不是框架的功劳或过错。离线测试模式下两边的响应来自同一份夹具，回答几乎一样，那也只是脚本写成这样。看结果先看验收函数的结论，再看回答的措辞。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "框架替你做了什么",
+          "paragraphs": [
+            "对照消息格式、工具注册和循环，框架接手的是四件事：建消息对象、生成工具定义、解析调用提议、把工具结果包成消息回填。原生循环里这四件事都写在明处：消息是带 role 的字典，工具定义是手写的 JSON Schema，调用提议要自己从响应里取出 arguments 字符串再解析，工具结果要自己拼成 role 为 tool 的消息。换成框架后这些代码不见了，但每一步仍然在发生。",
+            "拿加法任务走一遍。原生循环收到响应，直接把那条 assistant 消息原样放回消息历史，执行时才解析 arguments。LangChain 收到同一份响应，先把它变成 AIMessage：能解析的调用进 tool_calls，arguments 已经是字典；解析失败的进 invalid_tool_calls。下一轮发请求前，再把 AIMessage 转回服务商认识的格式。数一下：带一个调用的响应，原生循环一处不改；框架至少转换三次，响应到 AIMessage，AIMessage 回到请求里的 assistant 消息，工具结果到 ToolMessage 再到 tool 消息。后面请求体的差异就出在这几次转换上。",
+            "要分清这些活是谁做的。消息类、@tool、用 convert_to_openai_tool 生成工具定义、用 parse_tool_call 解析实参，属于 langchain-core；把框架消息转换成请求体、缺调用 id 时补一个、把每个调用交给 RunContext 执行，是本平台的适配层 `course/frameworks.py` 做的。正式项目里这份适配工作由服务商集成包承担，各家做法不同；本课只装 langchain-core，免得请求绕开平台的记录。读轨迹时，被 lesson.framework_input 和 lesson.framework_output 前后包住的 request，就出自框架一侧。分界线在读码页的导入语句里：从 `langchain_core` 导入的是框架本身，带 RunContext 字样的是平台。",
+            "框架没有接手的同样重要。langchain-core 只做到“调一次模型、拿回一条 AIMessage”，没有替你写循环：停止条件、最多几轮、工具失败后怎么告诉模型、模型调用数的上限、怎样才算任务完成，都写在 run_langchain 里，或者交给平台。{{lesson:fail-safely}}讲的结构化错误，这里仍由同一个 execute_tool 产生。《深入理解 AI Agent》把运行层归纳为上下文、工具接口、约束、验证、纠正五件事，框架主要帮的是前两件，后三件仍落在你的代码里。"
+          ]
+        },
+        {
+          "id": "deep-dive-references",
+          "type": "deep-dive",
+          "title": "几份参考怎样描述框架",
+          "summary": "三份资料都说框架省的是重复劳动，不是判断。",
+          "paragraphs": [
+            "Hugging Face Agents Course 在框架单元开头就说，基于大语言模型的应用并不总是需要 Agent 框架：流程简单、几段提示词串起来就够时，直接写代码能完全掌握系统；等到要让模型调用函数、协调多个 Agent，抽象才开始有用。它列出一个框架要提供的部件：驱动系统的模型、工具列表、从模型输出里提取调用的解析器、与解析器配套的系统提示词、记忆，以及应对模型出错的日志和重试。",
+            "对照本课：工具列表和解析器 LangChain 都给了。系统提示词仍是前两课手写的那段，因为函数调用让服务商直接返回结构化的调用，不再需要教模型按某种文本格式输出。记忆和重试，langchain-core 没有替你做。Microsoft AI Agents for Beginners 用“模块化组件”概括框架的好处：模型连接、工具定义、消息管理拿来就用，团队把精力放在业务逻辑上。它的示例里，工具也是一个带类型注解和文档字符串的 Python 函数，框架据此生成 Schema，和本课的 @tool 是同一种做法。",
+            "《深入理解 AI Agent》第一章从另一面讲：早期框架主要关注上下文与工具，让 Agent 能做事；生产系统的重心转向约束、验证与纠正，让它不做错事。书里还引用了一条构建原则：直接调用接口往往优于复杂框架，每多一层抽象，调试时就多一处盲区。本课的办法是给这层抽象开窗：框架输入、请求体、框架输出分开记录，盲区就变成可以逐字段核对的证据。"
+          ]
+        },
+        {
+          "id": "misconception-framework-handles-it",
+          "type": "misconception",
+          "claim": "用了框架，停止条件和错误处理就有人管了。",
+          "correction": "langchain-core 只负责一次模型调用前后的格式转换；循环、轮数上限、工具失败后的处理和验收都要自己写。更完整的预置 Agent 有自己的默认值，这些默认值同样要读懂、核对。本课的“实参转换”练习里，默认的 @tool 就把原生工具会拒绝的三组实参放了过去。"
+        },
+        {
+          "id": "predict-requests",
+          "type": "predict",
+          "prompt": "运行“正常任务：加法”之前先猜：两种实现加起来，这次运行会出现几个 request 事件？",
+          "experiment": "paired-run",
+          "arm": "sum",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-not-handled",
+          "type": "micro-quiz",
+          "question": {
+            "id": "core-does-not",
+            "prompt": "下面哪件事 langchain-core 没有替你做？",
+            "options": [
+              {
+                "id": "a",
+                "text": "决定最多调用几轮模型、什么时候停",
+                "feedback": "对。langchain-core 没有循环，轮数上限和停止条件写在本课的 run_langchain 里。"
+              },
+              {
+                "id": "b",
+                "text": "把工具函数的类型注解转成参数 Schema",
+                "feedback": "不对。这正是 @tool 和 convert_to_openai_tool 做的事。"
+              },
+              {
+                "id": "c",
+                "text": "把 arguments 字符串解析成字典",
+                "feedback": "不对。parse_tool_call 会解析它，结果放进 AIMessage 的 tool_calls。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "框架接手格式上的重复劳动，循环的边界仍由你的代码决定。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "请求还是那个请求",
+          "paragraphs": [
+            "抓下框架实际发出的请求，与原生请求逐字段比较，大部分字段一字不差。消息列表、系统提示词、用户问题、工具名都相同，因为框架最后也要按服务商的接口发一个 OpenAI 兼容的请求体。本课的“请求体逐字段对照”报告把两边的请求按顺序配对，只列值不同或只有一边有的字段，所以表里的每一行都是一处真实的差异。差异本身不一定是坏事，要紧的是知道它在哪、从哪来。",
+            "加法任务里，第一对请求的差异来自工具定义。原生一侧手写了参数描述“第一个数字”，还写了 additionalProperties 为 false；@tool 从 `a: float, b: float` 推断出的 Schema 只有类型，没有参数描述，也没有 additionalProperties。原生一侧还写了 tool_choice 为 auto，LangChain 一侧没有绑定这个选项，请求里就没有这个字段。服务商对缺省的 tool_choice 通常按 auto 处理，但这是服务商的约定，不是请求里写明的事实。这几处会改变模型看到的东西：参数描述没了，模型只能凭参数名猜 `a`、`b` 是什么。",
+            "第二对请求的差异在消息里。原生循环把服务商的 assistant 消息原样放回，arguments 还是服务商写的那串文字；框架先把它解析成字典，再序列化回去，空格的写法可能变了；这次运行里服务商写的就是这种格式，两边相同。工具结果也不同：默认的 @tool 按 `float` 校验实参，整数 19 和 23 先被转成浮点数，原生工具返回 42，框架一侧返回 42.0。这两处都不影响请求是否合法，却说明框架回填的是它自己理解后的版本，不是原文。",
+            "请求体要和框架输入分开看。lesson.framework_input 记的是框架手里的消息，字段名是 LangChain 的 type、content、tool_calls，这就是概念卡里说的框架输入；紧接着的 request 才是适配层转换后的请求体，标注方式和其他请求一样，由运行路径决定。离线测试模式下请求和响应来自夹具，真实运行时才是服务商实际收到的内容。两者混为一谈，就会把框架内部的表示误当成发给模型的内容。本课的请求体对照比的就是 request 这一层，两边可以逐字段放在一起。"
+          ]
+        },
+        {
+          "id": "deep-dive-defaults",
+          "type": "deep-dive",
+          "title": "默认值怎样藏起失败",
+          "summary": "宽松校验悄悄修好坏实参；解析失败的调用不在 tool_calls 里。",
+          "paragraphs": [
+            "@tool 用 Pydantic 校验实参。Pydantic 默认是宽松模式，会做隐式类型转换：目标类型是浮点数时，字符串 \"23\" 被转成 23.0，布尔值 true 被转成 1.0；推断出的 Schema 不禁止多余字段，多传的 `c` 被悄悄丢掉。实参在到达原生函数之前已经被“修好”，原生 add_numbers 里那几行类型检查根本没有机会执行。",
+            "“实参转换”练习把同一段 arguments 交给三个入口。四组实参里，原生工具拒绝三组：数字写成字符串、布尔值、多一个参数；默认的 @tool 三组都执行成功，布尔值那组返回 24.0。把参数 Schema 换成 StrictNumbers，打开严格模式并禁止多余字段，三组都变回 ValidationError，结论和原生一致。严格模式仍会把整数转成浮点数，所以合法实参的结果依然是 42.0。",
+            "无效调用提议是另一类默认行为。实参不是合法 JSON，或者解析出来是数组而不是对象，框架不抛异常，而是把它放进 invalid_tool_calls。只遍历 tool_calls 的循环会漏掉它：模型提了三个调用，只有一个得到回答。OpenAI 兼容接口通常要求每个调用 id 都有对应的工具结果，缺了就拒绝下一次请求。本课的 execute_tool_calls 两类都执行，但先执行有效调用、后执行无效调用提议，回填顺序因此可能和服务商发来的不同。",
+            "要让框架一侧的结论回到原生工具的水平，有三种做法。一是像本课的 StrictNumbers 那样给工具一个严格的参数 Schema；二是参数类型写宽一些，让原生函数自己做全部检查；三是在执行前另加一道业务检查。三种做法都要配一组故意写错的实参来测，就像“实参转换”练习那样：不测，就不知道框架的默认值在哪里替你做了决定。"
+          ]
+        },
+        {
+          "id": "misconception-same-schema",
+          "type": "misconception",
+          "claim": "框架从函数生成的工具定义，和手写的一样完整。",
+          "correction": "@tool 只从类型注解和传入的描述生成定义：本课生成的版本没有参数描述，也没有 additionalProperties。模型读到的信息因此变少，服务商也不会拦下多余的字段。要补上，可以用带描述的类型注解或单独的参数 Schema，再用请求体对照确认它真的进了请求。"
+        },
+        {
+          "id": "compare-responsibility",
+          "type": "compare",
+          "title": "两种实现的分工",
+          "columns": [
+            "环节",
+            "原生循环",
+            "LangChain（核心包加适配层）",
+            "仍要自己负责"
+          ],
+          "rows": [
+            [
+              "消息",
+              "带 role 的字典",
+              "SystemMessage、HumanMessage、AIMessage、ToolMessage",
+              "消息历史里放什么"
+            ],
+            [
+              "工具定义",
+              "手写 JSON Schema",
+              "@tool 从类型注解生成",
+              "参数描述、要不要严格校验"
+            ],
+            [
+              "调用解析",
+              "执行时才解析 arguments",
+              "解析进 tool_calls 或 invalid_tool_calls",
+              "无效调用提议也要回答"
+            ],
+            [
+              "结果回填",
+              "自己拼 role 为 tool 的消息",
+              "ToolMessage",
+              "失败写成结构化错误"
+            ],
+            [
+              "循环与停止",
+              "run_agent",
+              "langchain-core 不提供",
+              "轮数上限、停止条件、模型调用数"
+            ],
+            [
+              "验收",
+              "accept",
+              "accept",
+              "同一把尺子"
+            ]
+          ]
+        },
+        {
+          "id": "mq-coercion",
+          "type": "micro-quiz",
+          "question": {
+            "id": "default-coercion",
+            "prompt": "默认的 @tool 收到 arguments `{\"a\": 19, \"b\": \"23\"}`，这次工具结果是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "ok，结果 42.0",
+                "feedback": "对。宽松校验先把 \"23\" 转成 23.0，原生函数的类型检查没有机会执行。"
+              },
+              {
+                "id": "b",
+                "text": "ValueError：参数 b 必须是数字",
+                "feedback": "不对。这是原生工具的结论；默认的 @tool 在它之前已经把字符串转成了数字。"
+              },
+              {
+                "id": "c",
+                "text": "ValidationError",
+                "feedback": "不对。要换成 StrictNumbers 这样的严格 Schema 才会报 ValidationError。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "框架的默认值可能把原生工具会拒绝的输入悄悄修好，失败就从轨迹里消失了。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "回调与统一轨迹",
+          "paragraphs": [
+            "用回调把框架内部步骤接进平台的事件记录，框架做过什么就能在同一条轨迹里看到。LangChain 的组件会在关键时刻调用回调处理器：聊天模型开始时调 on_chat_model_start，结束时调 on_llm_end；工具开始、结束、出错时调 on_tool_start、on_tool_end、on_tool_error。平台的 RunContextCallbackHandler 把这些时刻记成 lesson.framework_callback 事件，只记回调名和嵌套关系，不记输入输出。运行编号按出现顺序写成 `fw-1`、`fw-2`，回放时读到的嵌套关系每次都一样。",
+            "为什么不记输入输出？因为它们已经有更可靠的记录。模型那一侧，转换前的框架输入、实际的请求、响应、框架构造的 AIMessage 各有一条事件；工具那一侧，execute_tool_calls 把每个调用交给 RunContext，照常产生 tool_call 和 tool_result。回调只补一件事：框架自己认为发生了什么、按什么顺序。比如除数为零的任务里，tool_call 和 tool_result 之间夹着一条 on_tool_error，说明异常确实从 LangChain 工具里抛了出来，再被平台变成结构化错误。",
+            "统一轨迹的关键是所有路径都走同一个出口。模型调用只走 RunContext 的 complete，工具调用只走 execute_proposal，所以原生一侧和框架一侧的事件格式相同，回放和实验报告不需要知道是谁发的。反例是 LangGraph 预置的工具节点：它直接调用工具函数，不经过 RunContext，轨迹里就会少掉 tool_call 和 tool_result。课程运行里一律用 execute_tool_calls 代替它。本课原生一侧走 execute_proposal，框架一侧走 execute_tool_calls，后者最终也交给前者，所以两边的工具事件能直接放在一起比。自己写框架代码时，判断一条执行路径能不能用，先问它经不经过这两个出口。",
+            "回调处理器设了 raise_error，平台的停止请求在回调里抛出时，框架不会把它吞掉。另一个容易忽略的出口是 LangSmith：langchain-core 依赖它，环境变量打开追踪时，框架会把消息上传到外部服务。本课把框架调用放在 local_tracing_only 里，追踪开着时适配层直接拒绝发请求，运行数据只留在本机。回调能告诉你框架走了哪些步骤，但不能代替请求和工具结果本身：判断对错，仍要回到那几条事件。"
+          ]
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "依赖版本",
+          "paragraphs": [
+            "锁定版本、记录能力差异，框架升级时要能复跑对照。本课锁定 langchain-core 1.6.x，依赖写在 `pyproject.toml`，下限 1.6.10、上限低于 2。报告里的“langchain-core 版本”是这次运行实际装的版本号，每条 lesson.framework_input 也带着它。框架的接口变得快，网上不少教程还停在旧版本的写法，照着示例写之前先核对版本。本课提到的接口名都按已装的版本核对过，换版本后要再核对一遍。",
+            "能力差异要逐项写下来，不能笼统说“框架都支持”。比如本课的适配层只接受文本消息，图片块会直接报错；它没有实现边生成边返回的接口，框架会退回一次性调用；服务商不报告用量时，AIMessage 的 usage_metadata 留空，框架输出里写 usage_reported 为 false，不填 0。这些都是这一版适配层的事实，换成服务商集成包时要重新核对。服务商这一层也有差异：同一个请求体，不同服务商对 tool_choice、并行调用的支持不同，要在真实运行里逐项核对，按实测、回退、未验证分开写。",
+            "复跑对照靠测试。本课的测试把 @tool 为 add_numbers 生成的工具定义原样写进断言：只有类型，没有参数描述，也没有 additionalProperties。哪天升级后生成规则变了，这条测试先失败，提醒你重跑两种实现、重看请求体差异，再决定正文和验收要不要跟着改。只看“程序还能跑”不够：请求里多了或少了一个字段，模型看到的东西就变了。测试还会把四个练习在两种运行语言下各跑一遍，确认事件序列和报告结构没有变。",
+            "最后说范围。本课只装 langchain-core，不装 `langchain` 整包，也不装服务商集成包。`langchain` 包里的预置 Agent 把循环和工具执行都包好了，底下由 LangGraph 运行；它省掉的正是本课要看清的那几步。看清之后再用它，你就知道该去核对哪些默认值。下一课{{lesson:langchain-tools}}用框架的工具与校验组件接入已有的业务契约，{{lesson:langgraph-state}}再把循环画成有终态的图。项目里确实要用预置 Agent 时，先用本课的办法给它做一次对照，再决定信任它的哪些默认值。"
+          ]
+        },
+        {
+          "id": "deep-dive-packages",
+          "type": "deep-dive",
+          "title": "LangChain 的包怎样分工",
+          "summary": "langchain-core 是公共接口，langchain 包是预置 Agent，集成包连到服务商。",
+          "paragraphs": [
+            "LangChain 1.x 拆成几个包。langchain-core 定义消息、工具、聊天模型基类和回调这些公共接口，几乎不带具体实现；`langchain` 包在它上面提供 `create_agent` 这样的预置 Agent，循环和工具执行由 LangGraph 驱动；`langchain-openai` 这类集成包把聊天模型接到具体服务商，负责把框架消息转换成那家的请求格式。官方文档里写的 `from langchain.tools import tool`，用的是同一个装饰器，只是从 `langchain` 包转出来。",
+            "本课只装 langchain-core，有两个原因。第一，集成包自己发 HTTP 请求，请求不经过 RunContext，平台记录不到，也不受模型调用数和停止请求的约束，所以平台写了 RunContextChatModel 顶替集成包的位置。第二，预置 Agent 把循环藏起来了，而本课要看清循环里每一步是谁做的。学会对照之后再用预置 Agent，你会知道该核对它的哪些默认值：最多跑几步、工具出错怎样回给模型、无效调用提议怎样处理。",
+            "Microsoft AI Agents for Beginners 讲工具使用的那一课也是这个顺序：先手写函数的 JSON Schema，自己拿模型选中的函数名和参数去执行，再把结果送回模型；然后才介绍框架怎样把这一来一回包起来，让开发者只写一个带类型注解的函数。先手写、后用框架，也是本课程把框架课放在原生循环之后的原因：知道被包起来的是什么，才知道该检查什么。",
+            "再对照 Learn Claude Code 的第一课：它的最小循环是一个没有上限的 `while` 循环，模型不再调用工具就退出，二十来行代码；生产里的 Agent 在这副骨架上叠加约束、钩子和生命周期控制。框架做的也是这件事，在同一副骨架上叠层。叠了哪些层、每层的默认值是什么，就是读框架源码和文档时要找的东西。"
+          ]
+        },
+        {
+          "id": "walkthrough-round",
+          "type": "walkthrough",
+          "title": "LangChain 一侧的一轮",
+          "description": "按步骤说明 run_langchain 的一轮，代码是简化的示意，非运行记录；本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "建消息",
+              "actor": "运行器",
+              "title": "消息对象进入框架",
+              "body": "系统提示词和问题包成 SystemMessage、HumanMessage，和原生一侧的文字相同。",
+              "code": "history = [SystemMessage(prompt), HumanMessage(question)]",
+              "language": "python",
+              "evidence": "lesson.framework_input 的 messages"
+            },
+            {
+              "id": "step-2",
+              "label": "发请求",
+              "actor": "适配层",
+              "title": "框架消息转成请求体",
+              "body": "RunContextChatModel 把消息和绑定的工具转换成 OpenAI 兼容的请求体，经 RunContext 发出。",
+              "code": "reply = model.invoke(history, round_number=3)",
+              "language": "python",
+              "evidence": "第 3 轮的 request"
+            },
+            {
+              "id": "step-3",
+              "label": "解析",
+              "actor": "langchain-core",
+              "title": "响应变成 AIMessage",
+              "body": "能解析的调用进 tool_calls，解析失败的进 invalid_tool_calls；缺调用 id 时适配层补一个。",
+              "code": "reply.tool_calls, reply.invalid_tool_calls",
+              "language": "python",
+              "evidence": "lesson.framework_output"
+            },
+            {
+              "id": "step-4",
+              "label": "执行与回填",
+              "actor": "运行器",
+              "title": "每个调用都得到 ToolMessage",
+              "body": "execute_tool_calls 逐个交给 RunContext 执行，结果包成 ToolMessage 追加进消息历史。",
+              "code": "history += execute_tool_calls(context, reply, allowlist)",
+              "language": "python",
+              "evidence": "tool_call 与 tool_result"
+            },
+            {
+              "id": "step-5",
+              "label": "停止",
+              "actor": "运行器",
+              "title": "没有调用就停",
+              "body": "这条规则和轮数上限都写在本课的循环里，不在框架里。",
+              "code": "if not reply.tool_calls and not reply.invalid_tool_calls: break",
+              "language": "python",
+              "evidence": "实验报告里“停止条件”一行"
+            }
+          ]
+        },
+        {
+          "id": "mq-tool-node",
+          "type": "micro-quiz",
+          "question": {
+            "id": "why-not-tool-node",
+            "prompt": "为什么课程运行里不用 LangGraph 预置的工具节点执行工具？",
+            "options": [
+              {
+                "id": "a",
+                "text": "它直接调用工具函数，不经过 RunContext，轨迹里会缺 tool_call 和 tool_result",
+                "feedback": "对。统一轨迹要求所有工具调用都走同一个出口。"
+              },
+              {
+                "id": "b",
+                "text": "它不能执行 Python 函数",
+                "feedback": "不对。它能执行，问题是执行没有被平台记录。"
+              },
+              {
+                "id": "c",
+                "text": "它会多调用一次模型",
+                "feedback": "不对。执行工具不调用模型，差别在记录。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "绕开记录的执行路径，回放时就像什么都没发生。"
+          }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "hf-frameworks",
+              "title": "什么时候需要 Agent 框架（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/introduction.mdx"
+            },
+            {
+              "id": "hf-langgraph",
+              "title": "LangGraph 与 LangChain 的关系、控制与自由（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/when_to_use_langgraph.mdx"
+            },
+            {
+              "id": "hf-llamaindex",
+              "title": "另一种框架的组件、工具与工作流（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/llama-index/introduction.mdx"
+            },
+            {
+              "id": "ms-frameworks",
+              "title": "Agent 框架的模块化组件（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/02-explore-agentic-frameworks/README.md"
+            },
+            {
+              "id": "ms-tool-use",
+              "title": "工具 Schema 与框架里的工具调用（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/04-tool-use/README.md"
+            },
+            {
+              "id": "book-harness",
+              "title": "Harness 工程：模型之外的竞争力（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            },
+            {
+              "id": "lcc-loop",
+              "title": "最小的 Agent 循环（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/agents/s01_agent_loop.py"
+            },
+            {
+              "id": "langchain-tools-docs",
+              "title": "@tool 装饰器、Schema 推断与工具执行（LangChain 文档，2026-10-20 核对）",
+              "url": "https://docs.langchain.com/oss/python/langchain/tools"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "tool-selection"
+        },
+        {
+          "id": "code-langchain-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langchain_vs_native/runtime.py",
+          "start": 101,
+          "end": 131,
+          "notes": [
+            {
+              "id": "n-signature",
+              "line": 101,
+              "anchor": "def run_langchain(context: RunContext, task: str, first_round: int) -> Side:",
+              "text": "LangChain 一侧的完整循环。first_round 接在原生一侧最后一轮之后，两组请求在时间线上不会撞号。"
+            },
+            {
+              "id": "n-tools",
+              "line": 104,
+              "anchor": "tools = langchain_tools(task, context.locale)",
+              "text": "工具由 @tool 从同一份 Python 函数生成，系统提示词也取自前两课的 setup，两边只差写法。"
+            },
+            {
+              "id": "n-callbacks",
+              "line": 106,
+              "anchor": "handler = RunContextCallbackHandler(context, include_chains=False)",
+              "text": "回调处理器把框架的步骤记成 lesson.framework_callback。模型和工具都挂上它，开始、结束、出错各记一条。"
+            },
+            {
+              "id": "n-bind",
+              "line": 109,
+              "anchor": "model = RunContextChatModel(context=context, callbacks=[handler]).bind_tools(tools)",
+              "text": "bind_tools 把工具转换成 OpenAI 格式的工具定义并绑定到模型上。注意没有绑定 tool_choice，请求里就没有这个字段。"
+            },
+            {
+              "id": "n-allowlist",
+              "line": 110,
+              "anchor": "allowlist = tools_as_callables(tools)",
+              "text": "白名单：工具名对应调用 LangChain 工具的函数。执行仍走平台的 execute_tool，失败照样是结构化错误。"
+            },
+            {
+              "id": "n-messages",
+              "line": 112,
+              "anchor": "history = [SystemMessage(setup.system_prompt), HumanMessage(context.question)]",
+              "text": "消息历史换成框架的消息对象，文字和原生一侧完全相同。"
+            },
+            {
+              "id": "n-tracing",
+              "line": 114,
+              "anchor": "with local_tracing_only():",
+              "text": "关掉 LangSmith 追踪：环境里开着追踪，框架会把消息上传到外部服务。"
+            },
+            {
+              "id": "n-loop",
+              "line": 116,
+              "anchor": "for step in range(MAX_TOOL_ROUNDS):",
+              "text": "langchain-core 没有循环。轮数上限和原生一侧一样是 3，写在这里。"
+            },
+            {
+              "id": "n-body",
+              "line": 117,
+              "anchor": "side.bodies.append(request_body(model, history))",
+              "text": "记下这次要发的请求体，供请求体对照用；测试证明它和平台记录的 request 一致。"
+            },
+            {
+              "id": "n-invoke",
+              "line": 119,
+              "anchor": "reply = model.invoke(history, round_number=first_round + step)",
+              "text": "一次 invoke 就是一次经 RunContext 的模型调用，前后各有一条框架输入、框架输出事件。返回值是 AIMessage。"
+            },
+            {
+              "id": "n-counts",
+              "line": 121,
+              "anchor": "side.valid_calls += len(reply.tool_calls)",
+              "text": "框架已经把调用分成两类：解析成功的在 tool_calls，失败的在 invalid_tool_calls。"
+            },
+            {
+              "id": "n-stop",
+              "line": 123,
+              "anchor": "if not reply.tool_calls and not reply.invalid_tool_calls:",
+              "text": "停止条件：两类调用都没有才算模型给出了回答。只看 tool_calls，一条坏调用就会被当成最终回答。"
+            },
+            {
+              "id": "n-execute",
+              "line": 127,
+              "anchor": "for message in execute_tool_calls(context, reply, allowlist):",
+              "text": "有效和无效调用提议都交给 RunContext 执行，每个都换回一条 ToolMessage，下一次请求才合法。"
+            },
+            {
+              "id": "n-kinds",
+              "line": 130,
+              "anchor": "side.message_kinds = [message.type for message in history]",
+              "text": "框架消息的类型名是 `system`、`human`、`ai`、`tool`，报告里拿它和原生的 role 并排比较。"
+            }
+          ]
+        },
+        {
+          "id": "code-tools",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langchain_vs_native/tools.py",
+          "start": 19,
+          "end": 38,
+          "notes": [
+            {
+              "id": "n-strict-class",
+              "line": 19,
+              "anchor": "class StrictNumbers(BaseModel):",
+              "text": "严格的参数 Schema，只在“实参转换”练习里用，作为默认 @tool 的对照。"
+            },
+            {
+              "id": "n-strict-config",
+              "line": 22,
+              "anchor": "model_config = ConfigDict(strict=True, extra=\"forbid\")",
+              "text": "strict 关掉隐式类型转换，extra 为 forbid 拒绝多余字段。两项合起来，结论才和原生工具一致。"
+            },
+            {
+              "id": "n-factory",
+              "line": 27,
+              "anchor": "def add_numbers_tool(locale: str, *, strict: bool = False) -> BaseTool:",
+              "text": "按运行语言生成工具：工具名是代码，描述取自{{lesson:tool-selection}}的运行时文本。"
+            },
+            {
+              "id": "n-native",
+              "line": 30,
+              "anchor": "native = partial(add_numbers, t)",
+              "text": "绑定的是原生课的 add_numbers，类型检查和错误文字都原样保留。"
+            },
+            {
+              "id": "n-decorator",
+              "line": 34,
+              "anchor": "@tool(\"add_numbers\", description=t.add_numbers, args_schema=StrictNumbers if strict else None)",
+              "text": "@tool 的名字和描述由参数给出；args_schema 为空时，参数 Schema 从下面函数的类型注解推断。"
+            },
+            {
+              "id": "n-body-call",
+              "line": 35,
+              "anchor": "def add(a: float, b: float) -> float:",
+              "text": "类型注解决定了宽松校验的目标类型：\"23\" 和 true 都会先被转成浮点数，再交给原生函数。"
+            }
+          ]
+        },
+        {
+          "id": "code-parse",
+          "type": "annotated-source",
+          "path": "course/frameworks.py",
+          "start": 196,
+          "end": 233,
+          "notes": [
+            {
+              "id": "n-parse-signature",
+              "line": 196,
+              "anchor": "def ai_message_from_response(response: dict, *, call_index: int, locale: str)",
+              "text": "平台适配层：把 OpenAI 格式的响应变成框架的 AIMessage。“调用解析”练习直接调用它。"
+            },
+            {
+              "id": "n-parse-loop",
+              "line": 208,
+              "anchor": "for position, raw_call in enumerate(raw.get(\"tool_calls\") or [], start=1):",
+              "text": "逐个处理服务商给的调用；position 是它在原始列表里的位置。"
+            },
+            {
+              "id": "n-parse-id",
+              "line": 210,
+              "anchor": "if not (isinstance(raw_call.get(\"id\"), str) and raw_call[\"id\"].strip()):",
+              "text": "缺调用 id 时补一个，否则工具结果无法对上调用。这一步是适配层做的，langchain-core 本身把 id 记为空。"
+            },
+            {
+              "id": "n-parse-synth",
+              "line": 212,
+              "anchor": "synthesized.append(raw_call[\"id\"])",
+              "text": "补过的 id 单独列出，写进框架输出的 synthesized_call_ids，不冒充服务商的 id。"
+            },
+            {
+              "id": "n-parse-core",
+              "line": 215,
+              "anchor": "parsed = parse_tool_call(raw_call, return_id=True)",
+              "text": "langchain-core 的解析函数：把 arguments 字符串解析成字典。"
+            },
+            {
+              "id": "n-parse-invalid",
+              "line": 216,
+              "anchor": "except OutputParserException as error:",
+              "text": "不是合法 JSON 时不抛给你，而是变成一条无效调用提议，带着原始 arguments 和错误说明。"
+            },
+            {
+              "id": "n-parse-object",
+              "line": 221,
+              "anchor": "if not isinstance(parsed[\"args\"], dict):",
+              "text": "parse_tool_call 接受任何 JSON，数组也照收；不是对象就无法按名字传参，所以也算无效调用提议。"
+            },
+            {
+              "id": "n-parse-valid",
+              "line": 225,
+              "anchor": "tool_calls.append({\"name\": parsed[\"name\"] or function.get(\"name\") or \"\", \"args\": parsed[\"args\"],",
+              "text": "有效调用只保留解析后的字典，原始的 arguments 文字到这里就丢了，下一次请求里是重新序列化的版本。"
+            },
+            {
+              "id": "n-parse-message",
+              "line": 230,
+              "anchor": "message = AIMessage(content=raw.get(\"content\") or \"\", tool_calls=tool_calls,",
+              "text": "两类调用分别放进 tool_calls 和 invalid_tool_calls。服务商没报告用量时 usage_metadata 为空，不填 0。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-choice",
+              "start": 202,
+              "end": 206,
+              "label": "平台：检查响应结构，取出第一条 choice 的 message"
+            },
+            {
+              "id": "fold-metadata",
+              "start": 227,
+              "end": 229,
+              "label": "平台：整理结束原因、模型名等响应元数据"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "只装 langchain-core，循环自己写，执行经过 RunContext",
+          "chosen": "模型用平台的 RunContextChatModel，工具用 @tool 从原生函数生成，执行交给 execute_tool_calls；循环、轮数上限和验收函数在本课里写明，和原生一侧逐项相同。",
+          "alternatives": [
+            {
+              "id": "prebuilt-agent",
+              "title": "用 langchain 包的预置 Agent",
+              "why_not": "它把循环和工具执行都包好了，本课要对照的正是这些步骤；它的默认值要先读懂才能用。"
+            },
+            {
+              "id": "provider-package",
+              "title": "装服务商集成包，直接用它的聊天模型",
+              "why_not": "集成包自己发请求，不经过 RunContext：没有记录，不计入模型调用数，也停不下来。"
+            },
+            {
+              "id": "tool-node",
+              "title": "用 LangGraph 预置的工具节点执行工具",
+              "why_not": "它直接调用工具函数，轨迹里会缺 tool_call 和 tool_result。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "paired-run",
+          "title": "同一任务，两种实现",
+          "hypothesis": "两种实现用同一问题、工具函数、轮数上限和验收函数，验收结论相同；请求体的差异来自框架生成或改写的字段：工具定义、tool_choice，以及回填消息里被转换、丢掉或补上的字段。",
+          "predict": "predict-requests",
+          "arms": [
+            {
+              "id": "sum",
+              "exercise": "sum",
+              "label": "正常任务：加法"
+            },
+            {
+              "id": "divide",
+              "exercise": "divide-zero",
+              "label": "失败任务：除数为零"
+            }
+          ],
+          "observe": [
+            {
+              "id": "native-choice",
+              "text": "原生一侧第一次请求里的 tool_choice。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tool_choice"
+              }
+            },
+            {
+              "id": "framework-input",
+              "text": "LangChain 一侧第一次调用前的框架输入：消息用的是框架自己的字段名。",
+              "selector": {
+                "event": "lesson.framework_input",
+                "round": 3,
+                "path": "data.messages"
+              }
+            },
+            {
+              "id": "framework-tools",
+              "text": "同一轮里转换后的请求体：@tool 生成的工具定义。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.tools"
+              }
+            },
+            {
+              "id": "framework-output",
+              "text": "框架从响应构造的 AIMessage 里解析好的 tool_calls。",
+              "selector": {
+                "event": "lesson.framework_output",
+                "round": 3,
+                "path": "data.message.tool_calls"
+              }
+            },
+            {
+              "id": "callback",
+              "text": "回调处理器记下的第一个框架步骤。",
+              "selector": {
+                "event": "lesson.framework_callback",
+                "path": "data.callback"
+              }
+            },
+            {
+              "id": "diff",
+              "text": "第一对请求有几个字段不同。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=diff_1]"
+              }
+            },
+            {
+              "id": "acceptance",
+              "text": "LangChain 一侧的验收结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=langchain_accepted]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "一次运行里两种实现前后各跑一遍：原生循环占第 1、2 轮，LangChain 从第 3 轮开始。"
+            },
+            {
+              "text": "原生循环每次请求都写明 tool_choice 为 auto。",
+              "observe": "native-choice",
+              "stage": "runtime"
+            },
+            {
+              "text": "LangChain 一侧调用模型前，先记下框架输入：type 是 `system`、`human`，不是 role。",
+              "observe": "framework-input"
+            },
+            {
+              "text": "紧接着的 request 才是发出去的请求体。对照一下，工具定义里少了参数描述。",
+              "observe": "framework-tools",
+              "stage": "model"
+            },
+            {
+              "text": "响应回来后，框架把调用解析进 AIMessage，arguments 已经是字典。",
+              "observe": "framework-output"
+            },
+            {
+              "text": "回调把框架自己的步骤接进同一条轨迹，第一条是聊天模型开始。",
+              "observe": "callback"
+            },
+            {
+              "text": "请求体对照报告只列真实的差异，先看第一对有几处。",
+              "observe": "diff"
+            },
+            {
+              "text": "最后看验收：同一个函数，读的是工具结果和请求体，不是回答的措辞。",
+              "observe": "acceptance",
+              "stage": "tool"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里两种实现各发了哪些请求、执行了哪些工具、为什么停下，以及验收函数对两边的结论。",
+              "请求体的哪些字段因框架而不同：生成的工具定义、缺省的 tool_choice、被转换成浮点数的工具结果，以及回填时被丢掉的服务商附带字段。arguments 的写法是否变化，取决于服务商怎么写；这次运行里两边相同。"
+            ],
+            "does_not_prove": [
+              "两边回答措辞不同不能归因于框架：两次模型调用本身就可能不同。",
+              "缺省的 tool_choice 在某个服务商那里按什么处理，要看那家的文档和真实运行。",
+              "离线测试模式下的模型响应来自夹具，arguments 的写法是脚本定的。",
+              "一次对照里验收相同，不代表所有任务上两种写法都等价；换任务、换工具要重新对照。"
+            ]
+          }
+        },
+        {
+          "id": "hidden-defaults",
+          "title": "框架悄悄做掉的事",
+          "hypothesis": "默认的 @tool 会把原生工具拒绝的实参转换后执行；换成严格 Schema 后结论与原生一致。框架解析调用时会补缺失的调用 id、把解析失败的调用放进 invalid_tool_calls，并先回填有效调用。",
+          "arms": [
+            {
+              "id": "arguments",
+              "exercise": "arguments",
+              "label": "实参转换（运行器构造）"
+            },
+            {
+              "id": "parsing",
+              "exercise": "parsing",
+              "label": "调用解析（运行器构造）"
+            }
+          ],
+          "observe": [
+            {
+              "id": "masked",
+              "text": "原生拒绝、默认 @tool 却执行成功的组数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=masked]"
+              }
+            },
+            {
+              "id": "default-string",
+              "text": "“数字写成字符串”这组交给默认 @tool 的结果。",
+              "selector": {
+                "event": "tool_result",
+                "round": 2,
+                "path": "data.result",
+                "nth": 2
+              }
+            },
+            {
+              "id": "strict-string",
+              "text": "同一组交给严格 Schema 的结果。",
+              "selector": {
+                "event": "tool_result",
+                "round": 2,
+                "path": "data.result",
+                "nth": 3
+              }
+            },
+            {
+              "id": "invalid",
+              "text": "解析失败、进了 invalid_tool_calls 的调用。",
+              "selector": {
+                "event": "lesson.parse_result",
+                "path": "data.message.invalid_tool_calls"
+              }
+            },
+            {
+              "id": "synthesized",
+              "text": "适配层补的调用 id。",
+              "selector": {
+                "event": "lesson.parse_result",
+                "path": "data.synthesized_call_ids"
+              }
+            },
+            {
+              "id": "order",
+              "text": "回填顺序和服务商发来的顺序是否一致。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=same_order]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这两组都不调用模型：实参和服务商响应都是运行器构造的，工具和解析代码真实执行。"
+            },
+            {
+              "text": "先看实参转换的汇总：原生拒绝的几组里，默认 @tool 放过了几组。",
+              "observe": "masked"
+            },
+            {
+              "text": "字符串 \"23\" 交给默认 @tool，结果是 ok。",
+              "observe": "default-string",
+              "stage": "tool"
+            },
+            {
+              "text": "同一段实参交给严格 Schema，得到 ValidationError，和原生结论一致。",
+              "observe": "strict-string",
+              "stage": "tool"
+            },
+            {
+              "text": "换到调用解析：截断的 JSON 和数组都进了 invalid_tool_calls，没有被丢掉。",
+              "observe": "invalid",
+              "stage": "runtime"
+            },
+            {
+              "text": "缺 id 的那个调用拿到了适配层补的 id，并被单独列出。",
+              "observe": "synthesized"
+            },
+            {
+              "text": "回填时有效调用排在前面，顺序和服务商发来的不同。",
+              "observe": "order"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "在已装的 langchain-core 版本上，默认 @tool 对这四组实参的处理，以及严格 Schema 怎样恢复原生的结论。",
+              "适配层怎样处理截断的 JSON、数组实参和缺失的调用 id：每个调用都得到工具结果，补过的 id 有记录。"
+            ],
+            "does_not_prove": [
+              "真实模型会不会发出这样的实参或响应：这两组的输入是运行器构造的，不是模型输出。",
+              "服务商集成包也这样处理：本课的解析经过平台适配层，别的集成包要另外核对。",
+              "严格 Schema 是唯一的修法：参数类型写宽、交给原生函数检查，或者执行前另加业务检查，也能得到和原生一致的结论。"
+            ]
+          }
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "本课让两种实现共享哪些东西，才能说对照是公平的？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "问题、系统提示词、工具函数、轮数上限和验收函数",
+                  "feedback": "对。只改写法这一个变量，差异才能归到框架上。"
+                },
+                {
+                  "id": "b",
+                  "text": "只要工具名相同就行",
+                  "feedback": "不对。提示词或轮数上限不同，结果就无法归因。"
+                },
+                {
+                  "id": "c",
+                  "text": "两边的模型回答必须一字不差",
+                  "feedback": "不对。回答由模型采样决定，不是对照的前提。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "对照实验每次只改一个变量。"
+            },
+            {
+              "id": "q2",
+              "prompt": "lesson.framework_input 和紧跟着的 request 有什么区别？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "前者是框架手里的消息，后者是适配层转换后的请求体",
+                  "feedback": "对。框架输入用 LangChain 的字段名，请求体才是发给服务商的格式。"
+                },
+                {
+                  "id": "b",
+                  "text": "两者完全相同，只是重复记了一次",
+                  "feedback": "不对。消息的字段名和结构都不同，例如 type 对 role。"
+                },
+                {
+                  "id": "c",
+                  "text": "前者是服务商收到的原始请求",
+                  "feedback": "不对。框架输入是转换前的表示，不能当作请求体。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "两层分开记录，才不会把框架内部的表示误当成发出的请求。"
+            },
+            {
+              "id": "q3",
+              "prompt": "服务商返回的一个调用 arguments 是 [19, 23]。LangChain 一侧会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "进 invalid_tool_calls，仍被执行一次，得到参数必须是 JSON 对象的结构化错误",
+                  "feedback": "对。不是对象就无法按名字传参，但调用不会被丢掉。"
+                },
+                {
+                  "id": "b",
+                  "text": "按位置传给 a 和 b，得到 42",
+                  "feedback": "不对。工具参数只按名字传。"
+                },
+                {
+                  "id": "c",
+                  "text": "整条调用被丢弃",
+                  "feedback": "不对。丢掉它，下一次请求就缺一个工具结果。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "无效调用提议也要有工具结果，消息历史才完整。"
+            },
+            {
+              "id": "q4",
+              "prompt": "默认的 @tool 收到 `{\"a\": 19, \"b\": 23, \"c\": 1}`，结果是什么？原生工具呢？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "默认 @tool 丢掉 `c`，返回 42.0；原生工具报 TypeError",
+                  "feedback": "对。推断出的 Schema 不禁止多余字段，原生函数则不接受未知参数。"
+                },
+                {
+                  "id": "b",
+                  "text": "两边都报错",
+                  "feedback": "不对。只有换成 StrictNumbers 这类禁止多余字段的 Schema，框架一侧才会报错。"
+                },
+                {
+                  "id": "c",
+                  "text": "两边都返回 43",
+                  "feedback": "不对。`c` 不参与计算，原生工具也不会接受它。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "框架的默认值可能让失败从轨迹里消失，要用严格 Schema 或业务检查补上。"
+            },
+            {
+              "id": "q5",
+              "prompt": "升级 langchain-core 后，怎样知道两种实现的对照还成立？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "跑本课测试：生成的工具定义写在断言里，变了就失败，再重跑两种实现看请求体差异",
+                  "feedback": "对。版本锁定加上能复跑的对照，升级才可控。"
+                },
+                {
+                  "id": "b",
+                  "text": "程序不报错就说明没有变化",
+                  "feedback": "不对。请求里多一个或少一个字段，程序照样能跑。"
+                },
+                {
+                  "id": "c",
+                  "text": "看框架的版本号是不是更大",
+                  "feedback": "不对。版本号说明不了生成的内容变没变。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "把框架生成的内容写进测试，升级时差异会自己冒出来。"
+            },
+            {
+              "id": "q6",
+              "prompt": "除数为零的任务里，验收函数凭什么判定 LangChain 一侧通过？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "divide_numbers 全部返回 ok=false，且这条失败写进了下一次请求的 tool 消息",
+                  "feedback": "对。验收读的是工具结果和请求体，失败没有被藏起来。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型的回答里出现了“不能除以 0”",
+                  "feedback": "不对。验收不看回答措辞，措辞会随采样变化。"
+                },
+                {
+                  "id": "c",
+                  "text": "运行没有抛出异常",
+                  "feedback": "不对。流程结束不等于任务验收通过。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "区分流程结束、工具执行和任务验收，是两种实现共用的尺子。"
+            },
+            {
+              "id": "q7",
+              "prompt": "除数为零的任务里，LangChain 一侧的 tool_call 和 tool_result 之间夹着一条 on_tool_error 回调。它说明了什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "异常从 LangChain 工具里抛了出来，随后被平台变成结构化错误回填给模型",
+                  "feedback": "对。回调记的是框架自己经历的步骤，结果仍以 tool_result 为准。"
+                },
+                {
+                  "id": "b",
+                  "text": "运行因为工具出错而中断了",
+                  "feedback": "不对。后面还有 tool_result 和下一次请求，运行照常继续。"
+                },
+                {
+                  "id": "c",
+                  "text": "框架自动重试了这次工具调用",
+                  "feedback": "不对。langchain-core 不会替你重试，事件里也只有一次执行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "回调补充框架内部的顺序，判断对错仍看请求和工具结果。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“调用解析（运行器构造）”，找出适配层补了调用 id 的证据。",
+          "target": {
+            "event": "lesson.parse_result",
+            "path": "data.synthesized_call_ids"
+          },
+          "explanation": "lesson.parse_result 的 synthesized_call_ids 列出了适配层补的 id。样本里第三个调用没有 id，它在服务商列表里排第三，所以补的 id 以 3 结尾；后面的 tool_call 和 tool_result 都用这个 id 配对。原生一侧没有这一步：它把服务商的消息原样放回，缺 id 时由平台在执行调用提议时补一个以 synthesized_call 开头的 id。对照之下，前两个调用自带 id，它们虽然解析失败，回填时仍用服务商给的 id。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在同一次运行里找到了两种实现的第一次请求，并说出它们有哪些字段不同。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能指出 lesson.framework_input、request、lesson.framework_output 各记的是哪一层。"
+            },
+            {
+              "id": "item-3",
+              "text": "我看了“实参转换”的报告，能说出默认 @tool 放过了哪几组实参、为什么。"
+            },
+            {
+              "id": "item-4",
+              "text": "我能说出在 run_langchain 里，哪几行是框架没有替我写、必须自己写的。"
+            },
+            {
+              "id": "item-5",
+              "text": "我打开过一条 lesson.framework_callback，能说出它和 tool_call、tool_result 的先后关系。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "tool_calls",
+      "note": "AIMessage 的字段：解析成功的调用，arguments 已是字典，每条带调用 id。"
+    },
+    {
+      "name": "invalid_tool_calls",
+      "note": "AIMessage 的字段：解析失败的调用，保留原始 arguments 和错误说明，不在 tool_calls 里。"
+    },
+    {
+      "name": "bind_tools",
+      "note": "把工具转换成 OpenAI 格式的工具定义并绑定到模型，之后每次 invoke 都带上。"
+    },
+    {
+      "name": "invoke",
+      "note": "LangChain 组件统一的调用方法；聊天模型的 invoke 收消息列表，返回一条 AIMessage。"
+    },
+    {
+      "name": "RunContextChatModel",
+      "note": "平台写的 LangChain 聊天模型：每次调用都经 RunContext 发出并记录，顶替服务商集成包。"
+    },
+    {
+      "name": "execute_tool_calls",
+      "note": "平台函数：有效和无效调用提议都交给 RunContext 执行，返回 ToolMessage 列表。"
+    },
+    {
+      "name": "StrictNumbers",
+      "note": "本课的严格参数 Schema：关掉类型转换、禁止多余字段，结论与原生工具一致。"
+    },
+    {
+      "name": "local_tracing_only",
+      "note": "关闭 LangSmith 追踪的上下文管理器，框架数据只留在本机。"
+    },
+    {
+      "name": "accept",
+      "note": "两种实现共用的验收函数：只读工具结果和请求体，不看模型的措辞。"
+    },
+    {
+      "name": "synthesized_call_ids",
+      "note": "框架输出里列出适配层补的调用 id，免得被当成服务商发来的。"
+    },
+    {
+      "name": "parse_tool_call",
+      "note": "langchain-core 的解析函数：把 arguments 字符串解析成字典，不是合法 JSON 就抛异常。"
+    }
+  ]
+}

@@ -1,0 +1,1450 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "DELEGATION / BUDGET",
+      "source": "61a154213e1f"
+    },
+    "hero.headline": {
+      "text": "Write the contract before the work goes out,",
+      "source": "8ed9d550ed0e"
+    },
+    "hero.highlight": {
+      "text": "and check the results before they are merged.",
+      "source": "88050cc3938d"
+    },
+    "hero.takeaway": {
+      "text": "The coordinator hands four questions about a final project to five subagents. Each sees only the documents assigned to it, and all of them draw on one budget of calls, tokens and time. Every conclusion comes back with a verbatim quote, conflicts are listed as they are, and subtasks that time out or never got their turn go into the final verdict.",
+      "source": "bac94141e0ad"
+    },
+    "concepts.01-contract.label": {
+      "text": "01 / CONTRACT",
+      "source": "57a54145f0dc"
+    },
+    "concepts.01-contract.title": {
+      "text": "Write it down before handing it over",
+      "source": "a2c7aab3e86c"
+    },
+    "concepts.01-contract.description": {
+      "text": "Each subtask gets a contract: one question, the documents assigned to it, the JSON format to hand back, whether a verbatim quote is required, what to do when the answer is not there, and how long it has.",
+      "source": "f408f3056ee1"
+    },
+    "concepts.02-merge.label": {
+      "text": "02 / MERGE",
+      "source": "4fbc344cb108"
+    },
+    "concepts.02-merge.title": {
+      "text": "Check, then merge",
+      "source": "a24200821241"
+    },
+    "concepts.02-merge.description": {
+      "text": "Every conclusion that comes back is checked against the same terms: the quote must appear word for word in the documents assigned to that subtask. When one question gets different values, they are listed as a conflict and nobody picks a winner.",
+      "source": "ed8c0755d0c6"
+    },
+    "concepts.03-budget.label": {
+      "text": "03 / BUDGET",
+      "source": "9498e979d7ce"
+    },
+    "concepts.03-budget.title": {
+      "text": "One budget for everyone",
+      "source": "96fa3efef5d5"
+    },
+    "concepts.03-budget.description": {
+      "text": "Model calls, reported tokens and run time sit in one ledger and subtasks ask for them by priority. When it runs out, dispatch stops and the subtasks that never started go into the report.",
+      "source": "9a9e40eebcb1"
+    },
+    "concepts.04-cancel.label": {
+      "text": "04 / CANCEL",
+      "source": "93a95ecdf57e"
+    },
+    "concepts.04-cancel.title": {
+      "text": "Cancellation travels down",
+      "source": "0026441ad991"
+    },
+    "concepts.04-cancel.description": {
+      "text": "The coordinator cancels the root scope and every subtask can see it. A request already sent cannot be called back; the coordinator can only stop waiting for it, and its usage is still booked.",
+      "source": "350075cc49bc"
+    },
+    "section-1.title": {
+      "text": "Subtask contracts",
+      "source": "07c857bd16be"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Work that goes out needs its input, output, evidence and stop conditions written down. Together they form a delegation contract. {{lesson:multi-agent-patterns}} compared several ways of organizing agents and saw that one rule missing from a handoff package could carry an error all the way to the verifier. This lesson takes another angle: the coordinator has already decided to split, so how should it hand work out and take results back so that every step can be checked? The coordinator here is the runner. It answers four questions about a final project for the learner and gives each question to one subagent.",
+      "source": "1c57637532d0"
+    },
+    "section-1.paragraphs.1": {
+      "text": "First, see how a one-sentence delegation breaks. Say the coordinator only writes \"find out when the final project is due\". The subagent might answer \"December 12\", or write a long explanation, or wander off into other documents. When the answer arrives, the coordinator does not know which document was read, cannot judge whether to trust the sentence, and has no idea why it took three times as long. It is the same between people: if the handoff did not say what to deliver, by when, or what counts as done, rework is nearly certain.",
+      "source": "8884e3b8144e"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The contract in this lesson lives in Contract and render in contracts.py and has four parts. Input: a question plus the ids of the documents assigned to it, docs, and its context holds nothing else. Output: a JSON object whose status is either answered or not_found and whose value is at most 40 characters. Evidence: evidence lists document ids and verbatim quotes. Stop conditions: call the model once; write not_found when the documents do not say, never guess; stop waiting once deadline_ms has passed. Each contract also carries a priority that decides who goes first when the budget is short.",
+      "source": "283f4b4af3a4"
+    },
+    "section-1.paragraphs.3": {
+      "text": "A contract limits what the subagent can see and what it should hand back; it does not guarantee that the subagent complies. A model may invent a quote or write value as a long paragraph, so the other half of the contract is in the coordinator's hands: whatever comes back is checked item by item against the same terms. One more rule is easy to forget: a subtask must not delegate again. The subagents here have no tools, so they cannot send work down another level; in a real system this rule belongs in the contract, or the task tree can grow without end.",
+      "source": "2d07134c6fa7"
+    },
+    "section-2.title": {
+      "text": "Evidence and sources",
+      "source": "2218a7ef9b16"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Every conclusion a subtask hands back must carry a source the coordinator can check for itself. The coordinator is not inside the subagent's context: it cannot see what was read or how the answer was reached, and holds only the returned JSON. The one way to trust a conclusion is to take the source it names back to the original documents and compare. In this lesson that source is evidence: which document, and which sentence. It is the same idea as the source citations in {{lesson:rag-citations}}, except that the citations are limited to the documents assigned to this subagent.",
+      "source": "7c14339cb216"
+    },
+    "section-2.paragraphs.1": {
+      "text": "The merge check does the comparing. check_reply tests four things for every result: status is valid; a result that says it found the answer has a value of at most 40 characters; evidence is not empty; and every quote appears word for word in the document it names, which must be one assigned to this subtask. The last rule guards against borrowed context. deadline-notice receives only d2, so if its evidence names d1, the conclusion did not come from its own documents: it may be a guess, or other context may have leaked in. Either way it is not accepted.",
+      "source": "ae866c3f1ebf"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Context isolation has two sides here. One is cleanliness: each subagent's request holds only its contract and its own documents, and docs_seen in lesson.delegate is read from the messages actually sent, so you can verify it one by one. The other is that the contract must be complete: the subagent does not know the coordinator will check evidence at merge time, and if the contract does not say so it will not provide any. The \"Contract without an evidence requirement\" group removes only the evidence clause. All five subtasks still hand back conclusions, and the merge check accepts none of them, because none can be verified.",
+      "source": "faf6a69f94ff"
+    },
+    "section-2.paragraphs.3": {
+      "text": "A verbatim check proves that the quote really comes from that document. It does not prove that value was read correctly from it: a subagent can quote a correct sentence and write a wrong value. To close that gap, send an independent subagent that sees only the quote and the conclusion to double-check, or compare dates and numbers with a program. This lesson does only the verbatim check, so a pass in the experiment report means the evidence can be checked, not that the answer is right.",
+      "source": "15242401b617"
+    },
+    "deep-dive-contracts.title": {
+      "text": "How detailed a contract should be: what a few references do",
+      "source": "c78315dc43b2"
+    },
+    "deep-dive-contracts.summary": {
+      "text": "From a one-line task description to a handoff with a format, acceptance rules and limited depth, the references move in the same direction.",
+      "source": "4f387886e87e"
+    },
+    "deep-dive-contracts.paragraphs.0": {
+      "text": "In the orchestrator-workers example of the Claude Cookbooks, a worker receives three things: the original task, the style it is responsible for and a specific instruction, and it returns a piece of text; the program only checks that the reply is not empty. The example says in its own limitations that a worker may return something empty or badly formatted and that the split may not be sensible. That is the loosest end of contracts, fine for creative work whose output is read by a person. To hand results to a program for merging, you have to go a few steps further: fix the output format and say what counts as acceptable.",
+      "source": "76249fa2a032"
+    },
+    "deep-dive-contracts.paragraphs.1": {
+      "text": "The subagent example in the Learn Claude Code tutorial takes the second step: the subagent starts from an empty message list, runs its own tool loop and hands only the final text back to the parent; the tool that dispatches tasks is not among the subagent's tools, so there is exactly one level of delegation. The tutorial points out that this is message isolation only; parent and child still share one working directory. Understanding AI Agents in Depth compares the structured summary a subagent hands back to a process's exit code: the parent does not read the child's memory, it only looks at what comes back.",
+      "source": "66846a02ba52"
+    },
+    "deep-dive-contracts.paragraphs.2": {
+      "text": "The book also gives pseudocode for a parallel manager whose key point is the settlement step: the manager accepts \"the first verified success\", not \"the first claimed success\". When a result arrives it is verified with a check the other side cannot see; only after it passes is it settled, the settlement takes a lock and happens once, and the other subagents are told to stop. A result that fails is just recorded as a failure. The merge check in this lesson is such a settlement point, except that it waits for all the results before judging instead of finishing at the first success. The workflow tool in Claude Code builds the same idea into its interface: each subagent hands back a structured conclusion in an agreed format rather than a full trajectory; check the official documentation for details.",
+      "source": "7c5d8b3960e4"
+    },
+    "misconception-returned.claim": {
+      "text": "Once every subtask has handed back a result, the task is done.",
+      "source": "2bc5341954cb"
+    },
+    "misconception-returned.correction": {
+      "text": "Handing back only means the process ran to the end. The results still have to pass the merge check: can the evidence be verified, is the source right. After that you still look at conflicts and at subtasks that timed out or never got their turn. In the \"Contract without an evidence requirement\" group all five subtasks hand back results and none passes, so the verdict is incomplete.",
+      "source": "5fdd34024d09"
+    },
+    "predict-requests.prompt": {
+      "text": "Before running \"Tight shared budget\", guess: with five subtasks and a shared budget of 3 calls, how many request events will this run produce?",
+      "source": "3e4c6738ea45"
+    },
+    "mq-evidence.evidence-gap.prompt": {
+      "text": "In the \"Contract without an evidence requirement\" group all five subtasks handed back conclusions and the merge check accepted none. What is the main reason?",
+      "source": "baf009eca163"
+    },
+    "mq-evidence.evidence-gap.a.text": {
+      "text": "The contract did not ask for evidence, so the subtasks gave none; the coordinator still needs evidence when merging, so the conclusions cannot be verified",
+      "source": "e31fa5ea4337"
+    },
+    "mq-evidence.evidence-gap.a.feedback": {
+      "text": "Right. A subagent has no way to know about a requirement the contract does not state.",
+      "source": "fbb3ce7f0acb"
+    },
+    "mq-evidence.evidence-gap.b.text": {
+      "text": "Every value the subtasks handed back was wrong",
+      "source": "f44093b12b83"
+    },
+    "mq-evidence.evidence-gap.b.feedback": {
+      "text": "No. In offline test mode the values are the same as in the full-contract group; the problem is the missing evidence.",
+      "source": "422b294a22c5"
+    },
+    "mq-evidence.evidence-gap.c.text": {
+      "text": "The merge check was switched off for this group",
+      "source": "441ce70462e8"
+    },
+    "mq-evidence.evidence-gap.c.feedback": {
+      "text": "No. Both groups use the same merge check; only the contract differs.",
+      "source": "d7229e4dd6a6"
+    },
+    "mq-evidence.evidence-gap.explanation": {
+      "text": "Whatever the coordinator will check at acceptance has to be written into the contract first.",
+      "source": "9ea08e44d458"
+    },
+    "section-3.title": {
+      "text": "Merging results and conflicts",
+      "source": "5b2aa91ec3c5"
+    },
+    "section-3.paragraphs.0": {
+      "text": "When results from several subtasks are merged, conflicts are listed, not settled by picking one. This lesson asks the most important question twice: the deadline goes to deadline-syllabus and to deadline-notice, the first seeing only the September syllabus d1, the second only the November registrar notice d2. One document says December 12; the other says it moved to December 19. Each subtask is right on its own and both quotes can be checked word for word, yet together they contradict each other.",
+      "source": "af9d63d821e7"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The easy way out is to pick one: take the later arrival, the higher priority, or the document that looks newer. Each of those quietly writes a rule into the merge code. \"Take the document with the later date\" sounds reasonable, but what if the registrar later withdrew the notice? At merge time the program holds two values with their sources and has no standing to rule for the learner. merge_check does three things only: decide whether each result is accepted; group the accepted values by question; and when one question has different values, record them in conflicts together with each side's document and quote.",
+      "source": "6fc25540cfe9"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Before comparing, it applies the smallest normalization: same_value removes spaces, unifies case and drops a final full stop, so \"December 12\" and \"december 12.\" are not counted as two values. Only values that still differ after that are a conflict. In lesson.merge, conflicts is listed by question, and the final answer writes it as \"the documents disagree and this needs confirming\" followed by each side's version. The verdict for the whole task is therefore \"required questions answered, a conflict needs confirming\", not \"complete\".",
+      "source": "55dee7e93dfa"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Normalization handles formatting differences only; the same date written another way is still recorded as a conflict: better to over-report than to miss one. In the other direction, if two subtasks copy the same value from the same wrong document, they agree at merge time and conflict detection sees nothing; cross-checking helps only when the two sources are truly independent. Having a model write a summary to merge is more dangerous still, because fluent prose easily smooths a conflict away, so in this lesson the final answer is assembled by the program straight from the merge result.",
+      "source": "50ec198038bc"
+    },
+    "section-4.title": {
+      "text": "Shared budget",
+      "source": "c2c3f90d0c4e"
+    },
+    "section-4.paragraphs.0": {
+      "text": "A global budget is split among subtasks, and any one of them overspending must be able to stop the run. Once there are many subtasks, cost is no longer about one call, and if each subagent weighs its own spend, each one finds its single call cheap. A shared budget puts three things into one ledger that all subtasks use together: the number of model calls, the tokens the provider reported, and run time. SharedBudget grants one call before each subtask goes out, and grant either approves or says why it refuses: calls, tokens or time.",
+      "source": "be9f2e30cda4"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Work through the \"Tight shared budget\" group by hand. The budget is 3 calls, with at most 3 running at once. The queue is sorted by priority: deadline-syllabus, team-size and weight are priority 1, deadline-notice is 2 and late-policy is 3. The first three each get one call and the balance drops to 0. When the first result returns and frees a slot, the request for deadline-notice is refused with the reason calls. The runner records one lesson.budget_stop listing deadline-notice and late-policy as not started, and sends no new subtask after that.",
+      "source": "1d1a1e7274fe"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The three budgets are charged differently. Calls are charged before the request goes out, so they can be stopped in advance. Tokens can only be charged afterwards: how many a request used is known only from the usage in the response, and charge deducts only the total_tokens the provider reported; if none was reported, one call is noted as not reported, neither estimated nor counted as 0. So a token budget means \"once reported usage reaches the limit, send no new tasks\"; it cannot stop the requests already running. Time is counted from the start of the run, and each subtask's deadline is the earlier of its own deadline_ms and the time left in the run.",
+      "source": "ffeeff6d4f07"
+    },
+    "section-4.paragraphs.3": {
+      "text": "Priority decides who is protected first when the budget is not enough. The verdict for this group is \"required questions answered, some subtasks not done\": all three required questions have answers, which looks cleaner than the full-contract group, but only because deadline-notice, which does the cross-check, never got its turn, so the conflict was never found. When the budget is tight, cross-checking is often the first thing to go. The report has to name what was not done, or readers will take \"not checked\" for \"no problem\".",
+      "source": "30ef12caf737"
+    },
+    "deep-dive-budget.title": {
+      "text": "How to split a budget: charging before, charging after and budget awareness",
+      "source": "60631582132e"
+    },
+    "deep-dive-budget.summary": {
+      "text": "Calls can be charged up front, tokens only afterwards; and a budget works only if the one doing the work can see it.",
+      "source": "c9ba77c506a7"
+    },
+    "deep-dive-budget.paragraphs.0": {
+      "text": "Charging before and charging after each cost something. Take a made-up example: a token budget of 1000 and a cap of 400 tokens per reply. Charging the worst case up front reserves 400 for every subtask, so the third cannot be sent even if the first two actually used only 150 each; charging the reported figure afterwards, as this lesson does, lets all three go out, but if all three fill their cap the total is 1200, 20% over. Real systems often combine the two: calls and parallelism are charged up front, tokens afterwards, and a cap on reply length per request keeps any overrun within one request.",
+      "source": "e21a972cf67c"
+    },
+    "deep-dive-budget.paragraphs.1": {
+      "text": "A study cited in Understanding AI Agents in Depth found that simply giving an agent more steps does not always give better results: an agent with no budget awareness stops at shallow search even when it has hundreds of steps. For the extra steps to help, the agent has to see how many are left, explore early and concentrate on the most promising direction later. The book therefore suggests that managers allocate budget by difficulty rather than evenly. Each subtask in this lesson makes only one call, so budget awareness lives at the coordinator: it protects the required questions first by priority.",
+      "source": "740afa3b311b"
+    },
+    "deep-dive-budget.paragraphs.2": {
+      "text": "The latency example in the Claude Cookbooks shows one concrete approach: the whole team shares a single timer, and before each model call the message at the end carries \"how many seconds have passed, how many in total\". A subagent dispatched late sees the team's time on its first look, not a fresh start, because the budget belongs to the team. The book also warns of the opposite risk: a runaway agent could dispatch thousands of subagents at once, so a highly autonomous system is best given its own API key, which caps total spend at the account level.",
+      "source": "7256f4cc92b9"
+    },
+    "mq-priority.priority-cut.prompt": {
+      "text": "Five subtasks, a shared budget of 3 calls, at most 3 running at once. By this lesson's priorities, which two subtasks will not start?",
+      "source": "7250f1ed8443"
+    },
+    "mq-priority.priority-cut.a.text": {
+      "text": "deadline-notice and late-policy",
+      "source": "c37eccf5d490"
+    },
+    "mq-priority.priority-cut.a.feedback": {
+      "text": "Right. Their priorities are 2 and 3, behind the three required questions.",
+      "source": "9238de44c11f"
+    },
+    "mq-priority.priority-cut.b.text": {
+      "text": "The last two to return a result",
+      "source": "f601760a5bfa"
+    },
+    "mq-priority.priority-cut.b.feedback": {
+      "text": "No. A subtask that never starts sends no request and so has no result.",
+      "source": "6cc5e287f2d7"
+    },
+    "mq-priority.priority-cut.c.text": {
+      "text": "Two chosen at random on each run",
+      "source": "cecef01784a0"
+    },
+    "mq-priority.priority-cut.c.feedback": {
+      "text": "No. The queue is sorted by priority and equal priorities keep the plan's order, so the outcome is deterministic.",
+      "source": "1c65af5ae641"
+    },
+    "mq-priority.priority-cut.explanation": {
+      "text": "When the budget is short, priority decides who is protected first; subtasks that never started go into the report.",
+      "source": "34c345fbbbd8"
+    },
+    "section-5.title": {
+      "text": "Cancellation propagation",
+      "source": "35562639101f"
+    },
+    "section-5.paragraphs.0": {
+      "text": "When the main task is cancelled, its subtasks stop with it. Three things can stop a subtask: it passes its own deadline; the coordinator's run time is used up; the learner clicks stop on the page. Scope is this lesson's cancellation scope: the coordinator holds the root scope and gives each subtask it dispatches a child scope; a child first checks whether it was cancelled itself and, if not, asks its parent. After one root.cancel, the reason of every child scope becomes run_deadline: cancellation travels down along the creation relationship, which is cancellation propagation.",
+      "source": "bbaf2783a838"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Take the \"One subtask times out\" group. The deadline of weight is only 50 ms and its request has already gone out. When 50 ms is up the coordinator stops waiting: it cancels that scope and records a lesson.subtask with status timed_out and timed_out_after_ms of 50. The other subtasks go on as usual, and the freed slot goes to the next one in the queue. weight is the only source for the required question \"share of the final grade\", so once it times out, that question has no answer.",
+      "source": "8b763313ce12"
+    },
+    "section-5.paragraphs.2": {
+      "text": "One fact about cancellation cannot be avoided: a request that has gone out cannot be called back. The provider keeps generating and meters it when it finishes. The response of weight did come back in the end and the platform records a response event as usual; at wrap-up the runner waits for it, books the tokens it reported into the ledger, and records a lesson.late_response with discarded true, so the result does not take part in the merge. A request not yet sent can be stopped: ask checks the scope before sending, and a cancelled subtask sends nothing.",
+      "source": "277e70763199"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Cooperative cancellation works only where the code chooses to look at the cancellation state. While a subagent waits for a slow model response, nothing outside can interrupt it; you can only stop waiting. Each subtask here calls the model once, so there is only one such place, before the request goes out. When the learner clicks stop, the platform raises the cancellation at the next such place, the whole run ends as stopped, and the report is never written. To stop faster, split long tasks into more small steps that look at the cancellation state, or use a streaming request that can be cut mid-way; {{lesson:streaming-cancel}} covers that.",
+      "source": "6c9cacf99697"
+    },
+    "section-6.title": {
+      "text": "Partial results and the final verdict",
+      "source": "08afd4001be0"
+    },
+    "section-6.paragraphs.0": {
+      "text": "That every subtask handed something back does not mean the task is complete; the final verdict has to count what was not finished and what is in conflict. The runner sets it with finalize, judging in order: if a required question has no answer that passed the check, it is \"incomplete\"; if every required question has an answer but there is a conflict, it is \"needs confirming\"; if there is no conflict but some subtask was not done, it is \"required questions answered, some subtasks not done\"; only when all five subtasks pass and nothing conflicts is it \"complete\". The required questions are the deadline, the team size and the share of the final grade; the late policy is optional.",
+      "source": "890696a2892c"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The four exercises land on different verdicts. In \"Full contract\" usually all five pass (one fewer if a subtask's value is longer than 40 characters) and the deadline conflicts, so the verdict is needs confirming. In \"Contract without an evidence requirement\" all five come back and none passes, so the verdict is incomplete; this is the difference between \"handed back\" and \"done\". \"Tight shared budget\" leaves two undone, with every required question answered. \"One subtask times out\" loses weight, so the verdict is incomplete, but the remaining results that pass the check are delivered all the same: the deadline conflict and the team size, and the late policy when its value is not too long.",
+      "source": "62340d4d210c"
+    },
+    "section-6.paragraphs.2": {
+      "text": "A partial result is worth delivering as long as it says what is missing and why. The final answer in this lesson is assembled by the program from the merge result: each question either gets a value with its quote, or is stated as a disagreement between documents, or is stated to have no answer that passed the check; at the end it lists the unfinished subtasks and the reasons. In the experiment report, a subtask that returned no result carries no pass mark, because the merge check never examined it; the report says only whether it timed out, failed or never got its turn.",
+      "source": "1385c2b80636"
+    },
+    "section-6.paragraphs.3": {
+      "text": "These verdict rules were set by this lesson for this task, and another task needs its own: for some tasks one failed key subtask should void everything, for others a missing piece is still usable. What matters is that the rules live in the program and the contract, not in a model improvising a summary at the end. {{lesson:observability-cost}} showed how to book every call into a ledger; this lesson turns the ledger into a budget shared by a group of subtasks; {{lesson:long-running-tasks}} goes on to tasks that run longer and move to the background.",
+      "source": "37de30046bf8"
+    },
+    "deep-dive-cancel.title": {
+      "text": "How cancellation travels in real systems",
+      "source": "443999dce36f"
+    },
+    "deep-dive-cancel.summary": {
+      "text": "Cancellation travels down the creation relationship, politely first and by force second; work already sent can only be left unawaited.",
+      "source": "71e52db936ce"
+    },
+    "deep-dive-cancel.paragraphs.0": {
+      "text": "Understanding AI Agents in Depth borrows Go's context to explain cancellation: each agent gets a context object from its parent, cancelling the parent cancels every agent derived from it, and orphan agents that nobody owns are ruled out at the root; a subagent checks the termination signal at safe points, corresponding to polling ctx.Done() in Go. If you do need a long-running background agent detached from the main one, it starts from a new lifecycle tree and declares explicitly that it does not end with its parent. The Scope in this lesson is the smallest version of this, with only two levels.",
+      "source": "62aa2db855a6"
+    },
+    "deep-dive-cancel.paragraphs.1": {
+      "text": "Termination comes in two strengths, matching SIGTERM and SIGKILL in an operating system. Graceful termination is the first choice: send a stop signal, and the subagent responds at a safe point in its current step, closes the browser, finishes a half-written file, releases locks and returns an acknowledgement before exiting. Forced termination is the fallback, used only when the other side does not respond, at the price of possibly leaving dangling resources. The book's parallel search experiment has the manager settle once under a lock when one subagent finds the target, broadcast a stop to the others still running, wait for acknowledgements or a timeout, then summarize; one site timing out counts only as that site's failure and does not affect the other subagents.",
+      "source": "94bf4de28bce"
+    },
+    "deep-dive-cancel.paragraphs.2": {
+      "text": "In Python the limits are more specific. A thread cannot be killed from outside, and cancelling in a thread pool works only on tasks that have not started. Cancelling an asyncio task raises a cancellation exception at the next await point, which is more flexible than threads, but for a request already handed to the provider, whether the other side stops generating or billing after you disconnect depends on the provider's documentation. So for a request already sent, this lesson does two things only: stop waiting for it, and book its usage when it comes back. {{lesson:async-concurrency}} covered the basic way to write timeouts and partial results; this lesson puts it inside multi-agent collaboration.",
+      "source": "fa42cd44b973"
+    },
+    "misconception-cancel.claim": {
+      "text": "A subtask that timed out was cancelled, so it costs nothing.",
+      "source": "67f7171803d3"
+    },
+    "misconception-cancel.correction": {
+      "text": "Cancellation stops only requests that have not gone out. By the time weight timed out its request had long been sent to the provider, which kept generating and metering. At wrap-up this lesson waits for the response, books the reported tokens into the ledger, and marks the result as not merged.",
+      "source": "957b37b47d9f"
+    },
+    "mq-late.late-response.prompt": {
+      "text": "In the \"One subtask times out\" group, after weight times out, which statement is right?",
+      "source": "3c1ee7f06239"
+    },
+    "mq-late.late-response.a.text": {
+      "text": "Its request was already sent; when the response arrives the usage is still booked, but the result is not merged",
+      "source": "f07b044c63df"
+    },
+    "mq-late.late-response.a.feedback": {
+      "text": "Right. lesson.late_response records this, with discarded true.",
+      "source": "5282d0afc5ed"
+    },
+    "mq-late.late-response.b.text": {
+      "text": "After cancellation the provider will not meter the request",
+      "source": "a33da4a10364"
+    },
+    "mq-late.late-response.b.feedback": {
+      "text": "No. A request already sent cannot be called back, and it is metered when generation finishes.",
+      "source": "cadb055516d9"
+    },
+    "mq-late.late-response.c.text": {
+      "text": "The coordinator estimates a value for it from the other subtasks' results",
+      "source": "be8aab97a951"
+    },
+    "mq-late.late-response.c.feedback": {
+      "text": "No. The coordinator does not answer for a subtask; the answer states that this question has no answer that passed the check.",
+      "source": "fcdc8a201973"
+    },
+    "mq-late.late-response.explanation": {
+      "text": "Cancellation stops the waiting and the actions that follow; it cannot stop a request already on its way.",
+      "source": "43932e1659e6"
+    },
+    "compare-exercises.title": {
+      "text": "The four exercises",
+      "source": "8a9bcb3207c9"
+    },
+    "compare-exercises.paragraphs.0": {
+      "text": "The table shows deterministic results in offline test mode, where a fixed script supplies the answers; a real run may differ, so go by your own experiment report.",
+      "source": "4f63f4bdbf6d"
+    },
+    "compare-exercises.columns.0": {
+      "text": "Exercise",
+      "source": "3cae1f75ef71"
+    },
+    "compare-exercises.columns.1": {
+      "text": "How it differs from the baseline",
+      "source": "a2e81bdf57cd"
+    },
+    "compare-exercises.columns.2": {
+      "text": "Model calls",
+      "source": "72926dfb7314"
+    },
+    "compare-exercises.columns.3": {
+      "text": "Merge check",
+      "source": "82cf58460060"
+    },
+    "compare-exercises.columns.4": {
+      "text": "Task verdict",
+      "source": "b1603f54de6f"
+    },
+    "compare-exercises.rows.0.0": {
+      "text": "Full contract",
+      "source": "25eb1eb7feff"
+    },
+    "compare-exercises.rows.0.1": {
+      "text": "None; this is the baseline",
+      "source": "a8bcb59fce3b"
+    },
+    "compare-exercises.rows.0.2": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "compare-exercises.rows.0.3": {
+      "text": "5 passed; two deadline values conflict",
+      "source": "9d0725156abc"
+    },
+    "compare-exercises.rows.0.4": {
+      "text": "Required questions answered, a conflict needs confirming",
+      "source": "43bdb55dbcc8"
+    },
+    "compare-exercises.rows.1.0": {
+      "text": "Contract without an evidence requirement",
+      "source": "ab1c7e7e236c"
+    },
+    "compare-exercises.rows.1.1": {
+      "text": "The evidence requirement is removed from the contract",
+      "source": "18ea23ed0aa6"
+    },
+    "compare-exercises.rows.1.2": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "compare-exercises.rows.1.3": {
+      "text": "0 passed, all missing evidence",
+      "source": "2a414fac840b"
+    },
+    "compare-exercises.rows.1.4": {
+      "text": "Incomplete",
+      "source": "6707de42c29d"
+    },
+    "compare-exercises.rows.2.0": {
+      "text": "Tight shared budget",
+      "source": "8f35de9d70a9"
+    },
+    "compare-exercises.rows.2.1": {
+      "text": "Call budget of 3",
+      "source": "00db6808799f"
+    },
+    "compare-exercises.rows.2.2": {
+      "text": "3",
+      "source": "4e07408562be"
+    },
+    "compare-exercises.rows.2.3": {
+      "text": "3 passed, 2 not started",
+      "source": "3507f2245e70"
+    },
+    "compare-exercises.rows.2.4": {
+      "text": "Required questions answered, some subtasks not done",
+      "source": "aa54484d34bf"
+    },
+    "compare-exercises.rows.3.0": {
+      "text": "One subtask times out",
+      "source": "998aff26f91d"
+    },
+    "compare-exercises.rows.3.1": {
+      "text": "Deadline of 50 ms for weight",
+      "source": "6bd4b59f065e"
+    },
+    "compare-exercises.rows.3.2": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "compare-exercises.rows.3.3": {
+      "text": "4 passed, weight timed out",
+      "source": "8ed003a3b2ca"
+    },
+    "compare-exercises.rows.3.4": {
+      "text": "Incomplete",
+      "source": "6707de42c29d"
+    },
+    "walkthrough.title": {
+      "text": "One delegation, from dispatch to verdict",
+      "source": "a9e055f6c26c"
+    },
+    "walkthrough.description": {
+      "text": "A step-by-step account of one \"Full contract\" run; the code is simplified for illustration. The evidence of this run is in the lab's events.",
+      "source": "152b8b82fde8"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Write the contract",
+      "source": "364c23487465"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Coordinator",
+      "source": "09f7ea9dfd6f"
+    },
+    "walkthrough.step-1.title": {
+      "text": "One contract per subtask",
+      "source": "c80474d4ce2f"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Question, documents, output format, evidence requirement, deadline and priority all go into the contract; the task card states the overall terms.",
+      "source": "c4d21b94524c"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.task_card",
+      "source": "db8c9dde935a"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Dispatch",
+      "source": "97d5647f408a"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Coordinator",
+      "source": "09f7ea9dfd6f"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Ask for budget by priority, then send",
+      "source": "d89fb703223f"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Each dispatch first gets one call granted; the request carries the subtask's own branch, and its context holds only its documents.",
+      "source": "0b9a09469455"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.delegate",
+      "source": "4076c1c45e30"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Collect results",
+      "source": "4654df9732f4"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Subagent",
+      "source": "70da69db33a7"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Hand back JSON on time",
+      "source": "afce7924fc82"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Each subagent hands back status, value and evidence; the coordinator deducts the reported usage.",
+      "source": "80cdd7577105"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.subtask",
+      "source": "d46e386faeb4"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Merge",
+      "source": "b07ece270100"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Coordinator",
+      "source": "09f7ea9dfd6f"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Merge check, conflicts listed as they are",
+      "source": "a875e3d96c83"
+    },
+    "walkthrough.step-4.body": {
+      "text": "Quotes are checked word for word; the deadline shows two values, which go into conflicts with nobody picking a winner.",
+      "source": "345395e07e39"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.merge",
+      "source": "b9f09a790d0a"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Verdict",
+      "source": "14163a5df29f"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Coordinator",
+      "source": "09f7ea9dfd6f"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Count conflicts and unfinished work in the verdict",
+      "source": "bf9419bf30aa"
+    },
+    "walkthrough.step-5.body": {
+      "text": "All required questions have answers and the deadline conflicts, so the verdict is needs confirming; the answer is assembled by the program from the merge result.",
+      "source": "3c25af462cb4"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.report",
+      "source": "ceca926ad91d"
+    },
+    "references.book-ch10.title": {
+      "text": "Multi-agent collaboration without shared context, termination and resource scheduling, failure modes — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "3f15290c87a4"
+    },
+    "references.book-parallel-research.title": {
+      "text": "Parallel research: timeouts, error isolation and cascading termination — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "f7ef0993fe5f"
+    },
+    "references.cookbook-orchestrator.title": {
+      "text": "Orchestrator-workers: dynamic splitting and what a worker receives (Claude Cookbooks)",
+      "source": "9069601eca55"
+    },
+    "references.cookbook-latency.title": {
+      "text": "Multi-agent teams under latency pressure: a shared clock and budget (Claude Cookbooks)",
+      "source": "ed5592e69623"
+    },
+    "references.lcc-subagent.title": {
+      "text": "Subagents: a separate message list and one level of delegation (Learn Claude Code)",
+      "source": "74860537b07b"
+    },
+    "references.lcc-task-system.title": {
+      "text": "Task system: task state, dependencies and claiming (Learn Claude Code)",
+      "source": "abed3f8ae6e5"
+    },
+    "references.ms-multi-agent.title": {
+      "text": "Multi-agent design patterns: coordination mechanisms and interaction visibility (Microsoft AI Agents for Beginners)",
+      "source": "c910e8e0e184"
+    },
+    "code-contract.n-render.text": {
+      "text": "render builds a subtask's whole context: a brand-new message list holding only its contract and the documents assigned to it.",
+      "source": "744197fd7698"
+    },
+    "code-contract.n-output.text": {
+      "text": "Whether the contract asks for evidence comes down to this one line: one of two output formats. The \"Contract without an evidence requirement\" group takes the second.",
+      "source": "f81d44ac15bd"
+    },
+    "code-contract.n-messages.text": {
+      "text": "Two messages only: the system prompt and this task. The coordinator's task card and the other subtasks' documents are not in it.",
+      "source": "d130e8141907"
+    },
+    "code-contract.n-check.text": {
+      "text": "The merge check's test of a single result; it returns problem codes, and an empty list means a pass.",
+      "source": "a54b5d46b38e"
+    },
+    "code-contract.n-not-found.text": {
+      "text": "Saying honestly that nothing was found is an acceptable reply, but it does not answer the question: the required question still counts as missing.",
+      "source": "8f0a6e4db12d"
+    },
+    "code-contract.n-too-long.text": {
+      "text": "A value over 40 characters is recorded as a problem; it is not shortened for the subtask.",
+      "source": "93eacee01341"
+    },
+    "code-contract.n-evidence.text": {
+      "text": "The coordinator always wants evidence, whether or not the contract asked for it. This is where the \"Contract without an evidence requirement\" group is rejected.",
+      "source": "0e6046674d59"
+    },
+    "code-contract.n-scope.text": {
+      "text": "The source must be a document assigned to this subtask; citing any other document is not accepted.",
+      "source": "8356ea930c92"
+    },
+    "code-contract.n-quote.text": {
+      "text": "The quote must appear word for word in the document it names. This checks the origin only, not whether the value was read correctly.",
+      "source": "e5517ecd8d32"
+    },
+    "code-contract.n-problems.text": {
+      "text": "Drop duplicate problem codes and keep the order in which they appeared.",
+      "source": "70d72998a45e"
+    },
+    "code-contract.fold-parse.label": {
+      "text": "Parse the reply: take the first JSON object, repair nothing",
+      "source": "cbb46499611b"
+    },
+    "code-dispatch.n-dispatch.text": {
+      "text": "The coordinator's scheduling: dispatch subtasks by priority, all sharing one budget.",
+      "source": "c1cf99d13720"
+    },
+    "code-dispatch.n-queue.text": {
+      "text": "The queue is sorted by priority; the sort is stable, so equal priorities keep the plan's order and the dispatch order is deterministic.",
+      "source": "e3583e596bfe"
+    },
+    "code-dispatch.n-pool.text": {
+      "text": "The thread count equals the number of subtasks, so a timed-out request cannot hold a thread and block the ones behind it; how many run at once is controlled by max_parallel.",
+      "source": "b6244ae50f07"
+    },
+    "code-dispatch.n-stop-button.text": {
+      "text": "Each round starts by checking whether the learner clicked stop.",
+      "source": "1ed285cc89df"
+    },
+    "code-dispatch.n-grant.text": {
+      "text": "Before dispatching, ask the shared budget for one call; if it refuses, dispatch stops and everything behind in the queue is recorded as not started.",
+      "source": "e08255f817d9"
+    },
+    "code-dispatch.n-child.text": {
+      "text": "Each subtask gets a child scope under the root scope.",
+      "source": "e13fb52cf0b4"
+    },
+    "code-dispatch.n-deadline.text": {
+      "text": "The deadline is the earlier of the subtask's own deadline and the moment the whole run ends.",
+      "source": "fc91d476d593"
+    },
+    "code-dispatch.n-submit.text": {
+      "text": "Hand ask to the thread pool: the request carries the subtask's own branch, which the timeline uses to pair requests with responses.",
+      "source": "27aca57c24da"
+    },
+    "code-dispatch.n-wait.text": {
+      "text": "Wait for the first result or for the nearest deadline, whichever comes first.",
+      "source": "3fcd4e6c5b7a"
+    },
+    "code-dispatch.n-root-cancel.text": {
+      "text": "Run time is used up: cancel the root scope, and the subtasks still running are cancelled together.",
+      "source": "bd2d79849fce"
+    },
+    "code-dispatch.n-in-time.text": {
+      "text": "Returned on time: deduct the reported usage, parse the reply, and leave it for the merge check to judge later.",
+      "source": "932b040fc99d"
+    },
+    "code-dispatch.n-late.text": {
+      "text": "Late, cancelled from above or past its deadline: stop waiting, record it as timed out, and keep it in late for wrap-up.",
+      "source": "9906fe28225a"
+    },
+    "code-dispatch.n-record.text": {
+      "text": "A subtask with an outcome leaves the running table and a lesson.subtask is recorded.",
+      "source": "6f1afb7cf825"
+    },
+    "code-dispatch.n-shutdown.text": {
+      "text": "At wrap-up, wait for the requests already sent: they cannot be called back, but their usage has to go into the ledger.",
+      "source": "eedbd04df8d1"
+    },
+    "code-budget.n-scope-class.text": {
+      "text": "The cancellation scope: when it was not cancelled itself, it reports its parent's reason.",
+      "source": "ee564d837055"
+    },
+    "code-budget.n-scope-fields.text": {
+      "text": "It keeps only the parent and its own reason, not a list of children: cancellation travels down because children look upward.",
+      "source": "328e39f98ad1"
+    },
+    "code-budget.n-cancel.text": {
+      "text": "The first reason wins and later ones do not rewrite it. If weight was cancelled for its deadline first, the reason stays deadline.",
+      "source": "8d20ee47d338"
+    },
+    "code-budget.n-reason.text": {
+      "text": "Look at itself first, then at the parent; cancel the root once and every child scope sees it.",
+      "source": "e8cf23cb3f82"
+    },
+    "code-budget.n-scope-check.text": {
+      "text": "ask calls this before sending: a cancelled subtask sends no request.",
+      "source": "f246ddd325c9"
+    },
+    "code-budget.n-budget-class.text": {
+      "text": "The ledger all subtasks share: model calls, reported tokens and run time.",
+      "source": "b19a9920d5ce"
+    },
+    "code-budget.n-clock.text": {
+      "text": "The clock can be replaced; tests use that to simulate time passing instead of really waiting.",
+      "source": "bdf1276be99f"
+    },
+    "code-budget.n-unreported.text": {
+      "text": "unreported counts calls that did not report usage; nothing is estimated.",
+      "source": "6fc0d328c81f"
+    },
+    "code-budget.n-grant-def.text": {
+      "text": "Each dispatched subtask asks for one call: approval returns None, a refusal returns the reason.",
+      "source": "83b81533576a"
+    },
+    "code-budget.n-time.text": {
+      "text": "Time is checked first: once run time is used up, nothing more is dispatched.",
+      "source": "c5ce54856a05"
+    },
+    "code-budget.n-calls.text": {
+      "text": "Calls are charged before the request goes out, so they can be stopped in advance.",
+      "source": "2dbffb6fe122"
+    },
+    "code-budget.n-tokens.text": {
+      "text": "Tokens can only be charged afterwards: refusal comes only once reported usage reaches the limit, and it cannot stop requests already running.",
+      "source": "b68678c3f4dd"
+    },
+    "code-budget.n-reserve.text": {
+      "text": "An approval is charged once; refund returns it when the request never went out.",
+      "source": "cb1d3d8760de"
+    },
+    "code-decision.title": {
+      "text": "A program as coordinator, a fixed contract, a merge that only lists conflicts, a budget granted by priority",
+      "source": "5ffaab621d99"
+    },
+    "code-decision.chosen": {
+      "text": "The split and the contract are written in the program; each subtask makes one model call and sees only its own documents. The runner calls the merge check as a tool; it only verifies evidence and lists conflicts, and never rules on them. Calls, tokens and time are one shared budget granted by priority, with the reason written down on refusal. A request that timed out is awaited at wrap-up so its usage is booked, and its result is not merged. The final answer is assembled by the program from the merge result.",
+      "source": "719f419f7493"
+    },
+    "code-decision.model-coordinator.title": {
+      "text": "Let a model be the coordinator: it writes the contracts and does the merge",
+      "source": "89006c035879"
+    },
+    "code-decision.model-coordinator.why_not": {
+      "text": "Dynamic splitting was covered in {{lesson:orchestrator-evaluator}}. This lesson wants to show what the contract, the check and the budget each do, so a program is the coordinator and every step can be verified from the events.",
+      "source": "24b64aa8ef7e"
+    },
+    "code-decision.newest-wins.title": {
+      "text": "When merging, take the value from the newer document",
+      "source": "79a34bee537e"
+    },
+    "code-decision.newest-wins.why_not": {
+      "text": "That hides a business rule inside the merge code, and the conflict disappears from the report. This lesson only lists conflicts and leaves the ruling to a person.",
+      "source": "b0196d36ffcd"
+    },
+    "code-decision.per-agent-budget.title": {
+      "text": "Give each subtask its own fixed budget",
+      "source": "85045f76dbd0"
+    },
+    "code-decision.per-agent-budget.why_not": {
+      "text": "Everyone minds their own, so total spend is the number of shares times the unit price and nobody gives way for the whole. A shared budget plus priorities protects the required questions first when there is not enough.",
+      "source": "df983c0e2eac"
+    },
+    "code-decision.kill-thread.title": {
+      "text": "On timeout, kill the thread and do not wait for the response",
+      "source": "4a477a4f90a0"
+    },
+    "code-decision.kill-thread.why_not": {
+      "text": "A Python thread cannot be ended from outside, and a request already sent cannot be called back; if you do not wait for it, that call's usage is never booked.",
+      "source": "3f77f73d3c5d"
+    },
+    "contract-evidence.title": {
+      "text": "A contract without the evidence requirement",
+      "source": "e36ec2776102"
+    },
+    "contract-evidence.hypothesis": {
+      "text": "Remove the evidence requirement from the contract and change nothing else: the subtasks still hand back conclusions, but without quotes; the coordinator's merge check still requires evidence, so it accepts none of them and the verdict is incomplete.",
+      "source": "c60cd3ebdea6"
+    },
+    "contract-evidence.full.label": {
+      "text": "Full contract",
+      "source": "25eb1eb7feff"
+    },
+    "contract-evidence.no-evidence.label": {
+      "text": "Contract without an evidence requirement",
+      "source": "ab1c7e7e236c"
+    },
+    "contract-evidence.card.text": {
+      "text": "The evidence requirement on the task card: the one thing the two groups differ in.",
+      "source": "3d30dc42cc6c"
+    },
+    "contract-evidence.isolation.text": {
+      "text": "Which documents are actually in each subtask's context, read from the messages sent.",
+      "source": "f4ae289bb144"
+    },
+    "contract-evidence.branch.text": {
+      "text": "Each subtask's request carries its own branch.",
+      "source": "5c9397fafbcb"
+    },
+    "contract-evidence.reply.text": {
+      "text": "The JSON a subtask handed back: whether it has evidence.",
+      "source": "9f23d3836cb4"
+    },
+    "contract-evidence.verdict-item.text": {
+      "text": "The merge check's verdict and problem codes for deadline-syllabus.",
+      "source": "8764ea8d14de"
+    },
+    "contract-evidence.accepted.text": {
+      "text": "How many subtasks passed the merge check.",
+      "source": "cd016f5f7718"
+    },
+    "contract-evidence.verdict.text": {
+      "text": "The verdict for the whole task.",
+      "source": "587ed4c7620e"
+    },
+    "contract-evidence.guide.0.text": {
+      "text": "The documents, budget and scheduling are identical in both groups; the only difference is whether the contract asks for evidence.",
+      "source": "672e01eeaf52"
+    },
+    "contract-evidence.guide.1.text": {
+      "text": "Start with the task card: the full-contract group requires verbatim quotes, the other says this version of the contract asks for no evidence.",
+      "source": "90e1093675c7"
+    },
+    "contract-evidence.guide.2.text": {
+      "text": "Each subtask sees only the one document assigned to it; the other documents are not in its context.",
+      "source": "753fbc1e5c19"
+    },
+    "contract-evidence.guide.3.text": {
+      "text": "Five requests go out, each with its own branch, with at most three running at once.",
+      "source": "d9f714b456a0"
+    },
+    "contract-evidence.guide.4.text": {
+      "text": "Look at the JSON handed back: in the group without the evidence requirement it has only status and value.",
+      "source": "f7b3db7359c4"
+    },
+    "contract-evidence.guide.5.text": {
+      "text": "The runner calls the merge check; results without evidence are rejected, with problem code no_evidence.",
+      "source": "9eee579347fb"
+    },
+    "contract-evidence.guide.6.text": {
+      "text": "How many passed the merge check: 0 in the group without evidence; usually 5 in the full-contract group, one fewer when a subtask's `value` is longer than 40 characters.",
+      "source": "2406ad7c4bcc"
+    },
+    "contract-evidence.guide.7.text": {
+      "text": "Verdict: the full-contract group needs confirming because of the deadline conflict; the group without evidence is incomplete.",
+      "source": "44b91d2d3591"
+    },
+    "contract-evidence.conclusion.proves.0": {
+      "text": "What the contract said in this run, which documents were in each subtask's context, what the returned JSON looked like, and the merge check's verdict on each result.",
+      "source": "dde8f7988a88"
+    },
+    "contract-evidence.conclusion.does_not_prove.0": {
+      "text": "A quote that can be checked word for word does not mean the value was read correctly: the merge check verifies only where the quote comes from.",
+      "source": "b5a956170d1a"
+    },
+    "contract-evidence.conclusion.does_not_prove.1": {
+      "text": "In offline test mode the script always gives only the value when no evidence is required; a real model might volunteer quotes, or might not.",
+      "source": "1214392c082a"
+    },
+    "shared-budget.title": {
+      "text": "Shared budget and priorities",
+      "source": "2a7512a63898"
+    },
+    "shared-budget.hypothesis": {
+      "text": "When five subtasks share a budget of 3 calls, the coordinator dispatches the three required questions first by priority; when the budget is gone dispatch stops, the cross-check and the optional question never start, and the deadline conflict is never found.",
+      "source": "64f607d1d4e3"
+    },
+    "shared-budget.full.label": {
+      "text": "Full contract",
+      "source": "25eb1eb7feff"
+    },
+    "shared-budget.tight.label": {
+      "text": "Tight shared budget",
+      "source": "8f35de9d70a9"
+    },
+    "shared-budget.grant.text": {
+      "text": "How much of the shared budget is left each time a subtask is dispatched.",
+      "source": "55b926469626"
+    },
+    "shared-budget.stop.text": {
+      "text": "When the budget refuses: which subtasks did not start, and why.",
+      "source": "924833627957"
+    },
+    "shared-budget.conflict.text": {
+      "text": "The deadline conflict recorded at merge: two values and each one's source.",
+      "source": "524cfc29c5f1"
+    },
+    "shared-budget.calls.text": {
+      "text": "How much of the call budget was used.",
+      "source": "eeedf847ab65"
+    },
+    "shared-budget.tokens.text": {
+      "text": "Cumulative total_tokens, counting only what the provider reported.",
+      "source": "b73aea2bd8c1"
+    },
+    "shared-budget.unfinished.text": {
+      "text": "The unfinished subtasks.",
+      "source": "0ba2ccafd3c9"
+    },
+    "shared-budget.guide.0.text": {
+      "text": "The two groups differ only in the call budget: 5 and 3. Start by watching how the budget shrinks at dispatch.",
+      "source": "cee565eb50f2"
+    },
+    "shared-budget.guide.1.text": {
+      "text": "Each dispatch lowers calls_left by 1; in the tight group it reaches 0 after the third.",
+      "source": "06b8fda21f5a"
+    },
+    "shared-budget.guide.2.text": {
+      "text": "When a slot frees up, the request for deadline-notice is refused; it and late-policy never start.",
+      "source": "5227f2697698"
+    },
+    "shared-budget.guide.3.text": {
+      "text": "The full-contract group ran the cross-check, so it found two deadline values; the tight group has no such entry.",
+      "source": "ebca6cf394a1"
+    },
+    "shared-budget.guide.4.text": {
+      "text": "Call budget: one group used 5, the other 3.",
+      "source": "85f966b1f830"
+    },
+    "shared-budget.guide.5.text": {
+      "text": "Tokens add up only reported figures; unreported ones are not estimated.",
+      "source": "62670c095e91"
+    },
+    "shared-budget.guide.6.text": {
+      "text": "Unfinished subtasks go into the report so readers do not take \"not checked\" for \"no problem\".",
+      "source": "414d93f744cc"
+    },
+    "shared-budget.conclusion.proves.0": {
+      "text": "When the call budget runs out the coordinator stops dispatching by priority, and the subtasks that never started and the reason are in the events; the cross-check that was skipped is why this run found no conflict.",
+      "source": "d18f1e122282"
+    },
+    "shared-budget.conclusion.does_not_prove.0": {
+      "text": "The priorities here are hard-coded for this lesson; they do not mean other tasks should rank this way.",
+      "source": "2c34545e7a07"
+    },
+    "shared-budget.conclusion.does_not_prove.1": {
+      "text": "The token budget charges only reported usage and stops nothing when the provider reports none; this group does not show the token budget running out first, but the tests do.",
+      "source": "4033bf5cc63b"
+    },
+    "timeout-partial.title": {
+      "text": "One subtask times out",
+      "source": "998aff26f91d"
+    },
+    "timeout-partial.hypothesis": {
+      "text": "The deadline of weight is only 50 ms, so it times out and is cancelled; its request has already gone out, so its usage is booked when the response comes back, but the result is not merged. The other results that return in time and pass the check are merged as usual, and since one required question is missing, the verdict is incomplete.",
+      "source": "41b8b494bf13"
+    },
+    "timeout-partial.full.label": {
+      "text": "Full contract",
+      "source": "25eb1eb7feff"
+    },
+    "timeout-partial.timeout.label": {
+      "text": "One subtask times out",
+      "source": "998aff26f91d"
+    },
+    "timeout-partial.timed-out.text": {
+      "text": "The timed-out subtask: how many milliseconds it waited and the reason it was cancelled.",
+      "source": "a021d7e02164"
+    },
+    "timeout-partial.late.text": {
+      "text": "The response that came back after the timeout: usage booked, result discarded.",
+      "source": "ff6e031a42b4"
+    },
+    "timeout-partial.merged.text": {
+      "text": "Which results the merge check received.",
+      "source": "71b29867a675"
+    },
+    "timeout-partial.missing.text": {
+      "text": "The required question with no answer that passed the check.",
+      "source": "64d813f8b053"
+    },
+    "timeout-partial.weight-check.text": {
+      "text": "The weight line in the report: no pass or fail mark, only the reason.",
+      "source": "5b09cbd89539"
+    },
+    "timeout-partial.model-calls.text": {
+      "text": "Model calls: the one that timed out counts too.",
+      "source": "6f9ae2b252f3"
+    },
+    "timeout-partial.verdict.text": {
+      "text": "The verdict for the whole task.",
+      "source": "587ed4c7620e"
+    },
+    "timeout-partial.guide.0.text": {
+      "text": "The two groups differ only in the deadline of weight: 30000 ms and 50 ms.",
+      "source": "8eb9996441d0"
+    },
+    "timeout-partial.guide.1.text": {
+      "text": "When 50 ms is up the coordinator cancels the weight scope and stops waiting.",
+      "source": "1d91e446bed9"
+    },
+    "timeout-partial.guide.2.text": {
+      "text": "Its request had long been sent and the response still came back: usage goes into the ledger, and the result is marked discarded.",
+      "source": "7b45f4d4a483"
+    },
+    "timeout-partial.guide.3.text": {
+      "text": "The merge check received only the four results that returned on time; weight is not among them.",
+      "source": "d3ee46505ee4"
+    },
+    "timeout-partial.guide.4.text": {
+      "text": "The share of the final grade has weight as its only source, so it becomes a missing required question.",
+      "source": "58bcfa8edad3"
+    },
+    "timeout-partial.guide.5.text": {
+      "text": "The merge check never examined weight, so it has no pass or fail mark in the report.",
+      "source": "59b91568fd39"
+    },
+    "timeout-partial.guide.6.text": {
+      "text": "The timed-out request counts as a model call too: 5 in both groups.",
+      "source": "438c92d56b28"
+    },
+    "timeout-partial.guide.7.text": {
+      "text": "The final verdict is incomplete, but the remaining results that pass the check are delivered all the same: in the Chinese run that is the deadline conflict, the team size and the late policy; if a subtask's `value` is too long, the late policy is rejected too and listed as unfinished.",
+      "source": "e6af001fefa9"
+    },
+    "timeout-partial.conclusion.proves.0": {
+      "text": "After a subtask times out the coordinator stops waiting and records the reason; the late response has usage and was not merged; the missing required question decides the task verdict.",
+      "source": "e5fa67722ccf"
+    },
+    "timeout-partial.conclusion.does_not_prove.0": {
+      "text": "In offline test mode every answer is delayed a fixed 150 ms, so 50 ms always times out; in a real run the delay depends on the provider and the network.",
+      "source": "cebd9447b80b"
+    },
+    "timeout-partial.conclusion.does_not_prove.1": {
+      "text": "Cancellation did not make the provider stop generating, and it did not save this call's usage.",
+      "source": "e42b87843c2a"
+    },
+    "inputs.contract.label": {
+      "text": "Contract",
+      "source": "220a12745284"
+    },
+    "inputs.contract.help": {
+      "text": "Without the evidence requirement the contract does not ask for quotes; the coordinator still requires them at merge.",
+      "source": "a00400d41a4e"
+    },
+    "inputs.contract.options.full.label": {
+      "text": "Full contract",
+      "source": "25eb1eb7feff"
+    },
+    "inputs.contract.options.no_evidence.label": {
+      "text": "No evidence requirement",
+      "source": "946e04f6f9cc"
+    },
+    "inputs.budget_calls.label": {
+      "text": "Call budget (calls)",
+      "source": "c210377ac0a8"
+    },
+    "inputs.budget_calls.help": {
+      "text": "Model calls shared by all subtasks, 1 to 5.",
+      "source": "bec7a4679eb2"
+    },
+    "inputs.budget_tokens.label": {
+      "text": "Token budget",
+      "source": "b58dd4cadc54"
+    },
+    "inputs.budget_tokens.help": {
+      "text": "Once reported total_tokens add up to this number, no new subtask is dispatched.",
+      "source": "655867f50b99"
+    },
+    "inputs.run_deadline_ms.label": {
+      "text": "Run time (ms)",
+      "source": "e126d4430361"
+    },
+    "inputs.run_deadline_ms.help": {
+      "text": "Counted from the start of the run; when it is used up, running subtasks are cancelled and none that has not started is dispatched.",
+      "source": "1f9ebdb0632e"
+    },
+    "inputs.max_parallel.label": {
+      "text": "Maximum running at once",
+      "source": "8fce4a5179df"
+    },
+    "inputs.max_parallel.help": {
+      "text": "The most subtasks that may wait for a model response at the same moment.",
+      "source": "f2a6ac1cb42a"
+    },
+    "inputs.tight_subtask.label": {
+      "text": "Subtask with a short deadline",
+      "source": "5c8f0aef8827"
+    },
+    "inputs.tight_subtask.help": {
+      "text": "The chosen subtask uses the short deadline below; every other subtask has a deadline of 30000 ms.",
+      "source": "db5b03e6a508"
+    },
+    "inputs.tight_subtask.options.none.label": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "inputs.tight_subtask.options.deadline-syllabus.label": {
+      "text": "deadline-syllabus (deadline, course syllabus)",
+      "source": "790956507fe4"
+    },
+    "inputs.tight_subtask.options.team-size.label": {
+      "text": "team-size (team size)",
+      "source": "0c4f666c69af"
+    },
+    "inputs.tight_subtask.options.weight.label": {
+      "text": "weight (share of the final grade)",
+      "source": "4ed80a579091"
+    },
+    "inputs.tight_subtask.options.deadline-notice.label": {
+      "text": "deadline-notice (deadline, registrar notice)",
+      "source": "a684f78326a5"
+    },
+    "inputs.tight_subtask.options.late-policy.label": {
+      "text": "late-policy (late policy)",
+      "source": "5c34604c17cf"
+    },
+    "inputs.tight_deadline_ms.label": {
+      "text": "Short deadline (ms)",
+      "source": "ba15700faa8c"
+    },
+    "inputs.tight_deadline_ms.help": {
+      "text": "Applies only to the subtask chosen above.",
+      "source": "43348da3b7e1"
+    },
+    "quiz.q1.prompt": {
+      "text": "Which items does this lesson's delegation contract fix?",
+      "source": "c6717cdf51e4"
+    },
+    "quiz.q1.a.text": {
+      "text": "Input scope, output format, evidence requirement and stop conditions",
+      "source": "4480ca49932f"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. It also carries a priority, which decides who goes first when the budget is short.",
+      "source": "fc6522d4030a"
+    },
+    "quiz.q1.b.text": {
+      "text": "The subagent's name and role",
+      "source": "bfa15d87152e"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. A name and a role do not say what to hand back or what counts as acceptable.",
+      "source": "5a4b5ddb7118"
+    },
+    "quiz.q1.c.text": {
+      "text": "The model's name and sampling temperature",
+      "source": "e1ec45bb53ed"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. Those are request parameters, not terms handed to a subtask.",
+      "source": "07b08ffb7586"
+    },
+    "quiz.q1.explanation": {
+      "text": "The contract says what to hand back, why it should be trusted and when to stop; the coordinator checks the results against the same terms.",
+      "source": "3f1a469fab11"
+    },
+    "quiz.q2.prompt": {
+      "text": "deadline-notice received only d2, but the evidence it handed back quotes d1. How does the merge check judge it?",
+      "source": "20be12b739dd"
+    },
+    "quiz.q2.a.text": {
+      "text": "Rejected, with problem code doc_out_of_scope",
+      "source": "7a9dd1c387de"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. The source must be a document assigned to it.",
+      "source": "733a13d9d56c"
+    },
+    "quiz.q2.b.text": {
+      "text": "Passed, because the quote really is from d1",
+      "source": "a235744b698c"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The quote is real, but it did not come from its own documents, which means the context went wrong or the answer was a guess.",
+      "source": "b520efa2c796"
+    },
+    "quiz.q2.c.text": {
+      "text": "Listed as a conflict",
+      "source": "2a04e56f26f3"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. A conflict is listed only when two results that passed the check have different values.",
+      "source": "1014fb3ab8f1"
+    },
+    "quiz.q2.explanation": {
+      "text": "Limiting the source to assigned documents is what exposes borrowed context.",
+      "source": "026cfb3b6b12"
+    },
+    "quiz.q3.prompt": {
+      "text": "Two subtasks handed back different deadline values, and both quotes can be checked word for word. What does this lesson do?",
+      "source": "38b0666e0b32"
+    },
+    "quiz.q3.a.text": {
+      "text": "List both values with their sources in conflicts; the verdict is needs confirming",
+      "source": "69e92ebf73c9"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. Merging records; it does not rule.",
+      "source": "b65bf8c62eb3"
+    },
+    "quiz.q3.b.text": {
+      "text": "Take the value from the document with the later date",
+      "source": "0cc1d3236897"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. That is a business rule, and writing it into the merge code hides the conflict.",
+      "source": "94795a3d7579"
+    },
+    "quiz.q3.c.text": {
+      "text": "Have a model write a summary and pick the more reasonable one",
+      "source": "05c0e5d613da"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. A fluent summary easily smooths a conflict away.",
+      "source": "559ef32a498a"
+    },
+    "quiz.q3.explanation": {
+      "text": "A conflict goes to whoever has the authority to rule, with each side's quote attached.",
+      "source": "b1b5e14ed8b4"
+    },
+    "quiz.q4.prompt": {
+      "text": "Why can this lesson's token budget not stop requests that are already running?",
+      "source": "d029f874c48c"
+    },
+    "quiz.q4.a.text": {
+      "text": "How many tokens a request used is known only from the reported response, so it can only be charged afterwards",
+      "source": "ad7a80b5d1d6"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. Calls can be charged up front; tokens only afterwards.",
+      "source": "0c9565ef3968"
+    },
+    "quiz.q4.b.text": {
+      "text": "The token budget works only in offline test mode",
+      "source": "2d5fa0bec699"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. Both modes run the same code.",
+      "source": "5f64ae51abdb"
+    },
+    "quiz.q4.c.text": {
+      "text": "Providers never report usage",
+      "source": "fb1c460d38a4"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. Most providers do; when one does not, this lesson records not reported and estimates nothing.",
+      "source": "2d531e22a016"
+    },
+    "quiz.q4.explanation": {
+      "text": "To hold an overrun down you also need a reply-length cap on each request, and calls and parallelism charged up front.",
+      "source": "e62833710767"
+    },
+    "quiz.q5.prompt": {
+      "text": "In which case would this lesson's verdict be \"complete\"?",
+      "source": "9fc47d2d62fd"
+    },
+    "quiz.q5.a.text": {
+      "text": "All five subtasks pass the merge check and there is no conflict",
+      "source": "28fb43afbcdc"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. One missing, or any conflict, is not complete.",
+      "source": "83fd6c205b57"
+    },
+    "quiz.q5.b.text": {
+      "text": "All five subtasks handed back results",
+      "source": "68993aaa45ec"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. Handed back is not passed; the group without the evidence requirement is the counterexample.",
+      "source": "78f14ce85f16"
+    },
+    "quiz.q5.c.text": {
+      "text": "All three required questions have answers",
+      "source": "f28d1b926ec7"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. Conflicts and subtasks not done count too.",
+      "source": "40ffff9f8380"
+    },
+    "quiz.q5.explanation": {
+      "text": "The verdict counts checks, conflicts and unfinished subtasks.",
+      "source": "77f461122348"
+    },
+    "quiz.q6.prompt": {
+      "text": "When run time is used up, the coordinator calls root.cancel. What happens?",
+      "source": "71ae24572339"
+    },
+    "quiz.q6.a.text": {
+      "text": "Every child scope becomes cancelled: running subtasks are no longer awaited and unstarted ones are not dispatched",
+      "source": "3e0a27112700"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. This is cancellation propagation.",
+      "source": "b1637e36d8b3"
+    },
+    "quiz.q6.b.text": {
+      "text": "Requests already sent are withdrawn by the provider",
+      "source": "1825d3637788"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. A request already sent cannot be called back.",
+      "source": "a46d60596244"
+    },
+    "quiz.q6.c.text": {
+      "text": "Only the last subtask dispatched is cancelled",
+      "source": "443112a4a3bb"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. Every child scope looks up to the root scope's reason.",
+      "source": "d2876ebf38cf"
+    },
+    "quiz.q6.explanation": {
+      "text": "Cancellation travels down the creation relationship; what stops is the waiting and the actions that follow.",
+      "source": "c9471a903ae1"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"Tight shared budget\" and find the evidence where the budget refuses to dispatch and lists the subtasks that did not start.",
+      "source": "0767e16cf461"
+    },
+    "check-hunt.explanation": {
+      "text": "lesson.budget_stop is recorded when the first result returns and frees a slot: the request for deadline-notice is refused with reason calls, not_started lists deadline-notice and late-policy, and calls_left in budget is 0. After that the coordinator sends no new subtask, and the whole run has only 3 request events.",
+      "source": "92b197b33871"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source and tick each item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran all four exercises and can say why each group's task verdict differs.",
+      "source": "12caf8758fe7"
+    },
+    "check-points.item-2.text": {
+      "text": "In lesson.delegate I verified that each subtask's context holds only the documents assigned to it.",
+      "source": "be13b7836b81"
+    },
+    "check-points.item-3.text": {
+      "text": "In the \"Full contract\" group I found the deadline conflict and both sides' quotes.",
+      "source": "8abbab830bd6"
+    },
+    "check-points.item-4.text": {
+      "text": "In the \"One subtask times out\" group I found the late response and confirmed that its usage was booked and its result was not merged.",
+      "source": "4954864cec37"
+    },
+    "code_notes.lesson.delegate.note": {
+      "text": "The record made when a subtask is dispatched: the contract, the budget left after this approval, and which documents were actually in its context.",
+      "source": "fcd9ee49d399"
+    },
+    "code_notes.lesson.subtask.note": {
+      "text": "A dispatched subtask's outcome: returned on time, timed out or failed; timed_out_after_ms appears only on a timeout.",
+      "source": "934aec441cb6"
+    },
+    "code_notes.lesson.budget_stop.note": {
+      "text": "The record made when the budget refuses to dispatch: the reason and the subtasks that did not start.",
+      "source": "b0287d20f028"
+    },
+    "code_notes.lesson.late_response.note": {
+      "text": "A response that came back after the timeout: usage booked, discarded true, result not merged.",
+      "source": "291277068bf1"
+    },
+    "code_notes.lesson.merge.note": {
+      "text": "The merged result: values grouped by question, conflicts, missing required questions and unfinished subtasks.",
+      "source": "d1a2c5c4be82"
+    },
+    "code_notes.merge_check.note": {
+      "text": "The merge check, called by the runner as a tool: it judges each result and lists different values for the same question as conflicts.",
+      "source": "40f7d5984d71"
+    },
+    "code_notes.check_reply.note": {
+      "text": "The merge check's test of a single result; it returns problem codes, and an empty list means a pass.",
+      "source": "4568f5d11fb1"
+    },
+    "code_notes.same_value.note": {
+      "text": "Normalization before comparing values: remove spaces, unify case, drop a final full stop.",
+      "source": "71cb54768914"
+    },
+    "code_notes.grant.note": {
+      "text": "Ask the shared budget for one call: approval returns None, a refusal returns the reason calls, tokens or time.",
+      "source": "7119dd309214"
+    },
+    "code_notes.charge.note": {
+      "text": "Charges the token budget from the provider's reported total_tokens; if none was reported, notes one as not reported.",
+      "source": "baa7cf246037"
+    },
+    "code_notes.Scope.note": {
+      "text": "Cancellation scope: when a child scope was not cancelled itself, it looks up the reason through its parent.",
+      "source": "85fc285e1c65"
+    },
+    "code_notes.finalize.note": {
+      "text": "Sets the verdict for the whole task: incomplete, needs confirming, some subtasks not done, or complete.",
+      "source": "afad1b2bbaaf"
+    },
+    "code_notes.docs_seen.note": {
+      "text": "Document ids read from the messages actually sent, used to verify context isolation.",
+      "source": "724a88037f1c"
+    },
+    "code_notes.deadline-notice.note": {
+      "text": "The subtask that cross-checks the deadline; it sees only d2, the November registrar notice, with priority 2.",
+      "source": "fe23f1df73d0"
+    },
+    "code_notes.weight.note": {
+      "text": "The subtask for the share of the final grade; it sees only the grading rules d4, the only source for this required question.",
+      "source": "616014e3461e"
+    },
+    "code_notes.not_found.note": {
+      "text": "The status a subtask uses when it says honestly that the documents have no answer; acceptable, but it answers nothing.",
+      "source": "5794694291f1"
+    },
+    "code_notes.evidence.note": {
+      "text": "A conclusion's source: the document id doc and the verbatim quote.",
+      "source": "d480f9364130"
+    },
+    "code_notes.timed_out_after_ms.note": {
+      "text": "A lesson.subtask field, present only when the subtask timed out: how many milliseconds the coordinator waited.",
+      "source": "3d1ddf21bec3"
+    },
+    "code_notes.discarded.note": {
+      "text": "A lesson.late_response field: true means the result did not take part in the merge.",
+      "source": "c283114f234a"
+    },
+    "code_notes.branch.note": {
+      "text": "The pairing label of a parallel request; this lesson uses the subtask id, such as weight.",
+      "source": "7ffb626e4ff5"
+    }
+  }
+}

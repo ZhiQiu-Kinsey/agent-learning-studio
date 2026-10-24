@@ -57,6 +57,23 @@ class ContextTests(unittest.TestCase):
             context.complete({"model": "different-paid-model", "messages": []})
         self.assertEqual(len(bodies), 1)
 
+    def test_unsupported_params_are_left_out_and_listed_in_the_request_event(self):
+        events, bodies = [], []
+        def provider(body, key):
+            bodies.append(json.loads(json.dumps(body)))
+            return {"choices": [{"message": {"content": "ok"}}]}
+        context = make_context(events, completion=provider, unsupported_params=frozenset({"temperature"}))
+        body = {"messages": [], "temperature": 0, "max_tokens": 9}
+        context.complete(body)
+        self.assertEqual(body["temperature"], 0)  # lesson code's own dict is untouched
+        self.assertNotIn("temperature", bodies[0])
+        self.assertEqual(events[0][1]["body"], bodies[0])
+        self.assertEqual(events[0][1]["omitted_params"],
+                         {"values": {"temperature": 0}, "reason": "unsupported_by_model"})
+        self.assertNotIn("omitted_params", events[1][1])
+        context.complete({"messages": []})
+        self.assertNotIn("omitted_params", events[2][1])
+
     def test_cancelled_completion_and_tools_cannot_continue(self):
         events = []
         cancelled = False

@@ -2,9 +2,12 @@
 
 只接收已经脱敏、序列化完成的事件文本；本模块不做脱敏，也不修改已写入的事件。
 唯一的删除路径是 `clear()`（界面“一键清除”），它删除全部记录并截断 WAL。
+运行状态可以在 running 与 paused（等待审批）之间切换；检查点就是 `checkpoint` 事件，
+恢复时按 (run_id, checkpoint_id) 从事件表读取，服务重启后仍然可用。
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -38,8 +41,13 @@ BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
 """
 
 RUN_FIELDS = ("run_id", "lesson_id", "exercise_id", "mode", "model", "provider_id", "representation",
-              "provenance", "schema_version", "status", "created_at", "finished_at", "locale")
+              "provenance", "schema_version", "status", "created_at", "finished_at", "locale",
+              "thread_id", "resumed_from_run", "resumed_from_checkpoint")
 FINAL_STATUSES = ("completed", "error", "cancelled", "interrupted")
+# 运行中的两种状态：paused 表示停在审批点等人决定，决定后回到 running。
+LIVE_STATUSES = ("running", "paused")
+# 加入恢复之前建的库没有这几列：打开时补上，旧运行的 thread_id 为空（读取时按自己的 run_id 理解）。
+_ADDED_COLUMNS = {"thread_id": "TEXT", "resumed_from_run": "TEXT", "resumed_from_checkpoint": "TEXT"}
 
 
 def utc_now() -> str:
@@ -64,10 +72,13 @@ class RunStore:
         columns = {row[1] for row in self._db.execute("PRAGMA table_info(runs)")}
         if "locale" not in columns:
             self._db.execute("ALTER TABLE runs ADD COLUMN locale TEXT NOT NULL DEFAULT 'zh-CN'")
-        # 新进程启动时不可能还有运行在执行；上次异常退出遗留的 running 如实标记为中断。
+        for name, kind in _ADDED_COLUMNS.items():
+            if name not in columns:
+                self._db.execute(f"ALTER TABLE runs ADD COLUMN {name} {kind}")
+        # 新进程启动时不可能还有运行在执行；上次异常退出遗留的 running/paused 如实标记为中断。
         with self._lock:
-            self._db.execute("UPDATE runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'",
-                             (utc_now(),))
+            self._db.execute("UPDATE runs SET status = 'interrupted', finished_at = ? "
+                             "WHERE status IN ('running', 'paused')", (utc_now(),))
 
     def close(self):
         with self._lock:
@@ -75,14 +86,52 @@ class RunStore:
 
     def create_run(self, *, run_id: str, lesson_id: str, exercise_id: str, mode: str, model: str,
                    provider_id: str, representation: str | None, provenance: str,
-                   schema_version: int, created_at: str, locale: str = "zh-CN"):
+                   schema_version: int, created_at: str, locale: str = "zh-CN", thread_id: str | None = None,
+                   resumed_from_run: str | None = None, resumed_from_checkpoint: str | None = None):
         with self._lock:
             self._db.execute(
                 "INSERT INTO runs (run_id, lesson_id, exercise_id, mode, model, provider_id, representation,"
-                " provenance, schema_version, status, created_at, locale)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)",
+                " provenance, schema_version, status, created_at, locale, thread_id, resumed_from_run,"
+                " resumed_from_checkpoint)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)",
                 (run_id, lesson_id, exercise_id, mode, model, provider_id, representation, provenance,
-                 schema_version, created_at, locale))
+                 schema_version, created_at, locale, thread_id or run_id, resumed_from_run,
+                 resumed_from_checkpoint))
+
+    def set_live_status(self, run_id: str, status: str):
+        """running ↔ paused；已经结束的运行不受影响（结束状态只由 finish 写入）。"""
+        if status not in LIVE_STATUSES:
+            raise ValueError("只能在 running 与 paused 之间切换。")
+        with self._lock:
+            self._db.execute("UPDATE runs SET status = ? WHERE run_id = ? AND status IN ('running', 'paused')",
+                             (status, run_id))
+
+    def checkpoint(self, run_id: str, checkpoint_id: str) -> dict | None:
+        """读取某次运行的一个检查点：返回 checkpoint 事件（信封 + data），没有时返回 None。"""
+        with self._lock:
+            rows = list(self._db.execute(
+                "SELECT event FROM events WHERE run_id = ? AND type = 'checkpoint' ORDER BY seq", (run_id,)))
+        for (text,) in rows:
+            event = json.loads(text)
+            if event.get("data", {}).get("checkpoint_id") == checkpoint_id:
+                return event
+        return None
+
+    def last_checkpoint_number(self, run_id: str) -> int:
+        """某次运行已存检查点的最大编号（cp-N 的 N）；没有检查点时为 0。恢复出来的运行从它之后接着编号。"""
+        with self._lock:
+            rows = list(self._db.execute(
+                "SELECT event FROM events WHERE run_id = ? AND type = 'checkpoint'", (run_id,)))
+        numbers = [int(str(json.loads(text).get("data", {}).get("checkpoint_id", "cp-0")).removeprefix("cp-") or 0)
+                   for (text,) in rows]
+        return max(numbers, default=0)
+
+    def first_event(self, run_id: str, kind: str) -> dict | None:
+        """按 seq 找某次运行第一条指定类型的事件（恢复时读取 run_start）。"""
+        with self._lock:
+            row = self._db.execute("SELECT event FROM events WHERE run_id = ? AND type = ? ORDER BY seq LIMIT 1",
+                                   (run_id, kind)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def append(self, run_id: str, seq: int, kind: str, event_json: str):
         """追加一条事件；(run_id, seq) 重复时由主键拒绝。自动提交。"""

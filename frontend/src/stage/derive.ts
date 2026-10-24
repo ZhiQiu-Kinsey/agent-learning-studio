@@ -39,7 +39,8 @@ export interface StageSignal {
 
 export interface StageSpan {
   id: string;
-  kind: "llm" | "tool";
+  /** approval: the run waited at an approval gate (approval_requested → approval_resolved). */
+  kind: "llm" | "tool" | "approval";
   round: number | null;
   name?: string;
   startIndex: number;
@@ -98,6 +99,7 @@ function edgeFor(
     case "request":
       return ["runtime", "model"];
     case "response":
+    case "response_delta":
       return ["model", "runtime"];
     case "tool_call":
       return ["runtime", toolNodeId(toolName(event))];
@@ -214,16 +216,20 @@ export function deriveStage(
     } else if (index === visible.length - 1) signal = null;
 
     const rule = spanRuleFor(event.type);
-    if (rule.span_kind === "llm" || rule.span_kind === "tool") {
+    if (
+      rule.span_kind === "llm" ||
+      rule.span_kind === "tool" ||
+      rule.span_kind === "approval"
+    ) {
       const kind = rule.span_kind;
       const pairValue =
-        kind === "tool" && rule.pair_field
+        kind !== "llm" && rule.pair_field
           ? event.data[rule.pair_field]
           : undefined;
       const key =
         event.span_id ??
-        (kind === "tool" && typeof pairValue === "string"
-          ? `tool:${pairValue}`
+        (kind !== "llm" && typeof pairValue === "string"
+          ? `${kind}:${pairValue}`
           : undefined);
       if (rule.phase === "start") {
         const span: StageSpan = {
@@ -253,6 +259,7 @@ export function deriveStage(
           span.endAt = event.timestamp;
           span.durationMs = elapsed(span.startAt, event.timestamp);
           span.status = "closed";
+          if (kind === "approval") span.ok = event.data.outcome === "approved";
           if (kind === "tool") {
             const result = event.data.result as { ok?: unknown } | undefined;
             if (typeof result?.ok === "boolean") span.ok = result.ok;
@@ -309,11 +316,14 @@ export function deriveStage(
                 : "idle";
   }
 
-  // Context film: what each request actually sent, with new items marked.
+  // Context film: what each chat request actually sent, with new items marked.
+  // Embedding requests (data.endpoint "embeddings") send texts, not messages,
+  // so they are not context rounds.
   const film: FilmRound[] = [];
   let previous: string[] = [];
   visible.forEach((event, index) => {
-    if (event.type !== "request") return;
+    if (event.type !== "request" || event.data.endpoint === "embeddings")
+      return;
     const messages = requestMessages(event);
     const serialized = messages.map((message) => JSON.stringify(message));
     let shared = 0;

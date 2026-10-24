@@ -8,7 +8,7 @@
 
 - `server/providers.py`：服务商绑定、连接配置校验和后端临时内存配置。
 - `course/providers.py`：模型连接类型与 LiteLLM 调用适配。
-- `course/api_client.py`：百炼原生 HTTP 传输。
+- `course/api_client.py`：百炼原生 HTTP 传输（聊天补全与 `/embeddings`）。
 - `course/execution.py`：课程共享调用预算、取消与事件快照。
 
 百炼原生入口读取 `local_config.py` 与 `DASHSCOPE_API_KEY`；其他服务使用各自的环境变量或网页提交的后端临时配置。变量列表和操作步骤见 [README](../../README.zh-CN.md#连接模型)。密钥不回显、不写入浏览器存储；切换服务商不会自动借用另一家的凭据。

@@ -1,0 +1,1275 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "evaluation-sets",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "EVALUATION / VERIFIER",
+          "headline": "跑通一次不算数，",
+          "highlight": "同一套题、同一个验证器，逐题比较两个版本。",
+          "takeaway": "把前三课的工具任务写成固定题集，由 Agent 之外的程序判定每一道题。流程结束、答案正确、证据充分和过程违规分开记，未通过和不可评估的题一条不删。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-split",
+              "label": "01 / SPLIT",
+              "title": "开发集与留出集",
+              "description": "改提示词时反复跑的是开发集（Development Set）；留出集（Holdout Set）事先分出来，版本定下才跑一次。",
+              "token": "dev · holdout"
+            },
+            {
+              "id": "02-verifier",
+              "label": "02 / VERIFIER",
+              "title": "Agent 之外的验证器",
+              "description": "验证器只读题目规定和本次轨迹，不看 Agent 怎么评价自己。能写成程序的判据都交给程序。",
+              "token": "verify()"
+            },
+            {
+              "id": "03-checks",
+              "label": "03 / CHECKS",
+              "title": "几项检查分开记",
+              "description": "流程结束、调用比对、答案正确、证据充分、过程无违规各记一项；判定不了的标“不可评估”，不算通过。",
+              "token": "ended ≠ passed"
+            },
+            {
+              "id": "04-paired",
+              "label": "04 / PAIRED",
+              "title": "逐题比较两个版本",
+              "description": "两个版本跑同一批题，逐题看谁变好、谁变坏；改善和回归（Regression）都留在报告里。",
+              "token": "改善 · 回归"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "一次跑通不等于能用",
+          "paragraphs": [
+            "固定题集和留出集，才能比较两个版本谁更好。{{lesson:task-contract}}里，一张任务卡配一次运行，验收器就能说清这一次过没过。可改了一句提示词之后，新版本到底更好还是更差？一次运行回答不了：那一次可能碰巧顺利，换个问题就出错；也可能改好了加法，却把除以零的处理改坏了。",
+            "举个编的例子。你给助手加了一条规则“计算必须调用工具”，试了“19 加 23”，答对了，于是觉得改好了。可同一条规则也可能让它在“我这周跑了 12 公里，下周跑同样的距离，要跑多少”这种题面已经给出答案的题上，多此一举地调用 add_numbers；还可能让它在拿不到数据时一律回答 NONE。只有把这些情况事先写成一套题，每次改动后整套重跑，才看得见改动的全部后果。",
+            "这就是评估（Evaluation）：用固定题集、事先写好的判据和独立的验证器衡量 Agent，并保留每一条失败记录。本课的题集在 cases.py 里，每道题写明类别、该怎么调用、正确答案是什么；题集有版本号 SUITE_VERSION，每道题有修订号 rev。题分两份：改进时反复跑的 6 道是开发集，另外 4 道是留出集，版本定下之前不看、不跑。运行开始时，lesson.task_card 写明这次跑哪份题、题集指纹是多少。",
+            "为什么非要留出一份？在开发集上改提示词，等于照着考题复习：改到全对，可能只是迁就了这 6 道题。留出集没参与修改，它上面的结果才接近“换一批没见过的题会怎样”。代价是留出集只能少用：每看一次结果再回头改，它就成了第二份开发集。题集本身也会出错，参考资料里的公开基准在发布后都修过大量问题，所以改题就升版本，新旧版本的分数不直接比。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "验证器与评分规则",
+          "paragraphs": [
+            "能用程序判定的先用程序判定，规则写在评分表里。Agent 很容易说“任务完成了”，但这句话不是证据。{{lesson:task-contract}}的验收器只看任务卡和工具结果；本课把同样的思路放大到一整套题：verifier.py 的 verify 只拿两样东西，一是题目规定，二是本次运行记录下的轨迹。它从不调用模型，也不读 Agent 对自己的评价。",
+            "评分表就是每道题的规定。cases.py 里 add-basic 一题写着：应调用一次 add_numbers，参数 a 为 19、b 为 23，答案是 42。clock-sum 一题的参数写成引用：add_numbers 的 a 必须取自 get_current_time 结果里的 hour，b 取自 minute；正确答案也由验证器自己用记录下的 hour 和 minute 相加，不信任 Agent 那次加法的返回值。最终回答约定在最后一行写 `<answer>42</answer>` 这样的标签，拿不到数值写 NONE，程序才读得出答案。",
+            "规则写成程序有三个好处：同一条轨迹判几次都是同一个结论；判一千道题不花一次模型调用；规则错了，可以像改代码一样修改，再像测试一样回归。参考资料里的公开基准大多这样做，SWE-bench 跑测试套件，GAIA 做精确字符串匹配。程序判不了的题，本课不硬判：开放式的自我介绍题 greeting，验证器只检查它有没有乱调用工具，答案正确一项记为不可评估。",
+            "不可评估不是通过，也不能悄悄删掉。报告里它单独计数，题目留在表里，提醒你这道题要靠人工或校准过的评审模型。反过来，验证器写错了，所有分数都会跟着错，所以本课的 test_lesson.py 先用手写的轨迹逐条测验证器：正确的轨迹必须通过，猜参数、编数字、不调用工具直接报答案的轨迹必须被拦下。"
+          ]
+        },
+        {
+          "id": "deep-dive-verifiers",
+          "type": "deep-dive",
+          "title": "公开基准怎样写验证器",
+          "summary": "确定性验证器便宜、可复现，但只说对错，不说错在哪一步。",
+          "paragraphs": [
+            "SWE-bench Verified 把“修好了”拆成两个独立命题：一组测试修复前失败、修复后通过，证明问题解决了；另一组修复前后都通过，证明没有改坏别处。只查前一组，Agent 删掉碍事的断言就能蒙混过关；只查后一组，等于没查。本课的思路相同：答案正确和过程无违规是两项检查，一项通过不能替另一项作证。",
+            "OSWorld 的验证器拥有完整的系统权限，数据库任务不只看报告文件在不在，还会连上数据库核对数据确实写进去了。GAIA 让答案无法从网上直接搜到，再用精确匹配判分。τ²-bench 每道题写明终态断言、必须发生的动作和必须告知用户的信息，再由 `reward_basis` 决定哪几项计分。书里分析的一条满分轨迹中，Agent 违反了“一次只调用一个工具”的规定，验证器没有管，因为那道题只按终态计分。",
+            "这些验证器有个共同的代价：给出 0 或 1，却不说失败从哪一步开始。所以本课的报告除了结论，还写出每项检查的 detail，比如“期望 1.5；回答 6”，或者“divide_numbers 在 get_current_time 的结果返回之前就发出了”。生产环境里，这类失败还要经过归因，找到第一个出错的步骤，再沉淀成新的回归题。",
+            "题从哪里来，参考书分了三个来源。公开基准用来粗筛模型、借鉴设计手法，它的题目分布和你的业务不一样，在上面涨两个百分点说明不了什么。自建的业务题集覆盖真实的任务分布，可以拿来做选型和设计决策。生产环境里用户纠正、点踩或者事后检查发现的失败，经过归因变成回归题，成本最高，也最准。几份参考资料讲的是同一个循环：离线评估，上线，收集新的失败，补进离线题集，再改。"
+          ]
+        },
+        {
+          "id": "misconception-ended",
+          "type": "misconception",
+          "claim": "运行结束了，Agent 也说完成了，这道题就算通过。",
+          "correction": "流程结束只说明模型给出了最终回答。本课每个版本的报告都把“流程结束”和“验收通过”分开计数，答案、证据和过程要由验证器分别判定。离线测试模式的脚本里，版本 A 在开发集上 6 道题全都结束了，只有 2 道通过；真实运行的数字以你自己的报告为准。"
+        },
+        {
+          "id": "predict-cases",
+          "type": "predict",
+          "prompt": "运行“开发集：版本 A 对比版本 B”之前先猜：这次运行会出现几个 lesson.case_result 事件？",
+          "experiment": "version-compare",
+          "arm": "dev",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.case_result"
+          }
+        },
+        {
+          "id": "mq-own-arithmetic",
+          "type": "micro-quiz",
+          "question": {
+            "id": "own-arithmetic",
+            "prompt": "clock-sum 的正确答案，为什么由验证器自己用 hour 和 minute 相加，而不直接用 Agent 那次 add_numbers 的返回值？",
+            "options": [
+              {
+                "id": "a",
+                "text": "Agent 的加法可能用了猜的参数，它的返回值不能拿来判它自己",
+                "feedback": "对。被检查的一方给出的数字，不能当作检查它的标准。"
+              },
+              {
+                "id": "b",
+                "text": "验证器的加法比工具算得更准",
+                "feedback": "不对。两边做的是同一种加法，差别在参数从哪里来。"
+              },
+              {
+                "id": "c",
+                "text": "因为 add_numbers 经常报错",
+                "feedback": "不对。这道题里加法工具并不报错，问题在于参数可能是猜的。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "验证器只信两样东西：题目规定和本次记录下的时钟结果。答案由它自己从这两样算出来。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "结果、轨迹与证据",
+          "paragraphs": [
+            "不只看最后答案，也检查调用了什么、依据是什么。只看答案会放过两类错误。一类是蒙对了：问 19 加 23，Agent 没调用工具，直接写 42，答案对，却没有任何证据；下次换成大数，它照样心算，就可能出错。另一类是做对了却说错了：工具确实返回了正确的值，最终回答里写的却是另一个数。",
+            "所以 verify 对每道题给出五项结论：流程结束、调用比对、答案正确、证据充分、过程无违规。证据充分由 check_evidence 判断：回答里的每个数字，都要能在题面或本次成功的工具结果里找到。unknown-balance 问“我的银行卡余额再加 100 元是多少”，没有任何工具能查余额；如果回答 1100，这个数在题面和工具结果里都找不到，证据一项不通过。这条规则借鉴了参考书配套代码的做法：一个数字找不到来源，就不可能来自证据。",
+            "过程无违规由 find_violations 判断，查的是与答案无关的规则。最典型的是猜参数：clock-sum 要先拿到时间，再用 hour 和 minute 做加法；如果 add_numbers 和 get_current_time 在同一步发出，加法的参数只能是猜的。轨迹里每个调用都记着它属于这道题的第几步 step，验证器比较两者的先后就能判定。就算碰巧猜对了，这道题也不算通过。",
+            "几项检查互相不能替代。divide-zero 问 100 除以 0，工具报错后如果回答 0，证据检查会放过它，因为 0 就写在题面里；违规检查会抓住它：工具报错后不该再给数值。反过来，证据充分也不代表答对：猜参数算出的 42 确实是 add_numbers 的返回值，证据一项通过，答案却是错的。证据检查只能说明数字有出处，不能说明出处是对的。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "评审模型与人工校准",
+          "paragraphs": [
+            "用评审模型打分前，先和人工标注对一下一致性。greeting 这类开放题，程序判不了好坏，自然会想到{{lesson:prompt-experiments}}里的评审模型：写一份量规，让另一个模型逐条判断。可评审模型本身也会出错，它的判定能不能当真，要先拿一批人工判过的样例对一对。",
+            "本课的练习“评审模型与人工标注对照”用 6 条固定回答做这件事。回答由作者写好，每条都事先标了合格或不合格，记在 cases.py 的 JUDGE_SAMPLES 里。量规有三条：说出至少一项真实能力；不声称没有的能力；只用一句话。运行器把每条回答连同量规发给模型，读回 verdict，再逐条和人工标注比较。回复不合格式记为无效，算作不一致。",
+            "比的不只是一致率。报告把不一致拆成两种：人工判不合格、评审判合格的“误判为合格”，和反过来的“误判为不合格”。前一种更危险，它会把坏回答算进通过率。样例 j6 专门为此而写：一段很长的自我介绍，前半段全对，后面夹着“还能帮你上网查资料”。参考书提到评审模型有长度偏差，倾向于给更长、更详尽的回答高分，这条样例就是用来测它的。",
+            "6 条样例只能发现明显的偏差，证明不了评审模型可靠。一致率还会被类别比例误导：6 条里如果有 5 条合格，评审模型全判合格也有 83% 的一致率。所以报告另给出 `Cohen's kappa`，它扣掉了碰巧一致的部分。校准过的评审模型也只用在程序判不了的地方，能写成规则的检查仍然交给验证器。"
+          ]
+        },
+        {
+          "id": "deep-dive-kappa",
+          "type": "deep-dive",
+          "title": "手算一致率和 kappa",
+          "summary": "kappa 回答的是：扣掉碰巧一致以后，评审模型还剩多少真本事。",
+          "paragraphs": [
+            "假设评审模型在 6 条样例上只错了 j6，把它判成合格。一致率是 5/6，约 0.83，看上去不错。但要先问：瞎猜能对几条？人工标注里合格 3 条、不合格 3 条；评审模型判了 4 条合格、2 条不合格。",
+            "如果两边互不相关，各按自己的比例随机给结论，碰巧同时判合格的概率是 `3/6 × 4/6 ≈ 0.33`，碰巧同时判不合格的概率是 `3/6 × 2/6 ≈ 0.17`，合起来碰巧一致约 0.5。kappa 等于实际一致减去碰巧一致，再除以 1 减碰巧一致，也就是 `(0.83 − 0.5) ÷ 0.5 ≈ 0.67`。kappa 函数就是照这个公式算的。",
+            "0.67 通常读作“相当一致”，可样例只有 6 条：再多错一条合格的样例，kappa 就会掉到 0.33 左右。要真正放心，样例要多，还要覆盖量规里每一种陷阱。参考书还提到两种做法：用不同家族的几个模型分别评审，看它们是否一致；让评审模型比较两个候选时，把顺序交换各评一次，抵消它偏向某个位置的倾向。"
+          ]
+        },
+        {
+          "id": "mq-agreement",
+          "type": "micro-quiz",
+          "question": {
+            "id": "agreement",
+            "prompt": "评审模型与人工标注一致 5/6，唯一的不一致是把一条不合格的长回答判成了合格。哪种做法最稳妥？",
+            "options": [
+              {
+                "id": "a",
+                "text": "一致率超过 80%，可以直接拿它评所有开放题",
+                "feedback": "不对。样例太少，而且它错在最危险的方向。"
+              },
+              {
+                "id": "b",
+                "text": "先读那条误判，看它属于哪类偏差，再补样例重新校准",
+                "feedback": "对。误判为合格会抬高通过率，要先弄清它为什么错。"
+              },
+              {
+                "id": "c",
+                "text": "把那条样例的人工标注改成合格",
+                "feedback": "不对。为了提高一致率去改标注，等于让评审模型来定标准。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "校准的目的是找出评审模型会在哪里出错，而不是凑出一个好看的一致率。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "工具调用的结构化比对",
+          "paragraphs": [
+            "把调用名与参数解析后比较，分简单、多个、并行和不该调用四类。最省事的写法是把模型给的参数字符串和期望的字符串直接比，可 `{\"a\": 19, \"b\": 23}`、`{\"b\":23,\"a\":19}` 和 `{\"a\": 19.0, \"b\": 23}` 是同一个调用，字符串却各不相同。所以 same_call 先把参数解析成对象，再按数值逐个比较。",
+            "按调用的形状，常见的分法有四类。简单：只该调用一次，比如 add-basic。多个：候选工具不止一个，要选对；本课每道题都同时提供三个工具，所以选对工具贯穿所有题，依赖题还要求按顺序调用两个不同的工具。并行：几次互相独立的调用，顺序不限，比如 two-sums 要算两次加法。不该调用：比如 greeting 和 given-distance，正确的做法是一次工具也不调。",
+            "cases.py 用 mode 区分比对规则：sequence 要求调用一一对应、顺序相同；unordered 只要求每个期望的调用都能对上一个不同的实际调用；none 要求没有调用。比对前还要先决定哪些差异不算错：add_numbers 交换两个参数结果不变，所以它登记在 COMMUTATIVE 里，比较时两边各自排序；19 和 19.0 按数值相等处理。这些决定写进代码，所有题、所有版本都用同一套。",
+            "结构化比对只管调用得对不对，不管调用的结果用得对不对，后者归答案正确和证据充分两项。它也只认题目规定的那一种做法：如果 Agent 先用 divide_numbers 算出 19 ÷ 1，再拿去做加法，结果没错，比对仍然不通过。规定得越死，误判合理做法的可能越大；本课的题都很小，只有一种合理做法，真实任务里常把可接受的调用写成一个集合，再列出禁止的调用。"
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "波动与回归",
+          "paragraphs": [
+            "同一版本多跑几次看波动，新版本要过旧的失败案例。模型的输出带随机性，题集又小，两个版本的分差很可能只是运气。举个编的例子：开发集 6 道题，版本 A 过了 2 道、版本 B 过了 5 道，看起来涨了一大截；可每道题都只跑了一次，再跑一遍，结论可能就变了。",
+            "先看一个版本自己有多稳。练习“同一版本跑两次”把版本 B 在开发集上完整跑两遍，报告列出每道题两次的结论，以及两次都通过的题数（`Pass^2`）和至少过一次的题数（`Pass@2`）。前者接近业务要的可靠性，后者只说明做得到。两次结论不一样的题，说明这道题本来就在波动，版本之间在这道题上的差异要打折扣。",
+            "比较两个版本时，用配对分析（Paired Analysis）：同一道题、同样的运行次数，只有版本不同。paired 逐题比较两个版本的通过次数，记为改善、回归或不变；不变的题不提供方向信息，只看结论不一致的那几道。sign_test 在这几道上做精确的符号检验：如果两个版本其实一样好，每道不一致的题朝哪边变就像抛硬币。不一致的题少于 6 道时，就算全朝一个方向，双侧 p 值也不会小于 0.05，报告直接写明只当方向线索。",
+            "回归要逐条看。假设版本 B 加的“计算必须调用工具”在开发集上只带来改善，留出集里仍可能冒出 given-distance 这样的题：题面已经给出 12 公里，新规则却让它去调用工具，原来通过的题不再通过。判断是不是回归，要看版本 A 在同一道题上有没有通过：版本 A 也调用了工具，就不是新规则造成的。每一道回归题都要留下，加进下一版的回归检查；报告里“版本 B 没有回归”这一项没通过时，不能只看总通过率涨了就发布。多跑几次时，paired 仍按题配对，把一道题的几次结果合成一个结论，不把同一道题的两次运行当成两道题。"
+          ]
+        },
+        {
+          "id": "deep-dive-uncertainty",
+          "type": "deep-dive",
+          "title": "小样本到底有多不确定",
+          "summary": "6 道题算出的通过率，误差能有正负几十个百分点。",
+          "paragraphs": [
+            "参考书给了一个粗算：在 `n` 道题上测得通过率 `p`，标准误约为 `sqrt(p(1-p)/n)`。100 道题、通过率 70%，95% 区间大约是正负 9 个百分点，所以“新版本 73% 对旧版本 70%”不足以支持切换。换成本课的 6 道题、通过率 50%，标准误约 0.2，正负两个标准误就是正负 40 个百分点。",
+            "这个公式在样本小、通过率接近 0 或 1 时会失真：6 道全过时，它给出的区间宽度是 0，好像结论毫无疑问。所以报告用 Wilson 区间，wilson 函数照公式计算：6 道里过 5 道，区间约为 44% 到 97%；过 2 道，约为 10% 到 70%。两个区间大段重叠，单看区间就知道还分不出高下。",
+            "多跑几次时，还要说清用哪种口径。假设每次运行独立、单次通过率是 0.6，跑 5 次：至少过一次的概率是 `1 − 0.4⁵ ≈ 99%`，5 次全过的概率只有 `0.6⁵ ≈ 7.8%`。前一个数字说明能力的上限，后一个才接近退款、支付这类场景要的可靠性。本课的重复练习把两个数都写进报告，就是为了不让好看的那个代替难看的那个。",
+            "两个版本跑的是同一批题，用配对的方法比单独比较两个通过率更灵敏。参考书推荐 McNemar 检验或配对自助法，本课用的符号检验是同类思路里最简单的一种：只数结论不一致的题，看改善和回归是不是明显偏向一边。3 道全部改善时，双侧 p 值是 `2 × 0.5³ = 0.25`；6 道全部改善，才降到约 0.03。同时比较好几个版本时，碰巧冒出一个好结果的机会也会变大，要收紧门槛，或者把好结果独立复跑一次。"
+          ]
+        },
+        {
+          "id": "misconception-rate",
+          "type": "misconception",
+          "claim": "通过率从 2/6 涨到 5/6，新版本就是更好。",
+          "correction": "6 道题的通过率误差很大，两次运行之间的差异可能只是波动。要看配对的结论：哪些题改善、哪些题回归，结论不一致的题够不够多；还要在留出集上复核，并逐条读回归的题。"
+        },
+        {
+          "id": "mq-sign-test",
+          "type": "micro-quiz",
+          "question": {
+            "id": "sign-test",
+            "prompt": "配对分析里，结论不一致的题只有 3 道，全部是改善，p 值 0.25。报告应该怎么写？",
+            "options": [
+              {
+                "id": "a",
+                "text": "版本 B 显著更好，可以发布",
+                "feedback": "不对。3 道题全朝一个方向，抛硬币也有四分之一的机会做到。"
+              },
+              {
+                "id": "b",
+                "text": "方向一致，但不一致的题太少，只当方向线索；留出集复核、扩大题集后再下结论",
+                "feedback": "对。这正是本课报告在不一致的题少于 6 道时的写法。"
+              },
+              {
+                "id": "c",
+                "text": "两个版本一样好，放弃版本 B",
+                "feedback": "不对。证据不足以说明更好，也不足以说明一样好。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "样本小时，既不能宣布显著，也不能宣布无差别；能做的是如实写出方向和不确定性，再去收集更多证据。"
+          }
+        },
+        {
+          "id": "compare-statuses",
+          "type": "compare",
+          "title": "一项检查的四种结果",
+          "columns": [
+            "结果",
+            "含义",
+            "本课的例子",
+            "对整题结论的影响"
+          ],
+          "rows": [
+            [
+              "通过",
+              "规定的条件满足了",
+              "add-basic 调用 add_numbers(19, 23)，回答 42",
+              "五项都通过（或不适用），整题才通过"
+            ],
+            [
+              "未通过",
+              "规定的条件没满足",
+              "工具报错后仍回答 0",
+              "任何一项未通过，整题未通过"
+            ],
+            [
+              "不适用",
+              "这项检查对这道题没有意义",
+              "题目本来不需要工具、回答也没有数字时的证据一项",
+              "不影响结论"
+            ],
+            [
+              "不可评估",
+              "验证器缺少判定所需的信息",
+              "greeting 的开放式回答；没读时钟的 clock-sum 的正确答案",
+              "不算通过，单独计数，题目留在报告里"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一道依赖题从运行到结论",
+          "description": "按步骤说明 clock-sum 在版本 B 下的一次运行，代码是简化的示意。真实的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "提问",
+              "actor": "运行器",
+              "title": "按版本拼好系统提示词",
+              "body": "版本 B 在共用的提示词和回答格式之间多一段规则，题目来自运行时文本。",
+              "code": "messages = [system_prompt(t, \"B\"), t.questions[\"clock-sum\"]]",
+              "language": "python",
+              "evidence": "request"
+            },
+            {
+              "id": "step-2",
+              "label": "读时钟",
+              "actor": "模型",
+              "title": "先只调用 get_current_time",
+              "body": "第 1 步只提出这一个调用，等结果回来。",
+              "code": "get_current_time()  # -> {\"hour\": 9, \"minute\": 15, ...}",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-3",
+              "label": "相加",
+              "actor": "模型",
+              "title": "用 hour 和 minute 调用 add_numbers",
+              "body": "参数取自上一步的工具结果，这次调用记在第 2 步。",
+              "code": "add_numbers(a=9, b=15)  # step=2",
+              "language": "python",
+              "evidence": "tool_call"
+            },
+            {
+              "id": "step-4",
+              "label": "判定",
+              "actor": "验证器",
+              "title": "逐项检查，给出结论",
+              "body": "验证器自己算 9 + 15，再查调用顺序、证据和违规。",
+              "code": "outcome = verify(case, trajectory, question, allowed, t)",
+              "language": "python",
+              "evidence": "lesson.case_result"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-evaluation",
+              "title": "成功的定义、评估集设计、自动化评估与统计显著性（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter7.md"
+            },
+            {
+              "id": "book-grounding",
+              "title": "答案里的数字有没有来源（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter1/context/grounding.py"
+            },
+            {
+              "id": "book-policy-eval",
+              "title": "用确定性规则给可观察动作评分（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter7/user-memory-policy-eval/runner.py"
+            },
+            {
+              "id": "cookbook-tool-evaluation",
+              "title": "用固定题集评估工具（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/tool_evaluation/tool_evaluation.ipynb"
+            },
+            {
+              "id": "cookbook-building-evals",
+              "title": "评估的组成与三种评分方式（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/misc/building_evals.ipynb"
+            },
+            {
+              "id": "hf-offline-evaluation",
+              "title": "离线评估与在线评估（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/bonus-unit2/what-is-agent-observability-and-evaluation.mdx"
+            },
+            {
+              "id": "hf-gaia",
+              "title": "GAIA 题集与精确匹配评分（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit4/hands-on.mdx"
+            },
+            {
+              "id": "ms-production",
+              "title": "生产环境中的观测与评估（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/10-ai-agents-production/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "task-contract"
+        },
+        {
+          "id": "code-verify",
+          "type": "annotated-source",
+          "path": "lessons/lesson_evaluation_sets/verifier.py",
+          "start": 171,
+          "end": 207,
+          "notes": [
+            {
+              "id": "n171",
+              "line": 171,
+              "anchor": "def find_violations(case: Case, answer: dict",
+              "text": "过程规则与答案对错无关：答案碰巧对了，违规照样记下。"
+            },
+            {
+              "id": "n174",
+              "line": 174,
+              "anchor": "for call in calls:",
+              "text": "白名单之外的工具名单独记一条违规，平台也会拒绝执行它。"
+            },
+            {
+              "id": "n178",
+              "line": 178,
+              "anchor": "for name, arguments in case.calls:",
+              "text": "只有参数写成引用的期望调用才有来源，比如 clock-sum 的加法依赖时钟。"
+            },
+            {
+              "id": "n181",
+              "line": 181,
+              "anchor": "ready = next((call[\"step\"] for call in calls",
+              "text": "来源工具第一次成功返回是在第几步。"
+            },
+            {
+              "id": "n182",
+              "line": 182,
+              "anchor": "early = [call for call in calls if call[\"name\"] == name",
+              "text": "依赖调用和来源同一步发出，或者根本没有来源结果，参数只能是猜的。"
+            },
+            {
+              "id": "n185",
+              "line": 185,
+              "anchor": "if case.answer.get(\"none\") and answer[\"kind\"] == \"numbers\"",
+              "text": "该回答 NONE 的题，工具报错后仍给出数值，就是编造。"
+            },
+            {
+              "id": "n190",
+              "line": 190,
+              "anchor": "def verify(case: Case, trajectory: dict",
+              "text": "验证器只接收题目规定和本次轨迹，不接收 Agent 的自评。"
+            },
+            {
+              "id": "n194",
+              "line": 194,
+              "anchor": "ended = (\"pass\", t.detail_ended) if trajectory[\"ended\"]",
+              "text": "流程结束单独一项：模型给出了最终回答，不代表答对。"
+            },
+            {
+              "id": "n198",
+              "line": 198,
+              "anchor": "\"correct\": check_correct(case, answer, calls, t) if trajectory[\"ended\"]",
+              "text": "没有最终回答就没有答案可判，正确一项直接记未通过，证据一项记不适用。"
+            },
+            {
+              "id": "n201",
+              "line": 201,
+              "anchor": "violations = find_violations(case, answer, calls, allowed, t)",
+              "text": "违规是第五项检查，每条违规的说明一起写进 detail。"
+            },
+            {
+              "id": "n206",
+              "line": 206,
+              "anchor": "verdict = \"failed\" if \"fail\" in statuses",
+              "text": "任何一项未通过就是未通过；没有未通过但有不可评估，整题记为不可评估，不算通过。"
+            }
+          ]
+        },
+        {
+          "id": "code-compare-calls",
+          "type": "annotated-source",
+          "path": "lessons/lesson_evaluation_sets/verifier.py",
+          "start": 68,
+          "end": 105,
+          "notes": [
+            {
+              "id": "n68",
+              "line": 68,
+              "anchor": "def same_call(expected: tuple[str, dict | None], call: dict) -> bool:",
+              "text": "比较一次调用：先解析参数，再比名字和每个参数的数值，不比字符串。"
+            },
+            {
+              "id": "n72",
+              "line": 72,
+              "anchor": "if call[\"name\"] != name or arguments is None",
+              "text": "名字不同、参数不是对象、来源缺失或参数名不一致，都直接判为不同。"
+            },
+            {
+              "id": "n74",
+              "line": 74,
+              "anchor": "if name in COMMUTATIVE:",
+              "text": "可交换的工具两边各自排序再比，a 和 b 交换不算错。"
+            },
+            {
+              "id": "n79",
+              "line": 79,
+              "anchor": "return all(_same_number(arguments[key], actual[key]) for key in arguments)",
+              "text": "其余工具按参数名逐个比较，19 与 19.0 视为相等。"
+            },
+            {
+              "id": "n82",
+              "line": 82,
+              "anchor": "def compare_calls(case: Case, calls: list[dict], t) -> tuple[str, str]:",
+              "text": "按这道题的 mode 选比对规则，返回状态和写进报告的说明。"
+            },
+            {
+              "id": "n85",
+              "line": 85,
+              "anchor": "if case.mode == \"none\":",
+              "text": "不该调用的题：一次调用也没有才通过。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "anchor": "expected = expected_calls(case, calls)",
+              "text": "把题目里的引用换成本次记录下的值，比如 hour 换成时钟返回的 9。"
+            },
+            {
+              "id": "n88",
+              "line": 88,
+              "anchor": "if any(arguments is None for _, arguments in expected):",
+              "text": "来源结果不存在，期望的参数无从确定，比对不通过。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "if case.mode == \"sequence\":",
+              "text": "简单题和依赖题：调用一一对应，顺序也要相同。"
+            },
+            {
+              "id": "n95",
+              "line": 95,
+              "anchor": "# unordered: every expected call must be matched",
+              "text": "并行题不限顺序，但每个实际调用只能对上一个期望调用，重复的同一调用不能凑数。"
+            },
+            {
+              "id": "n104",
+              "line": 104,
+              "anchor": "wanted = t.calls_separator.join(",
+              "text": "不通过时把规定和实际并排写出，报告里一眼看出差在哪。"
+            }
+          ]
+        },
+        {
+          "id": "code-paired",
+          "type": "annotated-source",
+          "path": "lessons/lesson_evaluation_sets/runtime.py",
+          "start": 88,
+          "end": 124,
+          "notes": [
+            {
+              "id": "n88r",
+              "line": 88,
+              "anchor": "def run_suite(context: RunContext, t: Texts, cases: list[Case]",
+              "text": "一个版本跑完整套题，返回每一道的结论，不挑选。"
+            },
+            {
+              "id": "n92r",
+              "line": 92,
+              "anchor": "for repeat in range(1, repeats + 1):",
+              "text": "重复几次就把整套题从头再跑几遍。"
+            },
+            {
+              "id": "n95r",
+              "line": 95,
+              "anchor": "trajectory = run_agent_case(context, t, case, version, rounds)",
+              "text": "被测的是前三课的工具循环：模型请求、执行调用、送回工具结果，每题最多 3 次模型调用。"
+            },
+            {
+              "id": "n97r",
+              "line": 97,
+              "anchor": "outcome = verify(case, trajectory, t.questions[case.id]",
+              "text": "验证器在 Agent 之外，只看题目规定和刚记录的轨迹。"
+            },
+            {
+              "id": "n99r",
+              "line": 99,
+              "anchor": "_emit_case(context, t, case, version, repeat, trajectory, outcome, rounds.value)",
+              "text": "每道题发一条 lesson.case_result，未通过和不可评估的也发。"
+            },
+            {
+              "id": "n100r",
+              "line": 100,
+              "anchor": "_suite_report(context, t, cases, version, repeats, results)",
+              "text": "每个版本一份实验报告：流程结束数和验收通过数并排。"
+            },
+            {
+              "id": "n104r",
+              "line": 104,
+              "anchor": "def passes(results: list[dict], case_id: str) -> int:",
+              "text": "一道题在几次运行里通过了几次。"
+            },
+            {
+              "id": "n108r",
+              "line": 108,
+              "anchor": "def paired(cases: list[Case], results_a: list[dict]",
+              "text": "按题配对：同一道题、同样的次数，只有版本不同。"
+            },
+            {
+              "id": "n113r",
+              "line": 113,
+              "anchor": "change = \"improved\" if b > a else \"regressed\" if b < a else \"unchanged\"",
+              "text": "通过次数多了是改善，少了是回归，一样是不变。"
+            },
+            {
+              "id": "n118r",
+              "line": 118,
+              "anchor": "def sign_test(improved: int, regressed: int) -> float:",
+              "text": "只用结论不一致的题；不变的题不说明哪个版本更好。"
+            },
+            {
+              "id": "n123r",
+              "line": 123,
+              "anchor": "tail = sum(math.comb(n, k) for k in range(min(improved, regressed) + 1)) / 2 ** n",
+              "text": "两个版本一样好时，结果至少这么偏的概率；乘 2 得双侧 p 值。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "程序验证在先，失败全部保留，差异如实写",
+          "chosen": "题目规定写在 cases.py，题集带版本和指纹；验证器只读规定和轨迹，五项检查分开记，判不了的记为不可评估；两个版本只差一段提示词，逐题配对，用符号检验说明不确定性；开放题先校准评审模型。",
+          "alternatives": [
+            {
+              "id": "self-report",
+              "title": "让 Agent 在回答里自报是否完成",
+              "why_not": "被检查的一方给自己打分，蒙对和编造都会被算成通过。"
+            },
+            {
+              "id": "judge-everything",
+              "title": "所有题都交给评审模型打分",
+              "why_not": "贵、会波动、有偏差；能写成规则的检查交给程序更便宜也更稳定。"
+            },
+            {
+              "id": "drop-unassessable",
+              "title": "把判不了的题从分母里去掉",
+              "why_not": "通过率会变好看，可判不了的题恰恰需要人去看。"
+            },
+            {
+              "id": "subtract-rates",
+              "title": "直接相减两个通过率下结论",
+              "why_not": "看不出哪些题回归了，也说不出差异是不是波动。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "version-compare",
+          "title": "版本对照：开发集与留出集",
+          "hypothesis": "两个版本只差系统提示词里的一段规则。在开发集上，加了规则的版本 B 可能在工具失败一类题上改善（版本 A 可能不调用工具就直接回答 NONE）；依赖题和缺少证据题版本 A 也可能本来就能通过；留出集用来检查改善是否还在、有没有新的回归。不论结果如何，每道题的五项检查和结论都留在报告里。",
+          "predict": "predict-cases",
+          "arms": [
+            {
+              "id": "dev",
+              "exercise": "dev-compare",
+              "label": "开发集：版本 A 对比版本 B"
+            },
+            {
+              "id": "holdout",
+              "exercise": "holdout-compare",
+              "label": "留出集：定好版本后跑一次"
+            }
+          ],
+          "observe": [
+            {
+              "id": "task-card",
+              "text": "任务卡：这次跑哪份题、题集版本和指纹。",
+              "selector": {
+                "event": "lesson.task_card",
+                "path": "data.input_scope"
+              }
+            },
+            {
+              "id": "violation",
+              "text": "第一道有违规的题，以及违规的说明。",
+              "selector": {
+                "event": "lesson.case_result",
+                "path": "data.violations[0]"
+              }
+            },
+            {
+              "id": "unassessable",
+              "text": "被记为不可评估的检查。",
+              "selector": {
+                "event": "lesson.case_result",
+                "path": "data.unassessable[0]"
+              }
+            },
+            {
+              "id": "ended",
+              "text": "版本报告里的流程结束数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=ended]"
+              }
+            },
+            {
+              "id": "passed",
+              "text": "同一份报告里的验收通过数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=passed]"
+              }
+            },
+            {
+              "id": "regressed",
+              "text": "配对分析里的回归数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=regressed]"
+              }
+            },
+            {
+              "id": "p-value",
+              "text": "符号检验的 p 值。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=p_value]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组用同一个验证器：先在开发集上比较两个版本，版本定下后再跑留出集。"
+            },
+            {
+              "text": "任务卡写明题集版本和指纹，换了题，指纹就会变。",
+              "observe": "task-card",
+              "stage": "runtime"
+            },
+            {
+              "text": "这道题违反了哪条过程规则；就算答案碰巧对了，有违规也不算通过。",
+              "observe": "violation",
+              "stage": "tool"
+            },
+            {
+              "text": "开放式回答判不了对错，记为不可评估，不算通过，也不删掉。",
+              "observe": "unassessable"
+            },
+            {
+              "text": "先看流程结束了几道。",
+              "observe": "ended"
+            },
+            {
+              "text": "再看验收通过了几道：结束了不等于过了。",
+              "observe": "passed"
+            },
+            {
+              "text": "回归数是版本 A 通过、版本 B 没通过的题数，不为 0 就逐条去看。",
+              "observe": "regressed",
+              "stage": "runtime"
+            },
+            {
+              "text": "p 值只作参考；结论不一致的题太少时，报告直接写明只当方向线索。",
+              "observe": "p-value"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每道题五项检查各自的结论和理由、两个版本逐题的变化，以及按记录算出的符号检验 p 值。"
+            ],
+            "does_not_prove": [
+              "6 道或 4 道题的结果说明不了版本 B 在别的任务上更好；样本太小，p 值只作参考。",
+              "验证器只按题目规定判定，规定本身写错了，结论也会跟着错。",
+              "离线测试模式下两个版本的行为由固定脚本给出，其中的改善和回归都是脚本安排的。"
+            ]
+          }
+        },
+        {
+          "id": "repeat-stability",
+          "title": "同一版本跑两次",
+          "hypothesis": "同一个版本、同一套题，请求里要求 temperature 为 0（模型不支持时会被省略，见请求的 omitted_params），两次运行的结论也可能不完全一样；结论翻转的题，说明这道题上的差异落在波动里。",
+          "arms": [
+            {
+              "id": "repeat",
+              "exercise": "repeat-b",
+              "label": "同一版本跑两次"
+            }
+          ],
+          "observe": [
+            {
+              "id": "second-run",
+              "text": "第二遍的第一道题。",
+              "selector": {
+                "event": "lesson.case_result",
+                "path": "data.repeat",
+                "nth": 7
+              }
+            },
+            {
+              "id": "pass-all",
+              "text": "两次都通过的题数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=pass_all]"
+              }
+            },
+            {
+              "id": "pass-any",
+              "text": "至少通过一次的题数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=pass_any]"
+              }
+            },
+            {
+              "id": "unstable",
+              "text": "前后结论不一致的题数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=unstable]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "版本 B 把开发集完整跑两遍，每道题会有两个结论。"
+            },
+            {
+              "text": "第二遍从第一道题重新开始，发出的请求和第一遍相同。",
+              "observe": "second-run",
+              "stage": "model"
+            },
+            {
+              "text": "两次都通过才算稳定通过。",
+              "observe": "pass-all"
+            },
+            {
+              "text": "至少过一次只说明做得到，不说明靠得住。",
+              "observe": "pass-any"
+            },
+            {
+              "text": "结论翻转的题数不为 0 时，版本之间在这些题上的差异要打折扣。",
+              "observe": "unstable",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这两次运行里每道题的结论是否一致，以及两次都通过、至少通过一次的题数。"
+            ],
+            "does_not_prove": [
+              "两次一样不代表每次都一样，跑两次只能发现明显的波动。",
+              "离线测试模式的脚本是确定的，两次结论必然相同；要看真实的波动，得用真实运行。"
+            ]
+          }
+        },
+        {
+          "id": "judge-calibration",
+          "title": "评审模型校准",
+          "hypothesis": "在写得具体的量规下，评审模型的多数判定会与人工标注一致；长回答里夹着错误说法时，它可能误判为合格。",
+          "arms": [
+            {
+              "id": "judge",
+              "exercise": "judge-calibration",
+              "label": "评审模型与人工标注对照"
+            }
+          ],
+          "observe": [
+            {
+              "id": "judge-request",
+              "text": "发给评审模型的量规。",
+              "selector": {
+                "event": "request",
+                "path": "data.body.messages[0].content"
+              }
+            },
+            {
+              "id": "judgement",
+              "text": "一条判定：样例、人工标注、评审结论和是否一致。",
+              "selector": {
+                "event": "lesson.judgement",
+                "path": "data.agree"
+              }
+            },
+            {
+              "id": "agreement",
+              "text": "一致率。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=agreement]"
+              }
+            },
+            {
+              "id": "false-pass",
+              "text": "误判为合格的条数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=false_pass]"
+              }
+            },
+            {
+              "id": "kappa",
+              "text": "扣掉碰巧一致之后的 kappa。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=kappa]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "六条固定回答逐条交给评审模型，每条都有作者事先写好的人工标注。"
+            },
+            {
+              "text": "系统提示词里是量规，评审模型只输出 verdict 和一句理由。",
+              "observe": "judge-request",
+              "stage": "model"
+            },
+            {
+              "text": "每条判定都和人工标注比较，agree 记下是否一致。",
+              "observe": "judgement",
+              "stage": "runtime"
+            },
+            {
+              "text": "一致率是最直观的数字。",
+              "observe": "agreement"
+            },
+            {
+              "text": "误判为合格最危险：坏回答会被算进通过率。",
+              "observe": "false-pass"
+            },
+            {
+              "text": "kappa 扣掉了碰巧一致的部分，样例少时它波动很大。",
+              "observe": "kappa"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次评审模型对每条回答的判定，以及它与人工标注的一致率、误判为合格的条数和 kappa。"
+            ],
+            "does_not_prove": [
+              "6 条样例不足以证明评审模型可靠，也不能推广到别的量规或别的题。",
+              "人工标注由作者写成，本身也可能有争议。",
+              "离线测试模式下评审结论由脚本给出，其中 j6 的误判是脚本安排的。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "task",
+          "label": "任务",
+          "options": [
+            {
+              "value": "compare",
+              "label": "跑题集并比较版本"
+            },
+            {
+              "value": "judge",
+              "label": "校准评审模型"
+            }
+          ]
+        },
+        {
+          "name": "split",
+          "label": "题集",
+          "help": "开发集 6 道，留出集 4 道；只在比较版本时生效。",
+          "options": [
+            {
+              "value": "dev",
+              "label": "开发集"
+            },
+            {
+              "value": "holdout",
+              "label": "留出集"
+            }
+          ]
+        },
+        {
+          "name": "versions",
+          "label": "版本",
+          "help": "两个版本只差系统提示词里的一段规则。",
+          "options": [
+            {
+              "value": "A",
+              "label": "只跑版本 A"
+            },
+            {
+              "value": "B",
+              "label": "只跑版本 B"
+            },
+            {
+              "value": "both",
+              "label": "两个版本都跑，并做配对分析"
+            }
+          ]
+        },
+        {
+          "name": "repeats",
+          "label": "重复次数",
+          "help": "整套题跑 1 到 2 次；每题最多 3 次模型调用，运行前会检查是否超出本课的调用上限。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "为什么留出集要等版本定下后才跑一次？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "每看一次它的结果再回头修改，它就成了第二份开发集",
+                  "feedback": "对。留出集的价值在于没被用来调整版本。"
+                },
+                {
+                  "id": "b",
+                  "text": "留出集的题比开发集难",
+                  "feedback": "不对。两份题的难度没有规定谁高谁低，区别在用法。"
+                },
+                {
+                  "id": "c",
+                  "text": "留出集不需要验证器",
+                  "feedback": "不对。两份题用同一个验证器。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "开发集上的分数会随着修改越来越乐观，留出集是用来纠正这种乐观的。"
+            },
+            {
+              "id": "q2",
+              "prompt": "clock-sum 里，Agent 在同一步发出了 get_current_time 和 add_numbers，碰巧答对。验证器怎么判？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "通过，答案对了",
+                  "feedback": "不对。答案对不代表过程对。"
+                },
+                {
+                  "id": "b",
+                  "text": "未通过：加法在时钟结果返回前就发出了，参数只能是猜的",
+                  "feedback": "对。find_violations 比较两次调用的 step。"
+                },
+                {
+                  "id": "c",
+                  "text": "不可评估",
+                  "feedback": "不对。时钟结果存在，正确答案能算出来，违规也能判定。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "过程无违规是单独的一项，碰巧答对救不了它。"
+            },
+            {
+              "id": "q3",
+              "prompt": "unknown-balance 的回答是 1100。除了答案正确，还有哪一项不通过？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "证据充分：1100 在题面和工具结果里都找不到",
+                  "feedback": "对。这个数没有任何出处。"
+                },
+                {
+                  "id": "b",
+                  "text": "流程结束",
+                  "feedback": "不对。模型给出了最终回答，流程是结束了的。"
+                },
+                {
+                  "id": "c",
+                  "text": "调用比对",
+                  "feedback": "不对。这道题不该调用工具，它也确实没调用。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "编造的数字过不了证据检查，这正是 check_evidence 要拦的情况。"
+            },
+            {
+              "id": "q4",
+              "prompt": "greeting 被记为不可评估。下列哪种处理正确？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "从题集里删掉，免得拉低通过率",
+                  "feedback": "不对。删掉判不了的题，通过率就成了挑选过的数字。"
+                },
+                {
+                  "id": "b",
+                  "text": "单独计数，留在报告里，交给人工或校准过的评审模型",
+                  "feedback": "对。不可评估要如实写出来。"
+                },
+                {
+                  "id": "c",
+                  "text": "既然没有错，就算作通过",
+                  "feedback": "不对。没查出错不等于查过了。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "不可评估说明验证器缺信息，补信息的办法是人工或评审模型，而不是改统计口径。"
+            },
+            {
+              "id": "q5",
+              "prompt": "6 条样例里人工标注 5 条合格、1 条不合格，评审模型全判合格，一致率 83%。为什么还要看 kappa？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "全判合格也能拿到 83%，kappa 扣掉了碰巧一致的部分",
+                  "feedback": "对。这个例子里 kappa 是 0，评审模型没有提供任何信息。"
+                },
+                {
+                  "id": "b",
+                  "text": "kappa 总比一致率高",
+                  "feedback": "不对。kappa 通常比一致率低。"
+                },
+                {
+                  "id": "c",
+                  "text": "kappa 可以代替人工标注",
+                  "feedback": "不对。kappa 本身就要用人工标注来算。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "类别比例很偏时，一致率会高估评审模型；kappa 把这一部分扣掉。"
+            },
+            {
+              "id": "q6",
+              "prompt": "add_numbers 登记在 COMMUTATIVE 里，意味着什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "比对时 a 和 b 交换不算错",
+                  "feedback": "对。加法交换参数，结果不变。"
+                },
+                {
+                  "id": "b",
+                  "text": "它可以和别的工具并行调用",
+                  "feedback": "不对。能不能并行由题目的 mode 和依赖关系决定。"
+                },
+                {
+                  "id": "c",
+                  "text": "它的结果不用检查",
+                  "feedback": "不对。答案和证据照样要检查。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "结构化比对前，要先写清哪些差异不算错，所有题都按同一套规则比。"
+            },
+            {
+              "id": "q7",
+              "prompt": "配对分析里，版本 B 改善 2 道、回归 1 道，总通过率比版本 A 高。最合适的下一步是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "总通过率涨了，直接发布",
+                  "feedback": "不对。回归的那道题说明新规则在某类题上有副作用。"
+                },
+                {
+                  "id": "b",
+                  "text": "逐条读回归的题，找出原因，把它加进下一版的回归检查",
+                  "feedback": "对。回归题是下一轮修改最直接的线索。"
+                },
+                {
+                  "id": "c",
+                  "text": "把回归的题从题集里删掉",
+                  "feedback": "不对。删掉失败的题就看不到问题了。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "改善和回归都要留在报告里，回归题尤其要保留，用来检查以后的版本。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“开发集：版本 A 对比版本 B”，找出第一道有过程违规的题。",
+          "target": {
+            "event": "lesson.case_result",
+            "path": "data.violations[0]"
+          },
+          "explanation": "lesson.case_result 的 violations 列出这道题违反的过程规则，每条有 id 和说明，比如 guessed_dependency 表示依赖调用在来源结果返回之前就发出了。同一条事件的 checks 里，过程无违规一项是未通过，整题结论也是未通过，哪怕答案正确一项通过了。这次运行如果没有任何违规，界面会提示没有这条证据。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在版本报告里对照了流程结束数和验收通过数，能说出它们为什么不同。"
+            },
+            {
+              "id": "item-2",
+              "text": "我找到了一道未通过的题，读了它每一项检查的 detail，说得出它错在哪一步。"
+            },
+            {
+              "id": "item-3",
+              "text": "我看了配对分析的改善数、回归数和 p 值，能用一句话写出不夸大的结论。"
+            },
+            {
+              "id": "item-4",
+              "text": "我读了评审模型的每条判定和理由；有不一致时，判断了它偏在哪个方向，没有不一致时，能说出 6 条一致证明不了什么。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "verify",
+      "note": "独立验证器的入口：只读题目规定和本次轨迹，给出五项检查和整题结论。"
+    },
+    {
+      "name": "check_evidence",
+      "note": "证据检查：回答里的每个数字都要能在题面或本次成功的工具结果里找到。"
+    },
+    {
+      "name": "find_violations",
+      "note": "过程规则：未登记的工具、来源结果返回前就发出的依赖调用、工具报错后仍给数值。"
+    },
+    {
+      "name": "same_call",
+      "note": "解析参数后按数值比较一次调用；登记为可交换的工具不看参数顺序。"
+    },
+    {
+      "name": "COMMUTATIVE",
+      "note": "参数可以交换的工具集合，本课只有 add_numbers。"
+    },
+    {
+      "name": "mode",
+      "note": "调用比对规则：sequence 按顺序一一对应，unordered 不限顺序，none 不该调用。"
+    },
+    {
+      "name": "step",
+      "note": "调用属于这道题的第几次模型调用；同一步发出的调用看不到彼此的结果。"
+    },
+    {
+      "name": "rev",
+      "note": "单道题的修订号；改了这道题的规定就加一。"
+    },
+    {
+      "name": "SUITE_VERSION",
+      "note": "题集版本；增删题或改规定都要升版本，不同版本的分数不直接比较。"
+    },
+    {
+      "name": "paired",
+      "note": "逐题比较两个版本的通过次数，标出改善、回归和不变。"
+    },
+    {
+      "name": "sign_test",
+      "note": "只看结论不一致的题的精确符号检验，给出双侧 p 值。"
+    },
+    {
+      "name": "wilson",
+      "note": "Wilson 区间：样本很小时也落在 0 到 1 之间的通过率区间。"
+    },
+    {
+      "name": "JUDGE_SAMPLES",
+      "note": "评审校准样例：作者写好的 6 条回答及其人工标注，不是运行记录。"
+    },
+    {
+      "name": "lesson.case_result",
+      "note": "一道题一次运行的结论：五项检查、违规、未通过项和不可评估项。"
+    },
+    {
+      "name": "verdict",
+      "note": "评审模型的结论，只认 pass 或 fail；其他输出记为无效。"
+    }
+  ]
+}

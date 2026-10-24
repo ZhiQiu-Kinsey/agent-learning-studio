@@ -12,7 +12,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 [![Node.js 22.12+](https://img.shields.io/badge/node-22.12%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Lessons](https://img.shields.io/badge/lessons-24%20available%20%2F%2053%20planned-8A5CF6)](docs/course-plan.en.md)
+[![Lessons](https://img.shields.io/badge/lessons-53%20available-8A5CF6)](docs/course-plan.en.md)
 [![CI](https://github.com/ZhiQiu-Kinsey/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/ZhiQiu-Kinsey/agent-learning-studio/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
@@ -23,7 +23,7 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 </div>
 
 > [!NOTE]
-> **Fully bilingual: English and 简体中文.** Switch languages from the top bar. The UI, the onboarding, all 24 available lessons, the curriculum and the glossary are translated — and so is the **runtime**: in English, the system prompts, tool descriptions, preset questions and lab reports your run sends and emits are English too, and the Code scene shows the English message catalog that actually runs. Each run records its language, and a replay always shows the run as it happened.
+> **Fully bilingual: English and 简体中文.** Switch languages from the top bar. The UI, the onboarding, all 53 available lessons, the curriculum and the glossary are translated — and so is the **runtime**: in English, the system prompts, tool descriptions, preset questions and lab reports your run sends and emits are English too, and the Code scene shows the English message catalog that actually runs. Each run records its language, and a replay always shows the run as it happened.
 
 <details>
 <summary><b>Table of contents</b></summary>
@@ -137,6 +137,7 @@ You can also configure providers ahead of time with environment variables:
 | OpenAI-compatible | `CUSTOM_API_KEY` | `CUSTOM_MODEL` / `CUSTOM_API_BASE` |
 
 - **Bailian:** copy `local_config.example.py` to `local_config.py` and fill in the endpoint and a model that supports tool calling. The file is git-ignored.
+- **Embedding model** (used by the retrieval lessons): Bailian defaults to `text-embedding-v4` with the URL derived from `API_URL`, or set `EMBEDDING_MODEL` / `EMBEDDING_API_URL` in `local_config.py`; OpenAI defaults to `text-embedding-3-small`; other providers need `<PROVIDER>_EMBEDDING_MODEL` (for example `GEMINI_EMBEDDING_MODEL`, `OLLAMA_EMBEDDING_MODEL`) or the **Embedding model** field in the web settings. Without one, exercises that need embeddings ask you to configure it first; they never switch to another model.
 - **Credentials are isolated:** switching providers never borrows another provider's key.
 - **Ollama:** bring your own local server and a tool-calling model; nothing is downloaded automatically.
 
@@ -223,13 +224,13 @@ A few non-negotiables, each guarded by tests or validators:
 
 - [x] Native foundations, tasks & interfaces, context & state, reasoning & control (24 lessons)
 - [x] 7-chapter onboarding, curriculum map, guided replay, experiment reports
-- [ ] Knowledge & retrieval (RAG)
-- [ ] LangChain / LangGraph, human-in-the-loop and recovery
+- [x] Knowledge & retrieval (RAG)
+- [x] LangChain / LangGraph, human-in-the-loop and recovery
 - [ ] Coding agents with sandboxing
-- [ ] Evaluation, observability and reliable tools
-- [ ] MCP and A2A
-- [ ] Multi-agent systems, long-running tasks and the capstone
-- [x] English UI and course translation (onboarding, 24 lessons, curriculum, glossary)
+- [x] Evaluation, observability and reliable tools
+- [x] MCP and A2A
+- [x] Multi-agent systems, long-running tasks and the capstone
+- [x] English UI and course translation (onboarding, 53 lessons, curriculum, glossary)
 - [x] Bilingual runtime: prompts, tool descriptions, presets and reports in the learner's language; English code comments
 - [x] Open-source essentials: contributing guide, code of conduct, security policy, issue/PR templates, CI
 - [ ] More languages

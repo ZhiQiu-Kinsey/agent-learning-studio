@@ -1,0 +1,1383 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "reliable-tools",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "TOOLS / RELIABILITY",
+          "headline": "工具会超时，重试会重复，",
+          "highlight": "写入只能生效一次。",
+          "takeaway": "读操作失败了可以放心再来；写操作再来之前先问一句：会不会多扣一次？本课在真实的本地数据库和文件上制造等锁超时、被占用的文件夹和丢失的结果，看重试、去重和撤销怎样守住存储。本课不调用模型。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-read-write",
+              "label": "01 / READ · WRITE",
+              "title": "读和写分开对待",
+              "description": "只读查询重复多少次都不改变存储，失败了可以直接再来。会改变存储的写操作，重试前先确认重复执行会不会多生效一次。",
+              "token": "repeatable"
+            },
+            {
+              "id": "02-classify",
+              "label": "02 / CLASSIFY",
+              "title": "先分类，再决定重试",
+              "description": "暂时失败（Transient Failure）指再试一次可能就成功的失败，比如等锁超时；参数不合法、业务规则拒绝，重试多少次结果都一样。",
+              "token": "classify · decide"
+            },
+            {
+              "id": "03-backoff",
+              "label": "03 / BACKOFF",
+              "title": "重试有上限",
+              "description": "失败后先等一会儿再试，这叫退避（Backoff）；等待按 1、2、4 倍增长就是指数退避。次数和总时间都设上限，每次尝试都记进事件。",
+              "token": "max_attempts · budget_ms"
+            },
+            {
+              "id": "04-key",
+              "label": "04 / KEY",
+              "title": "同一个操作，同一把键",
+              "description": "调用方在第一次尝试前生成幂等键（Idempotency Key），重试时原样带上；存储见过这把键，就交回第一次的结果，不再写一遍。",
+              "token": "idempotency_key"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "读和写要分开对待",
+          "paragraphs": [
+            "读操作可以放心重试，写操作重试之前要先确认会不会重复执行。{{lesson:fail-safely}}让工具失败时交回结构化错误，模型和运行器都能看懂失败的原因；可接下来怎么办，那一课只说了一句：有的失败值得重试，有的不值得。本课把这句话写成程序。场景是一个练习提交工具：学习者交一份答案，工具从批改额度里扣 1 次，并在数据库里登记一条提交记录。",
+            "先看最朴素的写法：出错就再调一次。查询额度的 read_account 这样做没问题，查十次和查一次，库里都还是 3 次额度。提交答案的 submit_practice 就不同了：假设第一次其实已经写进库里，只是结果没送回来，程序以为失败又调一次，库里就多出一条提交，额度从 3 变成 1，学习者只交了一份答案。读操作重复执行不改变存储，写操作每执行一次就改变一次。",
+            "本课的重试函数 call_with_retry 不靠猜，它要求调用方明确说出一件事：重复这次调用，会不会让效果多生效一次。这个判断写在参数 repeatable 里。read_account 填 True；带幂等键的 submit_practice 也填 True，因为存储见过这把键就不会再写；不带键的写操作填 False。每次尝试都经过 context.call_tool 发出，事件里是一对真实的 tool_call 和 tool_result，标明由运行器发起。这件事由调用方回答，因为重试函数只看得到一次失败，看不到背后的存储会不会因此多出一行。",
+            "本课不调用模型。四个练习都由运行器自己调用工具，每次运行新建一个临时数据库和一个批改箱文件夹，真实运行和离线测试模式走同一段代码，起点完全相同。故障也由运行器故意制造：另一条数据库连接把库锁住，或者在批改箱里放一个别人的锁文件。每个故障发生前都有一条 lesson.fault 事件，来源写着 fault_injection，不会被误当成自然发生的错误。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "超时与错误分类",
+          "paragraphs": [
+            "重试之前先给错误分类：暂时失败可以重试，参数错误和业务拒绝不该重试。再发一次有没有用，取决于失败的原因会不会自己消失。数据库正被别的程序锁着，过一会儿锁就放开了；练习编号写成了不存在的 speed-typing，或者学习者的额度已经是 0，再发一百次也是同样的拒绝，只会白白占用时间。重试的代价也不只是时间：每次尝试都要占用连接和锁，还会推迟真正的错误被报告出来。",
+            "超时是最常见的暂时失败。本课的超时是真的：PracticeStore 打开数据库时设了等锁的时限，故障注入让另一条连接先拿到排他锁，工具的查询只能干等，到了时限还拿不到锁就放弃，抛出 StoreTimeout。默认时限是 200 毫秒，所以报告表格里被锁住的那几次尝试，耗时都在 200 毫秒上下。StoreTimeout 的含义很精确：锁都没拿到，事务没有开始，库里什么也没发生。",
+            "分类只看一样东西：工具结果里的 error_type，也就是异常的类名。retry.py 的 CATEGORIES 表把它映射成类别：StoreTimeout 和 OutboxBusy 是暂时失败；InvalidArgument 和缺参数时 Python 抛出的 TypeError 是参数不合法；BusinessRejected 和 KeyConflict 是业务拒绝；ResponseLost 单独算一类，叫结果不明。表里没有的类型一律记为未归类，按不可重试处理：把一个没见过的错误当成暂时失败，可能就是把一次写入重复执行。",
+            "练习“错误分类：哪些失败值得重试”把四种情况放在同一次运行里：提交不存在的练习、额度为 0 的学习者提交、第一次遇到锁的正常提交、第一次遇到锁的批改箱写入。前两个各只尝试一次就停，lesson.retry 事件写着类别和停止原因；后两个等一小会儿再试，第二次成功。分类表是人写的，只覆盖写表的人想到的错误；工具新加的错误类型，补进表之前都会被当作不可重试。"
+          ]
+        },
+        {
+          "id": "deep-dive-timeout",
+          "type": "deep-dive",
+          "title": "超时之后，操作到底发生了没有",
+          "summary": "超时只说明调用方不等了；本课为什么能把“没开始”和“结果不明”分开。",
+          "paragraphs": [
+            "超时只说明调用方等不下去了，不说明对方没做。一次写入请求发出去以后，可能停在三个位置：请求还没到对方手里；对方收到并执行完了，结果在回来的路上丢了；对方还在执行。调用方看到的都是同一个超时。深入理解 AI Agent 用转账举例：网络超时后返回失败，钱可能已经转出，也可能还没有，不加判断地重试就可能转两次。",
+            "本课把这几种情况拆开放进了分类表。StoreTimeout 发生在拿锁这一步，事务根本没开始，属于第一种，所以哪怕是写操作也能放心重试：练习“错误分类：哪些失败值得重试”里那次正常提交，第一次撞上锁，第二次成功，库里只有一条记录。ResponseLost 属于第二种：工具已经提交了事务，结果被故障注入扔掉。调用方区分不了第二种和第三种，只能当作结果不明。",
+            "能这样拆，是因为本课的工具和存储都在本机，错误发生在哪一步看得清楚。调用远程服务时往往做不到：连接中途断开，你不知道请求有没有被处理。所以真实系统里，写操作的超时通常要按结果不明处理，要么带幂等键，要么先查询再决定。深入理解 AI Agent 还提到一种更隐蔽的故障：连接没断，数据却不再流动，只靠连接超时发现不了，要另设一个“多久没有新进展就判定卡死”的计时器。"
+          ]
+        },
+        {
+          "id": "predict-tool-calls",
+          "type": "predict",
+          "prompt": "去实验台运行“只读查询：锁住两次”之前先猜：数据库前两次被锁住，默认最多尝试 4 次，这次运行会出现几条 tool_call 事件？",
+          "experiment": "read-and-classify",
+          "arm": "read-timeout",
+          "rule": {
+            "kind": "count_events",
+            "event": "tool_call"
+          }
+        },
+        {
+          "id": "mq-classify",
+          "type": "micro-quiz",
+          "question": {
+            "id": "rejected-retry",
+            "prompt": "submit_practice 的工具结果里，error_type 是 BusinessRejected（额度已用完）。call_with_retry 会怎么做？",
+            "options": [
+              {
+                "id": "a",
+                "text": "立刻停止，这个操作只尝试一次",
+                "feedback": "对。额度不会因为等一会儿就变多。"
+              },
+              {
+                "id": "b",
+                "text": "等待后重试，直到达到次数上限",
+                "feedback": "不对。业务拒绝由输入和当前状态决定，重试只会得到同样的拒绝。"
+              },
+              {
+                "id": "c",
+                "text": "换一把新的幂等键再试",
+                "feedback": "不对。幂等键防的是重复执行，不能绕过业务规则。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "业务拒绝和参数不合法都不重试：同样的调用再发一次，结果不变。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "有上限的重试与退避",
+          "paragraphs": [
+            "重试的次数和等待都要有上限，每一次尝试都要留下记录。没有上限的重试会把一次暂时故障放大：锁一直不放开，循环就一直跑；很多调用方同时这样做，对方一恢复就同时涌上来，又把它压垮。{{lesson:fail-safely}}给 Agent 循环设了轮数上限，重试循环同样需要自己的停止条件。所以本课的重试由三样东西组成：分类决定该不该再试，次数上限和时间预算决定最多试到哪里，事件记录决定事后能不能查清每一次发生了什么。",
+            "手算一遍默认设置。max_attempts 是 4，base_delay_ms 是 100，单次等待最多 1 秒。第 1 次失败后最多等 100 毫秒，第 2 次后最多 200 毫秒，第 3 次后最多 400 毫秒；第 4 次失败就停，不再等待。backoff_delay 再把每次的等待乘上 0.5 到 1 之间的随机系数，这叫抖动，所以默认设置下报告里看到的是 66、115 这样的毫秒数，而不是整齐的 100、200。随机数用固定种子生成，同一组输入每次运行等的时间都一样。",
+            "只有次数上限还不够，还要有时间预算。每次失败后，call_with_retry 先算一笔账：已经用掉的时间，加上这次要等的时间，再加上下一次尝试最多要花的时限，超过 budget_ms 就不再重试，停止原因记为“再试一次会超出时间预算”。下一次尝试的时限也要算进去，因为它一旦开始就可能等满。每次失败都发一条 lesson.retry 事件：第几次、错误类型、类别、决定、原因、等了多久、已经用了多久。",
+            "重试只能等暂时的故障自己过去，修不好坏掉的东西。锁一直不放开时，四次尝试都会失败，运行器停下并如实报告：额度没有读到，回答里不填任何数字。这是最简单的降级：拿不到结果时说清拿不到，不用上一次的值或者估一个数顶上。上限定多少也没有标准答案。深入理解 AI Agent 提到，Claude Code 的上下文压缩连续失败 3 次就停止这条恢复路径，这个数来自真实会话的统计，不是拍脑袋定的。"
+          ]
+        },
+        {
+          "id": "deep-dive-backoff",
+          "type": "deep-dive",
+          "title": "指数退避为什么还要加随机数",
+          "summary": "一百个调用方同时失败之后会发生什么；两种常见的抖动；本课为什么固定种子。",
+          "paragraphs": [
+            "设想一个服务短暂过载，一百个调用方在同一时刻收到失败。如果大家都固定等 1 秒再试，一秒后一百个请求又同时到达，服务再次过载。指数退避让等待越来越长，给服务留出恢复的时间；可如果没有随机性，一百个调用方仍然一起等 1 秒、2 秒、4 秒，一起回来。抖动把它们打散：每个调用方在上限内随机取一个等待，回来的时间就错开了。",
+            "常见的抖动有两种。一种在 0 到上限之间随机取值，打散得最彻底，但有时几乎不等；本课用的是“一半固定、一半随机”：等待落在上限的一半到上限之间，至少保证真的等了一会儿。Learn Claude Code 的完整版运行层在遇到限流和过载错误时，等待按 2 的幂增长、封顶 32 秒，再加上最多四分之一的随机量，思路相同。",
+            "本课只有一个调用方，抖动的打散作用看不出来，保留它是为了让读码时看到完整的公式。真实系统里每个调用方各用自己的随机数；本课固定种子，只为让同一组输入的运行可以重现。还有一条容易忽略：对方拒绝时如果给出了建议的等待时间，比如限流响应里的重试间隔，应当照它等，而不是用自己算的数。辅助性的后台调用失败时，干脆不重试，免得挤占主流程的配额。"
+          ]
+        },
+        {
+          "id": "mq-budget",
+          "type": "micro-quiz",
+          "question": {
+            "id": "budget-stop",
+            "prompt": "max_attempts 是 6，budget_ms 是 2000，单次时限是 200 毫秒。已经用了 1500 毫秒，这次算出的退避等待是 400 毫秒。还会再试一次吗？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不会：1500 + 400 + 200 超过了 2000，停止原因是时间预算",
+                "feedback": "对。下一次尝试可能等满时限，要一起算进去。"
+              },
+              {
+                "id": "b",
+                "text": "会：次数还没到 6 次",
+                "feedback": "不对。次数和时间是两道独立的上限，哪一道先到都停。"
+              },
+              {
+                "id": "c",
+                "text": "会：1500 + 400 没有超过 2000",
+                "feedback": "不对。漏算了下一次尝试本身最多要花的 200 毫秒。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "次数上限和时间预算任何一个先到都停；预算要把下一次尝试的时限算进去。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "幂等键",
+          "paragraphs": [
+            "同一个操作带同一把幂等键，重复提交多少次，存储里也只执行一次。幂等的意思是执行一次和执行多次，对外部世界的影响相同。读操作天然幂等；扣额度、登记提交这类写操作天然不幂等，要靠键来补：调用方给这次操作起一个唯一的名字，第一次执行时连同结果一起存下来，之后再看到同一个名字，就把存下来的结果交回去。这个名字就是幂等键。它必须由调用方生成，因为只有调用方知道两次调用是不是同一件事。",
+            "练习“写入生效、结果丢失”把同一个故障放进三个新库：第一次提交已经写进库里，结果在返回途中被扔掉，调用方收到 ResponseLost。盲目重试的做法把它当成暂时失败再调一次，库里出现两条提交，额度从 3 变成 1；结果不明就停的做法不再重试，库里只有一条，可调用方只知道“结果不明”；带幂等键重试的做法再调一次，库里仍是一条，额度是 2，第二次尝试拿回的结果里 replayed 为 true。",
+            "键要在第一次尝试之前生成，所有重试原样带上，new_key 就做这件事。存储这一侧，submit_practice 先拿写锁，再到 operations 表里查这把键：查到了，直接交回当时存下的结果；没查到，才扣额度、插入提交，并把键、请求指纹和结果写进 operations。这几步在同一个事务里，要么一起提交，要么一起回滚。如果效果先提交、键后写入，两步之间出了故障，下次重试就查不到键，又写一遍。",
+            "一把键只代表一次请求。拿同一把键提交另一份答案，指纹对不上，工具抛出 KeyConflict，归为业务拒绝，不重试：这多半是调用方的程序写错了，悄悄交回旧结果会把错误藏起来。键也只管重复，不管对错：额度为 0 时，带不带键都会被拒绝。幂等的依据要能从存储里查到，报告的最后一项检查直接读 operations 表、列出那把键，而不是根据工具结果推断。"
+          ]
+        },
+        {
+          "id": "deep-dive-keys",
+          "type": "deep-dive",
+          "title": "键存在哪、存多久，以及不用键的办法",
+          "summary": "远程服务怎样去重，先查询再变更适合什么场合，哪些操作根本做不成幂等。",
+          "paragraphs": [
+            "本课把幂等记录和业务数据放在同一个 SQLite 文件里，才能用一个事务同时写入两者。真实系统里两者常常分开：调用远程的支付或下单接口时，键由调用方生成、放进请求，由对方服务负责去重，调用方只需保证重试时带同一把键。对方通常只把键保留一段时间，比如一天，过期之后同一把键会被当作新请求，所以“隔一天再重试”不在保护范围内。",
+            "另一种去重办法是先查询再变更：重试前先查目标资源的状态，确认还没完成再执行。本课撤销提交用的 cancel_submission 就是这样：它在事务里先看提交是不是已经 cancelled，撤销过就什么也不做。这种办法不需要键，但要求能从状态上认出“这件事做过了”。提交答案做不到：同一个学习者两次交同样的答案，可能是重复请求，也可能真的交了两次，只有调用方知道，所以要由调用方带键。",
+            "还有一类操作根本做不成幂等：发邮件、打电话、对外转账，执行一次就留下一次收不回的真实事件。深入理解 AI Agent 建议对这类操作先预检、再确认、最后执行，执行失败时把详细错误交回主模型重新规划，而不是自动重试。本课的批改箱文件属于另一种情况：同一个提交写两次，文件名和内容都相同，所以 write_outbox 可以放心重试。"
+          ]
+        },
+        {
+          "id": "mq-key",
+          "type": "micro-quiz",
+          "question": {
+            "id": "keyed-replay",
+            "prompt": "带幂等键的 submit_practice 第一次已经写入成功，结果丢了。调用方用同一把键、同样的内容重试，存储会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不再写入，交回第一次存下的结果，replayed 为 true",
+                "feedback": "对。存储见过这把键，只把首次结果交回去。"
+              },
+              {
+                "id": "b",
+                "text": "再写一条提交，额度再扣 1 次",
+                "feedback": "不对。这是不带键时盲目重试的结果。"
+              },
+              {
+                "id": "c",
+                "text": "拒绝这次重试，抛出 KeyConflict",
+                "feedback": "不对。KeyConflict 只在同一把键对应的内容不同时出现。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "同一把键、同样的内容，第二次执行只是把首次结果交回去。"
+          }
+        },
+        {
+          "id": "misconception-answer",
+          "type": "misconception",
+          "claim": "最后的回答说“提交成功”，写入就一定成功了，而且只成功了一次。",
+          "correction": "回答只是程序或模型写出来的一句话。盲目重试那一组，调用方最后拿到的工具结果是成功，回答也可以写成功，可库里有两条提交、额度被扣了两次；结果不明就停的那一组，写入其实成功了，调用方却说不清。写入到底发生了几次，要读存储：本课每次运行结束前发一条 lesson.storage 事件，直接从数据库和批改箱读出实际状态，报告的检查都以它为准。"
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "部分完成与补偿",
+          "paragraphs": [
+            "多步写入中途失败时，要说清哪些步骤已经生效，再用补偿（Compensation）把它们撤回。提交答案其实有两步：第 1 步在数据库里扣额度、登记提交；第 2 步把答案写成文件放进批改箱，批改程序从那里取。数据库事务只管得了数据库，管不了文件夹，两步之间没有共同的事务。第 2 步失败时，第 1 步已经提交，额度已经扣了。",
+            "练习“两步写入：中途失败与补偿”让批改箱一直被别人的锁文件占着。write_outbox 每次都抛出 OutboxBusy，这是暂时失败，按退避重试，4 次用完就放弃。这时第 1 步已经生效，运行器调用 cancel_submission：把提交标成 cancelled，退回 1 次额度。最后的 lesson.storage 显示：提交记录还在，状态是 cancelled，额度回到 3，批改箱里没有文件。报告的最终状态写着“未完成，已补偿”。四次失败的尝试都在第 2 轮的 lesson.retry 里，补偿那次调用在第 3 轮。",
+            "补偿不是让时间倒流，而是再做一次方向相反的写入。它不删除提交记录，只改状态并退回额度，历史仍然可查：先扣后退，两笔都在。补偿本身也是写操作，也可能失败、被重试，所以它必须能安全重复：cancel_submission 在事务里先检查状态，已经是 cancelled 就不再退。补偿也失败的话，报告写“部分完成，补偿失败”，回答明确说需要人工处理，不假装一切正常。",
+            "不是每一步都能补偿。文件放进批改箱后，批改程序可能已经开始批改；邮件发出去就收不回来。所以安排多步写入时，常把难以撤销的步骤放到最后，前面的步骤都备好补偿。把 outbox_busy_attempts 改成 1 再运行：第 2 步第二次就成功，没有补偿，最终状态是“两步都已完成”。无论哪种结局，报告的结论都来自存储，而不是最后那句回答。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次两步提交的经过",
+          "description": "按步骤说明“两步写入：中途失败与补偿”做了什么。代码是简化的示意，不是运行记录；实际的值看 tool_result、lesson.retry 和 lesson.storage 事件。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "01",
+              "actor": "运行器",
+              "title": "先生成幂等键",
+              "body": "第一次尝试之前生成，之后的重试都带它。",
+              "code": "key = new_key(\"submit\")",
+              "language": "python",
+              "evidence": "tool_call 的参数 idempotency_key"
+            },
+            {
+              "id": "step-2",
+              "label": "02",
+              "actor": "SQLite",
+              "title": "第 1 步：扣额度并登记",
+              "body": "一个事务里扣 1 次额度、插入提交、写入幂等记录。",
+              "code": "submit_practice(learner, exercise, answer, idempotency_key=key)  # credits 3 -> 2",
+              "language": "python",
+              "evidence": "第 1 轮的 tool_result"
+            },
+            {
+              "id": "step-3",
+              "label": "03",
+              "actor": "故障注入",
+              "title": "批改箱被占用",
+              "body": "每次写批改箱之前，都放好一个别人的锁文件。",
+              "code": "faults.attempt(context, \"export\", \"write_outbox\", number)  # outbox_locked",
+              "language": "python",
+              "evidence": "lesson.fault"
+            },
+            {
+              "id": "step-4",
+              "label": "04",
+              "actor": "运行器",
+              "title": "退避重试，用完次数就放弃",
+              "body": "OutboxBusy 是暂时失败；第 4 次失败后停止。",
+              "code": "write_outbox(submission_id)  # OutboxBusy, 4 attempts, reason max_attempts",
+              "language": "python",
+              "evidence": "第 2 轮的 lesson.retry"
+            },
+            {
+              "id": "step-5",
+              "label": "05",
+              "actor": "运行器",
+              "title": "补偿第 1 步",
+              "body": "退回额度，提交标成 cancelled，记录保留。",
+              "code": "cancel_submission(submission_id)  # credits 2 -> 3, status cancelled",
+              "language": "python",
+              "evidence": "第 3 轮的 tool_call"
+            },
+            {
+              "id": "step-6",
+              "label": "06",
+              "actor": "运行器",
+              "title": "读存储核对",
+              "body": "结论来自数据库和批改箱，不来自工具结果。",
+              "code": "store.snapshot()  # accounts, submissions, operations, outbox",
+              "language": "python",
+              "evidence": "lesson.storage 与 lesson.report"
+            }
+          ]
+        },
+        {
+          "id": "mq-compensate",
+          "type": "micro-quiz",
+          "question": {
+            "id": "after-compensation",
+            "prompt": "第 2 步写批改箱失败、补偿成功之后，存储里应该是什么样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "提交记录还在，状态是 cancelled，额度回到 3，批改箱里没有文件",
+                "feedback": "对。补偿是一笔反向写入，历史保留。"
+              },
+              {
+                "id": "b",
+                "text": "提交记录被删掉，就像从没发生过",
+                "feedback": "不对。删掉记录就看不出曾经扣过又退过。"
+              },
+              {
+                "id": "c",
+                "text": "额度还是 2，等批改箱空出来再说",
+                "feedback": "不对。第 2 步已经放弃，不撤回第 1 步，学习者就白白少了一次额度。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "部分完成时先说清哪些已生效，再用能安全重复的补偿把它撤回。"
+          }
+        },
+        {
+          "id": "wrap-up",
+          "type": "prose",
+          "title": "小结",
+          "paragraphs": [
+            "回头看本课的三条线：读写分开，决定能不能重试；先分类、再在次数和时间的上限内退避，决定怎么重试；幂等键和补偿，保证重试和中途失败不会在存储里多出或留下不该有的东西。它们有一个共同点：结论都落在存储上，写入了几次、额度还剩多少、文件在不在，都由 lesson.storage 读出来。下一课{{lesson:prompt-injection}}看另一种风险：工具读回来的资料里夹着指令，执行侧怎样控制工具、路径和副作用。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch4",
+              "title": "工具：执行工具一节的幂等性与取消语义（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-ch5",
+              "title": "Coding Agent：故障与错误恢复，先分类再计数、分级恢复与熔断上限（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter5.md"
+            },
+            {
+              "id": "ms-tool-use",
+              "title": "工具使用设计模式：错误处理与参数校验这一构件（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/04-tool-use/README.md"
+            },
+            {
+              "id": "ms-trustworthy",
+              "title": "构建可信的 Agent：资源过载与连锁错误的防护（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/06-building-trustworthy-agents/README.md"
+            },
+            {
+              "id": "lcc-s15",
+              "title": "完整运行层：限流与过载时的指数退避重试（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s15_integrated_harness/README.md"
+            },
+            {
+              "id": "cookbook-sre",
+              "title": "SRE 事故响应 Agent：只读工具与写工具分开约束（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/claude_agent_sdk/03_The_site_reliability_agent.ipynb"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "fail-safely"
+        },
+        {
+          "id": "code-classify",
+          "type": "annotated-source",
+          "path": "lessons/lesson_reliable_tools/retry.py",
+          "start": 7,
+          "end": 51,
+          "notes": [
+            {
+              "id": "n7",
+              "line": 7,
+              "anchor": "# error_type (the exception's class name",
+              "text": "分类只看工具结果里的 error_type，也就是异常的类名。"
+            },
+            {
+              "id": "n9",
+              "line": 9,
+              "anchor": "\"StoreTimeout\": \"transient\"",
+              "text": "锁都没拿到，事务没开始：暂时失败，写操作也能放心重试。"
+            },
+            {
+              "id": "n11",
+              "line": 11,
+              "anchor": "\"ResponseLost\": \"outcome_unknown\"",
+              "text": "工具可能已经执行：结果不明，能不能重试要看重复会不会多生效。"
+            },
+            {
+              "id": "n13",
+              "line": 13,
+              "anchor": "\"TypeError\": \"invalid\"",
+              "text": "缺参数或多参数时 Python 抛出 TypeError，属于参数不合法。"
+            },
+            {
+              "id": "n14",
+              "line": 14,
+              "anchor": "\"BusinessRejected\": \"rejected\"",
+              "text": "业务规则拒绝：同样的调用再发一次，结果不变。"
+            },
+            {
+              "id": "n19",
+              "line": 19,
+              "anchor": "def classify(error_type: str) -> str:",
+              "text": "查表得到类别，不解析错误文字。"
+            },
+            {
+              "id": "n21",
+              "line": 21,
+              "anchor": "return CATEGORIES.get(error_type, \"unclassified\")",
+              "text": "表里没有的错误不猜：记为未归类，后面一律停止。"
+            },
+            {
+              "id": "n24",
+              "line": 24,
+              "anchor": "def decide(category: str, repeatable: bool, blind: bool = False)",
+              "text": "repeatable 由调用方给出：重复这次调用会不会让效果多生效一次。"
+            },
+            {
+              "id": "n31",
+              "line": 31,
+              "anchor": "return \"retry\", \"transient\"",
+              "text": "暂时失败：读写都可以重试。"
+            },
+            {
+              "id": "n33",
+              "line": 33,
+              "anchor": "if repeatable or blind:",
+              "text": "结果不明时，只有能安全重复的调用才重试；blind 是盲目重试的对照组。"
+            },
+            {
+              "id": "n35",
+              "line": 35,
+              "anchor": "return \"stop\", \"outcome_unknown\"",
+              "text": "不带键的写操作结果不明：停下来如实报告，不盲目重试。"
+            },
+            {
+              "id": "n36",
+              "line": 36,
+              "anchor": "return \"stop\", category",
+              "text": "参数不合法、业务拒绝、未归类：一律停止。"
+            },
+            {
+              "id": "n48",
+              "line": 48,
+              "anchor": "def backoff_delay(attempt: int, policy: RetryPolicy",
+              "text": "第几次失败，就按第几次算等待。"
+            },
+            {
+              "id": "n50",
+              "line": 50,
+              "anchor": "ceiling = min(policy.max_delay_s,",
+              "text": "基础等待乘 2 的幂：100、200、400 毫秒，封顶 1 秒。"
+            },
+            {
+              "id": "n51",
+              "line": 51,
+              "anchor": "return ceiling * (0.5",
+              "text": "再乘 0.5 到 1 之间的随机系数，即抖动。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-policy",
+              "start": 39,
+              "end": 45,
+              "label": "重试参数：次数上限、单次时限、基础等待、时间预算、等待上限"
+            }
+          ]
+        },
+        {
+          "id": "code-retry-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_reliable_tools/retry.py",
+          "start": 67,
+          "end": 102,
+          "notes": [
+            {
+              "id": "n67",
+              "line": 67,
+              "anchor": "def call_with_retry(",
+              "text": "每个逻辑操作调用一次；operation 是它在事件里的名字。"
+            },
+            {
+              "id": "n69",
+              "line": 69,
+              "anchor": "started = clock.monotonic()",
+              "text": "时间预算从第一次尝试之前开始算。"
+            },
+            {
+              "id": "n71",
+              "line": 71,
+              "anchor": "for number in itertools.count(1):",
+              "text": "循环本身不限次数：停下来只靠下面的分类决定和两道上限。"
+            },
+            {
+              "id": "n74",
+              "line": 74,
+              "anchor": "with faults.attempt(context, operation, name, number):",
+              "text": "故障注入按计划为这次尝试布置故障，尝试结束就撤掉。"
+            },
+            {
+              "id": "n76",
+              "line": 76,
+              "anchor": "result = context.call_tool(name, arguments, tools, round_number)",
+              "text": "真实的工具调用：事件里是一对 tool_call 和 tool_result。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "anchor": "if result[\"ok\"]:",
+              "text": "成功就返回，记下这次尝试的耗时。"
+            },
+            {
+              "id": "n82",
+              "line": 82,
+              "anchor": "category = classify(result[\"error_type\"])",
+              "text": "只凭 error_type 分类。"
+            },
+            {
+              "id": "n84",
+              "line": 84,
+              "anchor": "wait = backoff_delay(number, policy, rng)",
+              "text": "决定重试才计算退避等待。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "anchor": "if decision == \"retry\" and number >= policy.max_attempts:",
+              "text": "次数上限：最后一次失败之后不再等待。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "anchor": "elif decision == \"retry\" and elapsed + wait + policy.timeout_s > policy.budget_s:",
+              "text": "时间预算：已用时间、要等的时间、下一次尝试的时限，三者相加。"
+            },
+            {
+              "id": "n95",
+              "line": 95,
+              "anchor": "context.emit(\"lesson.retry\", record, round_number)",
+              "text": "每次失败都发一条 lesson.retry，带类别、决定、原因和用时。"
+            },
+            {
+              "id": "n97",
+              "line": 97,
+              "anchor": "if decision == \"stop\":",
+              "text": "停下时分清失败和结果不明：结果不明只出现在写操作上。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "anchor": "# 4. Back off before the next attempt",
+              "text": "等待之前先响应停止请求，再按算好的时间等待。"
+            },
+            {
+              "id": "n102",
+              "line": 102,
+              "anchor": "clock.sleep(wait)",
+              "text": "经可替换的时钟等待：测试里换成假时钟，不真睡。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-record",
+              "start": 91,
+              "end": 94,
+              "label": "组装 lesson.retry 事件的字段：第几次、错误类型、类别、决定、原因、耗时、等待、已用时间"
+            }
+          ]
+        },
+        {
+          "id": "code-submit",
+          "type": "annotated-source",
+          "path": "lessons/lesson_reliable_tools/store.py",
+          "start": 114,
+          "end": 146,
+          "notes": [
+            {
+              "id": "n114",
+              "line": 114,
+              "anchor": "def submit_practice(",
+              "text": "写操作：扣 1 次额度、登记 1 条提交；idempotency_key 可选。"
+            },
+            {
+              "id": "n117",
+              "line": 117,
+              "anchor": "if exercise not in EXERCISES:",
+              "text": "不接受的练习编号：还没碰存储就抛出 InvalidArgument。"
+            },
+            {
+              "id": "n119",
+              "line": 119,
+              "anchor": "if not isinstance(answer, str) or not answer.strip()",
+              "text": "空答案或超长答案同样是参数不合法。"
+            },
+            {
+              "id": "n121",
+              "line": 121,
+              "anchor": "asked = fingerprint(learner, exercise, answer)",
+              "text": "请求指纹：记下这把键代表的到底是哪份内容。"
+            },
+            {
+              "id": "n123",
+              "line": 123,
+              "anchor": "with self._write() as db:",
+              "text": "先拿写锁；拿不到就是 StoreTimeout，事务没开始。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "anchor": "seen = db.execute(\"SELECT fingerprint, result FROM operations",
+              "text": "在同一个事务里查这把键有没有用过。"
+            },
+            {
+              "id": "n128",
+              "line": 128,
+              "anchor": "if seen and seen[0] != asked:",
+              "text": "同一把键、不同内容：拒绝，而不是悄悄交回旧结果。"
+            },
+            {
+              "id": "n131",
+              "line": 131,
+              "anchor": "return {**json.loads(seen[1]), \"replayed\": True}",
+              "text": "见过这把键：直接交回首次结果，不再扣额度。"
+            },
+            {
+              "id": "n136",
+              "line": 136,
+              "anchor": "if row[0] < 1:",
+              "text": "额度用完是业务拒绝；异常让整个事务回滚。"
+            },
+            {
+              "id": "n139",
+              "line": 139,
+              "anchor": "db.execute(\"UPDATE accounts SET credits = credits - 1",
+              "text": "扣额度。"
+            },
+            {
+              "id": "n140",
+              "line": 140,
+              "anchor": "cursor = db.execute(\"INSERT INTO submissions",
+              "text": "登记提交。"
+            },
+            {
+              "id": "n144",
+              "line": 144,
+              "anchor": "db.execute(\"INSERT INTO operations VALUES",
+              "text": "把键、指纹和结果写进 operations：和上面两步同一个事务。"
+            },
+            {
+              "id": "n146",
+              "line": 146,
+              "anchor": "return {**result, \"replayed\": False}",
+              "text": "第一次执行，replayed 为 false。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "按类别重试，写入靠键去重，多步失败靠补偿",
+          "chosen": "call_with_retry 只按 error_type 分类决定，次数和时间都有上限；调用方用 repeatable 声明重复是否安全；submit_practice 在同一个事务里检查幂等键、写入效果和操作记录；数据库与批改箱之间没有共同事务，第 2 步放弃时调用 cancel_submission 补偿；所有结论读存储得出。",
+          "alternatives": [
+            {
+              "id": "retry-everything",
+              "title": "出错就重试，固定试 3 次",
+              "why_not": "参数错误和业务拒绝会白白重试；结果不明的写入会被重复执行，练习里盲目重试那一组就这样多扣了一次额度。"
+            },
+            {
+              "id": "never-retry",
+              "title": "从不重试，失败就交给模型",
+              "why_not": "一次等锁超时就让任务失败，模型还要多花一轮重新发起调用；暂时失败在运行器里有上限地重试，代价更小。"
+            },
+            {
+              "id": "dedupe-by-content",
+              "title": "按内容去重：同样的答案只收一次",
+              "why_not": "分不清重复请求和学习者真的交了两次；只有调用方知道这是不是同一个操作，所以由调用方带键。"
+            },
+            {
+              "id": "key-after-commit",
+              "title": "先提交效果，再单独写幂等记录",
+              "why_not": "两次提交之间出故障，键没写上，下次重试又执行一遍；效果和记录必须在同一个事务里。"
+            },
+            {
+              "id": "delete-on-compensate",
+              "title": "补偿时直接删除提交记录",
+              "why_not": "历史就丢了，看不出曾经扣过又退过；改状态并退回额度，两笔都留着。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "read-and-classify",
+          "title": "读操作与错误分类",
+          "hypothesis": "只读查询遇到暂时失败时，运行器按退避等待后重试，直到成功或碰到次数、时间上限，存储前后不变；参数不合法和业务拒绝只尝试一次就停，暂时失败重试后成功。",
+          "predict": "predict-tool-calls",
+          "arms": [
+            {
+              "id": "read-timeout",
+              "exercise": "read-timeout",
+              "label": "只读查询：锁住两次"
+            },
+            {
+              "id": "classify",
+              "exercise": "classify",
+              "label": "四个操作：三种失败"
+            }
+          ],
+          "observe": [
+            {
+              "id": "fault-source",
+              "text": "故障来自哪里：source 写着 fault_injection。",
+              "selector": {
+                "event": "lesson.fault",
+                "path": "data.source"
+              }
+            },
+            {
+              "id": "error-type",
+              "text": "工具结果里的错误类型，分类只看它。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type"
+              }
+            },
+            {
+              "id": "category",
+              "text": "这次失败被归入哪一类。",
+              "selector": {
+                "event": "lesson.retry",
+                "path": "data.category"
+              }
+            },
+            {
+              "id": "decision",
+              "text": "据此作出的决定：等待后重试，还是停止。",
+              "selector": {
+                "event": "lesson.retry",
+                "path": "data.decision"
+              }
+            },
+            {
+              "id": "wait",
+              "text": "要等多久再试：退避加抖动后的毫秒数。",
+              "selector": {
+                "event": "lesson.retry",
+                "path": "data.wait_ms"
+              }
+            },
+            {
+              "id": "attempt-table",
+              "text": "报告表格：每次尝试或每个操作的结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "unchanged",
+              "text": "只读查询重试前后，存储完全相同。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=read_unchanged]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。运行器自己调用工具，故障也由它故意制造。"
+            },
+            {
+              "text": "每个故障发生前先有一条 lesson.fault，来源写明是故障注入。",
+              "observe": "fault-source",
+              "stage": "tool"
+            },
+            {
+              "text": "工具结果的 ok 为 false，error_type 是异常的类名。",
+              "observe": "error-type"
+            },
+            {
+              "text": "运行器只凭 error_type 查表，得出类别。",
+              "observe": "category",
+              "stage": "runtime"
+            },
+            {
+              "text": "类别决定下一步：暂时失败等一会儿再试，参数错误和业务拒绝直接停。",
+              "observe": "decision"
+            },
+            {
+              "text": "等待随次数翻倍，再乘一个随机系数。",
+              "observe": "wait"
+            },
+            {
+              "text": "报告把每次尝试排成一行，次数没有超过上限。",
+              "observe": "attempt-table"
+            },
+            {
+              "text": "只读查询重试了几次，存储一点没变。",
+              "observe": "unchanged"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "只读查询在真实的等锁超时后按退避重试，次数和时间都没有超过上限，重试前后存储相同。",
+              "参数不合法和业务拒绝各只尝试一次；暂时失败在重试后成功，库里只有一条提交。"
+            ],
+            "does_not_prove": [
+              "分类表只覆盖本课列出的错误类型；别的工具要有自己的分类，没归类的错误在这里一律不重试。",
+              "本课只有一个调用方，看不出抖动把大量调用方错开的效果。"
+            ]
+          }
+        },
+        {
+          "id": "lost-response",
+          "title": "结果丢失之后重试几次",
+          "hypothesis": "第一次提交已经写入、结果却丢失时：盲目重试会写入两次；结果不明就停只写入一次，但调用方不知道结果；带幂等键重试只写入一次，并拿回首次结果。",
+          "arms": [
+            {
+              "id": "lost-response",
+              "exercise": "lost-response",
+              "label": "三种做法，同一个故障"
+            }
+          ],
+          "observe": [
+            {
+              "id": "lost",
+              "text": "故障：第一次提交的结果被丢弃。",
+              "selector": {
+                "event": "lesson.fault",
+                "path": "data.fault"
+              }
+            },
+            {
+              "id": "blind",
+              "text": "盲目重试那一组：不管会不会重复，照样重试。",
+              "selector": {
+                "event": "lesson.retry",
+                "round": 1,
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "duplicate",
+              "text": "盲目重试之后，库里出现了第二条提交。",
+              "selector": {
+                "event": "lesson.storage",
+                "round": 1,
+                "path": "data.submissions[1]"
+              }
+            },
+            {
+              "id": "stop",
+              "text": "结果不明就停那一组：不带键的写操作不再重试。",
+              "selector": {
+                "event": "lesson.retry",
+                "round": 2,
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "replayed",
+              "text": "带幂等键那一组：重试拿回首次结果，replayed 为 true。",
+              "selector": {
+                "event": "tool_result",
+                "round": 3,
+                "path": "data.result.result.replayed"
+              }
+            },
+            {
+              "id": "key",
+              "text": "幂等依据：operations 表里的那把键。",
+              "selector": {
+                "event": "lesson.storage",
+                "round": 3,
+                "path": "data.operations[0].idempotency_key"
+              }
+            },
+            {
+              "id": "checks",
+              "text": "报告逐组核对库里实际写入了几次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三种做法各用一个新库，遇到的是同一个故障。"
+            },
+            {
+              "text": "第一次提交已经写进库里，结果在返回途中被扔掉。",
+              "observe": "lost",
+              "stage": "tool"
+            },
+            {
+              "text": "盲目重试把结果不明当成暂时失败，又调了一次。",
+              "observe": "blind",
+              "stage": "runtime"
+            },
+            {
+              "text": "于是库里多出第二条提交，额度被扣了两次。",
+              "observe": "duplicate"
+            },
+            {
+              "text": "不带键时更稳妥的做法是停下，如实说结果不明。",
+              "observe": "stop"
+            },
+            {
+              "text": "带键重试时，存储认出这把键，只把首次结果交回来。",
+              "observe": "replayed"
+            },
+            {
+              "text": "这把键就记在 operations 表里，可以直接查到。",
+              "observe": "key"
+            },
+            {
+              "text": "报告的检查读的是存储，不是工具结果。",
+              "observe": "checks"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "写入已生效、结果丢失时，不带键的盲目重试会造成重复写入，带幂等键的重试不会。",
+              "幂等依据可以直接从 operations 表查到，和提交记录在同一个库里。"
+            ],
+            "does_not_prove": [
+              "本课的结果丢失由故障注入制造；远程服务里结果怎样丢失、键保留多久，要看对方的实现。",
+              "幂等键只防重复执行，不判断这次提交本身该不该发生。"
+            ]
+          }
+        },
+        {
+          "id": "partial-write",
+          "title": "两步写入的部分完成与补偿",
+          "hypothesis": "第 1 步写入数据库后，第 2 步写批改箱一直被占用，重试用完后运行器调用补偿操作撤回第 1 步：提交记录保留、状态为 cancelled、额度退回、批改箱里没有文件。",
+          "arms": [
+            {
+              "id": "partial-write",
+              "exercise": "partial-write",
+              "label": "批改箱一直被占用"
+            }
+          ],
+          "observe": [
+            {
+              "id": "step-one",
+              "text": "第 1 步成功：额度已扣，提交已登记。",
+              "selector": {
+                "event": "tool_result",
+                "round": 1,
+                "path": "data.result.result.submission_id"
+              }
+            },
+            {
+              "id": "busy",
+              "text": "第 2 步每次都遇到批改箱被占用。",
+              "selector": {
+                "event": "lesson.retry",
+                "round": 2,
+                "path": "data.error_type"
+              }
+            },
+            {
+              "id": "give-up",
+              "text": "第 4 次失败后停止，原因是次数上限。",
+              "selector": {
+                "event": "lesson.retry",
+                "round": 2,
+                "path": "data.reason",
+                "nth": 4
+              }
+            },
+            {
+              "id": "compensate",
+              "text": "补偿调用：cancel_submission。",
+              "selector": {
+                "event": "tool_call",
+                "round": 3,
+                "path": "data.function.name"
+              }
+            },
+            {
+              "id": "status",
+              "text": "存储里的提交状态：cancelled。",
+              "selector": {
+                "event": "lesson.storage",
+                "path": "data.submissions[0].status"
+              }
+            },
+            {
+              "id": "final",
+              "text": "报告的最终状态。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=final_status]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "提交分两步：先写数据库，再写批改箱。两者没有共同的事务。"
+            },
+            {
+              "text": "第 1 步成功，额度从 3 变成 2。",
+              "observe": "step-one",
+              "stage": "tool"
+            },
+            {
+              "text": "第 2 步每次都撞上别人的锁文件，这是暂时失败。",
+              "observe": "busy"
+            },
+            {
+              "text": "次数用完，运行器放弃第 2 步。",
+              "observe": "give-up",
+              "stage": "runtime"
+            },
+            {
+              "text": "第 1 步已经生效，于是调用补偿把它撤回。",
+              "observe": "compensate"
+            },
+            {
+              "text": "提交记录还在，只是状态变成 cancelled。",
+              "observe": "status"
+            },
+            {
+              "text": "最终状态如实写成未完成、已补偿。",
+              "observe": "final"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "第 2 步放弃后，补偿撤回了第 1 步：额度退回，批改箱没有文件，提交记录以 cancelled 保留。",
+              "最终状态由存储核对得出，并在报告和回答里如实写明。"
+            ],
+            "does_not_prove": [
+              "补偿这次成功了；本课没有演示补偿也失败的情况，只在报告里预留了“部分完成，补偿失败”。",
+              "真实系统里有些步骤无法补偿，比如已经发出的邮件，本课的批改箱文件不代表这类操作。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "场景",
+          "options": [
+            {
+              "value": "read_timeout",
+              "label": "只读查询：锁住几次"
+            },
+            {
+              "value": "classify",
+              "label": "错误分类：四个操作"
+            },
+            {
+              "value": "lost_response",
+              "label": "写入生效、结果丢失（三种做法）"
+            },
+            {
+              "value": "partial_write",
+              "label": "两步写入：中途失败与补偿"
+            }
+          ]
+        },
+        {
+          "name": "locked_attempts",
+          "label": "数据库被锁的尝试次数",
+          "help": "只用于只读查询：前几次尝试时，另一条连接锁住数据库。大于或等于尝试次数上限时，查询最终失败。"
+        },
+        {
+          "name": "outbox_busy_attempts",
+          "label": "批改箱被占用的尝试次数",
+          "help": "只用于两步写入：小于尝试次数上限时，第 2 步最终成功；否则放弃并补偿。"
+        },
+        {
+          "name": "max_attempts",
+          "label": "尝试次数上限",
+          "help": "每个操作最多尝试几次，包括第一次。"
+        },
+        {
+          "name": "timeout_ms",
+          "label": "单次等锁时限（毫秒）",
+          "help": "工具等数据库锁的最长时间，超过就抛出 StoreTimeout；也计入时间预算。"
+        },
+        {
+          "name": "base_delay_ms",
+          "label": "基础退避等待（毫秒）",
+          "help": "第 1 次失败后的等待上限，之后每次翻倍、封顶 1 秒，再乘 0.5 到 1 之间的随机系数。"
+        },
+        {
+          "name": "budget_ms",
+          "label": "时间预算（毫秒）",
+          "help": "一个操作的全部尝试和等待加起来不能超过它。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "read-safe",
+              "prompt": "为什么 read_account 失败后可以直接重试？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它只读不写，重复执行不改变存储",
+                  "feedback": "对。读操作天然幂等。"
+                },
+                {
+                  "id": "b",
+                  "text": "它执行得很快，不怕重复",
+                  "feedback": "不对。快慢和会不会重复生效无关。"
+                },
+                {
+                  "id": "c",
+                  "text": "它的错误都是暂时失败",
+                  "feedback": "不对。查一个不存在的学习者会得到 InvalidArgument，那就不该重试。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "能不能重试先看重复执行会不会改变存储，再看错误类别。"
+            },
+            {
+              "id": "timeout-before-write",
+              "prompt": "submit_practice 抛出 StoreTimeout。不带幂等键，能放心重试吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "能：StoreTimeout 发生在拿写锁时，事务还没开始，什么都没写",
+                  "feedback": "对。这是本课能把它归为暂时失败的原因。"
+                },
+                {
+                  "id": "b",
+                  "text": "不能：超时一律算结果不明",
+                  "feedback": "不对。远程调用的超时常常只能这样算，但本课的 StoreTimeout 明确发生在事务开始之前。"
+                },
+                {
+                  "id": "c",
+                  "text": "不能：写操作永远不能重试",
+                  "feedback": "不对。能确定没有生效的写操作可以重试。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "分类要看错误发生在哪一步：没开始的写入可以重试，结果不明的写入要靠键。"
+            },
+            {
+              "id": "unknown-write",
+              "prompt": "不带幂等键的写操作遇到 ResponseLost，call_with_retry 默认怎么做？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "停止，状态记为结果不明，如实报告",
+                  "feedback": "对。这时重试可能重复写入。"
+                },
+                {
+                  "id": "b",
+                  "text": "按暂时失败重试",
+                  "feedback": "不对。这是盲目重试的对照组，库里因此多出一条提交。"
+                },
+                {
+                  "id": "c",
+                  "text": "当作成功，继续下一步",
+                  "feedback": "不对。调用方并没有看到结果，不能当作成功。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "结果不明的写操作，没有键就停下来说明情况。"
+            },
+            {
+              "id": "budget-first",
+              "prompt": "max_attempts 是 6，base_delay_ms 是 1000，budget_ms 只有 2000。锁一直不放开时，运行会怎样停下？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "多半在时间预算处停下，停止原因是“再试一次会超出时间预算”",
+                  "feedback": "对。等待很长、预算很小时，预算先到。"
+                },
+                {
+                  "id": "b",
+                  "text": "一定试满 6 次",
+                  "feedback": "不对。次数上限和时间预算哪一个先到都停。"
+                },
+                {
+                  "id": "c",
+                  "text": "一直等到锁放开",
+                  "feedback": "不对。重试循环必须有上限。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "两道上限独立生效，lesson.retry 的 reason 写明是哪一道。"
+            },
+            {
+              "id": "key-transaction",
+              "prompt": "为什么幂等记录要和扣额度、登记提交写在同一个事务里？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "否则效果已提交、键还没写上时出了故障，重试查不到键又会写一遍",
+                  "feedback": "对。两者必须一起提交或一起回滚。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为这样执行更快",
+                  "feedback": "不对。这样做是为了正确，不是为了快。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为 SQLite 不允许分开写",
+                  "feedback": "不对。SQLite 允许，是本课的设计要求放在一起。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "幂等记录和它保护的效果要原子地写入。"
+            },
+            {
+              "id": "compensation-history",
+              "prompt": "补偿操作 cancel_submission 为什么不删除提交记录？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "补偿是一笔反向写入：保留历史，用状态 cancelled 表示已撤销",
+                  "feedback": "对。先扣后退，两笔都可查。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为删除比更新慢",
+                  "feedback": "不对。这与快慢无关。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为以后还要把它恢复成 active",
+                  "feedback": "不对。撤销后要重新提交，会是一条新的提交。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "补偿改变状态、保留历史，并且能安全重复。"
+            },
+            {
+              "id": "evidence",
+              "prompt": "怎样确认一次提交实际写入了几次？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "读 lesson.storage 里数据库和批改箱的实际状态",
+                  "feedback": "对。报告的检查也以它为准。"
+                },
+                {
+                  "id": "b",
+                  "text": "看最后的回答怎么说",
+                  "feedback": "不对。盲目重试那一组的回答可以写成功，库里却有两条提交。"
+                },
+                {
+                  "id": "c",
+                  "text": "看最后一条 tool_result 的 ok",
+                  "feedback": "不对。ok 只说明那一次尝试的结果，不说明之前的尝试有没有生效。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "写入成功与否、成功几次，要以存储为准。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“写入生效、结果丢失”，找出带幂等键重试时被重放的那次工具结果。",
+          "target": {
+            "event": "tool_result",
+            "round": 3,
+            "path": "data.result.result.replayed"
+          },
+          "explanation": "第 3 轮是带幂等键的那一组。第一次尝试的工具结果是 ResponseLost；第二次尝试的工具结果 ok 为 true，replayed 为 true，submission_id 和第一次写入的相同。同一轮的 lesson.storage 里只有一条提交，operations 表里有这把键。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在“只读查询：锁住两次”的报告表格里找到了两次 StoreTimeout，它们的耗时都在 200 毫秒左右。"
+            },
+            {
+              "id": "item-2",
+              "text": "我把 locked_attempts 改成 6 再运行，看到第 4 次失败后停止，原因是次数上限，回答里没有额度数字。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说出 StoreTimeout 和 ResponseLost 为什么分在不同的类别。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在“写入生效、结果丢失”的 lesson.storage 里数出了三组各写入几次，并找到了 operations 表里的键。"
+            },
+            {
+              "id": "item-5",
+              "text": "我把 outbox_busy_attempts 改成 1 再运行，看到没有补偿，最终状态是“两步都已完成”。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "repeatable",
+      "note": "call_with_retry 的参数：重复这次调用不会多生效一次，如读、带键的写。"
+    },
+    {
+      "name": "idempotency_key",
+      "note": "同一个操作的所有尝试共用一把；库里见过就交回首次结果。"
+    },
+    {
+      "name": "StoreTimeout",
+      "note": "等数据库锁超过时限时抛出：事务没开始，什么也没写，归为暂时失败。"
+    },
+    {
+      "name": "ResponseLost",
+      "note": "故障注入：工具已经执行，结果在返回途中被丢弃，归为结果不明。"
+    },
+    {
+      "name": "CATEGORIES",
+      "note": "error_type 到错误类别的对照表；表里没有的类型一律算未归类，不重试。"
+    },
+    {
+      "name": "operations",
+      "note": "存幂等键、请求指纹和首次结果的表，和提交在同一个事务里写入。"
+    },
+    {
+      "name": "cancel_submission",
+      "note": "submit_practice 的补偿：退回额度并标成 cancelled；重复调用不再退。"
+    },
+    {
+      "name": "lesson.fault",
+      "note": "本课事件：运行器故意制造的故障，source 为 fault_injection。"
+    },
+    {
+      "name": "lesson.retry",
+      "note": "本课事件：每次失败一条，记下类别、决定、原因、等待和已用时间。"
+    },
+    {
+      "name": "lesson.storage",
+      "note": "本课事件：运行结束前直接读出的数据库和批改箱状态。"
+    },
+    {
+      "name": "replayed",
+      "note": "submit_practice 结果里的字段：为 true 表示这次没有写入，交回的是首次结果。"
+    }
+  ]
+}

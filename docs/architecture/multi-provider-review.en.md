@@ -10,7 +10,7 @@ The platform keeps the raw HTTP teaching path and uses the LiteLLM SDK to adapt 
 
 - `server/providers.py`: provider bindings, connection configuration validation, and the backend's temporary in-memory configuration.
 - `course/providers.py`: the model connection types and the LiteLLM call adapter.
-- `course/api_client.py`: the Bailian raw HTTP transport.
+- `course/api_client.py`: the Bailian raw HTTP transport (chat completions and `/embeddings`).
 - `course/execution.py`: the call budget, cancellation and event snapshots shared by lessons.
 
 The Bailian raw entry point reads `local_config.py` and `DASHSCOPE_API_KEY`. Other services use their own environment variables or the temporary backend configuration submitted from the web page. The variable list and the steps are in the [README](../../README.md#connecting-a-model). Keys are never echoed and never stored in browser storage. Switching providers never borrows another provider's credentials automatically.

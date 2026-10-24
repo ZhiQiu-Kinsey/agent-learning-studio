@@ -1,0 +1,1428 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "streaming-cancel",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "STREAMING / CANCEL",
+          "headline": "边写边收不是更快，是更早读到；停止不是撤销，是不再接收。",
+          "highlight": "停止、断开和结束是三件事，终态以后端的记录为准。",
+          "takeaway": "本课把同一条请求分别用流式和非流式发一次，比较第一个字到得多早；再让程序在中途停下，看已经收到的内容，并核对被截断的内容该怎样交给下一轮。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-stream",
+              "label": "01 / STREAM",
+              "title": "流式输出与首字延迟",
+              "description": "模型边写边发，程序逐块接收、逐块记录；总耗时不会因此变短，第一个字到得更早，用户等待的时间就短了。",
+              "token": "response_delta · first_token_ms"
+            },
+            {
+              "id": "02-cancel",
+              "label": "02 / CANCEL",
+              "title": "取消请求",
+              "description": "用户点停止后，后端不再记录新的数据块，已经收到的保留；原因写进终态，停止是协作式的。",
+              "token": "user_stop · discarded_after_cancel"
+            },
+            {
+              "id": "03-disconnect",
+              "label": "03 / DISCONNECT",
+              "title": "客户端断开",
+              "description": "只有读事件的连接断了，后端的运行照常继续；断开几次记在 done 里，终态以后端为准。",
+              "token": "client_disconnects"
+            },
+            {
+              "id": "04-partial",
+              "label": "04 / PARTIAL",
+              "title": "部分结果",
+              "description": "取消或提前停止留下的半截内容：没有完成原因、通常没有用量块；要标明不完整，核对之后才能续写。",
+              "token": "finish_reason"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "流式输出是什么",
+          "paragraphs": [
+            "流式输出（Streaming）让模型边生成边返回数据块，用户感受到的快慢取决于首字延迟（Time to First Token），而不是总耗时。没有它，一条要写 20 秒的回答会让界面空白 20 秒，用户分不清是在生成还是卡死了。{{lesson:dependent-calls}}和{{lesson:application-state}}里的请求都是一问一答：请求发出，等完整的响应回来，再往下走。本课换一种收法：响应没写完，已经写出的部分就先到手。",
+            "举个编的例子：模型每秒写 40 个 Token，这条回答共 400 个，写完要 10 秒；请求发出后 0.8 秒，模型才写出第一个字。非流式要等 10.8 秒才有东西可看。流式在 0.8 秒时就开始出字，最后一个字照样在 10.8 秒到。两种做法的总耗时一样，差别是用户等第一个字的时间：0.8 秒对 10.8 秒。这个 0.8 秒就是首字延迟。",
+            "做法很简单：请求体里多一个 `stream: true`，服务商就不再等整段写完，而是每写出一小段就发一块。百炼和 OpenAI 兼容接口用 SSE 传这些块：每块是一行 `data:` 加一个 JSON，文字在 `choices[0].delta.content` 里，最后一行是 `data: [DONE]`。平台替课程做了这些事：`complete_stream` 发请求、逐块接收，每个数据块原样记进 `response_delta` 事件。第一块单独记一条，所以首块到达的时刻在时间线上看得见。课程代码不写 `stream` 字段，也不碰网络。",
+            "流式不会让总耗时变短，也不会让模型写得更快。一个没人盯着的 Agent 循环，用流式几乎得不到好处；它的用处是让人早一点读到，也让程序有机会在中途停下。一块不等于一个字：一块可能是半个词、几个字，也可能是空的。本课的所有数字都来自平台在本进程里的计时，不估算，也不做逐字打出的效果，页面上只显示真实到达的块。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "拼接与最终回答",
+          "paragraphs": [
+            "把数据块拼成完整回答之后，它要和非流式的响应长得一样，下游的代码才不用分两种写。程序后面要读的是 `choices[0].message.content`、`finish_reason` 和 `usage`，不关心它们是一次拿到的，还是一块块攒出来的。平台按 OpenAI 兼容客户端通用的规则拼：每块的 `delta.content` 依次接在一起，工具调用片段按 `index` 合并，最后一个不为空的 `finish_reason` 生效，用量取最后那个用量块。",
+            "举个编的例子：一次回答来了四块。第一块只写明角色 `assistant`，文字是空的；第二块带着“1. 程序”，第三块带着“组装请求。”；第四块没有文字，只带 `finish_reason: stop`。拼出来的文字就是“1. 程序组装请求。”，完成原因 `stop`。第一块不带文字，所以首块到达比首字到达更早；本课两个时间都量，分别是 `first_chunk_ms` 和 `first_token_ms`。",
+            "用量要多留一个心眼。请求体里要有 `stream_options: {include_usage: true}`，平台默认加上它，服务商才会在最后多发一块：`choices` 是空数组，`usage` 里是本次的 Token 数。没有这一块，拼出来的响应里就没有 `usage`，界面和报告写“未报告”，不写 0，也不按字数估算。被提前结束的流通常也收不到这一块：OpenAI 的文档明确说，中断或取消的流可能拿不到用量。",
+            "拼出来的响应不是服务商发来的响应体。它是平台按数据块算出来的，`response` 事件里的 `stream.assembled_from_chunks` 标明了这一点，每个原始数据块都留在 `response_delta` 里。拼合的响应也缺少没有任何一块带的字段，比如非流式响应顶层的 `object`，对照实验的报告会列出两边各自独有的顶层字段。核对的是消息结构（`role`、`content`、`finish_reason`），不是文字：同一条请求发两次，模型写出的文字本来就可能不同。"
+          ]
+        },
+        {
+          "id": "deep-dive-wire",
+          "type": "deep-dive",
+          "title": "一条流式响应在线上长什么样",
+          "summary": "SSE 的行格式、用量块和 [DONE]，以及为什么平台记的是 JSON 而不是原始的行。",
+          "paragraphs": [
+            "SSE 是一种很朴素的格式：服务商保持连接不关，一块一块地写文本行。每个数据块占一行 `data: ` 加一个 JSON，块与块之间隔一个空行；以冒号开头的行是注释，常用来保活，不是数据。最后一行 `data: [DONE]` 不是 JSON，只表示服务商写完了。百炼的兼容接口和 OpenAI 一样，文字在 `choices[0].delta.content`，用量在加了 `include_usage` 之后的最后一个 JSON 里。",
+            "举个编的例子，一次很短的回答在线上就是这几行，每行后面隔一个空行（省略了不相关的字段）：`data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}`，`data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}`，`data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}`，`data: {\"choices\":[],\"usage\":{...}}`，最后是 `data: [DONE]`。读它的程序只要认得三种块：有文字的块、带完成原因的块、`choices` 为空的用量块。",
+            "平台记的是解析之后的 JSON，不是原始的行：SSE 的分隔符已经去掉，`[DONE]` 记为 `done_marker: true`。经 LiteLLM 接入的服务商拿不到这个标记，`done_marker` 是空值，每个数据块是 SDK 标准化之后的对象，所以事件上标的是“SDK 标准化”，不是原始报文。百炼原生 HTTP 的数据块才是一行行 `data:` 里的 JSON。不记原始的行还有一个原因：回放和录制要的是结构化数据，`data: ` 前缀和空行对读者没有信息，重放同一份 JSON 也比重新解析文本行更不容易出错。",
+            "不同服务商的流格式并不相同。Anthropic 的流用带类型的事件：开始一个内容块、给内容块追加增量、结束内容块、结束消息；增量里区分文字和思考。本课只处理 OpenAI 兼容的形状，其他格式由适配层先转成它。换服务商时，先确认三件事：文字在哪个字段、用量在哪一块、结束靠什么标记，再谈取消和拼接。"
+          ]
+        },
+        {
+          "id": "predict-requests",
+          "type": "predict",
+          "prompt": "运行“流式与非流式对照”之前先猜：整次运行里，一共会记录几条 `request` 事件？",
+          "experiment": "first-token-vs-total",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-latency",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-latency",
+            "prompt": "编的例子：模型每秒写 40 个 Token，回答共 400 个，请求发出后 0.8 秒写出第一个字。用户看到第一个字，流式和非流式分别是什么时候？",
+            "options": [
+              {
+                "id": "a",
+                "text": "都是 10.8 秒，流式只是把同样的内容分几次送到",
+                "feedback": "不对。流式不用等整段写完，第一个字一写出来就会发出。"
+              },
+              {
+                "id": "b",
+                "text": "流式约 0.8 秒，非流式约 10.8 秒",
+                "feedback": "对。总耗时都是 10.8 秒，差别只在用户等第一个字的时间。"
+              },
+              {
+                "id": "c",
+                "text": "流式约 10.8 秒，非流式约 0.8 秒",
+                "feedback": "不对。顺序反了：非流式要等整段写完才返回。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "流式缩短的是首字延迟，不是总耗时。"
+          }
+        },
+        {
+          "id": "section-measure",
+          "type": "prose",
+          "title": "首字延迟怎么量",
+          "paragraphs": [
+            "首字延迟要从发请求之前开始算，量到第一段非空文字交到程序手里为止，数字由平台在本进程里量，课程代码改不了它。起点在 `request` 事件写下之后、请求发出之前，终点是读取线程收到第一段非空文字的时刻。它包含建立连接、服务商排队、模型读完请求再写出第一个字的全部时间；每条 `response_delta` 还记着自己第一块和最后一块的 `received_ms`。",
+            "读这几个数要知道它们量的是什么。`first_chunk_ms` 是第一块到达的时间，可能带角色和文字，也可能只有角色，或是一个空的推理块；`first_token_ms` 是第一段文字到达的时间，两者通常差得很小，有的服务商会先发几块空内容，差就大一些。有的推理模型（先写推理内容、再写回答）会先流出推理文字，平台把它也算作第一段文字，这时首字延迟量到的是推理文字的开头。总耗时 `duration_ms` 要到流结束才有。举个编的例子：首块 420 毫秒、首字 450 毫秒、总耗时 9800 毫秒，用户盯着空白的时间是 450 毫秒，而不是 9800 毫秒。",
+            "这些时间是本进程收到数据的时刻，不是服务商生成数据的时刻。中间的代理、网关或系统缓冲，可能把几块攒在一起再交出来，到达时刻就挤在一起：`received_ms` 看上去几块同时到，并不说明服务商是同时写出的。时间线上把几块合成一条 `response_delta`，只是为了少几条事件，数据块一块不少，合并不改变任何一块的内容。",
+            "一次测量只是一个样本。同一条请求再发一次，首字延迟可能差好几倍，服务商的负载、缓存和网络都会影响它。所以本课的对照实验只回答“这一次流式和非流式各是多少”，不回答“这个服务商快不快”。要比较两个服务商或两种做法，得多次重复、交换顺序、再看分布；{{lesson:observability-cost}}会讲怎样把每一步的耗时系统地记下来。"
+          ]
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "取消请求",
+          "paragraphs": [
+            "取消请求（Cancel Request）让用户随时能让一次长输出停下，已经到手的内容保留，之后到达的不再要。没有它，一个跑偏的 30 秒回答只能干等。网页上的“停止运行”发出取消请求，原因记为 `user_stop`；关闭页面发 `page_closed`；别的调用方没写原因就是 `api`。原因最后写在 `done` 事件的 `cancel_reason` 里，回放时一眼就能看出是谁让它停的。",
+            "停止是协作式的：后端不能从外面掐掉一个正在跑的线程，只能让运行自己发现该停了。`complete_stream` 的循环每 0.05 秒看一次有没有人要求停止，没有新数据块到达也照看。发现之后，它把已经交给运行的数据块记进 `response_delta`，再写一条 `stream.status` 为 `cancelled` 的 `response`，最后抛出 `RunCancelled`，运行以 `cancelled` 结束，课程里写在它后面的代码都不会执行。",
+            "取消那一刻已收到的内容分三份。已经交给运行并记下的，写在 `response_delta` 里，拼合响应的内容就是它们。已经到达、但还没交给运行的，只计数，记在 `discarded_after_cancel`，不进记录。停止之后才到达的，既不记录也不计数。举个编的例子：停止时已记 38 块，另有 2 块在队列里，记录里就是 38 块，`discarded_after_cancel` 是 2。所以“取消后不再记录新的数据块”是可以检查的：拼合的内容里，没有一个字来自停止之后。",
+            "取消的是接收，不是服务商那边的生成。平台停止读取后，上游连接要等下一块到达或网络超时才会关闭，服务商何时真正停笔、是否继续计费，这里看不到；被取消的流多半没有用量块，用量写“未报告”。还要分清 `stop_when` 和取消：课程代码在 `stop_when` 里返回真，流以 `stopped` 结束，运行继续往下走；用户取消，流以 `cancelled` 结束，运行跟着结束。"
+          ]
+        },
+        {
+          "id": "deep-dive-stop",
+          "type": "deep-dive",
+          "title": "为什么停止不能立刻生效",
+          "summary": "阻塞读取、读取线程和网络超时：停止要先让运行结束，连接稍后才关。",
+          "paragraphs": [
+            "读一个网络流是阻塞的：线程停在“等下一块”上，什么也做不了。Python 没有安全地杀死线程的办法，更不能从别的线程去关一个正在读的连接。所以平台让一条读取线程专门读流，把每一块连同到达时刻放进队列；运行线程每 0.05 秒从队列里取一次，取不到也回头看有没有人要求停止。停止因此在 0.05 秒内就能被运行看到。如果改成每秒看一次，停止的反应就会慢上多达 1 秒；这个间隔是响应速度和空转开销之间的折中。",
+            "连接却不能那么快关。读取线程可能正卡在“等下一块”上，只有它自己能关流：它在下一块到达，或者网络超时之后才醒来、关闭连接。举个编的例子：模型在两块之间停顿了 30 秒，用户在停顿中点停止，运行当下就结束，上游连接要等到这 30 秒过去才关。非流式请求更难：整个请求在一次阻塞调用里，已经发出就收不回，只受 60 秒的网络超时限制；流式请求至少能在下一块之前就停止接收。",
+            "取消还有第三层：服务商那边。客户端关了连接，服务商通常能察觉并停止生成，但这取决于它的实现，也可能先把正在写的部分写完才发现。这几层平台都看不到，所以课程只承诺它能控制的两件事：不再记录新的数据块，运行以 `cancelled` 结束。"
+          ]
+        },
+        {
+          "id": "mq-discard",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-discard",
+            "prompt": "停止请求到达时，有 2 块数据已经到达，但还没有交给运行。它们在记录里是什么状态？",
+            "options": [
+              {
+                "id": "a",
+                "text": "照常写进 `response_delta`，因为已经收到了",
+                "feedback": "不对。没有交给运行的数据块不会进记录，否则“停止后不再记录”就没法检查。"
+              },
+              {
+                "id": "b",
+                "text": "不记录，只计入 `discarded_after_cancel`",
+                "feedback": "对。数量留下了，内容没有进记录。"
+              },
+              {
+                "id": "c",
+                "text": "不记录，也不计数",
+                "feedback": "不对。只有停止之后才到达的数据块既不记录也不计数；已到达而没交出的会计数。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "已记录、已丢弃（只计数）、之后到达（什么都不留），是取消那一刻的三种状态。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "客户端断开与后端运行",
+          "paragraphs": [
+            "客户端断开（Client Disconnect）只是读事件的浏览器走了，后端的运行照常往下跑，终态要以后端的记录为准。一次运行有两个角色：后台线程里执行的运行，和通过 SSE 读事件的浏览器。两者只靠事件记录相连：运行把事件写进存储，浏览器按 `seq` 读。读的人断了，写的人并不知道，也没有理由停。网页上的“断开事件连接（运行继续）”就是只关这一根读线。",
+            "重新连接时从最后一条事件接着读：请求带 `from_seq`，值是最后收到的 `seq` 加一，服务端从存储回放，再接上实时事件，不重不漏。运行结束前断开过几次，记在 `done` 事件的 `client_disconnects` 里；没断开过就没有这个字段。所以断开之后，终态不由屏幕上最后看到的那条事件决定，而由后端写下的 `done` 决定。",
+            "关闭页面和断开事件连接不是一回事，容易混。本平台在页面关闭时会主动发一个 `page_closed` 的取消请求，运行因此停止。要演示“断开不等于停止”，用网页上的“断开事件连接”，不要关页面。别的系统可能没有这个约定：读者走了运行就停，还是继续，是产品自己定的，没有通用答案，但无论哪种，记录里都要写明原因。",
+            "终态以后端记录为准，几种看上去相似的结局要分开。完整接收，`done` 的 `status` 是 `completed`；用户停止，是 `cancelled`，带着 `cancel_reason`；断开再重连，只要后端没被停止，还是 `completed`，多一个 `client_disconnects`。屏幕上的“已断开”“已停止”“已完成”是前端对这些记录的翻译，不是另一套真相。还要记住 `completed` 只说运行走完了，不说回答对；清单是否完整要另外核对，本课的报告用编号核对来做。"
+          ]
+        },
+        {
+          "id": "compare-endings",
+          "type": "compare",
+          "title": "四种结局对照",
+          "paragraphs": [
+            "同一次流式请求可能以四种方式收场。看三个地方就能分开它们：流的 `status`、`done` 的 `status`、事件连接有没有断。"
+          ],
+          "columns": [
+            "结局",
+            "谁触发",
+            "事件连接",
+            "运行",
+            "`done` 的 `status`",
+            "流的 `status`",
+            "记录里的内容"
+          ],
+          "rows": [
+            [
+              "完整接收",
+              "没有人操作",
+              "连着",
+              "走完",
+              "`completed`",
+              "`completed`",
+              "全部数据块、完成原因、用量块"
+            ],
+            [
+              "程序提前停止",
+              "课程代码的 `stop_when`",
+              "连着",
+              "继续往下走",
+              "`completed`",
+              "`stopped`",
+              "停止前的数据块，没有完成原因"
+            ],
+            [
+              "用户点停止",
+              "“停止运行”按钮",
+              "连着",
+              "结束",
+              "`cancelled`",
+              "`cancelled`",
+              "停止前已记录的数据块，另有 `discarded_after_cancel`"
+            ],
+            [
+              "断开事件连接",
+              "“断开事件连接”按钮",
+              "断开，可重连",
+              "继续",
+              "`completed`",
+              "`completed`",
+              "与完整接收相同，`done` 里多一个 `client_disconnects`"
+            ]
+          ]
+        },
+        {
+          "id": "mq-disconnect",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-disconnect",
+            "prompt": "一次运行结束时，`done` 里 `client_disconnects` 是 1，`status` 是 `completed`。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "用户点了停止，运行被取消后又恢复",
+                "feedback": "不对。被停止的运行 `status` 是 `cancelled`，并带着 `cancel_reason`。"
+              },
+              {
+                "id": "b",
+                "text": "事件连接断开过一次，运行没有因此停止，自己走完了",
+                "feedback": "对。读者离开不影响运行，次数只作为计数留下。"
+              },
+              {
+                "id": "c",
+                "text": "后端因为读者断开而重启了运行",
+                "feedback": "不对。后端不会因为读者断开重启或重放运行。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "断开计数只说明读者走过，终态仍是后端自己写下的。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "部分结果的记录与下一轮",
+          "paragraphs": [
+            "取消或提前停止留下的是部分结果（Partial Result），它要带着“不完整”的标记走完后面所有的步骤，不能当成完整回答。问题出在下一轮：用户点了停止，又说“接着写”，程序手里有半截回答，该怎么交给模型？最省事的做法，是把它原样放回消息历史，当成一条写完的 assistant 消息，再发一句“继续”。这样做，模型看到的是一条以为已经说完的话，而不是被打断的话。",
+            "不完整在数据里是看得出来的：部分结果的 `finish_reason` 是空的，拼合响应里没有 `usage`，最后一行往往停在半句话中间。本课让模型写编号清单，正是为了让程序也能核对：编号要从 1 到 N 连续、各出现一次、每一行以句号结束。举个编的例子：要求 8 条，停在第 3 条中间，已经写完的是第 1、2 条，第 3 条只有半句。半截回答过不了这个核对，再流畅的文字也一样。",
+            "更稳的做法分三步，对应《深入理解 AI Agent》第 6 章的规则 4，和语音系统里“把被打断的那一轮标出来”的做法：保留已经写完的部分，丢掉半句；在请求里写明上一次没写完，从第几条重写；合并之后由程序核对。本课的“标注不完整”就是这样做的：不放 assistant 前缀，用一条 user 消息写出已完整写出的条目和要续写的第一条，这两样由 `analyse_partial` 算出来。不假定半截输出可以当作合法的前缀回灌；有的服务商提供专门的前缀续写接口，用之前要先读它的文档，本课不用。",
+            "核对只能证明结构，不能证明内容。编号连续、每行写完，不等于每条都写得对；一行之内的拼接错乱，比如半句后面直接粘上重写的整句，编号核对也看不出来，要靠人读。两种用法在练习里各只有一个样本，原样接上有时也会成功：报告写的是这一次的事实，不是哪种做法永远更好。"
+          ]
+        },
+        {
+          "id": "deep-dive-tool",
+          "type": "deep-dive",
+          "title": "流式里的工具调用片段",
+          "summary": "参数 JSON 没拼完就停下时，不能执行半截调用。",
+          "paragraphs": [
+            "模型提出工具调用时，流里没有“一整条调用”，只有片段：第一个片段带 `id`、类型和函数名，之后的片段只带参数文字的一小截，每个片段用 `index` 标明属于第几个调用。平台的拼合按 `index` 把参数一截截接起来，名字和 id 取第一个带有它们的片段。拼完的 `arguments` 是一段文字，要程序自己解析成 JSON。所以从流里取工具调用，顺序是：先合并片段，再等完成原因，最后才解析和检查，三步缺一不可。",
+            "流在中途停下时，这段文字可能停在 `{\"path\": \"a.t` 这样的位置。它不是合法的 JSON，更不是模型想好的完整调用。规矩很简单：只有收到 `finish_reason: tool_calls`、并且 `arguments` 解析成功、通过了参数检查，才可以执行；停止或取消留下的半截调用一律不执行，也不补全。《深入理解 AI Agent》第 2 章提到，第一个调用的参数一经完整生成并通过校验，就可以立刻开始执行，不用等后面的调用写完，这和上面的规矩并不冲突：前提都是参数已经完整。",
+            "举个编的例子：模型一次提出两个调用，流里先后来了四个片段：`index` 为 0 和 1 的各带 id 与函数名，之后各有一段参数。平台按 `index` 拼成两个调用，参数各接各的。这时流断了，没有收到完成原因，就不知道后面还有没有片段，两个调用都不该执行，哪怕其中一个的参数恰好是合法的 JSON。"
+          ]
+        },
+        {
+          "id": "misconception-stop",
+          "type": "misconception",
+          "claim": "点了“停止运行”，模型就立刻停止生成，也不会再产生费用。",
+          "correction": "停止的是本程序的接收：平台不再记录新的数据块，运行以 `cancelled` 结束。服务商那边什么时候停笔、是否继续计费，平台看不到；被停止的流通常没有用量块，所以用量写“未报告”，不写 0。`discarded_after_cancel` 只数得清本程序已经收到却没有记录的块，数不了服务商还在写的部分。"
+        },
+        {
+          "id": "misconception-close",
+          "type": "misconception",
+          "claim": "关掉页面，只是断开了事件连接，运行一定会继续。",
+          "correction": "读事件的连接断开确实不会停止运行，网页上的“断开事件连接”演示的就是这一点。但本平台在页面关闭时会主动发 `page_closed` 的取消请求，所以关掉页面会停止运行，原因记在 `cancel_reason` 里。断开是读者的事，停止是一次明确的请求，两者在记录里分得清。"
+        },
+        {
+          "id": "mq-resume",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-resume",
+            "prompt": "第 3 条写到一半时流被停止。下一轮最稳的做法是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "把半截回答作为 assistant 消息放回历史，再发一句“继续”",
+                "feedback": "不稳。模型会把它当成已经说完的话，可能从半句后面直接接，也可能整条重写，拼出来的清单未必连续。"
+              },
+              {
+                "id": "b",
+                "text": "保留写完的第 1、2 条，写明上一次没写完，请模型从第 3 条重写，合并后按编号核对",
+                "feedback": "对。半句不进合并结果，缺的条目由请求说清，结果由程序核对。"
+              },
+              {
+                "id": "c",
+                "text": "丢掉全部内容，从头再来",
+                "feedback": "不算错，但已经写完并可以核对的内容白白丢掉了，还多花一次完整的生成。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "部分结果要标明不完整，保留能确认的部分，让模型补缺的，再由程序核对。"
+          }
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次被停止的流式运行",
+          "description": "下面是作者写的分步讲解，不含任何测量值。真实的数字和事件，请在实验台里自己运行。",
+          "steps": [
+            {
+              "id": "w-1",
+              "label": "1",
+              "actor": "运行器",
+              "title": "发出流式请求",
+              "body": "运行器调用 `complete_stream`，平台在请求体里加上 `stream` 和 `stream_options`，并记下 `request` 事件。",
+              "code": "streamed = context.complete_stream({\"messages\": messages}, 1)",
+              "language": "python",
+              "evidence": "request 事件的 data.stream 为 true。"
+            },
+            {
+              "id": "w-2",
+              "label": "2",
+              "actor": "服务商",
+              "title": "第一块只带角色",
+              "body": "服务商先发一块：写明角色，文字是空的。平台把它单独记成一条 `response_delta`，首块到达的时刻就有了。",
+              "code": "{\"delta\": {\"role\": \"assistant\", \"content\": \"\"}, \"finish_reason\": null}",
+              "language": "json",
+              "evidence": "第一条 response_delta 的 chunk_range 是 [1, 1]。"
+            },
+            {
+              "id": "w-3",
+              "label": "3",
+              "actor": "服务商",
+              "title": "第一段文字到达",
+              "body": "之后的数据块带着文字，一块块接在一起。第一段非空文字到达的时刻就是首字延迟。",
+              "code": "{\"delta\": {\"content\": \"1. 程序\"}, \"finish_reason\": null}",
+              "language": "json",
+              "evidence": "response 的 stream.first_token_ms。"
+            },
+            {
+              "id": "w-4",
+              "label": "4",
+              "actor": "学习者",
+              "title": "点“停止运行”",
+              "body": "网页向后端发出取消请求，原因是 `user_stop`。事件连接保持着，页面继续读，直到后端写下 `done`。",
+              "code": "POST /api/runs/{run_id}/cancel  {\"reason\": \"user_stop\"}",
+              "evidence": "后端接受请求，运行仍在记录事件。"
+            },
+            {
+              "id": "w-5",
+              "label": "5",
+              "actor": "平台",
+              "title": "循环发现停止",
+              "body": "`complete_stream` 的循环看到停止请求：已交给运行的数据块记下，已到达没交出的只计数，然后写一条 `cancelled` 的 `response`，抛出 `RunCancelled`。",
+              "code": "if self.cancelled():\n    outcome = \"cancelled\"\n    break",
+              "language": "python",
+              "evidence": "response 的 stream.status 是 cancelled，另有 cancel_reason 和 discarded_after_cancel。"
+            },
+            {
+              "id": "w-6",
+              "label": "6",
+              "actor": "后端",
+              "title": "写下终态",
+              "body": "运行以 `cancelled` 结束，`done` 里写着 `cancel_reason`。拼合的内容只到停止前收到的部分，没有完成原因，也没有用量。",
+              "code": "done.data = {\"status\": \"cancelled\", \"cancel_reason\": \"user_stop\"}",
+              "language": "json",
+              "evidence": "done 事件的 data.status 与 data.cancel_reason。"
+            }
+          ]
+        },
+        {
+          "id": "callout-next",
+          "type": "callout",
+          "tone": "boundary",
+          "title": "取消不是撤销",
+          "paragraphs": [
+            "停止只管不再接收，已经发出去的副作用收不回。接下来，{{lesson:async-concurrency}}处理多个任务同时在跑时怎样取消，{{lesson:hooks-approval}}让人在动作发生之前决定放不放行，{{lesson:human-in-the-loop}}则让运行停下来等人、之后再接着往下走。"
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-chapter6",
+              "title": "事件处理机制：取消式处理与“半截输出不是合法前缀”（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter6.md"
+            },
+            {
+              "id": "book-interruption",
+              "title": "语音系统的打断管理：把被打断的一轮标出来（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter6/streaming-speech/interruption_manager.py"
+            },
+            {
+              "id": "book-chapter2",
+              "title": "流式响应的优势与首 Token 延迟（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter2.md"
+            },
+            {
+              "id": "ms-production",
+              "title": "生产环境中的延迟与成本指标（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/10-ai-agents-production/README.md"
+            },
+            {
+              "id": "cookbook-thinking",
+              "title": "带类型的流式事件：增量与内容块（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/extended_thinking/extended_thinking.ipynb"
+            },
+            {
+              "id": "doc-bailian-stream",
+              "title": "流式输出（阿里云百炼官方文档）",
+              "url": "https://help.aliyun.com/zh/model-studio/stream"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "application-state"
+        },
+        {
+          "id": "code-flows",
+          "type": "annotated-source",
+          "path": "lessons/lesson_streaming_cancel/runtime.py",
+          "start": 55,
+          "end": 81,
+          "notes": [
+            {
+              "id": "n-flows-1",
+              "line": 55,
+              "anchor": "def run_compare",
+              "text": "最基本的对照：同一条请求发两次，只差一个是流式、一个是整段返回。"
+            },
+            {
+              "id": "n-flows-2",
+              "line": 57,
+              "anchor": "streamed = context.complete_stream({\"messages\": messages}, 1)",
+              "text": "流式请求：平台边收边记，返回时已带着首块、首字、总耗时和拼合的响应。"
+            },
+            {
+              "id": "n-flows-3",
+              "line": 59,
+              "anchor": "started = time.perf_counter()",
+              "text": "非流式的 complete 只返回响应体，没有计时，运行器自己量。"
+            },
+            {
+              "id": "n-flows-4",
+              "line": 62,
+              "anchor": "payload, answer = reports.compare(",
+              "text": "对照表和检查在 reports.py 里算，数字都来自上面量到的。"
+            },
+            {
+              "id": "n-flows-5",
+              "line": 67,
+              "anchor": "def run_long",
+              "text": "长输出：没有 stop_when，等流自己结束，或者被停止。"
+            },
+            {
+              "id": "n-flows-6",
+              "line": 70,
+              "anchor": "streamed = context.complete_stream({\"messages\": messages}, 1)",
+              "text": "按“停止运行”时，这一行抛出 RunCancelled：已收到的内容平台已记下，下面的代码不会执行。"
+            },
+            {
+              "id": "n-flows-7",
+              "line": 72,
+              "anchor": "context.emit(\"lesson.report\", payload, 1)",
+              "text": "只有流正常结束才走到这里，被停止的运行没有这份报告。"
+            },
+            {
+              "id": "n-flows-8",
+              "line": 76,
+              "anchor": "def run_stop",
+              "text": "第三种：程序自己在第 N 块之后结束流。"
+            },
+            {
+              "id": "n-flows-9",
+              "line": 78,
+              "anchor": "stop_when=stop_at(values.stop_after_chunks)",
+              "text": "stop_when 由课程代码决定：返回真，流以 stopped 结束，运行继续往下走。"
+            },
+            {
+              "id": "n-flows-10",
+              "line": 79,
+              "anchor": "payload, answer = reports.stopped",
+              "text": "部分结果在这里被报告成部分结果：没有完成原因，用量未报告。"
+            }
+          ]
+        },
+        {
+          "id": "code-continue",
+          "type": "annotated-source",
+          "path": "lessons/lesson_streaming_cancel/runtime.py",
+          "start": 84,
+          "end": 110,
+          "notes": [
+            {
+              "id": "n-cont-1",
+              "line": 84,
+              "anchor": "def run_continue",
+              "text": "最后一个练习：停下之后，被截断的内容怎么交给下一轮。"
+            },
+            {
+              "id": "n-cont-2",
+              "line": 86,
+              "anchor": "first = context.complete_stream(",
+              "text": "第一步和上一个练习一样：流到停止点就由程序结束。"
+            },
+            {
+              "id": "n-cont-3",
+              "line": 87,
+              "anchor": "partial = analyse_partial(first.text)",
+              "text": "算出哪几行是写完的、半句在哪、下一条该从第几条写。"
+            },
+            {
+              "id": "n-cont-4",
+              "line": 88,
+              "anchor": "gap = (\"not_reached\" if first.status != \"stopped\"",
+              "text": "没到停止点、还没收到文字，或者清单已经写完：没有缺口，不续写，也不编造缺口。"
+            },
+            {
+              "id": "n-cont-5",
+              "line": 97,
+              "anchor": "plain_messages = messages + [",
+              "text": "错误的用法：半截文字当成写完的 assistant 消息放回去，再说“继续”。"
+            },
+            {
+              "id": "n-cont-6",
+              "line": 99,
+              "anchor": "plain = context.complete({\"messages\": plain_messages}, 2)",
+              "text": "第 2 轮：这一次请求是原样接上的那一种。"
+            },
+            {
+              "id": "n-cont-7",
+              "line": 102,
+              "anchor": "notice = marked_notice(t, values, first, partial)",
+              "text": "正确的用法：不放 assistant 前缀，用一条 user 消息写明哪里没写完。"
+            },
+            {
+              "id": "n-cont-8",
+              "line": 104,
+              "anchor": "marked = context.complete({\"messages\": marked_messages}, 3)",
+              "text": "第 3 轮：标注不完整的那一种。"
+            },
+            {
+              "id": "n-cont-9",
+              "line": 105,
+              "anchor": "merged_plain = merge_plain(",
+              "text": "两种合并规则不同：原样接上，或只留写完的行再接新内容。"
+            },
+            {
+              "id": "n-cont-10",
+              "line": 109,
+              "anchor": "context.emit(\"lesson.report\", payload, 3)",
+              "text": "两种用法的核对结果放进同一份报告，由学习者自己对照。"
+            }
+          ]
+        },
+        {
+          "id": "code-stream",
+          "type": "annotated-source",
+          "path": "course/execution.py",
+          "start": 362,
+          "end": 415,
+          "notes": [
+            {
+              "id": "n-stream-1",
+              "line": 362,
+              "anchor": "            while True:",
+              "text": "平台读流的主循环，课程里每一次 complete_stream 都走这里。"
+            },
+            {
+              "id": "n-stream-2",
+              "line": 363,
+              "anchor": "                if self.cancelled():",
+              "text": "每圈先看有没有人要求停止，不管有没有新数据块到达。"
+            },
+            {
+              "id": "n-stream-3",
+              "line": 366,
+              "anchor": "item = pump.next(timeout=0.05)",
+              "text": "读取线程把数据块放进队列，这里最多等 0.05 秒，所以停止最迟 0.05 秒内被看到。"
+            },
+            {
+              "id": "n-stream-4",
+              "line": 371,
+              "anchor": "kind, value, arrived = item",
+              "text": "每块带着到达时刻，首块和首字的毫秒数由此而来。"
+            },
+            {
+              "id": "n-stream-5",
+              "line": 374,
+              "anchor": "if kind == \"error\":",
+              "text": "断流：已收到的先记下，之后抛出错误。"
+            },
+            {
+              "id": "n-stream-6",
+              "line": 378,
+              "anchor": "# Arrived while the run was being stopped",
+              "text": "刚好在停止时到达的一块：只计数，不记录。"
+            },
+            {
+              "id": "n-stream-7",
+              "line": 381,
+              "anchor": "received_ms = round((arrived - started) * 1000)",
+              "text": "时间是本进程测的：从请求发出前到传输层交出这一块。"
+            },
+            {
+              "id": "n-stream-8",
+              "line": 382,
+              "anchor": "assembler.add(value, received_ms)",
+              "text": "数据块在这里拼进响应，同时留一份原样的，等着写进 response_delta。"
+            },
+            {
+              "id": "n-stream-9",
+              "line": 390,
+              "anchor": "if stop_when is not None and stop_when(assembler.view()):",
+              "text": "课程的 stop_when 看到的是已拼出的文字和块数，返回真就以 stopped 结束。"
+            },
+            {
+              "id": "n-stream-10",
+              "line": 397,
+              "anchor": "discarded += pump.stop()",
+              "text": "无论怎么结束都让读取线程退出，队列里没交给运行的块在这里算作丢弃。"
+            },
+            {
+              "id": "n-stream-11",
+              "line": 398,
+              "anchor": "            flush()",
+              "text": "结束前把已交给运行的数据块写成 response_delta，所以“已收到”一定有记录。"
+            },
+            {
+              "id": "n-stream-12",
+              "line": 399,
+              "anchor": "facts = {\"assembled_from_chunks\": True",
+              "text": "response 里的 stream 事实：结束方式、块数、首块和首字时间。"
+            },
+            {
+              "id": "n-stream-13",
+              "line": 404,
+              "anchor": "facts[\"cancel_reason\"] = self.cancel_reason() or \"api\"",
+              "text": "只有 cancelled 才有原因和丢弃计数。"
+            },
+            {
+              "id": "n-stream-14",
+              "line": 411,
+              "anchor": "response = assembler.body()",
+              "text": "拼合的响应：只含数据块里真有的内容，不补字段。"
+            },
+            {
+              "id": "n-stream-15",
+              "line": 415,
+              "anchor": "raise RunCancelled(texts_for(self.locale).run_cancelled)",
+              "text": "response 写完之后才抛出：运行随后以 cancelled 结束。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "f-stream-idle",
+              "start": 367,
+              "end": 370,
+              "label": "平台：空闲时把攒着的数据块合并写成一条事件"
+            },
+            {
+              "id": "f-stream-error",
+              "start": 385,
+              "end": 389,
+              "label": "平台：流里带 error 对象时记下并抛出"
+            },
+            {
+              "id": "f-stream-flush",
+              "start": 393,
+              "end": 395,
+              "label": "平台：第一块单独成条，之后按时间或块数合并"
+            },
+            {
+              "id": "f-stream-extra",
+              "start": 406,
+              "end": 409,
+              "label": "平台：停止原因与错误信息"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "平台记数据块，课程代码只决定什么时候停、拿到的怎么用",
+          "chosen": "接收、计时、记录、停止和拼合都在平台的 `complete_stream` 里：课程代码只传请求体和可选的 `stop_when`，拿回 `StreamResult`，对着真实的计时和响应做核对。被停止时由平台记下已收到的内容再抛出 `RunCancelled`；课程代码不能在停止之后写事件。部分结果由 `analyse_partial` 判断哪些行写完，续写请求和合并规则放在运行器里，核对是纯 Python。",
+          "alternatives": [
+            {
+              "id": "own-sse",
+              "title": "课程自己读 SSE，自己处理连接",
+              "why_not": "每门课都要重写一遍超时、取消、密钥和脱敏，还容易漏掉“停止之后不再记录”。连接由平台统一管，课程代码拿不到密钥，也不能绕过它。"
+            },
+            {
+              "id": "wait-then-record",
+              "title": "等流结束再一次性记录",
+              "why_not": "中途被停止或断流时，已经收到的内容就丢了，无法回答“取消时收到了什么”。数据块边收边记，停在哪里，记录就到哪里。"
+            },
+            {
+              "id": "typewriter",
+              "title": "把拼好的整段回答逐字“打”出来",
+              "why_not": "那是伪造的流：时间线上的到达时刻不是真的，首字延迟也无从谈起。页面只显示真实到达的块和平台测到的时间。"
+            },
+            {
+              "id": "assistant-prefix",
+              "title": "把截断的文字放回去当 assistant 前缀，让模型继续",
+              "why_not": "没有受支持的续接接口时，半截输出不是合法前缀；模型可能从半句后接，也可能重写整条，结果要靠核对才知道。本课用标注不完整的 user 消息，并核对合并结果。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "first-token-vs-total",
+          "title": "流式与非流式对照",
+          "hypothesis": "同一条请求，流式的首字比它自己的总耗时早到，早多少取决于模型要不要先推理；流式与非流式的总耗时可能相近，也可能差几成。拼合的响应和非流式响应在消息结构上一致，只是顶层少一些没有任何数据块带的字段。",
+          "predict": "predict-requests",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "stream-vs-block",
+              "label": "流式再非流式各一次"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stream-request",
+              "text": "流式请求：`data.stream` 为 true，请求体里的 `stream` 与 `stream_options` 是平台加的。",
+              "selector": {
+                "event": "request",
+                "path": "data.stream"
+              }
+            },
+            {
+              "id": "first-delta",
+              "text": "第一块单独成一条 `response_delta`：`received_ms` 是首块到达的时刻。",
+              "selector": {
+                "event": "response_delta",
+                "path": "data.received_ms"
+              }
+            },
+            {
+              "id": "stream-facts",
+              "text": "拼合响应的 `data.stream`：首块、首字、数据块数和结束方式。",
+              "selector": {
+                "event": "response",
+                "path": "data.stream.first_token_ms"
+              }
+            },
+            {
+              "id": "usage-chunk",
+              "text": "拼合响应里的 `usage`：来自最后一个用量块，没有这个块就没有这个字段。",
+              "selector": {
+                "event": "response",
+                "round": 1,
+                "path": "data.body.usage"
+              }
+            },
+            {
+              "id": "plain-response",
+              "text": "第 2 轮的非流式响应：一次返回，没有 `data.stream`。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.duration_ms"
+              }
+            },
+            {
+              "id": "shape-check",
+              "text": "报告里的 `shape_match` 检查：两边的消息结构是否一致。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=shape_match]"
+              }
+            },
+            {
+              "id": "first-token-metric",
+              "text": "报告里的首字延迟，与流式总耗时放在一起比。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=first_token_ms]"
+              }
+            },
+            {
+              "id": "compare-table",
+              "text": "对照表：首块、首字、总耗时、完成原因、用量、字数和条目数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "同一条请求发两次，先流式，再非流式。先看流式那次是怎么发出去的。"
+            },
+            {
+              "text": "请求体里的 `stream: true` 和 `stream_options` 是平台加的，课程代码没有写。",
+              "observe": "stream-request",
+              "stage": "runtime"
+            },
+            {
+              "text": "第一块单独成一条事件，`received_ms` 就是它到达的时刻。它可能已带第一段文字，也可能只有角色或一个空的推理块。",
+              "observe": "first-delta",
+              "stage": "model"
+            },
+            {
+              "text": "流式响应收尾时，平台把首块、首字、块数和结束方式写在 `stream` 里。",
+              "observe": "stream-facts",
+              "stage": "runtime"
+            },
+            {
+              "text": "用量来自最后的用量块；服务商没发，这里就没有，报告里写“未报告”。",
+              "observe": "usage-chunk",
+              "stage": "model"
+            },
+            {
+              "text": "第 2 轮是同一条请求，不流式：一次返回，没有 `stream`，耗时只有一个数。",
+              "observe": "plain-response",
+              "stage": "model"
+            },
+            {
+              "text": "核对两边的消息结构是否一致：看的是角色、文字和完成原因，不是文字内容。",
+              "observe": "shape-check"
+            },
+            {
+              "text": "首字延迟和流式总耗时放在一起看：差多少，就是流式让用户少等的时间。",
+              "observe": "first-token-metric"
+            },
+            {
+              "text": "对照表把两边并排放好，注意哪几行非流式一侧是破折号：它没有首块和首字。",
+              "observe": "compare-table"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这一次运行里，流式的首块、首字、总耗时、数据块数，非流式的总耗时，以及两边消息结构是否一致；数字都是本进程的计时。"
+            ],
+            "does_not_prove": [
+              "服务商的延迟水平：每种做法只有一个样本，顺序固定为先流式后非流式，服务商的缓存可能让第二次更快。",
+              "流式能让总耗时变短：对照看的是用户等第一个字的时间。离线脚本里的耗时只说明计时的方式，不代表真实服务商。"
+            ]
+          }
+        },
+        {
+          "id": "cancel-and-disconnect",
+          "title": "流式输出中途取消",
+          "hypothesis": "同一个长输出练习，完整接收、中途停止、断开再重连三次运行，流的结束方式和后端终态各不相同：停止的运行拼合内容只到停止前收到的部分，断开的运行仍然完整结束。",
+          "arms": [
+            {
+              "id": "long",
+              "exercise": "long-stream",
+              "label": "长输出：完整、停止、断开"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stream-status",
+              "text": "流的结束方式：完整接收是 `completed`，停止之后是 `cancelled`。",
+              "selector": {
+                "event": "response",
+                "path": "data.stream.status"
+              }
+            },
+            {
+              "id": "first-token-time",
+              "text": "首字延迟：平台测到的第一段非空文字到达的时刻。",
+              "selector": {
+                "event": "response",
+                "path": "data.stream.first_token_ms"
+              }
+            },
+            {
+              "id": "delta-ranges",
+              "text": "第一条 `response_delta` 覆盖的数据块序号；之后每条首尾相接，一块不少。",
+              "selector": {
+                "event": "response_delta",
+                "path": "data.chunk_range"
+              }
+            },
+            {
+              "id": "finish-reason",
+              "text": "拼合响应的完成原因：完整接收是 `stop`，被停止的流是空值。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].finish_reason"
+              }
+            },
+            {
+              "id": "done-status",
+              "text": "后端写下的终态：这一条才是最终的结局。",
+              "selector": {
+                "event": "done",
+                "path": "data.status"
+              }
+            },
+            {
+              "id": "list-report",
+              "text": "只有正常结束才有的 `list_complete` 检查；被停止的运行没有这份报告。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=list_complete]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这个练习要自己动手跑三次：不操作；开始接收后点“停止运行”；开始接收后点“断开事件连接”，过几秒再重新连接。"
+            },
+            {
+              "text": "先看不操作的那次：流的结束方式是 `completed`。",
+              "observe": "stream-status",
+              "stage": "runtime"
+            },
+            {
+              "text": "首字比总耗时早到；早多少，看模型先推理了多久，以这次的数字为准。长输出的好处就在这段差距里。",
+              "observe": "first-token-time",
+              "stage": "model"
+            },
+            {
+              "text": "每条 `response_delta` 的序号首尾相接，数据块一块不少地记着。",
+              "observe": "delta-ranges",
+              "stage": "model"
+            },
+            {
+              "text": "完整接收有完成原因；停止那次，这里是空值，说明模型没写完。",
+              "observe": "finish-reason",
+              "stage": "model"
+            },
+            {
+              "text": "停止那次，`response` 的 `stream` 里多了 `cancel_reason` 和 `discarded_after_cancel`，用来核对取消时收到了什么。"
+            },
+            {
+              "text": "终态看 `done`：停止的是 `cancelled` 并带着原因；断开再重连的仍是 `completed`，多一个 `client_disconnects`。",
+              "observe": "done-status"
+            },
+            {
+              "text": "正常结束时才有报告；被停止的运行没有，因为停止之后的代码不会再执行。",
+              "observe": "list-report",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "同一个练习在完整、停止、断开三种操作下，各自在 `response` 和 `done` 里留下什么：流的结束方式、已记录的内容、后端终态和原因。"
+            ],
+            "does_not_prove": [
+              "服务商在停止之后有没有继续生成或计费：本平台只管不再接收，被停止的流通常没有用量，用量未报告。",
+              "每次停止都会留下同样的丢弃计数：点停止的时刻每次不同，已经在途的数据块数也不同。",
+              "页面关闭的行为和断开事件连接相同：关闭页面会发 `page_closed` 的取消请求。"
+            ]
+          }
+        },
+        {
+          "id": "partial-result-next-round",
+          "title": "部分结果交给下一轮",
+          "hypothesis": "程序在第 N 块后停止的流没有完成原因、没有用量；把这段半截内容原样接上和标注不完整地续写，对合并结果的核对可能给出不同的结论：原样接上可能出现重复编号或没写完的行，也可能一次就通过。",
+          "arms": [
+            {
+              "id": "stop",
+              "exercise": "stop-after-n",
+              "label": "程序在第 N 块后停止"
+            },
+            {
+              "id": "continue",
+              "exercise": "partial-continue",
+              "label": "续写：原样接上与标注不完整"
+            }
+          ],
+          "observe": [
+            {
+              "id": "stop-reason",
+              "text": "课程代码主动停止的流：`stop_reason` 是 `lesson`，不是 `cancel_reason`。",
+              "selector": {
+                "event": "response",
+                "path": "data.stream.stop_reason"
+              }
+            },
+            {
+              "id": "no-finish",
+              "text": "部分结果的完成原因是空值：模型没有说自己写完了。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].finish_reason"
+              }
+            },
+            {
+              "id": "usage-metric",
+              "text": "报告里的用量：服务商没发用量块，写“未报告”。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=usage]"
+              }
+            },
+            {
+              "id": "plain-request",
+              "text": "第 2 轮请求：最后两条消息是被截断的 assistant 消息和“继续”。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "marked-request",
+              "text": "第 3 轮请求：没有 assistant 前缀，一条 user 消息写明哪里没写完、从第几条重写。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "plain-merge",
+              "text": "原样接上之后的合并核对：编号、重复和没写完的行。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=plain_merge]"
+              }
+            },
+            {
+              "id": "marked-merge",
+              "text": "标注版合并之后的核对，用的是同一套规则。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=marked_merge]"
+              }
+            },
+            {
+              "id": "merge-table",
+              "text": "对照表：两种用法的完成原因、合并后的编号、重复的、缺的和没写完的行。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "先看只停不续写的那一组：程序在第 N 块之后结束了流，运行没有结束。"
+            },
+            {
+              "text": "主动停止留下的是 `stop_reason`，和用户取消的 `cancel_reason` 是两回事。",
+              "observe": "stop-reason",
+              "stage": "runtime"
+            },
+            {
+              "text": "部分结果的完成原因是空值，这是“没写完”留在数据里的痕迹。",
+              "observe": "no-finish",
+              "stage": "model"
+            },
+            {
+              "text": "用量也没有：服务商没发用量块，报告写“未报告”，不写 0。",
+              "observe": "usage-metric"
+            },
+            {
+              "text": "再看续写那一组。第 2 轮把截断的文字当成写完的 assistant 消息放回去，再说“继续”。",
+              "observe": "plain-request",
+              "stage": "model"
+            },
+            {
+              "text": "第 3 轮没有 assistant 前缀，一条 user 消息写明上一次没写完、已写完几条、从第几条重写。",
+              "observe": "marked-request",
+              "stage": "model"
+            },
+            {
+              "text": "原样接上的合并结果，用编号、重复和没写完的行来核对。",
+              "observe": "plain-merge"
+            },
+            {
+              "text": "标注版用同一套规则核对。两边的结论各是什么，以你这次运行为准。",
+              "observe": "marked-merge"
+            },
+            {
+              "text": "对照表把两种用法并排放好，逐列比一比。",
+              "observe": "merge-table"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "程序主动停止的流留下什么（`stopped`、没有完成原因和用量），两种续写用法发出的请求有什么不同，以及程序对两种合并结果的核对结论。"
+            ],
+            "does_not_prove": [
+              "哪种用法对所有模型都更好：每种用法只有一个样本，续写由模型自己写，原样接上有时也会成功。",
+              "合并结果的内容是对的：核对只看编号和每行是否写完，看不出一行之内的拼接错乱。",
+              "离线脚本里原样接上的重写能代表真实模型：那是预先写好的行为，真实运行的结果以核对为准。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "场景",
+          "help": "每个练习固定一个场景；这里只用来看清练习在做什么。",
+          "options": [
+            {
+              "value": "compare",
+              "label": "流式与非流式对照"
+            },
+            {
+              "value": "long",
+              "label": "长输出：停止与断开"
+            },
+            {
+              "value": "stop",
+              "label": "程序在第 N 块后停止"
+            },
+            {
+              "value": "continue",
+              "label": "不完整内容的下一轮"
+            }
+          ]
+        },
+        {
+          "name": "items",
+          "label": "清单条数",
+          "help": "让模型写几条编号清单，3 到 12。条数越多，流越长。"
+        },
+        {
+          "name": "detail",
+          "label": "每条的长度",
+          "help": "每条写一句话，或写三句话。",
+          "options": [
+            {
+              "value": "short",
+              "label": "一句话"
+            },
+            {
+              "value": "long",
+              "label": "三句话"
+            }
+          ]
+        },
+        {
+          "name": "stop_after_chunks",
+          "label": "停止点（数据块数）",
+          "help": "收到这么多块之后由程序结束流，2 到 400；只在“程序在第 N 块后停止”和“不完整内容的下一轮”里生效。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "一次流式请求结束后，`response` 事件里的 `body` 能说成服务商发来的响应体吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "能，内容和服务商发的一样",
+                  "feedback": "不对。内容虽然来自数据块，但整个对象是平台拼出来的。"
+                },
+                {
+                  "id": "b",
+                  "text": "不能，它是平台按数据块拼的，`stream.assembled_from_chunks` 标明了这一点",
+                  "feedback": "对。原始数据块在 `response_delta` 里，拼合的响应只是它们的合成。"
+                },
+                {
+                  "id": "c",
+                  "text": "只有经 LiteLLM 接入时才不能",
+                  "feedback": "不对。两条路径都是平台拼的，区别只在数据块是 JSON 还是 SDK 对象。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "拼合的响应不是原始报文，正文和界面都要如实标注。"
+            },
+            {
+              "id": "q2",
+              "prompt": "用户点“停止运行”之后，有一块数据在途中到达。它会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "写进 `response_delta`，因为它确实到了",
+                  "feedback": "不对。停止请求到达之后收到的块不记录。"
+                },
+                {
+                  "id": "b",
+                  "text": "已到达没交给运行的，只计入 `discarded_after_cancel`；停止之后才到的，既不记录也不计数",
+                  "feedback": "对。取消那一刻只有已交给运行的数据块在记录里。"
+                },
+                {
+                  "id": "c",
+                  "text": "运行等它到齐再结束",
+                  "feedback": "不对。停止不等待；等的是上游连接稍后自己关闭。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "取消后不再记录新的数据块。"
+            },
+            {
+              "id": "q3",
+              "prompt": "你点了“断开事件连接”，十秒后重新连接。后端的运行在这期间怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "被停止，重新连接会开始一次新运行",
+                  "feedback": "不对。读者断开不会停止运行。"
+                },
+                {
+                  "id": "b",
+                  "text": "照常往下跑；重新连接从最后一条事件接着读，终态以后端的 `done` 为准",
+                  "feedback": "对。事件在存储里，读者按 `seq` 续读，不重不漏。"
+                },
+                {
+                  "id": "c",
+                  "text": "暂停等待读者回来",
+                  "feedback": "不对。运行的暂停只发生在审批点，与读者无关。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "运行与读者只靠事件记录相连。"
+            },
+            {
+              "id": "q4",
+              "prompt": "课程代码在 `stop_when` 里返回真，和用户点停止相比，哪一项只属于前者？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "流以 `stopped` 结束，运行继续往下走",
+                  "feedback": "对。`stopped` 是课程自己的决定，运行没有被取消，之后的代码照常执行。"
+                },
+                {
+                  "id": "b",
+                  "text": "`response` 里有 `cancel_reason`",
+                  "feedback": "不对。`cancel_reason` 只在 `cancelled` 时出现。"
+                },
+                {
+                  "id": "c",
+                  "text": "后端 `done` 的 `status` 是 `cancelled`",
+                  "feedback": "不对。程序主动停止后运行照常完成，`done` 是 `completed`。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "stopped 与 cancelled 的区别：谁决定的，以及运行是否继续。"
+            },
+            {
+              "id": "q5",
+              "prompt": "被提前结束的流，服务商没有发用量块。报告里的用量该写什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "0，因为没收到 Token",
+                  "feedback": "不对。写 0 冒充了一个服务商没有报告的数。"
+                },
+                {
+                  "id": "b",
+                  "text": "按收到的字数估一个",
+                  "feedback": "不对。本平台不估算用量。"
+                },
+                {
+                  "id": "c",
+                  "text": "未报告",
+                  "feedback": "对。这个数可能存在，只是这次没给。"
+                }
+              ],
+              "correct": "c",
+              "explanation": "服务商没有报告的数，写“未报告”。"
+            },
+            {
+              "id": "q6",
+              "prompt": "流停在 `{\"path\": \"a.t` 这样的工具调用参数上。程序该怎么做？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "补全成 `{\"path\": \"a.txt\"}` 再执行",
+                  "feedback": "不对。补全是猜，模型想要的可能是别的文件。"
+                },
+                {
+                  "id": "b",
+                  "text": "不执行：没有 `finish_reason: tool_calls`，参数也解析不了",
+                  "feedback": "对。只有完整、通过检查的调用才可以执行。"
+                },
+                {
+                  "id": "c",
+                  "text": "先执行，失败了再重试",
+                  "feedback": "不对。工具可能有副作用，半截参数不该碰到工具。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "不完整的工具调用一律不执行。"
+            },
+            {
+              "id": "q7",
+              "prompt": "编号核对通过了：1 到 8 连续、各一次、每行写完。它能证明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "结构完整：没有重复、缺漏和半句；每条内容对不对，它不管",
+                  "feedback": "对。核对只看结构，内容要另外判断。"
+                },
+                {
+                  "id": "b",
+                  "text": "内容都是对的",
+                  "feedback": "不对。编号对得上，内容仍可能写错。"
+                },
+                {
+                  "id": "c",
+                  "text": "这种用法比另一种永远更好",
+                  "feedback": "不对。一次运行一个样本，说明不了“永远”。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "核对能证明的和不能证明的要分开说。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“程序在第 N 块后停止”，找出证明这个流是被课程代码主动结束、而不是被用户取消的那个字段。",
+          "target": {
+            "event": "response",
+            "path": "data.stream.stop_reason"
+          },
+          "explanation": "拼合的 `response` 里 `stream.stop_reason` 是 `lesson`，`status` 是 `stopped`；用户取消的流写的是 `cancel_reason` 和 `discarded_after_cancel`。同一条 `response` 里的 `finish_reason` 是空值，也没有 `usage`：模型没有说自己写完了，服务商也没来得及发用量块。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在“流式与非流式对照”里读出了首块、首字和总耗时，说得清它们各是什么。"
+            },
+            {
+              "id": "item-2",
+              "text": "我分别做过完整接收、点“停止运行”、点“断开事件连接”，并在 `response` 和 `done` 里找到各自的证据。"
+            },
+            {
+              "id": "item-3",
+              "text": "我能说出 `stopped` 和 `cancelled` 的区别，也能说出已记录、已丢弃和停止之后到达三者的区别。"
+            },
+            {
+              "id": "item-4",
+              "text": "我对比了原样接上和标注不完整两种续写的核对结果，知道核对证明了什么、没有证明什么。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "stop_when",
+      "note": "传给 complete_stream 的函数；返回真就由课程代码提前结束流，状态是 stopped。"
+    },
+    {
+      "name": "first_chunk_ms",
+      "note": "从请求发出前到第一块到达的毫秒数，平台在本进程里测；第一块常没有文字。"
+    },
+    {
+      "name": "first_token_ms",
+      "note": "从请求发出前到第一段非空文字到达的毫秒数，即首字延迟。"
+    },
+    {
+      "name": "discarded_after_cancel",
+      "note": "取消时已到达、却没有交给运行的数据块数；只计数，不进记录。"
+    },
+    {
+      "name": "cancel_reason",
+      "note": "运行为什么被停止：用户停止、页面关闭或接口调用，写在 done 里。"
+    },
+    {
+      "name": "response_delta",
+      "note": "流式的数据块事件：原样记录数据块，第一块单独一条，之后按时间或块数合并。"
+    },
+    {
+      "name": "StreamResult",
+      "note": "complete_stream 的返回值：拼合响应、结束方式、数据块数、首块与首字时间、总耗时。"
+    },
+    {
+      "name": "RunCancelled",
+      "note": "运行被停止时从 complete_stream 抛出；写在它后面的课程代码不会执行。"
+    },
+    {
+      "name": "analyse_partial",
+      "note": "判断半截文字：哪几行写完了、半句是哪一行、下一条该从第几条写。"
+    }
+  ]
+}

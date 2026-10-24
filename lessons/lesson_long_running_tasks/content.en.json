@@ -1,0 +1,1530 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "BACKGROUND / SCHEDULE",
+      "source": "32ae1b7fc751"
+    },
+    "hero.headline": {
+      "text": "Slow work goes to the background,",
+      "source": "97eeb0c77aab"
+    },
+    "hero.highlight": {
+      "text": "and its result comes back in a later round.",
+      "source": "c17357d30977"
+    },
+    "hero.takeaway": {
+      "text": "The inspection assistant sends the pack check and the grade count to the background, gets job ids at once and goes on with other work. When a job ends, the harness hands its result to the model before the next request, as one message that names its source. At the end of every round the harness itself judges the goal: done, impossible or still going, and a used-up budget stops the run in plain words. A scheduled trigger starts jobs again and again, with a rule for when the previous run has not finished.",
+      "source": "70fe4b27b454"
+    },
+    "concepts.01-background.label": {
+      "text": "01 / BACKGROUND",
+      "source": "490e0d7019ea"
+    },
+    "concepts.01-background.title": {
+      "text": "Take a number, do not wait",
+      "source": "bb85bbe31c81"
+    },
+    "concepts.01-background.description": {
+      "text": "A Background Job runs for real on a thread of the executor. The tool call that starts it returns a job id and the running status at once, and the model can go on with other work in the same round.",
+      "source": "a66b506c5751"
+    },
+    "concepts.02-injection.label": {
+      "text": "02 / INJECTION",
+      "source": "60b39a6479fe"
+    },
+    "concepts.02-injection.title": {
+      "text": "Hand the result back before the next request",
+      "source": "e3dbad811d47"
+    },
+    "concepts.02-injection.description": {
+      "text": "Result Injection: after a job ends, the harness puts its result into the message history before the next request, as one separate message that names its source. Before that, no request contains it.",
+      "source": "f6ac1aca8aac"
+    },
+    "concepts.03-trigger.label": {
+      "text": "03 / TRIGGER",
+      "source": "c9684b18eeda"
+    },
+    "concepts.03-trigger.title": {
+      "text": "Start on time, with a rule for overlap",
+      "source": "d44e679a20b3"
+    },
+    "concepts.03-trigger.description": {
+      "text": "A Scheduled Trigger starts a run at a fixed interval. When the next trigger is due before the previous run has ended, the Overlap Policy decides: skip, queue, or run in parallel up to a cap.",
+      "source": "cdab1a11872b"
+    },
+    "concepts.04-cleanup.label": {
+      "text": "04 / CLEANUP",
+      "source": "6bd671f2e580"
+    },
+    "concepts.04-cleanup.title": {
+      "text": "Stoppable, with a state you can look up",
+      "source": "29105217fd76"
+    },
+    "concepts.04-cleanup.description": {
+      "text": "A job can be cancelled, time out or fail, and every terminal state has an exit code. Jobs still running when the run ends are cancelled together; otherwise they become Orphan Jobs: the run is long over and the threads keep going in the background.",
+      "source": "aee9fa9e327e"
+    },
+    "section-1.title": {
+      "text": "What belongs in the background",
+      "source": "7804fc5682b6"
+    },
+    "section-1.paragraphs.0": {
+      "text": "A slow task should not block the conversation; its result can come back later. The inspection assistant of this lesson has two jobs for the teaching assistant: verify the SHA-256 of 6 submission packs, which takes 12 seconds, and count the passing scores of 12 students, which takes 6. The seconds here are seconds on a virtual clock, and the next section says why. If both jobs ran synchronously, every tool call would wait for its return and the model could do nothing for a full 18 seconds. Work that does not depend on the results, such as reading a grading rule or tidying the report format, would have to queue behind them.",
+      "source": "885eb91d1601"
+    },
+    "section-1.paragraphs.1": {
+      "text": "The way of a background job is to split “start” from “finish”. It is like taking a number at a restaurant: you go and do something else, and the number is called when the meal is ready. The model calls `start_background_job` and at once gets the job id `job-1` and the running status, with no result. The job runs for real on a thread of the executor, and in this round the model can read a rule, start a second job, or simply say “I will wait”.",
+      "source": "7a7c1083a85a"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Not every task is worth sending to the background. A good candidate has three traits: it is slow, usually seconds to minutes; the next step does not depend on its result; and getting the result a little later does not matter. A query that returns in milliseconds (the `read_policy` of this lesson), or a result the model needs in its very next sentence, is simpler to run synchronously: a background job costs an extra start call and an extra result message, and its state and cancellation have to be managed. The model proposes the background run itself by calling `start_background_job`; the harness does not guess that something is slow because it sees words such as `build` or `install`, and decide for the model.",
+      "source": "75f545e1026b"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The subtasks of {{lesson:delegation-budget}} also run in parallel, but the coordinator waits until all of them are back before it goes on, so the waiting happens inside one round. The background jobs of this lesson do not wait: the model starts one, turns to something else, and the result returns in a later round. The price is more boundaries: when a result enters the conversation, what happens when a job fails, and what happens to the jobs still running when the run ends. Those three questions are the next sections. One overall boundary: all of this happens inside one run. When the run ends, the jobs and the trigger rules are gone; keeping them across runs needs an external scheduler or a persistent queue, which this lesson does not build.",
+      "source": "f67a36577029"
+    },
+    "section-2.title": {
+      "text": "The job handle and the executor",
+      "source": "d9a9dfe793e9"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Starting a background job returns only a job id, and the real work runs on a thread of the executor. The id is the handle: looking the job up, cancelling it and matching its result all go through it. The name and the description of the tool must say “start” and mean it: the description of `start_background_job` says it returns a job id at once and does not wait, and the return holds only the id, the running status and a short note. The reason is that a model easily reads “the job has started” as “the job is done”, and then writes a conclusion that depends on a result that has not arrived.",
+      "source": "abd50bd28df2"
+    },
+    "section-2.paragraphs.1": {
+      "text": "The executor is in executor.py: one thread per job, working step by step. Take `checksum_pack`: it has 3 steps of a declared 4 seconds each, so started at second 0 it should finish a step at seconds 4, 8 and 12. Every step is real computation: step 1 feeds the first two files into SHA-256, and step 3 produces the digest. A job ends in one of four terminal states, each with an exit code: completed 0, failed 1 (the job itself raised an error), timed out 124, cancelled 143. The numbers borrow Unix habits; this lesson uses threads and starts no child process.",
+      "source": "740f64ecfa94"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The time a job declares is not waited out for real; it is seconds on a virtual clock. A thread does not `sleep`; it parks on the clock until a given moment. Only the runner can move the clock, and after every move it calls `settle` and waits until every thread has either parked for a later moment or ended. This has two benefits: the timeline of one run is the same every time, so a controlled comparison is possible, and a test can advance 120 seconds without waiting. Work it out by hand: with the clock at second 5, `checksum_pack` has done 1 step and its progress is 1/3; at second 15 it ended long ago, at second 12, so `finished_at` is 12, while the harness only sees it at second 15 and `observed_at` is 15.",
+      "source": "fa6ba5cce534"
+    },
+    "section-2.paragraphs.3": {
+      "text": "A job on a thread never publishes events itself. Only the runner's thread may publish through RunContext; letting worker threads do it would tangle events with stopping and with event order. So the runner reads the state after the threads have settled and records it for them. How many jobs run at once is also capped: `max_running` is 3 by default, and a fourth start gets the structured error `too_many_jobs`, so the model has to wait for one to end or cancel one. The cap exists to refuse clearly when resources are limited instead of queueing up and slowing down silently; the deployment lesson of Microsoft also names a capped concurrency and backpressure (refuse and tell the caller) as basic tools for scaling. A real system swaps in a wall clock, a process pool and a queue here, and the mechanism is the same.",
+      "source": "71f74c2e9c92"
+    },
+    "predict-injections.prompt": {
+      "text": "Before you run “5 seconds per round”, guess: grade_stats ends at second 6 and checksum_pack at second 12; how many background result messages will the harness inject into the conversation during the whole run?",
+      "source": "e286569a71c2"
+    },
+    "mq-handle.handle-return.prompt": {
+      "text": "What does the model get in the tool result right after it calls `start_background_job`?",
+      "source": "a368aa9a666b"
+    },
+    "mq-handle.handle-return.a.text": {
+      "text": "The job id and the running status, with no result",
+      "source": "1b6bba9cd7a3"
+    },
+    "mq-handle.handle-return.a.feedback": {
+      "text": "Right. Starting only hands the job over; the harness delivers the result separately later.",
+      "source": "ee20c7387f2b"
+    },
+    "mq-handle.handle-return.b.text": {
+      "text": "The final result of the job",
+      "source": "f791875c82b5"
+    },
+    "mq-handle.handle-return.b.feedback": {
+      "text": "No. The job has just begun and no result exists yet; the tool result does not get one added later.",
+      "source": "ffc142efd5c5"
+    },
+    "mq-handle.handle-return.c.text": {
+      "text": "The moment the job is expected to end",
+      "source": "a5e82a2000a1"
+    },
+    "mq-handle.handle-return.c.feedback": {
+      "text": "No. The return holds the start time and the deadline, not a predicted end time.",
+      "source": "55018a2206bd"
+    },
+    "mq-handle.handle-return.explanation": {
+      "text": "The start call returns only a handle; “started” is not “done”.",
+      "source": "abc4f9c92ed6"
+    },
+    "section-3.title": {
+      "text": "When a result is injected",
+      "source": "137ef9d0757b"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A background result is injected into the next request, with its source and time. The model sees only the request: `checksum_pack` ended at second 12, and if the harness does nothing, the next request still lacks it and the model knows nothing. So someone has to put it in. Before every request goes out, the runner checks whether any job has ended on its own; if so, it joins their results into one separate message and appends it to the end of the message history. It opens with “Background job results · source: the harness's background executor, not something the user said” and the current time, and then one line per job: id, kind, status, exit code and end time, with `value=` on a success.",
+      "source": "a4673470c235"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Why a separate message, neither in a tool result nor posing as the user? Not in a tool result, because one call has only one result: the call of `start_background_job` was already answered with running in round 1, and tool messages are paired by call id (see {{lesson:messages-context}}), so it cannot be answered a second time. Not posing as the user, because the words come from the harness and from the jobs: an error message or a file name can carry instructions. With the source named, the model can tell what the learner said from what outside data brought in; {{lesson:prompt-injection}} is about exactly this risk. When the harness inserted a reminder in {{lesson:todo-planning}}, it did the same thing: one separate message that says where it came from.",
+      "source": "0fd0e03b1577"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Now the timing. Before every request, the clock moves forward by `tick_seconds` seconds, 5 by default. The timeline of the inspection assistant is: round 1 is at second 0 and the model starts two jobs; round 2 is at second 5 and neither has ended; round 3 is at second 10 and grade_stats, which ended at second 6, is injected only now, 4 seconds late; round 4 is at second 15 and checksum_pack, which ended at second 12, is 3 seconds late. If the model does nothing in a round and only says “I will wait”, and the next job is a long way from ending, the harness does not spin round after round; it moves the clock in one step to that moment (`idle_wait`), so the next request carries something new. The length of a round comes from `tick_seconds`: with 10 seconds, grade_stats is injected in round 2.",
+      "source": "d9b2a25e15e0"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Before it is injected, the model cannot see a single word of a result. `check_job` gives only status and progress; once a job has ended, and before its result is delivered, it answers only that the result has not been delivered. The `not_seen_early` check in the report is more direct: it takes the line of each job in the injected message and looks for it in every request that was really sent; its first appearance must be exactly the round that injected it. What the check proves is the order; it cannot prove that the model uses the result well: when one message carries several results, the model may answer only the last one. Numbering each entry and ending with a one-line summary eases the problem but does not cure it.",
+      "source": "5d00038e2ccc"
+    },
+    "deep-dive-injection.title": {
+      "text": "When to inject: three ways to handle events",
+      "source": "4d2c698ff566"
+    },
+    "deep-dive-injection.summary": {
+      "text": "External events can interrupt, queue or run in parallel; a background result is queued.",
+      "source": "7d71baab83b5"
+    },
+    "deep-dive-injection.paragraphs.0": {
+      "text": "Chapter 6 of Understanding AI Agents (AI Agent book) sorts external events into three ways of handling, and this lesson uses the second. The cancelling way is for urgent events: when the user presses stop, it cancels the reasoning and the synchronous tools under way at once, appends the queued events together with this one, and requests again, which creates a safe point on purpose. The queued way is for ordinary events: a new event waits in a queue until the current step ends naturally, and is appended all at once at the boundary where a tool returns. The parallel way is for light questions unrelated to the main task: another session answers them and marks them as running in parallel with the main task.",
+      "source": "409c4fbeab69"
+    },
+    "deep-dive-injection.paragraphs.1": {
+      "text": "A background result is an ordinary event, so it takes the queued way: when the job ends at second 6, the model is inside the request of round 2 and is not interrupted; the result is appended before the next round, and several results that ended together are joined into one. The book also warns of two things. First, a synchronous interface requires every tool call to have a paired result, so the start call must be answered first with a placeholder “started”, and the real result then comes in as a new event with a job id and a source; the placeholder itself is a risk, because the model may take “started” for “done”. Second, in a batch of events the model may answer only the last one, so each event should be numbered and the batch should end with a one-line summary.",
+      "source": "6868ae87f66b"
+    },
+    "deep-dive-injection.paragraphs.2": {
+      "text": "The background task chapter of Learn Claude Code does much the same: a background thread puts the finished result into a queue, the queue is drained before every model call, the entries are formatted as `task_notification` and merged into the conversation, and the original call id is not reused; whether to go to the background is requested explicitly through a tool parameter, never guessed from keywords. The book also mentions that some model interfaces support asynchronous tool calls natively, so the model can keep working while a tool has not returned; whether a model has that ability and how to use it depends on the provider's documentation, and the harness still has to manage the lifecycle of the job.",
+      "source": "d4d827cb70d8"
+    },
+    "misconception-instant.claim": {
+      "text": "As soon as a background job ends, the model knows its result.",
+      "source": "b396152992d1"
+    },
+    "misconception-instant.correction": {
+      "text": "A model “knows” something only when it receives a request. The job ends at second 6, and the request of the round at second 5 went out long ago; the result has to wait for the harness to inject it before the next request. Before that, no request contains it, and the `not_seen_early` check in the report verifies exactly this.",
+      "source": "2e0d769667c6"
+    },
+    "mq-timing.injection-round.prompt": {
+      "text": "grade_stats ends at second 6 and the clock moves 5 seconds before every round. In which round's request does the model first see its result?",
+      "source": "effc36c272ab"
+    },
+    "mq-timing.injection-round.a.text": {
+      "text": "Round 2 (second 5)",
+      "source": "8cf60fbc866b"
+    },
+    "mq-timing.injection-round.a.feedback": {
+      "text": "No. The request of round 2 goes out at second 5, when the job has not ended.",
+      "source": "610b00044f99"
+    },
+    "mq-timing.injection-round.b.text": {
+      "text": "Round 3 (second 10)",
+      "source": "842fe21c8760"
+    },
+    "mq-timing.injection-round.b.feedback": {
+      "text": "Right. At the start of round 3 the clock reaches second 10, the harness finds the job ended and injects it before the request.",
+      "source": "f38b9386112a"
+    },
+    "mq-timing.injection-round.c.text": {
+      "text": "At second 6, without waiting for a round",
+      "source": "2674a6dedc2d"
+    },
+    "mq-timing.injection-round.c.feedback": {
+      "text": "No. A model sees something only when a request arrives; there is no “that moment” between requests.",
+      "source": "1d38ddb1f266"
+    },
+    "mq-timing.injection-round.explanation": {
+      "text": "Injection happens at the start of the first round after the job ends, before its request.",
+      "source": "ef3ebe94e18e"
+    },
+    "section-4.title": {
+      "text": "The goal check at the end of every round, and the budget",
+      "source": "b823ad491194"
+    },
+    "section-4.paragraphs.0": {
+      "text": "At the end of every round the harness itself judges the goal: done, impossible or still going. With background jobs, this cannot be left to the model. When the model stops calling tools, it only says that it has no action left in this round: it may be waiting for a job, or it may think it is finished. The absence of a new tool call does not prove that the goal is met, as the goal loop chapter of Learn Claude Code also reminds us.",
+      "source": "2e2094b23516"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The goal check of this lesson is in goal.py and looks only at facts a program can verify. Each required kind of job is in one of four states: completed with its result delivered (`done`), still running (`running`), free to be started or retried (`open`), or started up to the limit without success (`exhausted`). Besides that, it looks at the report: for every required job, the value must equal the value in the delivered result. There are three verdicts: all jobs `done` and the report consistent is `ok`; some kind `exhausted` is `impossible`; everything else is `continue`. The verdict and the reason of every round go into `lesson.goal_check`, and what the model said takes no part in the judgement.",
+      "source": "06636ef8b84e"
+    },
+    "section-4.paragraphs.2": {
+      "text": "An example of impossible: row 6 of the late-score sheet reads 8x, and `late_import` raises the same error 6 seconds after every start. After the first failure the verdict is to continue: `late_import` has not reached its start limit (started 1 time, limit 2), so it may be retried. The model does not always retry at once: in this run it first judged that the same row would fail the same way and did not retry; at the end of round 4 the goal check handed back \"Still to start: late_import\", and only then did it restart the job in round 5. The second attempt fails the same way, so the job has been started 2 times (the limit `max_attempts` is 2 by default), none succeeded and none is running, and the verdict becomes `impossible` and the run stops. Running the same job again would fail the same way, and retrying on only burns calls.",
+      "source": "71dcb767215a"
+    },
+    "section-4.paragraphs.3": {
+      "text": "Continuing cannot go on forever. Every round's model call counts against the budget: when `max_rounds` is used up and the verdict is still `continue`, the run stops with `budget_exhausted` and states the reason. When the budget is tight, polling wastes most: every `check_job` is a model call and does not make a result arrive any sooner. When the budget is used up, the background jobs still running are cancelled together. The check here is the smallest version: it can verify only facts with a definite answer and cannot judge an open-ended reply. {{lesson:goal-loops}} turns it into a judgement independent of the worker and treats budgets and the rules for stopping systematically.",
+      "source": "ff87d08503f3"
+    },
+    "mq-goal.goal-impossible.prompt": {
+      "text": "In the group “A failing job and a retry”, suppose the model retries late_import after a failure and it fails again. What does the goal check say after the second failure?",
+      "source": "df7ec0b867b3"
+    },
+    "mq-goal.goal-impossible.a.text": {
+      "text": "continue, because the budget is not used up yet",
+      "source": "7e05272caca7"
+    },
+    "mq-goal.goal-impossible.a.feedback": {
+      "text": "No. An unused budget decides to continue only when there is no other verdict; here the goal can already be judged impossible.",
+      "source": "50368c6cf8c7"
+    },
+    "mq-goal.goal-impossible.b.text": {
+      "text": "impossible: started 2 times, none succeeded and none running",
+      "source": "e25c9d3e6411"
+    },
+    "mq-goal.goal-impossible.b.feedback": {
+      "text": "Right. Trying the same job again would only fail the same way, and the run ends by giving up.",
+      "source": "1614656962f4"
+    },
+    "mq-goal.goal-impossible.c.text": {
+      "text": "ok, because the model has explained the failure",
+      "source": "c6a029059a09"
+    },
+    "mq-goal.goal-impossible.c.feedback": {
+      "text": "No. What the model says takes no part in the judgement; ok requires every required job done and the report consistent.",
+      "source": "cbac41546881"
+    },
+    "mq-goal.goal-impossible.explanation": {
+      "text": "The goal check looks only at job states and the report, and stops as soon as it can judge the goal impossible.",
+      "source": "4bec38889056"
+    },
+    "section-5.title": {
+      "text": "Scheduled triggers",
+      "source": "a9123c249da1"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A scheduled trigger starts a run again and again by time, and every run has its own record. A background job is “start now, end later”, and a scheduled trigger is “start later, start repeatedly”: inspect every night at 9, check the status every 5 minutes. When the time comes nobody sends a message, so something has to watch the clock and start the run on time. The scheduling chapter of Learn Claude Code arranges it like this: a scheduler thread looks at the time every second, a task that is due goes into a queue awaiting delivery, and when the agent is idle it is handed over as a new message.",
+      "source": "9b8431e1c990"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The trigger in scheduler.py is the simplest kind: a fixed interval. With an interval of 5 seconds it is due at seconds 5, 10, 15 and so on. Each time the runner moves the clock it calls `poll`: every trigger that is due gets a decision at once and a `lesson.schedule_fire` record; the decision can be to start, skip, queue, drop or refuse. The one that starts gets its own run id (`run-1`) and a background job, so every run has its own start and end times and exit code. The more common `cron` expression writes “when it is due” as five fields; see the deep dive.",
+      "source": "40d0537e0b76"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The hard part is when the previous run has not ended and the next trigger is due. The job of this lesson takes 12 seconds and the interval is only 5, so at second 10 `run-1` is still running. There are three overlap policies: `skip` skips this trigger; `queue` queues it, holds at most 2 and drops later ones; `parallel` runs in parallel, at most 2 at a time, and refuses later ones. Work out `skip` by hand: the triggers are due at seconds 5, 10, … 40, 8 times in all; `run-1` starts at second 5 and ends at second 17, so the triggers at seconds 10 and 15 are skipped, and at second 20 `run-1` has ended and `run-2` starts; and so on, so of 8 triggers 3 start and 5 are skipped.",
+      "source": "03404db1aae6"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Each of the three policies has a price. Skipping is the cheapest but quietly does less work, so every skip must record its reason; queueing keeps every trigger but the wait keeps growing: the second trigger of this lesson starts only at second 17, 7 seconds after it was due (`delayed_by`); parallel loses no job but requires jobs that can be repeated or run at the same time, otherwise it needs the idempotency keys of {{lesson:reliable-tools}}. One more boundary: the trigger and its records live only inside this run. When the process exits they vanish, and times missed during a shutdown are not made up; to run on time when the program is not running, use the system's `cron`, a timer or a persistent queue.",
+      "source": "bd7b0b2d9de2"
+    },
+    "deep-dive-cron.title": {
+      "text": "How to read the five cron fields, and why scheduling must be persistent",
+      "source": "b586db2df23e"
+    },
+    "deep-dive-cron.summary": {
+      "text": "Five fields decide “when it is due”; persistence decides whether it survives a restart.",
+      "source": "22475a40919f"
+    },
+    "deep-dive-cron.paragraphs.0": {
+      "text": "A `cron` expression writes “when it is due” in five fields: minute, hour, day of month, month and day of week. `*/5 * * * *` means every 5 minutes; `0 9 * * 1-5` means 9:00 sharp from Monday to Friday; `30 22 * * 0` means every Sunday at 22:30. The scheduling chapter of Learn Claude Code supports `*`, `*/N`, a plain number, an `N-M` range and a comma list, and validates the number of fields and the value ranges before saving. Deciding whether a given minute is due means matching the five fields against the current time one by one; when both the day and the weekday carry concrete values, either one matching is enough.",
+      "source": "7c667a196c01"
+    },
+    "deep-dive-cron.paragraphs.1": {
+      "text": "Once a task is due, that chapter puts it into a queue awaiting delivery and hands it to the agent as a new user message when the agent is idle, with a prefix such as `[Scheduled]`; within the same minute a marker of the last firing minute prevents it from being queued twice. This matches what this lesson does: triggering and executing are separate, and the trigger itself does not touch the model.",
+      "source": "9067e9c8464b"
+    },
+    "deep-dive-cron.paragraphs.2": {
+      "text": "Persistence is another matter. That chapter can save a task into a JSON file, written through a temporary file plus a replace, and reload it when the process restarts; a task that is not persistent lives only in memory and vanishes when the process exits. It explicitly chooses at-least-once delivery: if the process exits after the model has received the prompt and before the state is written back, the same task may be delivered once more after a restart, so a triggered action must be safe to repeat. When the process shuts down the scheduler thread stops too, and times missed during the shutdown are not made up. To run on time when the program is not running, use the system's `cron`, a `systemd` timer or a cloud scheduling service. The scheduler of this lesson is lighter than all of these: it lives only inside one run.",
+      "source": "fa2f86d69abe"
+    },
+    "section-6.title": {
+      "text": "Cancelling a job, and its terminal state",
+      "source": "ba3efaf7f3ae"
+    },
+    "section-6.paragraphs.0": {
+      "text": "A background job must also be stoppable, and its terminal state must be findable. There are three sources of a stop: the model decides the job is useless and calls `cancel_job`; the job passes its own deadline and the executor ends it; the whole run ends or the learner presses stop, and every job still running is cancelled together. The three sources leave different terminal states: a cancel is 143 and a timeout is 124; a cancel also records its reason (`model_request` or `run_end`), so afterwards it is clear who called it off.",
+      "source": "405fafe5fc98"
+    },
+    "section-6.paragraphs.1": {
+      "text": "How to stop is a practical problem in Python: a thread cannot be killed from outside. This lesson stops cooperatively: every job has a stop flag, a cancel sets it and wakes the job, and when the job, parked on the clock, sees the flag, it ends as cancelled. If it is in the middle of a step of computation, that step finishes first. A real process can be sent signals, SIGTERM first and then SIGKILL if that does not work, and the whole process group has to be killed, or child processes stay behind (see the deep dive). Either way, a cancel only makes the job stop going further; the steps already done and the requests already sent cannot be taken back; the `progress` in the return of `cancel_job` (for example 1/8) says which step it stopped at.",
+      "source": "607516507ccf"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The cleanup at the end of a run is the easiest to forget. The `finally` of `run` calls `shutdown`: it cancels every job still running and waits for every thread to end. Without it, orphan jobs are left behind: the run has ended, the threads keep running in the background, the results they compute are read by nobody, and the side effects happen all the same. The tests check not only a normal end but also an exit in the middle through an error, a stop by the learner and a used-up call budget of the platform, and count the threads after each. One thing must be said honestly: after a run is stopped the platform no longer accepts events, so the records of the cleanup cannot be published and only the reclaiming of the threads is guaranteed.",
+      "source": "cbd73de6eb5b"
+    },
+    "section-6.paragraphs.3": {
+      "text": "A findable terminal state means three things. The status, exit code, end time and injection round of every job are in the table of the report, jobs that did not end included, and those cancelled together are written as cancelled; `check_job` returns the details of a terminal state only after the result has been delivered; a job that ended but was never delivered is a bug, not a state. One last boundary: exit code 0 says only that the job itself succeeded, not that the goal is met. grade_stats completed, but if the number in the report is not filled in correctly, the goal check still fails.",
+      "source": "b0be689ad8aa"
+    },
+    "deep-dive-stop.title": {
+      "text": "What it takes to stop a process: signals, process groups and exit codes",
+      "source": "387b04cf3bb8"
+    },
+    "deep-dive-stop.summary": {
+      "text": "A thread can only stop cooperatively; a process can be ended by a signal.",
+      "source": "275e5d7f8ef3"
+    },
+    "deep-dive-stop.paragraphs.0": {
+      "text": "A Python thread cannot be ended from outside; it can only be made to see a stop signal and exit by itself. A process is different: the operating system lets you send it signals. The usual order is to send SIGTERM first, asking it to wrap up; if it has not exited after a short wait, send SIGKILL and end it by force. The background task chapter of Learn Claude Code starts commands through a `shell` and puts them in their own process group, and on stop it signals the whole group, because a command may have started child processes, and killing only the parent leaves the children behind as orphans. The chapter itself notes that this is lifecycle cleanup, not isolation: a process that starts a new session can still escape the group.",
+      "source": "0f54c551381a"
+    },
+    "deep-dive-stop.paragraphs.1": {
+      "text": "Exit codes have conventions too. A normal end is 0 and a failure is non-zero; the GNU `timeout` command returns 124 when it times out; a process ended by SIGTERM shows 128 plus the signal number in a `shell`, that is 143. This lesson borrows these numbers so that “timed out” and “cancelled” are easy to tell apart in a table. A real system also has to decide how to keep the output: command output can be long, only a summary can be injected into the conversation, and the rest stays in a file for the model to read when it needs it.",
+      "source": "cfdf9810cc6b"
+    },
+    "deep-dive-stop.paragraphs.2": {
+      "text": "If a background job has to run commands generated by a model, the problem is no longer only how to stop it: what the command may read and write, whether it may use the network and for how long, all have to be limited by an isolated execution environment; the jobs of this lesson are fixed built-in code and do not have this problem. Chapter 6 of Understanding AI Agents (AI Agent book) also gives a principle: a cancel point must be a place where the tool or the reasoning can wrap up safely, and a result that was not finished is shown by an explicit placeholder and never forged into a success. What `cancel_job` returns in this lesson is the real moment and progress of the cancel.",
+      "source": "b6614dab01f1"
+    },
+    "misconception-cancel.claim": {
+      "text": "Cancelling a job also undoes what it has already done.",
+      "source": "62d4a5e94a72"
+    },
+    "misconception-cancel.correction": {
+      "text": "A cancel only makes the job stop going further. The steps already computed, the requests already sent and the side effects are all still there. The `progress` in the return of `cancel_job` says where it stopped, for example 1/8; undoing what has happened needs compensation, which is the subject of {{lesson:reliable-tools}}.",
+      "source": "6e3433f58f91"
+    },
+    "mq-cancel.run-end-cancel.prompt": {
+      "text": "In the group “Tight budget”, deep_scan is still running when the budget is used up. What happens when the run ends?",
+      "source": "f81d10e62229"
+    },
+    "mq-cancel.run-end-cancel.a.text": {
+      "text": "Its thread keeps running to the end and nobody reads the result",
+      "source": "825cfc4fe1bb"
+    },
+    "mq-cancel.run-end-cancel.a.feedback": {
+      "text": "No. That would be an orphan job; `shutdown` cancels it and waits for the thread before the run ends.",
+      "source": "edd1d0ba74a5"
+    },
+    "mq-cancel.run-end-cancel.b.text": {
+      "text": "It is cancelled with exit code 143, the reason run_end, and the thread is reclaimed",
+      "source": "9b25b96c13c8"
+    },
+    "mq-cancel.run-end-cancel.b.feedback": {
+      "text": "Right. The cancel record in the events states the reason, and the report shows 0 live threads.",
+      "source": "201c963c1ff5"
+    },
+    "mq-cancel.run-end-cancel.c.text": {
+      "text": "It is marked timed out with exit code 124",
+      "source": "6b5771fa0ce3"
+    },
+    "mq-cancel.run-end-cancel.c.feedback": {
+      "text": "No. Timed out means passing the job's own deadline; a cancel together with the run is 143.",
+      "source": "3f7c9dd7975e"
+    },
+    "mq-cancel.run-end-cancel.explanation": {
+      "text": "Cancelling together when the run ends and waiting for the threads is how no orphan job is left.",
+      "source": "404fbbdb1aa1"
+    },
+    "compare-exercises.title": {
+      "text": "The six exercises",
+      "source": "867f452c7e14"
+    },
+    "compare-exercises.paragraphs.0": {
+      "text": "The table shows the deterministic results of the offline test mode, where the model's replies come from a fixed script; a real run may differ, so go by your own lab report.",
+      "source": "1bfd24a6f8d4"
+    },
+    "compare-exercises.columns.0": {
+      "text": "Exercise",
+      "source": "3cae1f75ef71"
+    },
+    "compare-exercises.columns.1": {
+      "text": "What to look at",
+      "source": "578b3ddc14d8"
+    },
+    "compare-exercises.columns.2": {
+      "text": "Model calls",
+      "source": "72926dfb7314"
+    },
+    "compare-exercises.columns.3": {
+      "text": "Verdict",
+      "source": "14163a5df29f"
+    },
+    "compare-exercises.rows.0.0": {
+      "text": "Background jobs and result injection",
+      "source": "dd6542c0dc59"
+    },
+    "compare-exercises.rows.0.1": {
+      "text": "Two jobs end separately and are injected in two rounds",
+      "source": "668ce23a9401"
+    },
+    "compare-exercises.rows.0.2": {
+      "text": "4",
+      "source": "4b227777d4dd"
+    },
+    "compare-exercises.rows.0.3": {
+      "text": "Completed",
+      "source": "c0b3fbff51cc"
+    },
+    "compare-exercises.rows.1.0": {
+      "text": "A failing job and a retry",
+      "source": "7bb86d3ca12f"
+    },
+    "compare-exercises.rows.1.1": {
+      "text": "The failure is injected with exit code 1, the retry fails again",
+      "source": "88193159c975"
+    },
+    "compare-exercises.rows.1.2": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "compare-exercises.rows.1.3": {
+      "text": "Given up: cannot be completed",
+      "source": "a8473b11a586"
+    },
+    "compare-exercises.rows.2.0": {
+      "text": "Tight budget: polling, cancelling and restarting",
+      "source": "71795c4490c9"
+    },
+    "compare-exercises.rows.2.1": {
+      "text": "2 polls, a cancel, a restart, and the budget runs out",
+      "source": "5e2670bed0cd"
+    },
+    "compare-exercises.rows.2.2": {
+      "text": "5",
+      "source": "ef2d127de37b"
+    },
+    "compare-exercises.rows.2.3": {
+      "text": "Budget used up, the job still running is cancelled together",
+      "source": "3c4c2b6d9e34"
+    },
+    "compare-exercises.rows.3.0": {
+      "text": "Scheduled trigger: skip, queue, parallel with a cap",
+      "source": "b0fa11effec1"
+    },
+    "compare-exercises.rows.3.1": {
+      "text": "8 triggers due, the three policies decide differently",
+      "source": "f85d6629a88a"
+    },
+    "compare-exercises.rows.3.2": {
+      "text": "0 (no model)",
+      "source": "18be44755dec"
+    },
+    "compare-exercises.rows.3.3": {
+      "text": "By policy: 5 skipped, 4 queued, 2 refused",
+      "source": "278b12fb2a72"
+    },
+    "walkthrough.title": {
+      "text": "One background run from start to verdict",
+      "source": "1844896e5771"
+    },
+    "walkthrough.description": {
+      "text": "A step-by-step account of one run of “Background jobs and result injection”, with simplified code; the evidence of your own run is in the events of the lab.",
+      "source": "1ea6ab6a4e70"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Start",
+      "source": "56410fc65314"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Start two jobs and read a rule on the side",
+      "source": "51ff420d27b4"
+    },
+    "walkthrough.step-1.body": {
+      "text": "In round 1 the model calls `start_background_job` twice and `read_policy` once; the first two return ids at once and the rule returns synchronously.",
+      "source": "eda895f05d3b"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.background_job",
+      "source": "f7c6a9864797"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Advance",
+      "source": "e0ff6ac57af5"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Harness",
+      "source": "7f40625adce7"
+    },
+    "walkthrough.step-2.title": {
+      "text": "The clock moves and the threads settle before going on",
+      "source": "14279cfc3a5f"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Before round 2 the clock reaches second 5 and each job has done a step; in this round the model only replies “I will wait”.",
+      "source": "326fd5b2318b"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.clock",
+      "source": "89fea113a6d2"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Inject",
+      "source": "16f0e116497c"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Harness",
+      "source": "7f40625adce7"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Before round 3, hand back the ended result as a separate message",
+      "source": "3751c147c7ea"
+    },
+    "walkthrough.step-3.body": {
+      "text": "grade_stats ended at second 6 and the harness sees it at second 10; the message opens with its source and a success carries its value; checksum_pack is injected only in round 4.",
+      "source": "693c4a794ab3"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.harness_injected",
+      "source": "94241404dbf7"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Report",
+      "source": "700c9acad28a"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Submit the report only once both results are in the history",
+      "source": "2ffe7131bc7d"
+    },
+    "walkthrough.step-4.body": {
+      "text": "In round 4 the model copies both values into `submit_report`; the runner only records it and does not judge.",
+      "source": "89515ab797ce"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Check",
+      "source": "978e275133d1"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Harness",
+      "source": "7f40625adce7"
+    },
+    "walkthrough.step-5.title": {
+      "text": "The goal check judges and the run stops",
+      "source": "b0930cd18ccf"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Both kinds are `done` and the values in the report match the results, so the verdict is `ok`; no job is still running, so `shutdown` has nothing to do and the live threads are 0.",
+      "source": "084d509a1125"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.goal_check",
+      "source": "1e98e4799b1d"
+    },
+    "references.book-ch6-async.title": {
+      "text": "Asynchronous and event-driven agents: the event loop, three ways of handling, task handles (Understanding AI Agents)",
+      "source": "d5bb33b292d3"
+    },
+    "references.book-async-agent.title": {
+      "text": "An asynchronous agent with parallel execution and interruption: async jobs, cancelling and status queries (Understanding AI Agents)",
+      "source": "320da58c25d5"
+    },
+    "references.lcc-background.title": {
+      "text": "Background tasks: slow work goes to the background and results are collected in later rounds (Learn Claude Code)",
+      "source": "d4cd2294e5a6"
+    },
+    "references.lcc-background-docs.title": {
+      "text": "Background tasks: the notification queue drained every round (Learn Claude Code)",
+      "source": "d9fa66afc591"
+    },
+    "references.lcc-cron.title": {
+      "text": "Cron scheduling: the five fields, the delivery queue and the persistence boundary (Learn Claude Code)",
+      "source": "402eb8356356"
+    },
+    "references.lcc-goal.title": {
+      "text": "The goal loop: the model proposes to stop, an independent judge decides whether to go on (Learn Claude Code)",
+      "source": "57f0ad4df4c4"
+    },
+    "references.ms-deploy.title": {
+      "text": "Deploying scalable agents: concurrency, backpressure and observability (Microsoft AI Agents for Beginners)",
+      "source": "ec24d4de37e5"
+    },
+    "code-worker.n-code-worker-1.text": {
+      "text": "Every background job has one thread and it runs this function; only it and _end below change the state of a job.",
+      "source": "1a8193d8fc56"
+    },
+    "code-worker.n-code-worker-2.text": {
+      "text": "The deadline is a virtual moment too: the start time plus timeout_seconds.",
+      "source": "b6a20a0b1d66"
+    },
+    "code-worker.n-code-worker-3.text": {
+      "text": "Step index should finish at this virtual moment: the time a job declares becomes a moment here.",
+      "source": "ee5c46c7fd98"
+    },
+    "code-worker.n-code-worker-4.text": {
+      "text": "This step could finish only after the deadline: wait for the deadline itself and then time out.",
+      "source": "bfc5db7ee4f6"
+    },
+    "code-worker.n-code-worker-5.text": {
+      "text": "Park on the clock until this moment; False means the job was cancelled while it waited.",
+      "source": "e041f807f659"
+    },
+    "code-worker.n-code-worker-6.text": {
+      "text": "Only when the moment has come is the step really computed: SHA-256, a sum, a parse or a duplicate scan.",
+      "source": "19cd54a5a92c"
+    },
+    "code-worker.n-code-worker-7.text": {
+      "text": "Progress goes up only after a step is done; the 1/3 that check_job reports comes from here.",
+      "source": "be8664b0039f"
+    },
+    "code-worker.n-code-worker-8.text": {
+      "text": "All done: the terminal state is completed, and the end time is that of the last step, not the moment the harness sees it.",
+      "source": "3622b64a350b"
+    },
+    "code-worker.n-code-worker-9.text": {
+      "text": "The job itself raises an error: only it fails (exit code 1), and its siblings and the harness are unaffected.",
+      "source": "0906c0cedc0c"
+    },
+    "code-worker.n-code-worker-10.text": {
+      "text": "The failure time is the moment of the step that failed, not the moment the harness looks.",
+      "source": "6f34d675cfa7"
+    },
+    "code-worker.n-code-worker-11.text": {
+      "text": "However it ends, it reports to the clock: settle relies on this to know nobody is still running.",
+      "source": "c0e192fbb33d"
+    },
+    "code-worker.n-code-worker-12.text": {
+      "text": "The state is changed in one go under the lock, followed by a notification: the harness reads either running or a complete terminal state.",
+      "source": "037710374b8d"
+    },
+    "code-rounds.n-code-rounds-1.text": {
+      "text": "A run is this loop: every round advances time, injects, requests and checks the goal.",
+      "source": "a3350fad293c"
+    },
+    "code-rounds.n-code-rounds-2.text": {
+      "text": "Every round starts by honouring a stop: once the learner presses stop, the next round does not begin.",
+      "source": "c1cf11b6df10"
+    },
+    "code-rounds.n-code-rounds-3.text": {
+      "text": "Time moves only here (round 1 excepted): if the model did nothing last round, wait until the next job ends, otherwise move tick_seconds.",
+      "source": "e0f57a2009c5"
+    },
+    "code-rounds.n-code-rounds-4.text": {
+      "text": "A result enters the message history only here: one separate message, before this round's request.",
+      "source": "77359f5424a9"
+    },
+    "code-rounds.n-code-rounds-5.text": {
+      "text": "Record the messages this round really sends; the not_seen_early check needs them.",
+      "source": "00915b6a61df"
+    },
+    "code-rounds.n-code-rounds-6.text": {
+      "text": "One request per round, with all the tools on offer in this one request.",
+      "source": "a761a5f2af85"
+    },
+    "code-rounds.n-code-rounds-7.text": {
+      "text": "The runner executes the calls the model proposed: start_background_job returns its id right here.",
+      "source": "a89206af2b49"
+    },
+    "code-rounds.n-code-rounds-8.text": {
+      "text": "No tool call only means the model gave up this round, not that the work is done.",
+      "source": "42c324fc7a8c"
+    },
+    "code-rounds.n-code-rounds-9.text": {
+      "text": "The harness judges the goal itself, reading only job states and the report.",
+      "source": "b2ea63dd81e1"
+    },
+    "code-rounds.n-code-rounds-10.text": {
+      "text": "Stop on ok or impossible; also stop on continue when the rounds run out, and say the budget is used up.",
+      "source": "44e899e10776"
+    },
+    "code-rounds.n-code-rounds-11.text": {
+      "text": "The verdict and reason of every round are recorded, a continue included.",
+      "source": "6e3be0f67216"
+    },
+    "code-rounds.n-code-rounds-12.text": {
+      "text": "Only when the model gave up the round and no job is running is the reason handed back to it as a message.",
+      "source": "36da4245809d"
+    },
+    "code-rounds.n-code-rounds-13.text": {
+      "text": "After stopping, first cancel the jobs still running, then produce the report.",
+      "source": "41512339cfa2"
+    },
+    "code-scheduler.n-code-scheduler-1.text": {
+      "text": "The runner calls it each time it moves the clock: it returns the decision for every trigger that is due.",
+      "source": "34517f49d6ca"
+    },
+    "code-scheduler.n-code-scheduler-2.text": {
+      "text": "A free slot goes first to the longest-queued trigger; only the queue policy has a queue.",
+      "source": "f7e0d964dc25"
+    },
+    "code-scheduler.n-code-scheduler-3.text": {
+      "text": "Every due moment gets its own decision; if the clock jumps several intervals at once, several records appear at once.",
+      "source": "e9e37f4ef2af"
+    },
+    "code-scheduler.n-code-scheduler-4.text": {
+      "text": "A decision is recorded whatever it is, start, skip or drop: work that was not done leaves a trace too.",
+      "source": "d8a6d15d2397"
+    },
+    "code-scheduler.n-code-scheduler-5.text": {
+      "text": "What to do when the previous run has not ended is decided in this function.",
+      "source": "9cdbfadbfbcc"
+    },
+    "code-scheduler.n-code-scheduler-6.text": {
+      "text": "With a free slot a run starts; the capacity is 1 for skip and queue and max_concurrent for parallel.",
+      "source": "9402e3a84268"
+    },
+    "code-scheduler.n-code-scheduler-7.text": {
+      "text": "skip: this trigger is void, with the reason previous_running recorded.",
+      "source": "5f7762681ed7"
+    },
+    "code-scheduler.n-code-scheduler-8.text": {
+      "text": "queue: at most 2 wait, and the order is kept.",
+      "source": "11200e48b040"
+    },
+    "code-scheduler.n-code-scheduler-9.text": {
+      "text": "A full queue drops the trigger, with the reason recorded the same way.",
+      "source": "e89f099a31a4"
+    },
+    "code-scheduler.n-code-scheduler-10.text": {
+      "text": "parallel at its cap: refused, because the parallel limit is reached.",
+      "source": "3a019a8175e9"
+    },
+    "code-decision.title": {
+      "text": "Fixed jobs, a virtual clock, events recorded by the harness, the goal judged by the harness",
+      "source": "ea4a30c6929e"
+    },
+    "code-decision.chosen": {
+      "text": "The background jobs are fixed code in jobs.py that really computes on the executor's threads; only their declared durations use the virtual clock. Worker threads publish no events: the runner reads the state after the threads have settled and records it. A result is injected before the next request as a separate message that names its source. At the end of every round the harness judges ok, impossible or continue, and a used-up budget stops the run explicitly. When the run ends, the jobs still running are cancelled and the threads joined.",
+      "source": "2fc886441299"
+    },
+    "code-decision.real-sleep.title": {
+      "text": "Use a real sleep and a wall clock",
+      "source": "6c3605fbe2db"
+    },
+    "code-decision.real-sleep.why_not": {
+      "text": "The timeline of every run would differ, the round of an injection would depend on the speed of the machine and the model, a controlled comparison would be impossible, and tests would have to wait for real. A real product uses a wall clock; this lesson swaps in a virtual one only for determinism, and says so in the events.",
+      "source": "98a13482184b"
+    },
+    "code-decision.worker-emits.title": {
+      "text": "Let the worker threads publish events themselves",
+      "source": "c5d44d208254"
+    },
+    "code-decision.worker-emits.why_not": {
+      "text": "Events may be published only from the runner's thread; publishing from workers would tangle with stopping and event order, and the platform's cancel exception would have to be handled inside the threads. Letting a thread change only its own state and the runner record everything is simpler and easier to test.",
+      "source": "5ec67e571312"
+    },
+    "code-decision.model-says-done.title": {
+      "text": "Stop when the model says it is done",
+      "source": "157107c7cc75"
+    },
+    "code-decision.model-says-done.why_not": {
+      "text": "A model that calls no tool only gives up the round; it may be waiting for a job or may have misremembered. The harness decides to stop from job states and the report, and what the model says is recorded but takes no part.",
+      "source": "7a09e810a82e"
+    },
+    "code-decision.model-schedules.title": {
+      "text": "Ask the model at every trigger whether to start",
+      "source": "cd483b20a541"
+    },
+    "code-decision.model-schedules.why_not": {
+      "text": "That would add a model call to every trigger, using budget and latency, and the decision would not be repeatable. The trigger and the overlap policy are fixed rules in the scheduler, and every decision is recorded.",
+      "source": "310f5426784e"
+    },
+    "inject-timing.title": {
+      "text": "Background jobs and result injection",
+      "source": "dd6542c0dc59"
+    },
+    "inject-timing.hypothesis": {
+      "text": "With two jobs in the background the model is never blocked for a round; they end at different moments, and each result is injected at the start of the first round after it ends, and before that no request contains them.",
+      "source": "e9dbf57cba08"
+    },
+    "inject-timing.basic.label": {
+      "text": "5 seconds per round",
+      "source": "e4d079468c85"
+    },
+    "inject-timing.started.text": {
+      "text": "The record when a job starts: job id, start time and round.",
+      "source": "111275c2b0ee"
+    },
+    "inject-timing.start-result.text": {
+      "text": "The tool result of start_background_job: only the id and the running status, no result.",
+      "source": "c9da37f010dc"
+    },
+    "inject-timing.clock.text": {
+      "text": "How far the clock moved before each round, and why.",
+      "source": "510936838550"
+    },
+    "inject-timing.finished.text": {
+      "text": "The first job that ended on its own: finished_at is when it ended by its own schedule, observed_at is when the harness saw it.",
+      "source": "1d6403d1114c"
+    },
+    "inject-timing.injected.text": {
+      "text": "The injected message: its source, which jobs it holds, and in which round.",
+      "source": "3fff8fd47fd6"
+    },
+    "inject-timing.waited.text": {
+      "text": "How many seconds passed between a job ending and its injection.",
+      "source": "a05a53b05bcc"
+    },
+    "inject-timing.not-early.text": {
+      "text": "The not_seen_early check in the report: whether a result appeared in a request before it was injected.",
+      "source": "75d5d1986517"
+    },
+    "inject-timing.injections.text": {
+      "text": "How many injections the whole run made.",
+      "source": "9308511475b9"
+    },
+    "inject-timing.guide.0.text": {
+      "text": "Both groups run the same task and differ only in how many seconds the clock moves before a round. Look at the start first.",
+      "source": "4cb999a5d719"
+    },
+    "inject-timing.guide.1.text": {
+      "text": "In round 1 the model starts the jobs, and the record holds the start time and the round.",
+      "source": "730185bd1d14"
+    },
+    "inject-timing.guide.2.text": {
+      "text": "The tool result of a start holds only the id and running; the result is not in it.",
+      "source": "e7b7e7746bda"
+    },
+    "inject-timing.guide.3.text": {
+      "text": "Before every request the runner moves the clock once: this is the only source of how much time has passed for the jobs.",
+      "source": "5b55dedbcd14"
+    },
+    "inject-timing.guide.4.text": {
+      "text": "A job ends at its own moment, and the harness sees it a little later.",
+      "source": "5021ddc38fd9"
+    },
+    "inject-timing.guide.5.text": {
+      "text": "Look at the injected message: the source is written at the start, with one line per job that ended.",
+      "source": "01cfea309854"
+    },
+    "inject-timing.guide.6.text": {
+      "text": "A few seconds pass between ending and injection, and the longer a round, the longer the wait.",
+      "source": "a3a3941e9b91"
+    },
+    "inject-timing.guide.7.text": {
+      "text": "The check: each result first appears in a request in exactly the round that injected it.",
+      "source": "1576ea8e0992"
+    },
+    "inject-timing.guide.8.text": {
+      "text": "The number of injections in the whole run is the number your prediction is compared with.",
+      "source": "0c772f5db8e4"
+    },
+    "inject-timing.conclusion.proves.0": {
+      "text": "For this run, the moment each job ended, the moment the harness saw it, the round that injected it, and the round in which each result first appeared in the requests really sent.",
+      "source": "055381101aaa"
+    },
+    "inject-timing.conclusion.does_not_prove.0": {
+      "text": "Whether a model uses the injected result correctly: the offline script copies the value from the message, while a real model may overlook it, answer only the last entry, or write the report without waiting for the result.",
+      "source": "287863be4d5a"
+    },
+    "inject-timing.conclusion.does_not_prove.1": {
+      "text": "Seconds on the virtual clock are not measured durations; how fast a real job runs depends on the machine. This lesson uses it to get a repeatable timeline.",
+      "source": "b24cf0f2169e"
+    },
+    "goal-outcomes.title": {
+      "text": "Three outcomes: completed, impossible, budget used up",
+      "source": "d196e7781152"
+    },
+    "goal-outcomes.hypothesis": {
+      "text": "The same goal check gives three different outcomes in the three groups: when all jobs succeed and the report is consistent the goal is completed; when the late-score import fails every time, the goal is judged impossible once the retry limit is reached; when the full scan needs 80 seconds against a default deadline of 40, its first start times out (exit code 124); with a budget of only 5 rounds, the run stops explicitly once the budget is used up after the model restarts it, and cancels the job still running. The reason of every round is recorded.",
+      "source": "982f42132165"
+    },
+    "goal-outcomes.ok.label": {
+      "text": "Completed",
+      "source": "c0b3fbff51cc"
+    },
+    "goal-outcomes.impossible.label": {
+      "text": "Impossible",
+      "source": "7232de943a88"
+    },
+    "goal-outcomes.budget.label": {
+      "text": "Budget used up",
+      "source": "d85485812e15"
+    },
+    "goal-outcomes.first-check.text": {
+      "text": "The check of round 1: the jobs have just started, the verdict is to continue, and the reason says what is awaited.",
+      "source": "c2e846916cac"
+    },
+    "goal-outcomes.exit-code.text": {
+      "text": "The exit code of the first job that ended on its own: 0 for a success, 1 for a failure.",
+      "source": "019f4527d6c0"
+    },
+    "goal-outcomes.failure.text": {
+      "text": "The error type and reason of a failed job, handed to the model in the injected message.",
+      "source": "e5a61033d37e"
+    },
+    "goal-outcomes.retry.text": {
+      "text": "The third start: the model retries the failed job, or starts it again after a timeout or a cancel.",
+      "source": "fcc9c757a544"
+    },
+    "goal-outcomes.cancel-reason.text": {
+      "text": "The reason of a cancel: the model asked, or the run ended.",
+      "source": "c92a05ea4527"
+    },
+    "goal-outcomes.final-check.text": {
+      "text": "The check that ended the run: the outcome and its reason.",
+      "source": "e1577e775c8c"
+    },
+    "goal-outcomes.polls.text": {
+      "text": "How many times check_job polled: every one is a model call.",
+      "source": "6544ab55aaac"
+    },
+    "goal-outcomes.no-orphans.text": {
+      "text": "The no_orphans check in the report: whether any background thread was alive when the run ended.",
+      "source": "f5854289eb65"
+    },
+    "goal-outcomes.outcome.text": {
+      "text": "The verdict in the report.",
+      "source": "487955eec6d3"
+    },
+    "goal-outcomes.guide.0.text": {
+      "text": "The three groups use the same goal check and differ only in the jobs and the budget. Look at round 1 first.",
+      "source": "e4ad00d82538"
+    },
+    "goal-outcomes.guide.1.text": {
+      "text": "The verdict of round 1 is always to continue: the jobs have just started, and the reason names the jobs still awaited.",
+      "source": "f3cce997d413"
+    },
+    "goal-outcomes.guide.2.text": {
+      "text": "The first job to end carries an exit code: 0 for a success, 1 for a failure.",
+      "source": "e835b9c2659a"
+    },
+    "goal-outcomes.guide.3.text": {
+      "text": "A failed job hands its error type and reason to the model, which decides whether to retry.",
+      "source": "0c28d908371a"
+    },
+    "goal-outcomes.guide.4.text": {
+      "text": "Starting again: retrying the same job, or restarting after a timeout or a cancel, both spend budget.",
+      "source": "2822bcda6bdb"
+    },
+    "goal-outcomes.guide.5.text": {
+      "text": "The reason of a cancel is in the record, telling a stop by the model from a cancel together at the end of the run.",
+      "source": "ac8966ae2d8d"
+    },
+    "goal-outcomes.guide.6.text": {
+      "text": "The number of polls: every check_job is a model call and does not make a result arrive earlier.",
+      "source": "ecbfa6c4383b"
+    },
+    "goal-outcomes.guide.7.text": {
+      "text": "The check that ended the run states the outcome and the reason.",
+      "source": "1a2570a51c56"
+    },
+    "goal-outcomes.guide.8.text": {
+      "text": "Whatever the outcome, no background thread is alive at the end.",
+      "source": "9ffee003d603"
+    },
+    "goal-outcomes.guide.9.text": {
+      "text": "The verdict in the report agrees with the outcome in the check.",
+      "source": "cd143b39c991"
+    },
+    "goal-outcomes.conclusion.proves.0": {
+      "text": "For this run, the verdict and reason of every round's goal check, the exit codes and cancel reasons of the jobs, and whether the threads were reclaimed when the run ended.",
+      "source": "c48bd8959831"
+    },
+    "goal-outcomes.conclusion.does_not_prove.0": {
+      "text": "The failure of the late-score import comes from fixed data and is the same every time, so a retry must fail; a real job may fail only for a moment and a retry may succeed.",
+      "source": "5b387ff512f7"
+    },
+    "goal-outcomes.conclusion.does_not_prove.1": {
+      "text": "The goal check only compares the values in the report with the job results; it does not judge whether the values mean anything.",
+      "source": "569fef720154"
+    },
+    "overlap-policy.title": {
+      "text": "Overlap policy",
+      "source": "5a3f749edf4b"
+    },
+    "overlap-policy.hypothesis": {
+      "text": "With a 12-second job triggered every 5 seconds, of the 8 triggers that come due: the skip policy starts only 3 and records the rest as skipped; the queue policy keeps the earlier triggers but has only 2 places, so later ones are dropped; the capped parallel policy runs at most 2 at a time and refuses the rest. Every due trigger has a record, and every run that starts has its own job record.",
+      "source": "03bdc3e272f6"
+    },
+    "overlap-policy.skip.label": {
+      "text": "Skip",
+      "source": "fc50a99caae0"
+    },
+    "overlap-policy.queue.label": {
+      "text": "Queue",
+      "source": "117c113c3b45"
+    },
+    "overlap-policy.parallel.label": {
+      "text": "Parallel with a cap",
+      "source": "80c816d0aba2"
+    },
+    "overlap-policy.first-fire.text": {
+      "text": "The first trigger: nothing is running, so it starts at once and gets a run id.",
+      "source": "19b7a1dde290"
+    },
+    "overlap-policy.first-overlap.text": {
+      "text": "The first time the previous run has not ended: the decision and its reason differ by policy.",
+      "source": "db7a3db7cdd2"
+    },
+    "overlap-policy.delay.text": {
+      "text": "A queued trigger that was dequeued started some seconds after it was due (only the queue policy has this).",
+      "source": "528f57ec8046"
+    },
+    "overlap-policy.run-record.text": {
+      "text": "Every run that started has a job record carrying its run id.",
+      "source": "a0777427831c"
+    },
+    "overlap-policy.run-end.text": {
+      "text": "The first run ends: at its own moment, with exit code 0.",
+      "source": "dd4426bb1633"
+    },
+    "overlap-policy.started.text": {
+      "text": "How many runs started.",
+      "source": "39b5b0c43d4c"
+    },
+    "overlap-policy.skipped.text": {
+      "text": "How many triggers were skipped.",
+      "source": "02c89de96e8b"
+    },
+    "overlap-policy.queued.text": {
+      "text": "How many triggers were queued.",
+      "source": "eb92be13d355"
+    },
+    "overlap-policy.denied.text": {
+      "text": "How many triggers the parallel cap refused.",
+      "source": "6dccfb4fdd6c"
+    },
+    "overlap-policy.cancelled-end.text": {
+      "text": "How many jobs still running were cancelled at the end.",
+      "source": "ad6fccf1707b"
+    },
+    "overlap-policy.every-fire.text": {
+      "text": "The every_fire check in the report: every due trigger has a record.",
+      "source": "b7fdd347f8be"
+    },
+    "overlap-policy.guide.0.text": {
+      "text": "The three groups share the interval and the job, and differ only in what happens when the previous run has not ended.",
+      "source": "1522f08b7058"
+    },
+    "overlap-policy.guide.1.text": {
+      "text": "At the first trigger nothing is running, so it starts at once and gets its run id.",
+      "source": "4d9c2d17e50b"
+    },
+    "overlap-policy.guide.2.text": {
+      "text": "The first time the previous run has not ended: skipped, queued or refused, each with its own reason.",
+      "source": "ff5942153965"
+    },
+    "overlap-policy.guide.3.text": {
+      "text": "When a queued trigger is dequeued and starts, it is some seconds later than it was due.",
+      "source": "4a032948328d"
+    },
+    "overlap-policy.guide.4.text": {
+      "text": "Every run that started has its own job record and run id.",
+      "source": "a54819805ceb"
+    },
+    "overlap-policy.guide.5.text": {
+      "text": "A run ends at the job's own moment with exit code 0.",
+      "source": "d7bda0884bfc"
+    },
+    "overlap-policy.guide.6.text": {
+      "text": "How many runs started is the most direct difference between the three policies.",
+      "source": "08b32a71d6c0"
+    },
+    "overlap-policy.guide.7.text": {
+      "text": "The number of skipped triggers.",
+      "source": "cdb56d7f3b3f"
+    },
+    "overlap-policy.guide.8.text": {
+      "text": "The number of queued triggers.",
+      "source": "ab09931166d8"
+    },
+    "overlap-policy.guide.9.text": {
+      "text": "The number refused by the parallel cap.",
+      "source": "559d1aa5e452"
+    },
+    "overlap-policy.guide.10.text": {
+      "text": "When the time is up, the jobs still running are cancelled together.",
+      "source": "7afe5a2ed5bc"
+    },
+    "overlap-policy.guide.11.text": {
+      "text": "Whatever the policy, every due trigger has a record, and work that was not done leaves a trace.",
+      "source": "f392e63438cc"
+    },
+    "overlap-policy.conclusion.proves.0": {
+      "text": "Within the time range of this run, the decision and reason for every due trigger, the runs that started, and their start and end times.",
+      "source": "e93545c498ff"
+    },
+    "overlap-policy.conclusion.does_not_prove.0": {
+      "text": "Which policy is better: it depends on whether the job may be repeated, whether one missed run matters and how long you can wait; this lesson only shows what each leaves behind.",
+      "source": "84c7af9fe5c4"
+    },
+    "overlap-policy.conclusion.does_not_prove.1": {
+      "text": "The trigger lives only inside this one run: when the process exits, it and the queued triggers are not kept, and missed times are not made up.",
+      "source": "576a4b8f0e1a"
+    },
+    "inputs.scenario.label": {
+      "text": "Scenario",
+      "source": "7f72f06a8877"
+    },
+    "inputs.scenario.help": {
+      "text": "Choose an inspection scenario; “Scheduled trigger” calls no model.",
+      "source": "93b1dd0b2c09"
+    },
+    "inputs.scenario.options.nightly.label": {
+      "text": "Tonight's inspection (both jobs succeed)",
+      "source": "e12e44a43f93"
+    },
+    "inputs.scenario.options.late.label": {
+      "text": "Late scores (the import fails every time)",
+      "source": "b57e5fa12566"
+    },
+    "inputs.scenario.options.deep.label": {
+      "text": "Full scan (takes 80 seconds)",
+      "source": "f5198e4e43a6"
+    },
+    "inputs.scenario.options.schedule.label": {
+      "text": "Scheduled trigger (no model)",
+      "source": "4420c0fd0aaa"
+    },
+    "inputs.tick_seconds.label": {
+      "text": "Virtual seconds per round",
+      "source": "14b0bea61571"
+    },
+    "inputs.tick_seconds.help": {
+      "text": "How many seconds the clock moves before every round, 1 to 30.",
+      "source": "652d7fb1e6cd"
+    },
+    "inputs.max_rounds.label": {
+      "text": "Round budget",
+      "source": "ae52ff569266"
+    },
+    "inputs.max_rounds.help": {
+      "text": "The most model calls this run may spend, 1 to 12; the run stops when they are used up.",
+      "source": "3662cedcaabe"
+    },
+    "inputs.max_running.label": {
+      "text": "Cap on jobs running at once",
+      "source": "3f950faa8908"
+    },
+    "inputs.max_running.help": {
+      "text": "Beyond it, start_background_job returns a structured error.",
+      "source": "a0025528f6aa"
+    },
+    "inputs.max_attempts.label": {
+      "text": "Most starts of one kind of job",
+      "source": "57536feaf043"
+    },
+    "inputs.max_attempts.help": {
+      "text": "When a kind has been started this many times without success and none is running, the goal check judges the goal impossible.",
+      "source": "0d545fd22229"
+    },
+    "inputs.overlap.label": {
+      "text": "Overlap policy",
+      "source": "5a3f749edf4b"
+    },
+    "inputs.overlap.help": {
+      "text": "What to do when the next trigger is due before the previous run has ended; used only in the scheduled trigger scenario.",
+      "source": "a4e02955f5ab"
+    },
+    "inputs.overlap.options.skip.label": {
+      "text": "Skip",
+      "source": "fc50a99caae0"
+    },
+    "inputs.overlap.options.queue.label": {
+      "text": "Queue (at most 2)",
+      "source": "e798ece71c74"
+    },
+    "inputs.overlap.options.parallel.label": {
+      "text": "Parallel with a cap",
+      "source": "80c816d0aba2"
+    },
+    "inputs.interval_seconds.label": {
+      "text": "Trigger interval (seconds)",
+      "source": "e2a5e6346e8d"
+    },
+    "inputs.interval_seconds.help": {
+      "text": "A fixed-interval trigger, 2 to 20 seconds; used only in the scheduled trigger scenario.",
+      "source": "e127bfab5a0b"
+    },
+    "inputs.horizon_seconds.label": {
+      "text": "How long to run (virtual seconds)",
+      "source": "b798bbbd580d"
+    },
+    "inputs.horizon_seconds.help": {
+      "text": "The run stops at this moment and cancels the jobs still running, 10 to 120; used only in the scheduled trigger scenario.",
+      "source": "aebde45c71a6"
+    },
+    "inputs.max_concurrent.label": {
+      "text": "Parallel cap",
+      "source": "3532ba0cd992"
+    },
+    "inputs.max_concurrent.help": {
+      "text": "The most runs at once under the parallel policy; used only in the scheduled trigger scenario.",
+      "source": "d161fbf34d92"
+    },
+    "quiz.q1.prompt": {
+      "text": "Why can the result of a background job not go into the tool result of the `start_background_job` call?",
+      "source": "6055f8957921"
+    },
+    "quiz.q1.a.text": {
+      "text": "That call was already answered with running at the start, one call has only one result, and the result can only be delivered as a new message",
+      "source": "4b28c042ba75"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. Tool messages are paired by call id and cannot answer twice.",
+      "source": "bfa2441c943b"
+    },
+    "quiz.q1.b.text": {
+      "text": "A tool result cannot contain numbers",
+      "source": "3be4d3a86a5a"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. A tool result can hold anything serializable; the limit comes from one result per call.",
+      "source": "e679daf24b4b"
+    },
+    "quiz.q1.c.text": {
+      "text": "The model does not read tool results",
+      "source": "b128d01511d0"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. The model reads tool results, which is why every tool message must be paired.",
+      "source": "5024ac9bfd89"
+    },
+    "quiz.q1.explanation": {
+      "text": "The start call returns the handle first, and the real result is delivered later in a message that names its source.",
+      "source": "de1a6a869ec4"
+    },
+    "quiz.q2.prompt": {
+      "text": "In round 2 the model only replies “I will wait” and calls no tool. What does the harness do?",
+      "source": "008f146c5c0b"
+    },
+    "quiz.q2.a.text": {
+      "text": "Treat it as the final answer and end the run",
+      "source": "44edfc41bcc4"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "No. No tool call only means the model gave up the round; the jobs still run and the goal is not met.",
+      "source": "f01d54a62a44"
+    },
+    "quiz.q2.b.text": {
+      "text": "The goal check says continue, the clock moves, and new results are injected before the next request",
+      "source": "742ac77ddb54"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "Right. The reason names the jobs still awaited; once the clock moves, the jobs that ended are injected.",
+      "source": "1fafab1e618c"
+    },
+    "quiz.q2.c.text": {
+      "text": "Send the same request again at once",
+      "source": "1d4a07fe5e5d"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The request holds nothing new and only wastes a call.",
+      "source": "b9b7d919399d"
+    },
+    "quiz.q2.explanation": {
+      "text": "A model giving up the round is not completion; the harness decides from facts whether to continue.",
+      "source": "61dc0a763b4f"
+    },
+    "quiz.q3.prompt": {
+      "text": "In the report, the value of checksum_pack differs from the delivered result and everything else is right. What is the verdict of the goal check?",
+      "source": "c85a2ebc978b"
+    },
+    "quiz.q3.a.text": {
+      "text": "continue, with the reason that the report does not match the background results",
+      "source": "a8fad330a19b"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. Every job is done but the report check fails, so it is not ok, and it is not impossible either.",
+      "source": "dc6b032e8d15"
+    },
+    "quiz.q3.b.text": {
+      "text": "ok, because the model has submitted a report",
+      "source": "cbf24d7b4957"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. ok requires every value in the report to equal the delivered result of its job.",
+      "source": "534c5d337f61"
+    },
+    "quiz.q3.c.text": {
+      "text": "impossible, because the report is wrong",
+      "source": "3c66eac64d16"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. impossible is given only when some kind of job has been started to the limit without success; a report can be resubmitted.",
+      "source": "5d04dcb8edb7"
+    },
+    "quiz.q3.explanation": {
+      "text": "The goal check recognizes only job states and the comparison result.",
+      "source": "186e3f5536f6"
+    },
+    "quiz.q4.prompt": {
+      "text": "At second 10 the previous run has not ended. What does the `queue` policy do?",
+      "source": "f71764ec2f05"
+    },
+    "quiz.q4.a.text": {
+      "text": "It records queued, and starts it from the queue after the previous run ends, some seconds later than it was due",
+      "source": "5fd6400659cb"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. The record of a start from the queue carries delayed_by, which grows with the wait; only a full queue drops a trigger.",
+      "source": "98d080ee34bc"
+    },
+    "quiz.q4.b.text": {
+      "text": "Drop it without a record",
+      "source": "71237f26ab3a"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. Every due trigger has a record, a drop states its reason, and only a full queue drops.",
+      "source": "e07c89283923"
+    },
+    "quiz.q4.c.text": {
+      "text": "Start one more in parallel",
+      "source": "49c1fb02daab"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. The queue policy runs one at a time; parallel is another policy.",
+      "source": "d9e44ed00f72"
+    },
+    "quiz.q4.explanation": {
+      "text": "Queueing keeps the trigger at the price of waiting; every decision is recorded.",
+      "source": "bb926425c0db"
+    },
+    "quiz.q5.prompt": {
+      "text": "`cancel_job` returns progress 1/8 and exit code 143. Which statement is right?",
+      "source": "38c34ddd20db"
+    },
+    "quiz.q5.a.text": {
+      "text": "The 1 step it has done and any request it sent are still there; the cancel only stops it going further",
+      "source": "894f61d38821"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. Undoing what has happened needs compensation, not a cancel.",
+      "source": "3bf92c98247e"
+    },
+    "quiz.q5.b.text": {
+      "text": "The step it had done was undone too",
+      "source": "0ec34990b06f"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. A cancel does not roll back.",
+      "source": "2b84b6e9a2c6"
+    },
+    "quiz.q5.c.text": {
+      "text": "143 means the job timed out",
+      "source": "c5a966e8bbe3"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. A timeout is 124 and 143 is a cancel.",
+      "source": "5eb863d32e66"
+    },
+    "quiz.q5.explanation": {
+      "text": "A cancel stops what comes next, not what has already happened.",
+      "source": "79208afdd619"
+    },
+    "quiz.q6.prompt": {
+      "text": "The learner presses stop in the middle of a run. Which thing does this lesson guarantee?",
+      "source": "5c78eca660b1"
+    },
+    "quiz.q6.a.text": {
+      "text": "Every background thread is reclaimed and no orphan job is left",
+      "source": "9ea79907ca79"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. `shutdown` in the `finally` cancels the jobs and waits for the threads; the tests count the threads after a stop.",
+      "source": "95412ce14515"
+    },
+    "quiz.q6.b.text": {
+      "text": "Every step of the cleanup is written into the events",
+      "source": "2ad1971c5eca"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. After a stop the platform accepts no events, so the records of the cleanup cannot be published.",
+      "source": "77e5515804fd"
+    },
+    "quiz.q6.c.text": {
+      "text": "The jobs still running finish and hand back their results",
+      "source": "d7f473dd6054"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The run is over and nobody would read those results.",
+      "source": "cd924b827e55"
+    },
+    "quiz.q6.explanation": {
+      "text": "Reclaiming the threads is guaranteed; recording events is not.",
+      "source": "cd369d2ef71a"
+    },
+    "check-hunt.prompt": {
+      "text": "Run “A failing job and a retry” and find the evidence where the model first sees the failure of late_import.",
+      "source": "e1c871189a84"
+    },
+    "check-hunt.explanation": {
+      "text": "lesson.harness_injected is the message the harness injected before the request of round 3: the exit code of `job-2` is 1, and the error says that the score 8x in row 6 is not an integer. No earlier request holds this failure; a check_job in round 2, if any, would only say that the result has not been delivered.",
+      "source": "b6d8f407904a"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and the source of this lesson, and tick an item only when you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran every exercise and can say how each outcome came about.",
+      "source": "9f3f3dc4a997"
+    },
+    "check-points.item-2.text": {
+      "text": "In “Background jobs and result injection” I found the moment a job ended and the round that injected it, and worked out how many seconds lay between.",
+      "source": "caece2a3acd7"
+    },
+    "check-points.item-3.text": {
+      "text": "In “A failing job and a retry” I read the exit code and the reason of the failure and saw the check judge the goal impossible after the second failure.",
+      "source": "383b197d7698"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed the overlap policy, compared the skip, queue and refuse counts of the three policies, and found them equal to the numbers in the report.",
+      "source": "d505c6acefc7"
+    },
+    "code_notes.lesson.background_job.note": {
+      "text": "A record of the job lifecycle: started, finished, injected or cancelled; times are virtual seconds.",
+      "source": "acaf325e9473"
+    },
+    "code_notes.lesson.goal_check.note": {
+      "text": "The goal check at the end of every round: verdict, reason, state of each job; the stopping one carries the outcome.",
+      "source": "62955ec1b26f"
+    },
+    "code_notes.lesson.clock.note": {
+      "text": "A record of each move of the virtual clock: from which second to which, with the reason round or idle_wait.",
+      "source": "6923c3bdf8c7"
+    },
+    "code_notes.lesson.schedule_fire.note": {
+      "text": "The decision for every due trigger: start, skip, queue, drop or refuse, with its reason and run id.",
+      "source": "2b6ef7d1bc75"
+    },
+    "code_notes.lesson.harness_injected.note": {
+      "text": "A message inserted by the harness; this lesson has two kinds: background results and goal feedback.",
+      "source": "193e845162de"
+    },
+    "code_notes.settle.note": {
+      "text": "After the clock moves, wait until every worker has parked for a later moment or ended.",
+      "source": "5ce95060baa2"
+    },
+    "code_notes.finished_at.note": {
+      "text": "When the job ended by its own schedule, not when the harness saw it.",
+      "source": "f1e57024ea2b"
+    },
+    "code_notes.observed_at.note": {
+      "text": "The moment the harness first saw that the job had ended.",
+      "source": "afda8a7328d1"
+    },
+    "code_notes.idle_wait.note": {
+      "text": "When the model did nothing, the clock jumps to the moment the next job ends.",
+      "source": "d4baa071d938"
+    },
+    "code_notes.not_seen_early.note": {
+      "text": "A report check: each result first appears in a request in exactly the round that injected it.",
+      "source": "fde140c9574d"
+    },
+    "code_notes.max_running.note": {
+      "text": "The cap on background jobs running at once, 3 by default.",
+      "source": "65c1eec4a568"
+    },
+    "code_notes.max_attempts.note": {
+      "text": "The most starts of one kind of job, 2 by default; at the limit without success the goal is judged impossible.",
+      "source": "26fe7830fda7"
+    },
+    "code_notes.tick_seconds.note": {
+      "text": "The virtual seconds the clock moves before each request, 5 by default.",
+      "source": "37744e3cf36e"
+    },
+    "code_notes.delayed_by.note": {
+      "text": "How many seconds later than due a dequeued trigger started.",
+      "source": "75354b34267e"
+    },
+    "code_notes.shutdown.note": {
+      "text": "Cancels every job still running and waits for the threads; always called when the run ends.",
+      "source": "be933cd5d838"
+    },
+    "code_notes.too_many_jobs.note": {
+      "text": "The structured error a start returns when the cap on jobs running at once is reached.",
+      "source": "f0b1d9969fed"
+    },
+    "code_notes.budget_exhausted.note": {
+      "text": "The outcome when the round budget is used up and the goal is still not met.",
+      "source": "b5a51eefe745"
+    },
+    "code_notes.exhausted.note": {
+      "text": "A state of a kind of job in the goal check: started up to the limit, still no success.",
+      "source": "9232639ab81d"
+    },
+    "code_notes.check_job.note": {
+      "text": "Looks up the status and progress of a background job; shows no result before it is delivered.",
+      "source": "c910b6ff92a7"
+    },
+    "code_notes.cancel_job.note": {
+      "text": "Cancels a background job still running and returns its state and progress after the cancel.",
+      "source": "ec7c9b22d8ac"
+    }
+  }
+}

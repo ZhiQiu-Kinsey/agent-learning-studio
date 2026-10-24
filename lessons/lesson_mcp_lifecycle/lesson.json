@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "id": "mcp-lifecycle",
+  "subtitle": "两个服务同时连着，其中一个断了怎么办",
+  "content": "content.json",
+  "sources": [
+    {
+      "path": "lessons/lesson_mcp_lifecycle/runtime.py",
+      "language": "python"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/loans_server.py",
+      "language": "python"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/catalog_server.py",
+      "language": "python"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/serving.py",
+      "language": "python"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/processes.py",
+      "language": "python"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/locales/zh_CN.py",
+      "language": "python",
+      "locale": "zh-CN"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/locales/en.py",
+      "language": "python",
+      "locale": "en"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/locales/servers/zh_CN.py",
+      "language": "python",
+      "locale": "zh-CN"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/locales/servers/en.py",
+      "language": "python",
+      "locale": "en"
+    },
+    {
+      "path": "lessons/lesson_mcp_lifecycle/fixtures.py",
+      "language": "python"
+    },
+    {
+      "path": "course/protocols.py",
+      "language": "python"
+    }
+  ],
+  "exercises": [
+    {
+      "id": "lifecycle",
+      "title": "两个服务：握手、命名与权限",
+      "question": {
+        "zh-CN": "宿主连上馆藏和借阅两个服务，给工具加服务前缀，探测可用性，再试三种越权调用，最后关闭全部连接。",
+        "en": "The host connects the catalog and loan desk services, prefixes their tools, probes them, tries three calls beyond its permissions, then closes every connection."
+      },
+      "requires_model": false,
+      "inputs": {
+        "task": "lifecycle",
+        "allow_writes": false
+      }
+    },
+    {
+      "id": "crash-recover",
+      "title": "借阅服务崩溃：第二次重连成功",
+      "question": {
+        "zh-CN": "登记一笔借阅后杀掉借阅服务进程，断连期间再写一笔；第一次重启的服务一启动就退出，第二次成功，再看哪些写入会重发。",
+        "en": "After one loan is registered, the loan desk process is killed and a second write goes out during the disconnect; the first restart exits at once, the second works, and we see which writes get resent."
+      },
+      "requires_model": false,
+      "inputs": {
+        "task": "crash",
+        "allow_writes": true,
+        "restart_fault": "exit-on-start",
+        "failing_restarts": 1,
+        "max_reconnects": 2,
+        "restart_variant": "v1"
+      }
+    },
+    {
+      "id": "crash-giveup",
+      "title": "两次重连都失败，放弃重连",
+      "question": {
+        "zh-CN": "同样杀掉借阅服务，但前两次重启的服务都一启动就退出；重连上限是 2 次，用完之后宿主放弃，再看运行怎么收尾。",
+        "en": "The loan desk is killed again, but both restarts exit as soon as they start; with a reconnect limit of 2 the host gives up, and you see how the run finishes."
+      },
+      "requires_model": false,
+      "inputs": {
+        "task": "crash",
+        "allow_writes": true,
+        "restart_fault": "exit-on-start",
+        "failing_restarts": 2,
+        "max_reconnects": 2,
+        "restart_variant": "v1"
+      }
+    },
+    {
+      "id": "crash-changed",
+      "title": "重连超时，回来的服务换了定义",
+      "question": {
+        "zh-CN": "同样杀掉借阅服务；第一次重启的服务不回应握手，等到读超时；第二次连上的是更新过的版本，登记借阅的参数变了。",
+        "en": "The loan desk is killed again; the first restart never answers the handshake and hits the read timeout; the second connects to an updated version whose loan registration takes different arguments."
+      },
+      "requires_model": false,
+      "inputs": {
+        "task": "crash",
+        "allow_writes": true,
+        "restart_fault": "hang-on-start",
+        "failing_restarts": 1,
+        "max_reconnects": 2,
+        "restart_variant": "v2"
+      }
+    },
+    {
+      "id": "agent",
+      "title": "模型通过两个服务借书，中途断连",
+      "question": {
+        "zh-CN": "帮读者 M-07 找一本讲工具调用的书，登记借阅，然后查一下他的借阅记录确认登记成功。",
+        "en": "Find a book about tool calling for member M-07, register the loan, then look up the member's loans to confirm it."
+      },
+      "inputs": {
+        "task": "agent",
+        "allow_writes": true,
+        "failing_restarts": 0,
+        "max_reconnects": 1,
+        "restart_variant": "v1"
+      }
+    }
+  ],
+  "runtime": {
+    "kind": "custom",
+    "entrypoint": "runtime:run",
+    "max_rounds": 4,
+    "requires_model": true,
+    "locales": [
+      "zh-CN",
+      "en"
+    ]
+  },
+  "testing": {
+    "completion_factory": "fixtures:create_completion"
+  },
+  "input_defaults": {
+    "task": "lifecycle",
+    "allow_writes": false,
+    "restart_fault": "exit-on-start",
+    "failing_restarts": 1,
+    "max_reconnects": 2,
+    "restart_variant": "v1",
+    "query": {
+      "zh-CN": "工具调用",
+      "en": "tool calling"
+    },
+    "member_id": "M-07"
+  },
+  "ui": {
+    "lab": "structured-inputs",
+    "inspector": "evidence-board",
+    "question_label": "用户问题",
+    "question_help": "只有“模型通过两个服务借书，中途断连”把这里的文字作为用户问题发给模型；其余四个练习由运行器按固定步骤调用服务，这里的文字只记为备注。"
+  }
+}

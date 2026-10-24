@@ -1,0 +1,1594 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "A2A / DISCOVER · DELEGATE · CANCEL",
+      "source": "ffef26a21340"
+    },
+    "hero.headline": {
+      "text": "Hand the job to an agent in another process,",
+      "source": "711e8c2f0fc3"
+    },
+    "hero.highlight": {
+      "text": "then watch the state of its task.",
+      "source": "5b36e80a9181"
+    },
+    "hero.takeaway": {
+      "text": "So far every tool was a function inside the agent's own process, and MCP moved it into a separate service. This lesson goes one step further: the delegated side is an agent in another process. The runner reads its Agent Card, sends a message that creates a task, follows the task's states and finally collects the result. A timeout, a failure and a half-finished result are each handled in their own way.",
+      "source": "4f9fca5b93bc"
+    },
+    "concepts.01-delegate.label": {
+      "text": "01 / DELEGATE",
+      "source": "751feef3f235"
+    },
+    "concepts.01-delegate.title": {
+      "text": "Delegation: hand over a task that has state",
+      "source": "137a7b909767"
+    },
+    "concepts.01-delegate.description": {
+      "text": "The Agent2Agent protocol, A2A for short, lets one agent hand a task to another agent that runs on its own. The delegating side only says what to do; how it is done is up to the remote agent, and the two sides share no message history.",
+      "source": "48c80ef8c090"
+    },
+    "concepts.02-card.label": {
+      "text": "02 / CARD",
+      "source": "18ab674cf4ce"
+    },
+    "concepts.02-card.title": {
+      "text": "Agent Card: the other side's self-description",
+      "source": "e04d0537f5f5"
+    },
+    "concepts.02-card.description": {
+      "text": "The Agent Card is the description the remote agent publishes at the fixed address `/.well-known/agent-card.json`: name, skills, interface address, whether it can stream. Only after reading it does the delegating side know what it can delegate and where to send it.",
+      "source": "fc9b7bbb3a60"
+    },
+    "concepts.03-lifecycle.label": {
+      "text": "03 / LIFECYCLE",
+      "source": "023391a93a90"
+    },
+    "concepts.03-lifecycle.title": {
+      "text": "Task lifecycle: every task has its own state",
+      "source": "3c01f30dbe6f"
+    },
+    "concepts.03-lifecycle.description": {
+      "text": "In the task lifecycle, a delegated task moves through SUBMITTED and WORKING and finally stops at COMPLETED, FAILED, CANCELED or REJECTED. The delegating side reads the state to decide whether to wait, cancel or handle a failure.",
+      "source": "ffdc0b501cd6"
+    },
+    "concepts.04-artifact.label": {
+      "text": "04 / ARTIFACT",
+      "source": "706d2778f1ad"
+    },
+    "concepts.04-artifact.title": {
+      "text": "A2A artifact: what comes back is the result, not the process",
+      "source": "6b3e3be4a673"
+    },
+    "concepts.04-artifact.description": {
+      "text": "An A2A artifact is the structured result a task produces. The remote agent's prompts, reasoning and internal tools do not travel with it, and once the artifact arrives the delegating side must still check that it covers every claim it handed over.",
+      "source": "18984f9d4375"
+    },
+    "section-1.title": {
+      "text": "How agents collaborate",
+      "source": "8acb02d32d8a"
+    },
+    "section-1.paragraphs.0": {
+      "text": "One agent hands a task to an agent in another process, instead of only calling a tool. The front-desk agent of the Bluestone Library has to answer “How many items can a B2 research card borrow, and when does the library close on Sunday?”, but it cannot read the service handbook. The handbook belongs to the reference checker, a separate program that only takes jobs like “find evidence for these claims”. The front desk can do three things: say what to check, wait until the other side is done, and inspect what comes back.",
+      "source": "572d4dc65d6e"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Wrapping the checker in a tool function sounds simpler, but this job does not behave like a function. It takes seconds and reports progress on the way; it may fail, or stop halfway and say it is done; and when you cannot wait any longer you have to make it stop. A function has only two endings, a return and an exception, and neither holds all that. Delegation gives the task a number and a set of states: accepted, working, done, failed, canceled. Each has a name, so a result can be matched to its task when it comes back.",
+      "source": "506bdcfdcd13"
+    },
+    "section-1.paragraphs.2": {
+      "text": "The other difference is who knows what. The front desk's message history, system prompt and the user's own words are invisible to the checker; how the checker searches and what it finds along the way are invisible to the front desk. The two sides exchange only what is written out explicitly: a message, a task, an artifact. Chapter 10 of Understanding AI Agents in Depth calls this collaboration without shared context. The price is that information has to be passed explicitly, and when something goes wrong you piece the story together from two sets of records.",
+      "source": "4b212d39bb73"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The A2A protocol fixes the conventions of this kind of collaboration: how to discover the other side, how to send a task, how to follow its state and how to collect the result. The two agents of this lesson live in two processes on one machine. The front desk is the delegating side inside the runner; the checker is the remote agent started by worker.py, listening on a free port of 127.0.0.1. The checker is a deterministic program and calls no model, for reasons given in section seven. The delegating side's model is called through RunContext as usual, so its requests and responses are recorded just as in the earlier lessons.",
+      "source": "52a6f1eb0c56"
+    },
+    "section-2.title": {
+      "text": "Capability discovery",
+      "source": "7e02c7836f06"
+    },
+    "section-2.paragraphs.0": {
+      "text": "The Agent Card tells the delegating side what the other agent can do. All the delegating side knows is an address, so to find out what the agent can do it first sends a GET to `/.well-known/agent-card.json`. What comes back is a JSON document: the name `bluestone-reference-checker`, a version, one JSONRPC interface with its address, a `capabilities` entry that says streaming updates are supported and push notifications are not, and one skill, `find-evidence`, whose `inputModes` lists only `application/json`.",
+      "source": "d4c1d81aee8a"
+    },
+    "section-2.paragraphs.1": {
+      "text": "This is the same idea as the tool discovery in {{lesson:mcp-basics}}, listing different things: `tools/list` lists tool names and parameter Schemas, while the Agent Card lists skill descriptions, input and output formats and the interface. The runner reads the card with discover and then turns the skill into the model's only tool, delegate_task, with delegation_tool: the skill id becomes the enum of the parameter `skill_id`, and the card's description goes into the tool description unchanged. If the card changes, the tool the model sees changes with it; nothing in the runner hard-codes what the checker can do.",
+      "source": "9aae476b2571"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The card is the other side's self-description, a claim and not a guarantee. After reading it the runner checks three things: is there a JSONRPC interface, is the interface address in the card the address this run started, and does any skill accept `application/json`. If any check fails, nothing is delegated. The second check matters most: the other side writes the address, and if you simply follow it, a wrong or malicious card can steer your request elsewhere. This lesson talks only to the process it started, and a test confirms that a card pointing somewhere else is refused.",
+      "source": "a049f7231f99"
+    },
+    "section-2.paragraphs.3": {
+      "text": "Discovery is neither authorization nor trust. The card says what the other side claims to do, not whether it does it correctly. The lesson.a2a_message that carries the card is the evidence of discovery. Its `captured` field reads `sdk_protobuf_message`: the SDK parsed the card into an object and exported it with the protocol's field names, so this is not the raw HTTP message.",
+      "source": "759675020412"
+    },
+    "section-3.title": {
+      "text": "Task states and returning results",
+      "source": "3f5847679afa"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A delegated task has its own state, and a result has to match its task when it comes back. The delegating side sends one `ROLE_USER` message: a text part for people, a data part for the program (`claims`, each claim numbered `c1`, `c2`), and the skill named in `metadata`. The first object the checker returns is a Task carrying the task number, a `contextId` and the state SUBMITTED: the job is accepted but not started.",
+      "source": "ef82aa468660"
+    },
+    "section-3.paragraphs.1": {
+      "text": "A run of status updates follows. The checker first reports WORKING with a line such as “2 claims received”, then reports again after each claim it has checked, so two claims give three WORKING updates. Then comes an artifact, `evidence-report`: its data part holds the evidence passages for each claim and its text part a summary for people. The last update sets the state to COMPLETED, and the event gains `terminal: true`. This chain of states from SUBMITTED to a final state is the task lifecycle.",
+      "source": "1236b7ca7780"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Two numbers make a result match its task. One is the task number: every remote message in the stream carries the same `taskId`, and the report's task_match check verifies each one. A delegating side may have several tasks at once, and if the numbers do not match you may take someone else's result for your own. The other is the claim number: the delegating side makes up `c1` and `c2` itself, and each result in the artifact carries a `claim_id`, so the delegating side knows which claim has a result and which does not.",
+      "source": "a3008ea67c04"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Every protocol message is recorded as a lesson.a2a_message: direction, message type, and the SDK object exported with the protocol's field names. It is not the bytes on the wire: there is no HTTP header and no JSON-RPC wrapper, and `method` is the protocol method name this lesson writes down from the SDK call. How the checker searches inside and how many steps it takes are not in the record; we see only the part it chooses to tell us in messages.",
+      "source": "f6b46ccc6084"
+    },
+    "predict-messages.prompt": {
+      "text": "Before running “Normal delegation: from Agent Card to artifact”, guess: how many lesson.a2a_message events will this run record? Hint: 1 for the card, 1 for the message sent, then the Task, one opening WORKING, one WORKING per claim, one artifact and one final state.",
+      "source": "6069a0242338"
+    },
+    "mq-card-address.card-address.prompt": {
+      "text": "The interface address in the Agent Card differs from the address of the service this run started. What should the runner do?",
+      "source": "1fa724625bdd"
+    },
+    "mq-card-address.card-address.a.text": {
+      "text": "Refuse to delegate and report that the card is unusable",
+      "source": "ebf9a9fe186a"
+    },
+    "mq-card-address.card-address.a.feedback": {
+      "text": "Right. The other side writes the address, and a card pointing elsewhere must not be followed.",
+      "source": "a0607748dae2"
+    },
+    "mq-card-address.card-address.b.text": {
+      "text": "Connect to the address in the card, because the card is the other side's official description",
+      "source": "0be92c1ed24a"
+    },
+    "mq-card-address.card-address.b.feedback": {
+      "text": "No. The card is self-description, not a guarantee; following it would send the request elsewhere.",
+      "source": "3c25507ce814"
+    },
+    "mq-card-address.card-address.c.text": {
+      "text": "Quietly use the started address and say nothing",
+      "source": "0969d549158d"
+    },
+    "mq-card-address.card-address.c.feedback": {
+      "text": "No. A card that disagrees with reality is a fact worth recording, and quietly working around it hides that.",
+      "source": "8b42ededfb11"
+    },
+    "mq-card-address.card-address.explanation": {
+      "text": "discover checks the address before creating the client and raises an error on a mismatch, so the model never gets to delegate against that card.",
+      "source": "00355ddfc553"
+    },
+    "section-4.title": {
+      "text": "Timeouts, cancellation and remote failure",
+      "source": "a2c3cf1d9c73"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Waiting needs a limit, a timeout needs an explicit cancel, and a remote failure must be reported honestly. The task runs on the other side and the delegating side cannot wait forever, so it sets itself a deadline, `deadline_seconds`, and stops reading the stream when it passes without a final state. But no longer reading the stream does not stop the task. The fault `slow` makes the checker wait 60 seconds before it starts, and if the delegating side simply walks away, that task keeps running remotely for nothing.",
+      "source": "6688b11dc0f6"
+    },
+    "section-4.paragraphs.1": {
+      "text": "So after the deadline the runner does two things: it sends `CancelTask`, then reads the task back with `GetTask` to see its final state. The reply to the cancel request is only what the other side says at that moment; it may already be finished, or it may refuse to cancel. Only a read-back state of CANCELED counts as confirmation, and this step gets just 5 seconds too. If the cancel cannot be confirmed, the report says the final state could not be confirmed and does not write success.",
+      "source": "55db30f104f5"
+    },
+    "section-4.paragraphs.2": {
+      "text": "A remote failure is a different path. The checker reports FAILED with a line saying its archive index is damaged; the delegating side passes the state and that line to the model, does not retry and does not invent an answer. The protocol works here: the task has a number, a state and a final state, and the result happens to be a failure. This must be kept apart from a broken connection: if the stream ends before any final state, the runner raises RemoteUnavailable, meaning nobody knows what became of the task, and that must not be reported as “remote failure”. REJECTED and INPUT_REQUIRED are also treated as failures: the first means the other side refuses the job, the second that it needs more information, and this lesson's delegating side does not hold a multi-turn exchange.",
+      "source": "54593b26e3c4"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The three endings each appear in tool_result as a structured error: DelegationTimeout, RemoteTaskFailed and, in the next section, IncompleteResult. The system prompt tells the model to say honestly which part was not checked after a timeout, a failure or an incomplete result, and not to fill in an answer itself. The offline fixture follows that rule; whether a real model does has to be checked in a real run.",
+      "source": "4b3743d85539"
+    },
+    "deep-dive-states.title": {
+      "text": "The parts of the state machine this lesson does not reach",
+      "source": "b170c0caf113"
+    },
+    "deep-dive-states.summary": {
+      "text": "There are two interrupted states, three ways to get the result back, and cancellation is only a request.",
+      "source": "39eca60fa5ea"
+    },
+    "deep-dive-states.paragraphs.0": {
+      "text": "In the specification task states fall into three groups: in progress (SUBMITTED, WORKING), final (COMPLETED, FAILED, CANCELED, REJECTED), and the interrupted INPUT_REQUIRED and AUTH_REQUIRED, where the task has not ended and waits for the delegating side to add information or finish authentication. The two constants TERMINAL and INTERRUPTED in this lesson's code draw the same line. In a real system a delegating side that meets an interrupted state should reply to the same task with another message so it can carry on; this lesson has no second turn, so it treats the state as a failure.",
+      "source": "e3b8ac7343bf"
+    },
+    "deep-dive-states.paragraphs.1": {
+      "text": "A task no longer changes once it is in a final state; new work needs a new task, and `contextId` ties the several tasks of one collaboration together. Each run of this lesson delegates once, so there is one task and one `contextId`. The task, context and message numbers are random UUIDs, which is why the experiments and tests never compare a concrete number, only whether two numbers are the same.",
+      "source": "5cdc104d86b6"
+    },
+    "deep-dive-states.paragraphs.2": {
+      "text": "There are three ways to get the result back. Streaming: after the message is sent, updates keep arriving, which is what this lesson uses. Polling: after sending, you immediately get the task in SUBMITTED and query it yourself with `GetTask` now and then. Push notifications: the remote agent calls an address the delegating side registered whenever the state changes. The card says `pushNotifications: false`, so this lesson does not use push. Long tasks that run for minutes or hours usually use polling or push, because a streaming connection would have to stay open all that time.",
+      "source": "5d9b297050e0"
+    },
+    "deep-dive-states.paragraphs.3": {
+      "text": "Cancellation is a request, not a command. If the task has already finished, the other side answers with `TaskNotCancelableError`; if it was purged, a later cancel may get `TaskNotFoundError`. A slow task often still has side effects to wrap up on the remote side, so CANCELED may not arrive at once. All this is why the lesson reads the state back after cancelling: a cancel request that was sent does not mean the task has stopped.",
+      "source": "1493e2455b4d"
+    },
+    "section-5.title": {
+      "text": "After completion the delegating side accepts the result",
+      "source": "d29ad256ef0c"
+    },
+    "section-5.paragraphs.0": {
+      "text": "When the remote agent reports COMPLETED, it only says it believes it is done; whether the result is usable is for the delegating side to check. The fault `partial` makes the checker process only the first claim and still send the artifact and COMPLETED. From the protocol's point of view everything is normal: the state sequence is complete, the task numbers match, there is no error. But the front desk handed over two claims and the artifact holds a result for `c1` only. If COMPLETED is taken as the answer, nothing supports “what time does the library close on Sunday”.",
+      "source": "fba0c4c448a4"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The check lives in accept and its rules are short: the artifact must have a data part; every claim number handed over must have a result; every result must have at least one evidence passage; and no number that was never handed over may appear. If any rule fails, the problems are listed, IncompleteResult is raised, and the part that did come back goes to the model together with them. Only with “`c2` has no result” and the result for `c1` in front of it can the model say “the first claim was found, the second was not checked”.",
+      "source": "71690fedee27"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Why not trust COMPLETED? The study of multi-agent failures that chapter 10 of Understanding AI Agents in Depth cites lists missing task verification as one of three large categories: an agent claims to be done and the result does not meet the requirement. The book adds that an agent usually does not crash but keeps giving plausible wrong conclusions. So acceptance must look at the artifact itself, using information the delegating side holds on its own, which here is the claim numbers it made up.",
+      "source": "a3350212a4c3"
+    },
+    "section-5.paragraphs.3": {
+      "text": "This check verifies structure only. It can tell whether each claim has a result and evidence; it cannot tell whether the evidence is relevant, whether an old version was swapped correctly, or whether the final answer is right. For that you read the passages themselves, or use an independent verifier as in {{lesson:evaluation-sets}}. The report puts two conclusions side by side: the task state is COMPLETED, and the delegating side's result check did not pass. Do not merge them into one “success” or “failure”.",
+      "source": "eda2aac34ff0"
+    },
+    "misconception-completed.claim": {
+      "text": "If the task state is COMPLETED, the delegation succeeded.",
+      "source": "70c85473b151"
+    },
+    "misconception-completed.correction": {
+      "text": "COMPLETED is the remote agent's claim, not the delegating side's acceptance. It shows the task ran its course, not that the artifact covers every claim. In the “Incomplete result from the remote agent” exercise the state is COMPLETED, yet the delegating side's result check does not pass. To reach a conclusion, look at the task state, the result check and whether the answer has support as three separate things.",
+      "source": "f99c11d8e00b"
+    },
+    "mq-cancel-readback.cancel-readback.prompt": {
+      "text": "After the deadline the runner sends `CancelTask` and then `GetTask`. Why can the second step not be left out?",
+      "source": "04ccd9f72bd6"
+    },
+    "mq-cancel-readback.cancel-readback.a.text": {
+      "text": "The reply to the cancel request is only what the other side says at that moment; a read-back state of CANCELED is the confirmation",
+      "source": "53ea9906c50f"
+    },
+    "mq-cancel-readback.cancel-readback.a.feedback": {
+      "text": "Right. The other side may already be finished or may refuse to cancel.",
+      "source": "ac8e3177a8a1"
+    },
+    "mq-cancel-readback.cancel-readback.b.text": {
+      "text": "`GetTask` makes the remote side stop sooner",
+      "source": "0100ae6742b1"
+    },
+    "mq-cancel-readback.cancel-readback.b.feedback": {
+      "text": "No. It only reads the state and does not change the task.",
+      "source": "1f2386caffeb"
+    },
+    "mq-cancel-readback.cancel-readback.c.text": {
+      "text": "The protocol requires a query after a cancel, otherwise the connection leaks",
+      "source": "b61cf87df377"
+    },
+    "mq-cancel-readback.cancel-readback.c.feedback": {
+      "text": "No. The protocol has no such rule; the read-back is a step this lesson adds for confirmation.",
+      "source": "818de97f6eef"
+    },
+    "mq-cancel-readback.cancel-readback.explanation": {
+      "text": "Look at the “bounded wait” check in the report: it states the read-back state, not the reply to the cancel request.",
+      "source": "718540fbed8a"
+    },
+    "section-6.title": {
+      "text": "How A2A differs from MCP",
+      "source": "373892d36c81"
+    },
+    "section-6.paragraphs.0": {
+      "text": "MCP connects tools and A2A connects agents, and the two can be used together. In {{lesson:mcp-basics}} the model calls `search_handbook`: one request, one result, and the tool runs synchronously. In A2A the delegating side sends a message and gets back a task that has state, receives progress along the way and finally collects an artifact. The first is like calling a function; the second is like handing a job to a colleague who works at their own pace.",
+      "source": "ee0e47434dad"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The differences fall in four places. What is discovered: MCP lists tools, A2A reads an Agent Card. The unit of a call: in MCP it is one call, in A2A it is a task with a number and a state. The process: an MCP call waits for one reply and a timeout is a protocol error, while an A2A task can run for a long time, stream updates, be queried and be canceled. The inside: an MCP server is a function whose behavior its code fixes, while an A2A remote agent is an opaque agent that decides how to work, and the delegating side sees only messages and artifacts.",
+      "source": "ecc6bfcb6924"
+    },
+    "section-6.paragraphs.2": {
+      "text": "So why not use MCP for this scenario? Checking the handbook can perfectly well be an MCP tool, and {{lesson:mcp-basics}} does exactly that. This lesson uses A2A because the conditions changed: the checker is an agent maintained by another team, has its own version rule, handles several claims at once, takes seconds and reports progress, can fail, can stop halfway, and has to be cancelable. These needs force task states into the picture. For a single quick, deterministic query, use a tool; only when the other side should decide how to work and the process has state is delegation worth it.",
+      "source": "b432e9aadec6"
+    },
+    "section-6.paragraphs.3": {
+      "text": "The two are not alternatives. A remote agent can perfectly well use MCP to reach its own tools, and an agent that speaks A2A outward and MCP inward is common. {{lesson:mcp-lifecycle}} covers how connections stay alive, how to reconnect and how to name several services, and the A2A card and task sit on top of that. Microsoft's course sums up the division of labor like this: MCP lets an agent use tools and data, A2A lets agents work with agents.",
+      "source": "261de996ff0b"
+    },
+    "compare-mcp-a2a.title": {
+      "text": "An MCP call and an A2A delegation",
+      "source": "84f355ec40b9"
+    },
+    "compare-mcp-a2a.columns.0": {
+      "text": "Aspect",
+      "source": "5512242c5690"
+    },
+    "compare-mcp-a2a.columns.1": {
+      "text": "MCP tool call",
+      "source": "8cbbf5de9422"
+    },
+    "compare-mcp-a2a.columns.2": {
+      "text": "A2A delegation",
+      "source": "20ca6bf3b18b"
+    },
+    "compare-mcp-a2a.rows.0.0": {
+      "text": "What is discovered",
+      "source": "e7b0cafdc953"
+    },
+    "compare-mcp-a2a.rows.0.1": {
+      "text": "Tools: name, description, input Schema (`tools/list`)",
+      "source": "50d55f6a5793"
+    },
+    "compare-mcp-a2a.rows.0.2": {
+      "text": "An agent: skills, interface, capabilities (Agent Card)",
+      "source": "beb8d2eab818"
+    },
+    "compare-mcp-a2a.rows.1.0": {
+      "text": "Unit of one interaction",
+      "source": "1e744a5b95ac"
+    },
+    "compare-mcp-a2a.rows.1.1": {
+      "text": "One call, one result",
+      "source": "b1b006439cfd"
+    },
+    "compare-mcp-a2a.rows.1.2": {
+      "text": "One task with a number and a state, possibly many messages",
+      "source": "ddf9b26a2131"
+    },
+    "compare-mcp-a2a.rows.2.0": {
+      "text": "Is the process visible",
+      "source": "33c4e776c165"
+    },
+    "compare-mcp-a2a.rows.2.1": {
+      "text": "Only the request and the result",
+      "source": "6474951043a4"
+    },
+    "compare-mcp-a2a.rows.2.2": {
+      "text": "Status updates and progress notes arrive in the stream",
+      "source": "f1ac08757565"
+    },
+    "compare-mcp-a2a.rows.3.0": {
+      "text": "What if it takes too long",
+      "source": "131236b27ea9"
+    },
+    "compare-mcp-a2a.rows.3.1": {
+      "text": "A read timeout, a protocol error",
+      "source": "5bb2c3b3b15b"
+    },
+    "compare-mcp-a2a.rows.3.2": {
+      "text": "The delegating side sets its own deadline, sends `CancelTask` at expiry and reads the state back",
+      "source": "bfc4df949796"
+    },
+    "compare-mcp-a2a.rows.4.0": {
+      "text": "What is inside",
+      "source": "46ff1add174e"
+    },
+    "compare-mcp-a2a.rows.4.1": {
+      "text": "A function whose behavior the server's code fixes",
+      "source": "b4b41755614f"
+    },
+    "compare-mcp-a2a.rows.4.2": {
+      "text": "An opaque agent that decides how to work",
+      "source": "c328f0195f2d"
+    },
+    "compare-mcp-a2a.rows.5.0": {
+      "text": "What the result looks like",
+      "source": "ee373de52806"
+    },
+    "compare-mcp-a2a.rows.5.1": {
+      "text": "`content` and `structuredContent`",
+      "source": "fd70c7c3ff9b"
+    },
+    "compare-mcp-a2a.rows.5.2": {
+      "text": "An A2A artifact that the delegating side accepts itself",
+      "source": "fee0be011836"
+    },
+    "compare-mcp-a2a.rows.6.0": {
+      "text": "Evidence in this lesson",
+      "source": "26317b963e80"
+    },
+    "compare-mcp-a2a.rows.6.1": {
+      "text": "lesson.mcp_message in the previous lesson",
+      "source": "ae99ff9bf68c"
+    },
+    "compare-mcp-a2a.rows.6.2": {
+      "text": "lesson.a2a_message in this lesson",
+      "source": "1b806ec82928"
+    },
+    "deep-dive-no-shared-context.title": {
+      "text": "Collaboration without shared context: data plane and control plane",
+      "source": "529d882c0975"
+    },
+    "deep-dive-no-shared-context.summary": {
+      "text": "Understanding AI Agents in Depth treats talk between agents as inter-process communication, and A2A's states and cancellation both have a place in that frame.",
+      "source": "8a1bde1c05eb"
+    },
+    "deep-dive-no-shared-context.paragraphs.0": {
+      "text": "Inter-process communication comes down to two paradigms: shared memory and message passing. Agents are no different, and the three usual approaches are tool-call parameters, a shared file system and a message bus. A2A is message passing, and of the kind that crosses a trust boundary: inside one team a message bus is enough, and a public protocol like A2A is needed only when the parties do not trust each other and cannot see each other's implementation.",
+      "source": "c6e579492fd2"
+    },
+    "deep-dive-no-shared-context.paragraphs.1": {
+      "text": "The book splits collaboration infrastructure into a data plane and a control plane. The data plane exchanges artifacts, which here is `evidence-report`; the control plane covers message passing, status queries, termination and resource scheduling. Status queries come in push and pull forms: the child agent reports on its own, or the parent asks. The book argues for a shared vocabulary of states, working, needs input, done, failed, and the A2A task lifecycle standardizes exactly that set.",
+      "source": "3cd09e5d003d"
+    },
+    "deep-dive-no-shared-context.paragraphs.2": {
+      "text": "Termination has two strengths, matching SIGTERM and SIGKILL in Unix. Graceful termination sends a signal, the other side wraps up at a safe point and acknowledges; forced termination ends the process outright and may leave unfinished writes behind. This lesson has both: `CancelTask` is the graceful kind and needs the other side's confirmation, while `spawn_local_service` sends a termination signal on exit and kills after 3 seconds as the fallback. The book also borrows Go's context to explain cascading cancellation: cancel the parent and everything derived from it is canceled too, so no orphaned task is left with nobody to claim it.",
+      "source": "e8e0185e4b99"
+    },
+    "deep-dive-no-shared-context.paragraphs.3": {
+      "text": "Now count connections. With point-to-point communication, n agents connected pairwise need `n(n-1)/2` connections: 3 agents need 3 and 10 agents need 45, and sender and receiver must both be online at the same moment. With a message bus, 10 agents need only 10 connections, and the sender does not have to know who will consume the message. This lesson has just two agents, so point to point is simplest; the problems of buses and asynchronous notification appear only when agents multiply, and this lesson does not go into them.",
+      "source": "7621358202ba"
+    },
+    "mq-which-protocol.which-protocol.prompt": {
+      "text": "Which of these jobs fits A2A delegation better than an MCP tool?",
+      "source": "6ebab73cac61"
+    },
+    "mq-which-protocol.which-protocol.a.text": {
+      "text": "Read one passage of the handbook by its number, returning in milliseconds",
+      "source": "315be3d795a7"
+    },
+    "mq-which-protocol.which-protocol.a.feedback": {
+      "text": "No. A single quick, deterministic read is fine as a tool.",
+      "source": "d2fdcd4414f0"
+    },
+    "mq-which-protocol.which-protocol.b.text": {
+      "text": "Hand a batch of claims to another team's agent to check, taking seconds, with progress to watch and the ability to cancel",
+      "source": "4cf60ddc2a6c"
+    },
+    "mq-which-protocol.which-protocol.b.feedback": {
+      "text": "Right. The process has state and the other side decides how to work: that is the delegation case.",
+      "source": "6598544bca99"
+    },
+    "mq-which-protocol.which-protocol.c.text": {
+      "text": "Look up the borrowing limit for a card type",
+      "source": "0d7aca78bbf1"
+    },
+    "mq-which-protocol.which-protocol.c.feedback": {
+      "text": "No. That is one deterministic lookup, which suits a tool.",
+      "source": "c4321aebf6cd"
+    },
+    "mq-which-protocol.which-protocol.explanation": {
+      "text": "The test is whether the task has a state and a pace of its own, not whether the other side is an agent.",
+      "source": "edcd5ec82cd0"
+    },
+    "section-7.title": {
+      "text": "The process boundary, the model and credentials",
+      "source": "b8bd223fc217"
+    },
+    "section-7.paragraphs.0": {
+      "text": "The remote agent is another process and cannot reach the runner's RunContext, so it calls no model. RunContext is the record and the constraints the platform gives this run: model calls are recorded, counted and stoppable, and only the backend holds the key. Another process cannot use it. If the checker called a model itself, its requests would not appear in this run's trace and neither replay nor statistics would see them; the key would also have to be handed to the child process, which breaks the rule that keys stay in the backend. So the checker is a deterministic program: BM25 search plus one version rule.",
+      "source": "714020c3653d"
+    },
+    "section-7.paragraphs.1": {
+      "text": "This is a teaching trade-off, not something A2A requires. The protocol does not care whether the other side is a model or rules: the Agent Card, the task states and the artifact look the same in both. What we gain is that every model request can be recorded and no key leaves the process; what we give up is the side where the other party is also an agent that reasons. A remote agent with a model may return plausible wrong results and needs the delegating side's acceptance even more, and its usage and cost are not on the delegating side's books. The deep dive below returns to this.",
+      "source": "9f5b38098212"
+    },
+    "section-7.paragraphs.2": {
+      "text": "Three things hold the process boundary. Starting: spawn_local_service starts services only from modules under the `lessons.` package and never concatenates a command string; the child gets only the few variables safe_child_environment provides, the event records their names, the report's no_secret check looks for key-like names, and a test puts a fake key in the parent process to confirm it is not passed on. Communication: the service binds only a random port on 127.0.0.1, so it cannot collide with the learner's own server. Stopping: when the with block exits the child first gets a termination signal and is killed after 3 seconds, and the runner then tries the port once more and records `port_closed` only if the connection fails.",
+      "source": "a47f54df1afb"
+    },
+    "section-7.paragraphs.3": {
+      "text": "A learner pressing stop and a timeout are two different things. On stop, run_until_cancelled cancels the current A2A call, the SDK cleans up, and `RunCancelled` is raised without a report. A timeout is the delegating side's own decision and goes through cancel and read-back. Once the local process is reclaimed the remote task is simply gone; a real remote service is not yours to stop, so all you can do is send `CancelTask` and wait for it to confirm.",
+      "source": "c7b9477bab8e"
+    },
+    "deep-dive-real-remote.title": {
+      "text": "When the remote side has a model: keeping observation and credentials apart",
+      "source": "cf80852392e6"
+    },
+    "deep-dive-real-remote.summary": {
+      "text": "This lesson's checker has no model. A real remote agent has a model and keys of its own, and the two sides keep separate records and bills.",
+      "source": "2de56b3a1725"
+    },
+    "deep-dive-real-remote.paragraphs.0": {
+      "text": "Observation has two layers. The delegating side records what it can see: the A2A messages, its own model calls and the task number. What happens inside the remote agent is the job of the remote agent's own records: which model it called and how many tokens it spent. The two sides line up through the task number and `contextId`, which serve as the join key. If the remote agent does not report usage, the delegating side's report says not reported, not 0, and does not estimate from message length. This lesson's report says exactly that with “what happened inside the remote agent is not in this side's record”.",
+      "source": "bbafba816246"
+    },
+    "deep-dive-real-remote.paragraphs.1": {
+      "text": "Credentials are kept apart too. The key the delegating side uses for its own model stays in its own backend and is never handed to the other side with a message. The remote agent calls its own model with its own key, and the cost lands on its owner's account. To reach the other service, the delegating side needs the credential matching the authentication scheme the Agent Card declares, stored only in the backend and never written into events or logs. Microsoft's course lists built-in authentication as one of A2A's benefits, and Understanding AI Agents in Depth also advises giving highly autonomous agents their own keys so spending cannot run away.",
+      "source": "75e7b44c1476"
+    },
+    "deep-dive-real-remote.paragraphs.2": {
+      "text": "The budget does not reach the other side. The delegating side's cap on model calls only limits its own calls; how much the remote agent may spend can be limited only through a deadline and cancellation. So every delegation carries a deadline, and the task is canceled when it passes. How finer budgets are split among subtasks and passed down is the subject of {{lesson:delegation-budget}}. Also, the text the other side returns is external text, just like the passages retrieved in this lesson, and the system prompt says they are material and not instructions. That rule was covered in {{lesson:prompt-injection}} and does not become true by itself when the transport is A2A.",
+      "source": "bd50bfa764b8"
+    },
+    "misconception-replace.claim": {
+      "text": "A2A is an upgraded MCP, so once you use A2A you no longer need MCP.",
+      "source": "c11aab40b394"
+    },
+    "misconception-replace.correction": {
+      "text": "They connect different things. MCP connects tools, and a call has no lifecycle of its own; A2A connects agents, and what is delegated is a task with state. A remote agent can perfectly well use MCP again to reach its own tools. Which to pick depends on the need: for a quick, deterministic query with one result per call, use a tool; only for a job where the other side should decide how to work, progress matters and cancellation may be needed is delegation worth it.",
+      "source": "e17fedc2b45c"
+    },
+    "walkthrough.title": {
+      "text": "One delegation across two processes",
+      "source": "226cf372e424"
+    },
+    "walkthrough.description": {
+      "text": "A step-by-step account of one “Normal delegation” run. The code is simplified for illustration; the evidence for your own run is in the lab's events.",
+      "source": "f72e72b8d840"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Discover",
+      "source": "10493d06b90f"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Delegating side",
+      "source": "5339d9ea8265"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Read the Agent Card",
+      "source": "a5f7bf431686"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The runner sends a GET to the remote agent's fixed address, reads the skill list and interface address, and goes on only if the checks pass.",
+      "source": "34a4c05c952f"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.a2a_message",
+      "source": "1296fd5575dc"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Decide",
+      "source": "710fba34d594"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Propose one delegation",
+      "source": "148857dd75b3"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The model sees the tool delegate_task built from the card, splits the user's question into two claims and picks the skill find-evidence.",
+      "source": "bf4e824c01ea"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "tool_call",
+      "source": "99bd30a8e4c3"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Send",
+      "source": "edecf0ae6e51"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Delegating side",
+      "source": "5339d9ea8265"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Send the message that creates the task",
+      "source": "8404ebef2c5d"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The message has a text part and a data part with the skill in metadata; the remote agent first returns a Task in SUBMITTED.",
+      "source": "cee36a8d21b6"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.a2a_message",
+      "source": "1296fd5575dc"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Work",
+      "source": "bc62d1b6b936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Remote agent",
+      "source": "ab5a9c114120"
+    },
+    "walkthrough.step-4.title": {
+      "text": "WORKING and progress",
+      "source": "132334702ac1"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The remote agent runs the BM25 search and sends a WORKING update after each claim it checks, while the delegating side reads the stream.",
+      "source": "7b6717b3de40"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.a2a_message",
+      "source": "1296fd5575dc"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Deliver",
+      "source": "1b29df5aa1ec"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Remote agent",
+      "source": "ab5a9c114120"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Artifact and final state",
+      "source": "08a5f4cd8fe1"
+    },
+    "walkthrough.step-5.body": {
+      "text": "The remote agent sends the artifact evidence-report, then sets the state to COMPLETED, and the event carries the terminal flag.",
+      "source": "bdc9b07bb599"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "terminal",
+      "source": "4e686af7bdcc"
+    },
+    "walkthrough.step-6.label": {
+      "text": "Accept",
+      "source": "7acb62b7d929"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Delegating side",
+      "source": "5339d9ea8265"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Check that the artifact covers every claim",
+      "source": "dfddd6e31c82"
+    },
+    "walkthrough.step-6.body": {
+      "text": "accept checks each claim number and its evidence passages and hands the result to the model only if the check passes.",
+      "source": "b4bd1c29c3c1"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "walkthrough.step-7.label": {
+      "text": "Answer",
+      "source": "f3f512648742"
+    },
+    "walkthrough.step-7.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-7.title": {
+      "text": "Answer only from the evidence that came back",
+      "source": "3341d974c742"
+    },
+    "walkthrough.step-7.body": {
+      "text": "The second model call may not propose another call; its text is the final answer, and the runner then reclaims the remote agent's process.",
+      "source": "25c007337de2"
+    },
+    "walkthrough.step-7.evidence": {
+      "text": "answer",
+      "source": "0db52f4076c0"
+    },
+    "mq-remote-inside.remote-inside.prompt": {
+      "text": "Can you see how the checker searched inside, and how many times, in this run's events?",
+      "source": "56e18c471d4d"
+    },
+    "mq-remote-inside.remote-inside.a.text": {
+      "text": "No: the events hold only the A2A messages and the delegating side's own model calls",
+      "source": "841151ad3a3d"
+    },
+    "mq-remote-inside.remote-inside.a.feedback": {
+      "text": "Right. The remote agent is another process and its inner process is not in this side's record.",
+      "source": "5a0256b18530"
+    },
+    "mq-remote-inside.remote-inside.b.text": {
+      "text": "Yes: every step of the remote agent has a `request` event",
+      "source": "142201ee5f67"
+    },
+    "mq-remote-inside.remote-inside.b.feedback": {
+      "text": "No. `request` records only model calls made through RunContext, and the remote agent makes none.",
+      "source": "093e0ae0e875"
+    },
+    "mq-remote-inside.remote-inside.c.text": {
+      "text": "Yes: the Agent Card lists its internal steps",
+      "source": "fdabb9ffe1dd"
+    },
+    "mq-remote-inside.remote-inside.c.feedback": {
+      "text": "No. The card lists skills and interface, not how the work is done.",
+      "source": "8abace409ae9"
+    },
+    "mq-remote-inside.remote-inside.explanation": {
+      "text": "The report's model-call count covers only the delegating side's calls, and counting `request` events confirms it.",
+      "source": "d600c4012345"
+    },
+    "references.ms-protocols.title": {
+      "text": "Agentic protocols: A2A's Agent Card, executor, artifact and event queue (Microsoft AI Agents for Beginners)",
+      "source": "b599fd2a4cef"
+    },
+    "references.book-ch10.title": {
+      "text": "Collaboration without shared context, communication and control, cross-organization A2A, multi-agent failure modes — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "9dbc21d19df8"
+    },
+    "references.book-ch4.title": {
+      "text": "Collaboration tools: create, message, cancel and discover — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "d212a4404eec"
+    },
+    "references.book-bus.title": {
+      "text": "A minimal message envelope, termination signal and acknowledgement — Understanding AI Agents in Depth (深入理解 AI Agent), companion code",
+      "source": "d9f2d39b164f"
+    },
+    "references.a2a-spec.title": {
+      "text": "A2A specification: task states, cancellation, push and polling (A2A Project)",
+      "source": "4138cba23913"
+    },
+    "references.a2a-sdk.title": {
+      "text": "A2A Python SDK (A2A Project)",
+      "source": "6d9cb75b6b3c"
+    },
+    "code-discover.n-discover.text": {
+      "text": "The entry point of discovery: read the other side's card before the model has seen anything.",
+      "source": "ac08df38755c"
+    },
+    "code-discover.n-get-card.text": {
+      "text": "GET `/.well-known/agent-card.json`; the SDK parses the reply into an AgentCard object.",
+      "source": "cd39aa6439db"
+    },
+    "code-discover.n-record-card.text": {
+      "text": "Export the card with the protocol's field names and record it before judging anything.",
+      "source": "c485b7a91717"
+    },
+    "code-discover.n-interfaces.text": {
+      "text": "Accept only the JSONRPC binding, the only one this lesson implements.",
+      "source": "f7ebf1246399"
+    },
+    "code-discover.n-endpoint.text": {
+      "text": "The other side writes the address in the card; if it differs from the address this run started, refuse instead of following it elsewhere.",
+      "source": "57610a09fc1c"
+    },
+    "code-discover.n-skill-mode.text": {
+      "text": "At least one skill must accept `application/json`, because the data part of the delegation message is JSON.",
+      "source": "9bc2c6a33a87"
+    },
+    "code-discover.n-unusable.text": {
+      "text": "An unusable card ends in an error, so the model never gets to delegate against it.",
+      "source": "91a948410583"
+    },
+    "code-discover.n-client.text": {
+      "text": "Create the SDK client from the card that passed; sending, cancelling and querying all go through it.",
+      "source": "5b419816f091"
+    },
+    "code-discover.n-tool.text": {
+      "text": "The model's only tool, built from the card; the runner hard-codes nothing about what the remote agent can do.",
+      "source": "f8df9cde500d"
+    },
+    "code-discover.n-skills.text": {
+      "text": "Join each skill's id and description into one string for the tool description.",
+      "source": "b4ffe81d49b5"
+    },
+    "code-discover.n-description.text": {
+      "text": "The card's name and description enter the tool description unchanged: the model reads whatever the other side wrote, and it is external text.",
+      "source": "d1d91e0c1e0b"
+    },
+    "code-discover.n-strict.text": {
+      "text": "The Schema allows no extra parameters.",
+      "source": "c32d9afe50f9"
+    },
+    "code-discover.n-enum.text": {
+      "text": "The skill id enum comes from the card, so the model cannot invent a skill the card does not list.",
+      "source": "40c83fcffa14"
+    },
+    "code-discover.n-claims.text": {
+      "text": "One to three claims of at most 160 characters each; the limit is in the Schema, and the remote agent checks it as well.",
+      "source": "f3462349682b"
+    },
+    "code-delegate.n-deadline.text": {
+      "text": "The whole stream read gets only `deadline_seconds` seconds, then TimeoutError is raised: no endless wait.",
+      "source": "4146acd0eed0"
+    },
+    "code-delegate.n-follow.text": {
+      "text": "follow reads the stream: the Task, status updates and artifact updates up to a final state, and brings back the artifacts and the other side's last line.",
+      "source": "a23eb6bfc4ad"
+    },
+    "code-delegate.n-timeout.text": {
+      "text": "The deadline passed but the remote task has not stopped: not reading the stream only means not waiting.",
+      "source": "1809eb3660f2"
+    },
+    "code-delegate.n-outcome.text": {
+      "text": "Record the outcome first; the report writes “timed out” from it.",
+      "source": "0b415fbfcd4f"
+    },
+    "code-delegate.n-cancel-call.text": {
+      "text": "Cancel actively and confirm by reading back; see the function below.",
+      "source": "d6e88f00fa7c"
+    },
+    "code-delegate.n-raise-timeout.text": {
+      "text": "Turn it into a structured error that tells the model the state read back.",
+      "source": "5a9ae68a7908"
+    },
+    "code-delegate.n-client-error.text": {
+      "text": "A protocol-level error (connection, an error from the other side) is not the same as a failed task.",
+      "source": "4be382e584ae"
+    },
+    "code-delegate.n-unavailable.text": {
+      "text": "Only the error type name goes out; the raw exception text may carry an address and is not handed to the model.",
+      "source": "79ca9db26787"
+    },
+    "code-delegate.n-last-state.text": {
+      "text": "The final state is taken from the sequence of states this side recorded.",
+      "source": "c0ebb50505ae"
+    },
+    "code-delegate.n-interrupted.text": {
+      "text": "INPUT_REQUIRED or AUTH_REQUIRED: the other side wants more information, and this lesson has no multi-turn exchange.",
+      "source": "bd41588d026f"
+    },
+    "code-delegate.n-no-terminal.text": {
+      "text": "The stream broke before a final state: nobody knows what became of the task, which must not be called a failure.",
+      "source": "1ed27f3f1756"
+    },
+    "code-delegate.n-failed.text": {
+      "text": "FAILED or REJECTED: report the other side's own line unchanged and do not retry.",
+      "source": "ed18f070244f"
+    },
+    "code-delegate.n-accept.text": {
+      "text": "COMPLETED is only the other side's claim; accept decides whether the result is usable.",
+      "source": "b76d4012d625"
+    },
+    "code-delegate.n-cancel-def.text": {
+      "text": "Cancel and confirm: the reply to the cancel request is not evidence.",
+      "source": "7bb269437ea9"
+    },
+    "code-delegate.n-no-id.text": {
+      "text": "Without a task number nothing can be canceled, and the code says so.",
+      "source": "33a77a6de77b"
+    },
+    "code-delegate.n-cancel-limit.text": {
+      "text": "Cancelling and confirming also have a 5-second limit.",
+      "source": "0192a383522e"
+    },
+    "code-delegate.n-cancel-task.text": {
+      "text": "Send CancelTask; both the request and the reply are recorded as lesson.a2a_message.",
+      "source": "dcab88cd34e7"
+    },
+    "code-delegate.n-cancel-fail.text": {
+      "text": "The task may have finished or be unknown to the other side: a failed cancel is not the end of the story.",
+      "source": "42e237b2fcb1"
+    },
+    "code-delegate.n-get-task.text": {
+      "text": "Whatever the cancel reply said, read the task back and go by the other side's state right now.",
+      "source": "1340f8fe796e"
+    },
+    "code-delegate.n-confirmed.text": {
+      "text": "Only a read-back CANCELED counts as confirmed, and the report writes “canceled” or “not confirmed” accordingly.",
+      "source": "c6bc29f8c0f0"
+    },
+    "code-worker.n-execute.text": {
+      "text": "The remote agent's entry point: the SDK calls it when a message arrives; it puts events on the queue and the SDK turns them into a stream.",
+      "source": "e339bd3cde66"
+    },
+    "code-worker.n-new-task.text": {
+      "text": "A new message creates a new task; the SDK generates the task number and `contextId`.",
+      "source": "64b4cbf4d6de"
+    },
+    "code-worker.n-submitted.text": {
+      "text": "The first event is the Task itself, in SUBMITTED.",
+      "source": "9790fc224ef5"
+    },
+    "code-worker.n-updater.text": {
+      "text": "TaskUpdater puts status updates and artifacts on the queue in the protocol's format.",
+      "source": "ab33c9c22576"
+    },
+    "code-worker.n-contract.text": {
+      "text": "The skill's input contract: the skill id in metadata plus one to three numbered claims.",
+      "source": "71185688ccf1"
+    },
+    "code-worker.n-rejected.text": {
+      "text": "A message that breaks the contract is rejected: straight to REJECTED, with no WORKING.",
+      "source": "95cabdcefbed"
+    },
+    "code-worker.n-working.text": {
+      "text": "WORKING plus a line the delegating side can show while it waits.",
+      "source": "fecaae1e8251"
+    },
+    "code-worker.n-slow.text": {
+      "text": "Fault injection: wait 60 seconds before starting and report WORKING every second, to trip the delegating side's deadline.",
+      "source": "8a9234b316f8"
+    },
+    "code-worker.n-fail.text": {
+      "text": "Fault injection: report FAILED at once, with a reason.",
+      "source": "4572cf730824"
+    },
+    "code-worker.n-partial.text": {
+      "text": "The partial fault: process only the first claim and still report COMPLETED; nothing is wrong at the protocol level.",
+      "source": "88a669260f66"
+    },
+    "code-worker.n-check.text": {
+      "text": "A real BM25 search plus the version rule: the remote agent's own business, invisible to the delegating side.",
+      "source": "69eb4814cc31"
+    },
+    "code-worker.n-progress.text": {
+      "text": "One progress update after each claim checked.",
+      "source": "a9f4f3aa0f1f"
+    },
+    "code-worker.n-artifact.text": {
+      "text": "The artifact: a data part for the program and a text part for people.",
+      "source": "60c39a3b91c2"
+    },
+    "code-worker.n-completed.text": {
+      "text": "The final state COMPLETED, after which the stream ends.",
+      "source": "81c987157eec"
+    },
+    "code-decision.title": {
+      "text": "Why is the remote agent a deterministic program and not another agent that calls a model?",
+      "source": "d7311ad77c08"
+    },
+    "code-decision.chosen": {
+      "text": "The checker in the child process does only BM25 search and the version rule and calls no model. Every model request is then recorded through RunContext, no key leaves the process, and at the protocol level it looks exactly like a remote agent with a model.",
+      "source": "2edd4c56c7bf"
+    },
+    "code-decision.remote-model.title": {
+      "text": "The child process calls a model itself",
+      "source": "480141b39e59"
+    },
+    "code-decision.remote-model.why_not": {
+      "text": "Its requests would not enter this run's record, so neither replay nor usage statistics could see them, and the key would have to be handed to the child process, which breaks the rule that keys stay in the backend.",
+      "source": "6f9f5796e367"
+    },
+    "code-decision.proxy-model.title": {
+      "text": "The child sends its model requests back through the parent",
+      "source": "d4a4c4f6434f"
+    },
+    "code-decision.proxy-model.why_not": {
+      "text": "Possible, but the platform has no such capability yet: it needs a controlled channel from child to parent and limits on the child's requests. This lesson does not build a channel around RunContext.",
+      "source": "cb013ac28509"
+    },
+    "code-decision.in-process.title": {
+      "text": "Simulate the “remote” side in the same process",
+      "source": "f82af992b15b"
+    },
+    "code-decision.in-process.why_not": {
+      "text": "There would be no process boundary: you could not see states really travel, cancellation or process reclaiming, and could not demonstrate environment isolation.",
+      "source": "ff604a5bda40"
+    },
+    "delegate-lifecycle.title": {
+      "text": "Normal delegation: from Agent Card to artifact",
+      "source": "f7891e939e66"
+    },
+    "delegate-lifecycle.hypothesis": {
+      "text": "The delegating side can read the remote process's Agent Card and build the model's tool from it; after the message is sent, one task moves through SUBMITTED and WORKING to COMPLETED, and once the artifact arrives every claim matches a result.",
+      "source": "dffd7ff98755"
+    },
+    "delegate-lifecycle.delegate.label": {
+      "text": "Normal delegation",
+      "source": "59a65c6b351d"
+    },
+    "delegate-lifecycle.card.text": {
+      "text": "The Agent Card: name, interface address, `capabilities` and the skill list.",
+      "source": "d7f5fca504a0"
+    },
+    "delegate-lifecycle.tool-from-card.text": {
+      "text": "The tool in the first request: the skill id is an enum and the description comes from the card.",
+      "source": "e438c3639563"
+    },
+    "delegate-lifecycle.send.text": {
+      "text": "The message the delegating side sends: a text part, the numbered claims and the skill in `metadata`.",
+      "source": "d42d60f4fec0"
+    },
+    "delegate-lifecycle.submitted.text": {
+      "text": "The first object the remote agent returns: a Task in SUBMITTED.",
+      "source": "2cf45af8be06"
+    },
+    "delegate-lifecycle.working.text": {
+      "text": "A WORKING update and the progress note the remote agent attaches.",
+      "source": "f9005ce5b264"
+    },
+    "delegate-lifecycle.artifact.text": {
+      "text": "The artifact `evidence-report`: the evidence passages for each claim.",
+      "source": "fb444a79950d"
+    },
+    "delegate-lifecycle.terminal.text": {
+      "text": "The final-state message with `terminal: true`.",
+      "source": "46f3c67cbaf3"
+    },
+    "delegate-lifecycle.task-match.text": {
+      "text": "The task number check in the report: every remote message belongs to the same task.",
+      "source": "48763f2ccad9"
+    },
+    "delegate-lifecycle.accept.text": {
+      "text": "The delegating side's result check: every claim has a result and evidence.",
+      "source": "0a449826a737"
+    },
+    "delegate-lifecycle.guide.0.text": {
+      "text": "This run has two processes: the delegating side inside the runner and the reference checker it started. Every protocol message is recorded as lesson.a2a_message, and we start with discovery.",
+      "source": "019eeb3c0916"
+    },
+    "delegate-lifecycle.guide.1.text": {
+      "text": "The first message is the Agent Card, where the delegating side learns what the other side can do.",
+      "source": "10ed6688cbc5"
+    },
+    "delegate-lifecycle.guide.2.text": {
+      "text": "The tool in the model request was written from this card, and the card's description went into the tool description unchanged.",
+      "source": "b9d8d7ce0570"
+    },
+    "delegate-lifecycle.guide.3.text": {
+      "text": "The message the delegating side sends: text for people, numbered claims in the data part and the skill in `metadata`.",
+      "source": "4821f09e6683"
+    },
+    "delegate-lifecycle.guide.4.text": {
+      "text": "The remote agent first returns a Task in SUBMITTED, carrying the task number.",
+      "source": "00cd4ea26cdc"
+    },
+    "delegate-lifecycle.guide.5.text": {
+      "text": "Then WORKING with a progress note the other side wrote, and again after each claim it checks.",
+      "source": "8dba575da849"
+    },
+    "delegate-lifecycle.guide.6.text": {
+      "text": "The artifact holds the evidence passages for each claim, matched one to one by claim number.",
+      "source": "85b4c3ea24e3"
+    },
+    "delegate-lifecycle.guide.7.text": {
+      "text": "The final state COMPLETED carries `terminal: true`, and the stream ends here.",
+      "source": "51f529927754"
+    },
+    "delegate-lifecycle.guide.8.text": {
+      "text": "The report verified that every remote message carries the same task number.",
+      "source": "96f5a489816a"
+    },
+    "delegate-lifecycle.guide.9.text": {
+      "text": "Last comes the delegating side's own acceptance: it passes only if every claim has a result and evidence.",
+      "source": "9d3fa848dce0"
+    },
+    "delegate-lifecycle.conclusion.proves.0": {
+      "text": "In this run discovery, task states and the artifact all came from a real A2A exchange with another process: every object the SDK parsed is recorded, and the search was really run by BM25 inside the remote process.",
+      "source": "d43ca8445ff1"
+    },
+    "delegate-lifecycle.conclusion.proves.1": {
+      "text": "The state sequence and the task number can be checked one by one in the record, and the delegating side's acceptance is decided from the artifact's content.",
+      "source": "41c8fc1f9f29"
+    },
+    "delegate-lifecycle.conclusion.does_not_prove.0": {
+      "text": "The messages are SDK objects exported by field name, not the raw bytes on the wire; neither key order nor the JSON-RPC wrapper can be compared against.",
+      "source": "be61af3575b7"
+    },
+    "delegate-lifecycle.conclusion.does_not_prove.1": {
+      "text": "In offline test mode the model's decisions and answers come from a fixed script and stand for no real model, and one run cannot show whether a model splits the claims well.",
+      "source": "652d100896d9"
+    },
+    "delegate-lifecycle.conclusion.does_not_prove.2": {
+      "text": "The result check verifies structure only; whether the evidence is relevant and the answer correct takes reading the passages themselves.",
+      "source": "b5f2bfc9315b"
+    },
+    "three-failures.title": {
+      "text": "Three failure paths: timeout, remote failure, incomplete result",
+      "source": "7bca4c208eb8"
+    },
+    "three-failures.hypothesis": {
+      "text": "Each of the three endings has its own record: a timeout ends with the delegating side sending `CancelTask` and reading back CANCELED, with no endless wait; a remote failure is a working protocol and a FAILED final state; and when the remote agent reports COMPLETED with an incomplete artifact, the state looks normal while the delegating side's result check fails.",
+      "source": "5f15ecb7fcf0"
+    },
+    "three-failures.timeout.label": {
+      "text": "Timeout, then cancel",
+      "source": "bb4daea91ff3"
+    },
+    "three-failures.failure.label": {
+      "text": "Remote failure",
+      "source": "90839c3313b1"
+    },
+    "three-failures.incomplete.label": {
+      "text": "Incomplete result from the remote agent",
+      "source": "4e691a61933d"
+    },
+    "three-failures.cancel-request.text": {
+      "text": "The `CancelTask` the delegating side sends; the request holds only the task number.",
+      "source": "f1fb0ca21403"
+    },
+    "three-failures.cancel-reply.text": {
+      "text": "The reply to the cancel request: a Task already in CANCELED.",
+      "source": "75e114da8c01"
+    },
+    "three-failures.bounded.text": {
+      "text": "The “bounded wait” check in the report, which states the state read back.",
+      "source": "46293d31f5da"
+    },
+    "three-failures.terminal.text": {
+      "text": "The first message with `terminal: true`.",
+      "source": "fd2bc3bf7684"
+    },
+    "three-failures.error-type.text": {
+      "text": "The error type in `tool_result`, different for each of the three endings.",
+      "source": "73368a6e09ea"
+    },
+    "three-failures.result-check.text": {
+      "text": "The result check, which the COMPLETED run does not pass.",
+      "source": "ddb3fee6d18f"
+    },
+    "three-failures.outcome.text": {
+      "text": "The “delegation outcome” in the report, written separately for each ending.",
+      "source": "67e7b8ebaafb"
+    },
+    "three-failures.answer.text": {
+      "text": "The model's answer, which says what was not checked.",
+      "source": "69eead89094d"
+    },
+    "three-failures.guide.0.text": {
+      "text": "The three arms use the same question and differ only in the fault parameter the remote agent was started with. Start with the timeout arm.",
+      "source": "76e8669e93b3"
+    },
+    "three-failures.guide.1.text": {
+      "text": "The deadline passed and the delegating side sends `CancelTask`, whose request holds only the task number.",
+      "source": "7813c8a61b94"
+    },
+    "three-failures.guide.2.text": {
+      "text": "The cancel reply already says CANCELED, but that is only the other side's word at that moment and a read-back follows.",
+      "source": "f9725ea5d81b"
+    },
+    "three-failures.guide.3.text": {
+      "text": "The report's “bounded wait” check states the state read back, and that is the confirmation of the cancel.",
+      "source": "f8a243abf271"
+    },
+    "three-failures.guide.4.text": {
+      "text": "Now the final-state flag: CANCELED read back in the timeout arm, FAILED in the remote-failure arm and COMPLETED in the incomplete arm.",
+      "source": "a8c523d11cad"
+    },
+    "three-failures.guide.5.text": {
+      "text": "The three endings reach `tool_result` with different error types, and the model learns from them what happened.",
+      "source": "9bfbcb3dc1c6"
+    },
+    "three-failures.guide.6.text": {
+      "text": "The completed-but-incomplete arm: the state is COMPLETED and the result check fails; the other two arms have no artifact to check.",
+      "source": "666d1a7c8613"
+    },
+    "three-failures.guide.7.text": {
+      "text": "The report writes the three endings separately and does not just say “failed”.",
+      "source": "78cf91c1e19a"
+    },
+    "three-failures.guide.8.text": {
+      "text": "The model's answer says honestly what was not checked and fills in nothing. That is how the offline fixture is written; a real model has to be checked separately.",
+      "source": "994a3de91ef9"
+    },
+    "three-failures.conclusion.proves.0": {
+      "text": "In these three runs the timeout was canceled and its final state read back, with no endless wait; the remote failure and the incomplete result were kept as two different endings, and their type, state sequence and explanation can all be found in the record.",
+      "source": "dab8312ffbbd"
+    },
+    "three-failures.conclusion.proves.1": {
+      "text": "With the offline fixture, none of the three endings was answered as a success.",
+      "source": "497a8e5ceff2"
+    },
+    "three-failures.conclusion.does_not_prove.0": {
+      "text": "The faults are injected through the remote agent's start-up parameter and the source is stated in the report; a real remote failure may show up in another state or another kind of disconnect.",
+      "source": "73341c452160"
+    },
+    "three-failures.conclusion.does_not_prove.1": {
+      "text": "CANCELED only shows the other side confirmed the cancel this time, not that all its side effects are wrapped up.",
+      "source": "2afd94bef6c3"
+    },
+    "three-failures.conclusion.does_not_prove.2": {
+      "text": "The model's answer in the fixture is a script and does not show how a real model would phrase things when it meets these results.",
+      "source": "61795fd434d0"
+    },
+    "process-boundary.title": {
+      "text": "The process boundary: the invisible inside and the keys it cannot get",
+      "source": "a91c948730b7"
+    },
+    "process-boundary.hypothesis": {
+      "text": "The remote agent receives only safe environment variables, with no key-like names; its inner process does not appear in this side's events, and the count of model calls covers only the delegating side's own requests; after the run the process has been reclaimed and the port no longer accepts connections, in the timeout arm as well.",
+      "source": "f08961633823"
+    },
+    "process-boundary.delegate.label": {
+      "text": "Normal delegation",
+      "source": "59a65c6b351d"
+    },
+    "process-boundary.timeout.label": {
+      "text": "Timeout, then cancel",
+      "source": "bb4daea91ff3"
+    },
+    "process-boundary.env-names.text": {
+      "text": "The environment variable names recorded when the remote agent started.",
+      "source": "e069d4143a51"
+    },
+    "process-boundary.no-secret.text": {
+      "text": "The report check: no key-like name among the variable names.",
+      "source": "26e92ec4ff58"
+    },
+    "process-boundary.model-calls.text": {
+      "text": "This side's model-call count.",
+      "source": "041ff8588dd8"
+    },
+    "process-boundary.timeline.text": {
+      "text": "The timeline table in the report: direction, type and state of each protocol message.",
+      "source": "e08ae5571f8b"
+    },
+    "process-boundary.fault.text": {
+      "text": "Where the injected fault comes from: the remote agent's start-up parameter.",
+      "source": "fe0f6880c37a"
+    },
+    "process-boundary.stopped.text": {
+      "text": "The last process event: whether the port still accepts connections.",
+      "source": "6a2e1a3d8b33"
+    },
+    "process-boundary.guide.0.text": {
+      "text": "This experiment looks at the process boundary: what gets across, what stays invisible and what must be gone when the run ends.",
+      "source": "1b7fbd11d5ba"
+    },
+    "process-boundary.guide.1.text": {
+      "text": "The start event lists the environment variable names the remote agent received, only a few system variables.",
+      "source": "19a5de30e16c"
+    },
+    "process-boundary.guide.2.text": {
+      "text": "The report looks for key-like variables by name and passes only if there are none; the values are never recorded.",
+      "source": "240cd0d80774"
+    },
+    "process-boundary.guide.3.text": {
+      "text": "This side made only two model calls: one to decide on delegating and one to write the answer. The remote agent makes none.",
+      "source": "114ccc45b55d"
+    },
+    "process-boundary.guide.4.text": {
+      "text": "The timeline lists each message in order with its direction, type and state, and the progress notes are written by the remote agent itself.",
+      "source": "56a1de584b5f"
+    },
+    "process-boundary.guide.5.text": {
+      "text": "The fault in the timeout arm comes from the start-up parameter, which the report states; it is not a real remote failure.",
+      "source": "f8f5e3422e7b"
+    },
+    "process-boundary.guide.6.text": {
+      "text": "The last process event: the port no longer accepts connections and the process is reclaimed, in the timeout arm too.",
+      "source": "b312b2e3f30e"
+    },
+    "process-boundary.conclusion.proves.0": {
+      "text": "In these two runs the remote process received only safe environment variables, with no key-like names, and its port no longer accepted connections after the run.",
+      "source": "ef48aa27dacc"
+    },
+    "process-boundary.conclusion.proves.1": {
+      "text": "This side's model-call count comes only from the delegating side's own requests, and the remote agent's inner process has no record at all.",
+      "source": "f93423672992"
+    },
+    "process-boundary.conclusion.does_not_prove.0": {
+      "text": "No key among the variable names shows only that none was passed through the environment; this lesson relies on the remote agent being a deterministic program that never touches a model to make sure it has no use for a key.",
+      "source": "b2525737f3e3"
+    },
+    "process-boundary.conclusion.does_not_prove.1": {
+      "text": "A closed port shows the local process was reclaimed; a real remote service is not yours to stop, and this lesson does not demonstrate that.",
+      "source": "02ed54741e7f"
+    },
+    "process-boundary.conclusion.does_not_prove.2": {
+      "text": "This lesson has no remote agent with a model; how to reconcile its observation and cost is covered in the deep dive of section seven.",
+      "source": "8d4a4d0d45ec"
+    },
+    "inputs.fault.label": {
+      "text": "Fault injection",
+      "source": "35a89cb0cf26"
+    },
+    "inputs.fault.help": {
+      "text": "The `--fault` parameter the remote agent is started with. Each exercise is preset, and another value changes how this run ends.",
+      "source": "78cdc7627b0d"
+    },
+    "inputs.fault.options.none.label": {
+      "text": "none: works normally",
+      "source": "67581ae8285b"
+    },
+    "inputs.fault.options.slow.label": {
+      "text": "slow: waits 60 seconds before starting",
+      "source": "2b4a82be280b"
+    },
+    "inputs.fault.options.fail.label": {
+      "text": "fail: reports a failure after starting",
+      "source": "0bf16aba4d88"
+    },
+    "inputs.fault.options.partial.label": {
+      "text": "partial: reports completion after checking only the first claim",
+      "source": "e0ab3ba512db"
+    },
+    "inputs.deadline_seconds.label": {
+      "text": "Deadline (seconds)",
+      "source": "e38b897305c3"
+    },
+    "inputs.deadline_seconds.help": {
+      "text": "How long the delegating side waits for a final state, 1 to 10 seconds; it cancels after that. It matters only when the remote agent cannot finish in time.",
+      "source": "a039937a04ff"
+    },
+    "quiz.q1.prompt": {
+      "text": "Which of these is not in an Agent Card?",
+      "source": "580a6de57d8e"
+    },
+    "quiz.q1.a.text": {
+      "text": "The skill list and the input formats each skill accepts",
+      "source": "d75a269a7059"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "No. That is the main content of a card.",
+      "source": "d88f408f40c3"
+    },
+    "quiz.q1.b.text": {
+      "text": "The remote agent's system prompt and internal tools",
+      "source": "6cda44b5420c"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "Right. A card holds only outward claims; how the agent works inside stays opaque.",
+      "source": "51c7528906fb"
+    },
+    "quiz.q1.c.text": {
+      "text": "The interface address and whether streaming updates are supported",
+      "source": "2f56497e9085"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. Interface and capabilities are both in the card.",
+      "source": "8359009efc97"
+    },
+    "quiz.q1.explanation": {
+      "text": "The card is an outward self-description: what it can do and how to connect, not how it does it.",
+      "source": "338b7ecf0a54"
+    },
+    "quiz.q2.prompt": {
+      "text": "In a normal delegation, what is the first object the delegating side reads from the stream?",
+      "source": "29e4461685b6"
+    },
+    "quiz.q2.a.text": {
+      "text": "A Task in SUBMITTED carrying the task number",
+      "source": "91fa9928497f"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. The WORKING status updates come after it.",
+      "source": "ce6b364ea693"
+    },
+    "quiz.q2.b.text": {
+      "text": "The artifact",
+      "source": "faa3e87e26be"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The artifact comes after WORKING and before the final state.",
+      "source": "248e9e89ef0e"
+    },
+    "quiz.q2.c.text": {
+      "text": "An update in COMPLETED",
+      "source": "20784b6b0aff"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The final state is the last one.",
+      "source": "c15c2571d8bb"
+    },
+    "quiz.q2.explanation": {
+      "text": "You can see the order in the “Normal delegation” experiment: Task, WORKING, artifact, final state.",
+      "source": "5fe59b822eef"
+    },
+    "quiz.q3.prompt": {
+      "text": "The deadline has passed and the task is not in a final state. What should the delegating side do?",
+      "source": "cb92595aad5a"
+    },
+    "quiz.q3.a.text": {
+      "text": "Send `CancelTask`, read the state back and write the timeout and the confirmation into the report",
+      "source": "b38d9803ee7e"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. The wait is bounded and the cancel needs confirmation.",
+      "source": "1102bf47e6d3"
+    },
+    "quiz.q3.b.text": {
+      "text": "Keep waiting until the remote side gives a result",
+      "source": "c29f4fa97897"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. That is an endless wait.",
+      "source": "0ed4b51f488f"
+    },
+    "quiz.q3.c.text": {
+      "text": "Estimate an answer from the progress received",
+      "source": "bf2afa094cba"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. Without a checked result there is no answer to give.",
+      "source": "1bca30430ac1"
+    },
+    "quiz.q3.explanation": {
+      "text": "In the timeout exercise's report, the “bounded wait” check states the state read back.",
+      "source": "644f64f50e60"
+    },
+    "quiz.q4.prompt": {
+      "text": "The stream ended before a final state and the last state seen was WORKING. How should it be recorded?",
+      "source": "834ab8f98fa5"
+    },
+    "quiz.q4.a.text": {
+      "text": "A broken exchange: nobody knows what became of the task, so it is not a remote failure",
+      "source": "c816cec2ac3a"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. FAILED is a final state the other side reports explicitly, and nothing was reported here.",
+      "source": "198b5ddad872"
+    },
+    "quiz.q4.b.text": {
+      "text": "A remote failure, because the task did not complete",
+      "source": "090cd83181e7"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. The other side did not say it failed.",
+      "source": "445c72841e23"
+    },
+    "quiz.q4.c.text": {
+      "text": "The task completed, because no error was seen",
+      "source": "15a8f1292b51"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. Not having seen a final state is not completion.",
+      "source": "7ef2745a32d5"
+    },
+    "quiz.q4.explanation": {
+      "text": "In the code this path raises RemoteUnavailable, not RemoteTaskFailed.",
+      "source": "de2aea202cd0"
+    },
+    "quiz.q5.prompt": {
+      "text": "The state is COMPLETED and the artifact holds a result for `c1` only, while `c1` and `c2` were handed over. What now?",
+      "source": "ec432f4c0570"
+    },
+    "quiz.q5.a.text": {
+      "text": "Treat it as an incomplete result: tell the model both the part that came back and the missing claim",
+      "source": "b5cfcd262f18"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. A normal state does not mean a complete artifact.",
+      "source": "ebabc2e91c9e"
+    },
+    "quiz.q5.b.text": {
+      "text": "Treat it as a success, because the protocol raised no error",
+      "source": "11bb24334289"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. Success at the protocol level is not a usable result.",
+      "source": "befd12d20aac"
+    },
+    "quiz.q5.c.text": {
+      "text": "Treat it as a connection fault and reconnect",
+      "source": "422f88082238"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. The connection is fine; the problem is the artifact.",
+      "source": "39fb254bc44b"
+    },
+    "quiz.q5.explanation": {
+      "text": "In the report the state sequence ends in COMPLETED while the result check fails, and both are recorded side by side.",
+      "source": "eba3a4930011"
+    },
+    "quiz.q6.prompt": {
+      "text": "Why does this lesson's reference checker not call a model?",
+      "source": "a8ea81a74d37"
+    },
+    "quiz.q6.a.text": {
+      "text": "It runs in another process and cannot reach RunContext: its requests could not be recorded and the key would have to be handed to the child process",
+      "source": "4f20c88438c0"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. This is a teaching trade-off, not a protocol requirement.",
+      "source": "63eac4e9914d"
+    },
+    "quiz.q6.b.text": {
+      "text": "The A2A protocol forbids the remote agent from using a model",
+      "source": "a10bd18871e4"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. The protocol does not care what is inside the other side.",
+      "source": "45a6888d0cac"
+    },
+    "quiz.q6.c.text": {
+      "text": "Because model calls are too slow and would break the delegating side's deadline",
+      "source": "a48bbb013e0b"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The reasons are the record and the key, not speed.",
+      "source": "ad805274b74a"
+    },
+    "quiz.q6.explanation": {
+      "text": "See the decision block: the two alternatives break the key rule or lack a platform capability.",
+      "source": "febc33b17ad6"
+    },
+    "quiz.q7.prompt": {
+      "text": "The Agent Card gives an address elsewhere and the runner must refuse. What does this rule guard against?",
+      "source": "e26878250a4d"
+    },
+    "quiz.q7.a.text": {
+      "text": "An address the other side wrote steering the request elsewhere",
+      "source": "761d264559c5"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. The other side writes the address, so it cannot be trusted as is.",
+      "source": "8de5f8fcb83e"
+    },
+    "quiz.q7.b.text": {
+      "text": "Too many skills in the card for the model to choose from",
+      "source": "f74c3185637f"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. This check has nothing to do with the number of skills.",
+      "source": "f3c9d93fca96"
+    },
+    "quiz.q7.c.text": {
+      "text": "Streaming updates too fast for the runner to read",
+      "source": "844f488ee851"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. That has nothing to do with the address.",
+      "source": "a0f1b90fda07"
+    },
+    "quiz.q7.explanation": {
+      "text": "This lesson connects only to the process it started, and a test with a card pointing elsewhere confirms the refusal.",
+      "source": "d4c1b9f2a851"
+    },
+    "check-hunt-cancel.prompt": {
+      "text": "Run “Timeout, then cancel” and find the cancel request the delegating side sent to the remote agent.",
+      "source": "178e61776d93"
+    },
+    "check-hunt-cancel.explanation": {
+      "text": "It is the lesson.a2a_message whose `name` is `CancelTaskRequest` and whose direction is `client_to_agent`; the request holds only the task number. The cancel reply follows, then `GetTaskRequest` and the Task read back. The state of that last Task is the confirmation of the cancel.",
+      "source": "deb34d9ab5e7"
+    },
+    "check-hunt-incomplete.prompt": {
+      "text": "Run “Incomplete result from the remote agent” and find the check in the report that does not pass.",
+      "source": "cee3051aa066"
+    },
+    "check-hunt-incomplete.explanation": {
+      "text": "The `passed` field of the `result` check is false and its detail names the claim that has no result. In the same report the state sequence ends in COMPLETED, so “task completed” and “result usable” are two different conclusions.",
+      "source": "43ae8b72a628"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and this lesson's source, and tick an item only when you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran “Normal delegation”, found the Agent Card, the Task, WORKING, the artifact and the final state in the events in order, and can say who sent each one.",
+      "source": "c53982102508"
+    },
+    "check-points.item-2.text": {
+      "text": "I ran “Timeout, then cancel”, found `CancelTask` and the `GetTask` read-back, and know why the cancel reply does not count as confirmation.",
+      "source": "907a63e495b7"
+    },
+    "check-points.item-3.text": {
+      "text": "I compared “Remote failure” and “Incomplete result from the remote agent”: one ends in FAILED and the other in COMPLETED, and I can name the result check and error type of each.",
+      "source": "dd4b201f0c82"
+    },
+    "check-points.item-4.text": {
+      "text": "I found the environment variable names the remote agent received and this side's model-call count in the report, and explained why the remote agent has no `request` events.",
+      "source": "63ca559e167d"
+    },
+    "check-points.item-5.text": {
+      "text": "I can explain in my own words why this scenario uses A2A and not MCP, and give an example where MCP is the right choice instead.",
+      "source": "fbee9512e4b2"
+    },
+    "code_notes.delegate_task.note": {
+      "text": "The model's only tool: skills and parameter ranges come from the Agent Card.",
+      "source": "e53b08035170"
+    },
+    "code_notes.discover.note": {
+      "text": "Reads the Agent Card and checks it is usable; only then is the client created.",
+      "source": "496327c98817"
+    },
+    "code_notes.delegation_tool.note": {
+      "text": "Turns the Agent Card's skills into the model's tool definition.",
+      "source": "264152e08396"
+    },
+    "code_notes.accept.note": {
+      "text": "The delegating side's acceptance: passes only if every claim has a result and evidence.",
+      "source": "e0399af0c1b5"
+    },
+    "code_notes.DelegationTimeout.note": {
+      "text": "Raised after the cancel was sent and the state read back; no result came.",
+      "source": "adb39dac89a0"
+    },
+    "code_notes.RemoteTaskFailed.note": {
+      "text": "The remote task ended in FAILED, REJECTED or the like, with the other side's line.",
+      "source": "e5f9a5a57039"
+    },
+    "code_notes.IncompleteResult.note": {
+      "text": "The remote agent reported COMPLETED but the artifact failed acceptance.",
+      "source": "a7b070152a6a"
+    },
+    "code_notes.RemoteUnavailable.note": {
+      "text": "A protocol-level error or a stream cut before a final state; the task's fate is unknown.",
+      "source": "a10856fb4628"
+    },
+    "code_notes.lesson.a2a_message.note": {
+      "text": "One A2A protocol object: direction, type and the SDK-exported content.",
+      "source": "f06fe5ac67d5"
+    },
+    "code_notes.sdk_protobuf_message.note": {
+      "text": "Value of captured: the SDK's protobuf object exported by field name.",
+      "source": "bee5a494bbb3"
+    },
+    "code_notes.spawn_local_service.note": {
+      "text": "Platform function: starts a local service process and always reclaims it on exit.",
+      "source": "4ce6f2e0a935"
+    },
+    "code_notes.safe_child_environment.note": {
+      "text": "Platform function: the child gets only the SDK's safe environment variables.",
+      "source": "0bcc390cc864"
+    },
+    "code_notes.run_until_cancelled.note": {
+      "text": "Platform function: on stop it cancels the async call so the process is reclaimed.",
+      "source": "62fd870efed4"
+    },
+    "code_notes.task_match.note": {
+      "text": "Report check: every remote message carries the same task number.",
+      "source": "6d9bb00a0934"
+    },
+    "code_notes.no_secret.note": {
+      "text": "Report check: no key-like name among the variables given to the child.",
+      "source": "7d2b01709d06"
+    },
+    "code_notes.TERMINAL.note": {
+      "text": "The final states: COMPLETED, FAILED, CANCELED, REJECTED.",
+      "source": "cbd8415677c3"
+    },
+    "code_notes.INTERRUPTED.note": {
+      "text": "The interrupted states: INPUT_REQUIRED and AUTH_REQUIRED.",
+      "source": "ac27713d2967"
+    }
+  }
+}

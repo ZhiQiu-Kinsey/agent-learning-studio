@@ -49,7 +49,7 @@ class ProviderTests(unittest.TestCase):
         for profile in data["providers"]:
             self.assertEqual(set(profile), {"id", "label", "model", "api_key_configured",
                                            "config_ready", "base_url_configured", "supports_custom_base_url",
-                                           "requires_api_key"})
+                                           "requires_api_key", "embedding_model"})
             self.assertIsInstance(profile["requires_api_key"], bool)
         self.assertNotIn("bailian-env-secret", response.text)
         self.assertNotIn("native.example.invalid", response.text)
@@ -207,6 +207,14 @@ class SDKHttpTests(unittest.TestCase):
         self.assertEqual(str(requests[0].url), "https://mock-provider.invalid/v1/chat/completions")
         self.assertEqual(requests[0].headers["authorization"], "Bearer mock-key")
         self.assertEqual(json.loads(requests[0].content)["model"], "mock-model")
+
+
+class UnsupportedParamsTests(unittest.TestCase):
+    def test_anthropic_five_series_rejects_temperature_only(self):
+        for model in ("claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5", "claude-fable-5-1"):
+            self.assertEqual(ModelProfile("anthropic", "A", model, "k", None, True).unsupported_params, {"temperature"})
+        for provider, model in (("anthropic", "claude-sonnet-4-5"), ("openai", "claude-sonnet-5-5"), ("openai", "gpt-5")):
+            self.assertEqual(ModelProfile(provider, "P", model, "k", None, True).unsupported_params, frozenset())
 
 
 if __name__ == "__main__":

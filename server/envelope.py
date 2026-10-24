@@ -15,11 +15,13 @@ PROVENANCES = ("real_run", "recorded_run", "offline_recompute", "illustration")
 # 表示层级：传输边界原始字节 / 我们对原始字节的解析 / SDK 标准化对象 / 原生 HTTP 请求体。
 REPRESENTATIONS = ("wire", "parsed", "sdk_standardized", "http_body")
 # agent 层预留给多 Agent 课程；当前单 Agent 运行中 step 直接挂在 run 下。
-SPAN_KINDS = ("run", "agent", "step", "llm", "tool")
+# approval：运行停在审批点等人决定的区间（approval_requested → approval_resolved）。
+SPAN_KINDS = ("run", "agent", "step", "llm", "tool", "approval")
 DEFAULT_ACTOR = "agent"
 
-# 区间事件与瞬时事件的唯一声明。phase：start 打开 span、end 关闭 span、instant 挂在当前 span。
-# model_payload 表示事件承载模型请求或响应，只有这类事件才标注 representation。
+# 区间事件与瞬时事件的唯一声明。phase：start 打开 span、end 关闭 span、instant 挂在当前 span、
+# progress 挂在按 pair_field 配对的那个未关闭 span 上但不关闭它（流式分块）。
+# model_payload 表示事件承载模型请求或响应（含流式分块），只有这类事件才标注 representation。
 SPAN_EVENTS = {
     "run_start": {"phase": "start", "span_kind": "run", "closed_by": "done"},
     "done": {"phase": "end", "span_kind": "run", "opened_by": "run_start"},
@@ -28,10 +30,19 @@ SPAN_EVENTS = {
                 "pair_field": "branch"},
     "response": {"phase": "end", "span_kind": "llm", "opened_by": "request", "model_payload": True,
                  "pair_field": "branch"},
+    # 流式响应的分块：挂在同一 branch 的 llm span 里，最后由平台拼合的 response 关闭该 span。
+    "response_delta": {"phase": "progress", "span_kind": "llm", "opened_by": "request", "model_payload": True,
+                       "pair_field": "branch"},
     "tool_call": {"phase": "start", "span_kind": "tool", "closed_by": "tool_result",
                   "pair_field": "id"},
     "tool_result": {"phase": "end", "span_kind": "tool", "opened_by": "tool_call",
                     "pair_field": "tool_call_id"},
+    # 审批：请求打开 approval span（运行暂停），决定、超时或取消关闭它，按 approval_id 配对。
+    "approval_requested": {"phase": "start", "span_kind": "approval", "closed_by": "approval_resolved",
+                           "pair_field": "approval_id"},
+    "approval_resolved": {"phase": "end", "span_kind": "approval", "opened_by": "approval_requested",
+                          "pair_field": "approval_id"},
+    "checkpoint": {"phase": "instant"},
     "answer": {"phase": "instant"},
     "error": {"phase": "instant"},
 }
@@ -80,6 +91,8 @@ class SpanTracker:
     - request/tool_call 打开 llm/tool span，父级是当前 step（无 round 时是 run）；
     - response 按 branch 关闭同一分支的 llm span（没有 branch 时关闭最近一个未关闭的）；
       tool_result 按 tool_call_id 关闭对应 tool span；
+    - response_delta 挂在同一 branch 的未关闭 llm span 上，不关闭它；
+    - approval_requested/approval_resolved 按 approval_id 打开、关闭 approval span；
     - 找不到可关闭的 span 时按瞬时事件处理，不凭空制造配对；
     - 瞬时事件挂在最内层未关闭的 llm/tool span 下；没有时挂在当前 step（无 round 时挂在 run）。
     """
@@ -129,6 +142,10 @@ class SpanTracker:
             match = self._match_open(rule, data)
             if match is not None:
                 self._open.remove(match)
+                return self._placed(match["id"], match["kind"])
+        if rule["phase"] == "progress":
+            match = self._match_open(rule, data)
+            if match is not None:
                 return self._placed(match["id"], match["kind"])
         if self._open:
             current = self._open[-1]

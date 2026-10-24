@@ -1,0 +1,1417 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "hybrid-retrieval",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "knowledge",
+    "model"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "KNOWLEDGE / HYBRID RETRIEVAL",
+          "headline": "两路检索各有漏检，",
+          "highlight": "按名次合并，再管好过滤与更新。",
+          "takeaway": "关键词和向量各找各的，合并只看名次；重排只给少量候选；过滤和索引更新决定哪些片段还能当证据。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-fuse",
+              "label": "01 / FUSE",
+              "title": "按名次合并",
+              "description": "混合检索（Hybrid Retrieval）同时跑关键词检索和向量检索，再把两份结果合成一份。合并用倒数排名融合（Reciprocal Rank Fusion）：每份结果里第 r 名得 1/(k + r)，相加后重新排序。",
+              "token": "1/(k + rank)"
+            },
+            {
+              "id": "02-rerank",
+              "label": "02 / RERANK",
+              "title": "只细看前几条",
+              "description": "重排（Reranking）把查询和每条候选放在一起重新判断谁更相关。它比检索慢、也更贵，只对融合后的前几条做；没进候选的片段，它也找不回来。",
+              "token": "candidates = 8"
+            },
+            {
+              "id": "03-filter",
+              "label": "03 / FILTER",
+              "title": "先过滤再取 k",
+              "description": "元数据过滤（Metadata Filtering）按版本、来源这类字段，先去掉不该参与排名的片段，再取前 k 条，并记下去掉了哪些、为什么。",
+              "token": "newest_only"
+            },
+            {
+              "id": "04-update",
+              "label": "04 / UPDATE",
+              "title": "索引跟着资料走",
+              "description": "向量是按某一版原文算出来的。资料改了或删了，要找出受影响的片段，重算或移除，并让索引记录的版本和资料一致。",
+              "token": "corpus_version"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "为什么要混合",
+          "paragraphs": [
+            "关键词与向量各有漏检，合并两份结果往往更稳。{{lesson:keyword-retrieval}}的查询集里，“晚还书要交多少滞纳金？”用关键词检索找不到讲逾期费用的那一节，因为资料里根本没有“滞纳金”这个词。{{lesson:embedding-retrieval}}换成向量检索，同义改写能找到了，可“R-305 有几个座位？”这类编号查询，向量反而可能排不上去：一个房间编号在向量里没有专门的位置。",
+            "举个编的例子。查询甲在关键词结果里排第 1，在向量结果里排第 9；查询乙正好反过来。只用任何一份结果，总有一类查询会漏。两份结果合在一起看，只要有一路把正确片段排在前面，它就有机会留在最终的前 k 条里。这就是混合检索的出发点：不指望一种检索包打天下，让两种盲区不同的检索互相补位。",
+            "本课第一个练习把这件事放在同一组条件下比较：同一份资料切出的片段（中文运行 38 个，英文 36 个）、同一组 14 条查询，先分别跑关键词检索和向量检索，再用这两份结果合成混合结果。每种检索的前 k 条都按片段覆盖的小节和人工标注对照，判成命中、部分命中或未命中，三种各有一份实验报告，互不混在一起。",
+            "混合不是把两路的命中直接加起来。前 k 条的位置有限，一个片段挤进来，另一个就被挤出去；某一路排在前面的噪声，也可能借合并挤进最终结果。所以对照表不只数“混合命中了几条”，还要逐条看它在哪些查询上比单路好、在哪些查询上变差，最后能说出一个优势和一个失败例。"
+          ]
+        },
+        {
+          "id": "predict-embedding-requests",
+          "type": "predict",
+          "prompt": "先跑一次。在实验“同一查询集比较三种检索”运行之前先猜：中文运行 38 个片段（英文 36 个）加 14 条查询，每次请求最多 10 段文字，这次运行一共会发出几次模型请求（request 事件）？",
+          "experiment": "compare-three",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-why-hybrid",
+          "type": "micro-quiz",
+          "question": {
+            "id": "why-hybrid",
+            "prompt": "“R-305 有几个座位？”关键词检索排第 1，向量检索没进前 5。混合检索的出发点是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "两种检索的盲区不同，合并后只要有一路排得靠前，正确片段就有机会留下",
+                "feedback": "对。关键词认字面，向量认意思，两者漏掉的查询往往不一样。"
+              },
+              {
+                "id": "b",
+                "text": "向量检索这次错了，以后都应该只用关键词检索",
+                "feedback": "不对。同义改写的查询正好反过来：关键词漏检，向量能找到。"
+              },
+              {
+                "id": "c",
+                "text": "把两路的分数相加，分数越高越可靠",
+                "feedback": "不对。两路分数不在同一个尺度上，下一节会看到合并只用名次。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "混合检索让盲区不同的两种检索互相补位，但前 k 条的位置有限，补位也可能挤掉别的片段。"
+          }
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "结果合并（RRF）",
+          "paragraphs": [
+            "按排名而不是分数合并，避免两种分数尺度不同。BM25 得分没有固定上限，在本课的资料上大致落在 1 到 16 之间；余弦相似度最大是 1，这批资料上多在 0 到 1 之间。把 12.1 和 0.73 直接相加，结果几乎只由 BM25 决定。先把两路各自缩放到 0 到 1 再加，又得决定怎么缩放、两路各占多少权重，换一批查询，这些设定可能就不合适了。",
+            "倒数排名融合（RRF）干脆不看分数。片段在某一路结果里排第 r 名，就从这一路得到 1/(k + r)；这一路没有它，就得 0；各路相加，按总分重新排序。k 是平滑常数，常取 60。手算一下：第 1 名得 1/61 ≈ 0.0164，第 2 名得 1/62 ≈ 0.0161，第 10 名得 1/70 ≈ 0.0143。两路都排第 2 的片段得 0.0323，几乎是只在一路排第 1 的两倍。RRF 奖励的是“两路都认为靠前”。",
+            "fusion.py 的 rrf 就是这样算的：它只读每个片段在列表里的位置，不读分数，并在每个结果的 detail 里记下片段在两路各排第几、各贡献多少。本课让两路各交出前 10 名参与合并（FUSION_DEPTH），合并后再截取前 top_k 条。实验报告“RRF 逐项计算”把“晚还书要交多少滞纳金？”这一条摊开，每一行是一个片段的两路名次、两路贡献和总分，可以逐行验算。",
+            "只用名次也有代价。分数里“差得多远”的信息丢了：第 1 名领先第 2 名一大截，和两者几乎打平，在 RRF 看来一样。还有一种情况要留意：关键词检索因为一个碰巧相同的字词，把无关片段排在前面，向量检索也把它排进前 10，它就拿到两份贡献，压过只被一路排在第 1 的正确片段。合并本身修不好这种错，要靠下一节的重排，或者改进单路检索。"
+          ]
+        },
+        {
+          "id": "deep-dive-rrf",
+          "type": "deep-dive",
+          "title": "手算 RRF：k 改变了什么",
+          "summary": "用三个片段算一遍 RRF，再看 k 变小时谁占便宜，以及加权融合多出了哪些要调的东西。",
+          "paragraphs": [
+            "设三个片段：甲在关键词结果排第 1，向量结果里没有；乙在两路都排第 3；丙在向量结果排第 1、关键词结果排第 8。取 k = 60：甲得 1/61 ≈ 0.0164；乙得 2/63 ≈ 0.0317；丙得 1/61 + 1/68 ≈ 0.0164 + 0.0147 = 0.0311。排序是乙、丙、甲：两路都给了名次的片段排在前面，只出现在一路的甲垫底，哪怕它在那一路是第 1。",
+            "把 k 改成 0：甲得 1；乙得 1/3 + 1/3 ≈ 0.67；丙得 1 + 1/8 = 1.125。排序变成丙、甲、乙。k 越小，第 1 名和第 3 名之间的差距越大，单路的第 1 名越占便宜；k 越大，名次之间的差距被压平，越看重“几路都给了名次”。60 这个常用值来自最早提出 RRF 的论文，也是实践中最常见的取值，但不是对每份资料都最好的值。本课的输入里可以改 rrf_k，换个值再跑一次，看对照表哪几条查询的名次变了。",
+            "另一种常见做法是加权分数融合：先把每一路的分数按“最高分记 1、最低分记 0”缩放，再按权重相加。《深入理解 AI Agent》第 3 章的检索流水线示例同时保留了 RRF 和这种加权融合；Claude Cookbooks 的上下文感知检索示例则给 RRF 本身加了权重，语义检索占 0.8、BM25 占 0.2。权重让你能偏向某一路，代价是多了要调的数，而且最小最大缩放对离群的高分很敏感：一个特别高的 BM25 分数会把同一列表里其他片段都压到接近 0。",
+            "无论哪种融合，产出的都只是一个统一的候选列表。RRF 分数也只在同一次查询内部有意义：0.0323 在这条查询里排第 1，在另一条查询里可能排第 5，不能拿不同查询的 RRF 分数比较“哪条查得更准”。"
+          ]
+        },
+        {
+          "id": "mq-rrf",
+          "type": "micro-quiz",
+          "question": {
+            "id": "rrf-by-hand",
+            "prompt": "k = 60。片段甲只在关键词结果里，排第 1；片段乙在两路结果里都排第 4。合并后谁在前？",
+            "options": [
+              {
+                "id": "a",
+                "text": "乙：2/64 ≈ 0.031，比甲的 1/61 ≈ 0.016 高",
+                "feedback": "对。两路都给了名次，贡献加起来就超过了单路第 1。"
+              },
+              {
+                "id": "b",
+                "text": "甲：第 1 名总是最好的",
+                "feedback": "不对。RRF 把各路贡献相加，只出现在一路的片段只有一份贡献。"
+              },
+              {
+                "id": "c",
+                "text": "要看两路的原始分数才能判断",
+                "feedback": "不对。RRF 只用名次，原始分数不参与计算。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "每一路贡献 1/(k + 名次)，相加后排序；k 越大，名次之间的差距越小。"
+          }
+        },
+        {
+          "id": "misconception-rrf-score",
+          "type": "misconception",
+          "claim": "混合检索的分数是把 BM25 得分和余弦相似度换算后相加得到的，所以分数越高越相关，不同查询之间也能比。",
+          "correction": "本课的混合结果用 RRF，分数只由两路名次算出，里面没有任何原始得分。它只说明这个片段在这条查询的两份结果里排得多靠前，不能跨查询比较，也不是“相关的概率”。要判断检索得好不好，看片段覆盖的小节和人工标注是否对得上。"
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "重排",
+          "paragraphs": [
+            "用更贵的模型给少量候选重新排序，比较重排前后的命中。检索阶段为了快，查询和片段是分开处理的：BM25 数两边共有的词，向量检索比较两个事先算好的向量。两者都没有把查询和片段放在一起逐字读。所以融合后的前几条里，常有字面或意思沾边、却回答不了问题的片段，排在真正有答案的片段前面。",
+            "可以把检索想成按简历上的条件先筛一遍，重排就是面试：面试官一次只见几个人，但每个人都当面细谈。专门的重排模型就是这样工作的，它把查询和一条候选拼成一段文字，输出一个相关程度的分数。本课不另接重排模型，而是用已经配置好的聊天模型：一次请求把查询和融合后的前 8 条候选一起交给它，让它返回排好的顺序。",
+            "rerank.py 给候选编号 `c1`、`c2`……模型只需要返回 `{\"order\": [...]}`，没法凭空写出一个片段。程序拿到回答后用 parse_order 逐项检查：不认识的编号丢掉，重复的只算一次，漏掉的按融合顺序补在后面；回答里没有可用的列表，就保持融合顺序，实验报告标出“模型回答是可用的排序”未通过。候选原文是资料，可能夹着像命令一样的句子（读者留言里就有一条），系统提示词写明它们只是数据。",
+            "重排有三笔账。第一，它多一次模型调用：报告记下这次请求的 Token 总数（服务商没报告就写未报告）、耗时和用户消息的字符数，候选越多，请求越长。第二，它只能在候选里挑：正确片段没进前 8 条，重排后也不会出现，所以报告先检查候选里有没有全部人工标注的小节。第三，它也可能排错。两个练习分别用同义改写查询和精确编号查询，看重排在两类查询上的前后变化，不预设哪一类一定变好。"
+          ]
+        },
+        {
+          "id": "deep-dive-rerank",
+          "type": "deep-dive",
+          "title": "重排为何只对少量候选做",
+          "summary": "检索可以先把所有片段算好，重排每次都要现算；成本跟着候选数一起涨。",
+          "paragraphs": [
+            "检索快，是因为大部分工作提前做完了。片段的向量在建索引时就算好了，查询时只算一个查询向量，再和几十个或几百万个向量比一比；BM25 的词频也事先统计好。重排做不到提前：它要看“这条查询”和“这条候选”放在一起的样子，查询每次都不同，所以每条候选都得现算一遍。《深入理解 AI Agent》第 3 章把前者叫双编码器（查询和文档各自编码），后者叫跨编码器（两者拼在一起编码），并用猎头先筛简历、面试官再当面深谈作比喻。",
+            "所以实际系统都是两段式。Claude Cookbooks 的上下文感知检索示例先多取一些候选（要 10 条就先取 100 条），再交给专门的重排接口挑出前 10；《深入理解 AI Agent》的检索流水线示例对融合后的前若干条（例如前 50 条）逐一打分。这个示例的说明给出的量级是重排 20 条候选约多花 100 到 200 毫秒，Claude Cookbooks 也说重排让每次查询多出约 100 到 200 毫秒，视候选数而定。",
+            "用聊天模型做重排，成本更直观：所有候选的原文都写进一次请求。本课中文资料每个片段约 100 到 150 字，8 条候选加上说明，用户消息大约一千多字；候选翻倍，请求的输入也接近翻倍。实验报告的“重排请求的用户消息字符数”和服务商报告的 Token 总数，就是这笔账的证据。",
+            "候选数还影响效果。候选太少，正确片段可能根本不在里面；候选太多，模型要在一长串相似的片段里排序，更容易漏看或排乱，读者留言这类夹带命令的资料也更可能混进来。先用检索把范围缩到几条到几十条，再让慢而细的方法在这个小范围里精排，是两段式的本意。"
+          ]
+        },
+        {
+          "id": "misconception-rerank",
+          "type": "misconception",
+          "claim": "反正最后有重排，前面的检索粗一点也没关系，重排会把好片段找回来。",
+          "correction": "重排只在送来的候选里重新排序，不会去资料里找新片段。正确片段没进候选池，重排之后也不会出现。所以本课的实验报告先检查“候选里已经有全部人工标注的小节”，再比较重排前后：检索负责把它找进来，重排负责把它排上去。"
+        },
+        {
+          "id": "mq-rerank-pool",
+          "type": "micro-quiz",
+          "question": {
+            "id": "rerank-pool",
+            "prompt": "重排前后，前 3 条都没有命中。实验报告显示“候选里已经有全部人工标注的小节”未通过。先改哪里？",
+            "options": [
+              {
+                "id": "a",
+                "text": "先改检索或候选数，让正确片段进入候选池",
+                "feedback": "对。候选池里没有它，重排再好也排不上来。"
+              },
+              {
+                "id": "b",
+                "text": "换一个更强的模型做重排",
+                "feedback": "不对。重排只能在送来的 8 条里挑，换模型也变不出池外的片段。"
+              },
+              {
+                "id": "c",
+                "text": "把 top_k 从 3 改成 1",
+                "feedback": "不对。取得更少只会更难命中。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "检索负责把片段找进候选池，重排负责在池里排序；先看池子，再看排序。"
+          }
+        },
+        {
+          "id": "compare-strategies",
+          "type": "compare",
+          "title": "三种检索和重排",
+          "columns": [
+            "做法",
+            "看什么",
+            "擅长",
+            "容易漏或排错",
+            "分数说明什么"
+          ],
+          "rows": [
+            [
+              "关键词检索",
+              "查询和片段共有的词",
+              "编号、名称、金额这类精确用词",
+              "资料里没有的说法（同义改写）",
+              "BM25 得分，只在本次列表内比较"
+            ],
+            [
+              "向量检索",
+              "两段文字向量的夹角",
+              "换了说法、意思相同的查询",
+              "编号、代码这类没有语义的字符串",
+              "余弦相似度，只在本次列表内比较"
+            ],
+            [
+              "混合检索",
+              "两份结果里的名次",
+              "两路盲区不同时互相补位",
+              "两路都排在前面的噪声",
+              "RRF 分数，只说明名次靠前"
+            ],
+            [
+              "重排",
+              "查询和候选原文放在一起",
+              "把候选里真正有答案的排上去",
+              "不在候选里的片段；也可能排错",
+              "模型给的顺序，由程序校验"
+            ]
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "元数据过滤与 top_k",
+          "paragraphs": [
+            "按来源、时间过滤，再取前 k 条，记录过滤掉了什么。资料里有两份开放时间：2025 年版和 2026 年版，新版文件开头的元数据写着 supersedes，表示它取代 `hours-2025`。查“周日几点闭馆？”时，两版都和查询很像，旧版甚至可能排得更靠前。旧版一旦进了前 k 条，后面生成回答时就可能用上作废的时间。",
+            "过滤和截取谁先谁后，结果不一样。举个编的例子：前 5 条里有 2 条是旧版。先取前 5 条再删旧版，只剩 3 条；先删旧版再取前 5 条，原来的第 6、第 7 名补上来，仍有 5 条有效结果。本课的过滤都在截取之前做：关键词检索先在全部片段里排好再去掉被过滤的，向量检索在比较时直接跳过它们，最后才各取前 10 名去合并。",
+            "apply_filter 返回两样东西：留下的片段，和被去掉片段的记录，每条写着 chunk_id、doc_id、原因 reason，被取代的还有取代它的新版 by。newest_only 只在新版还在候选里时才去掉旧版：如果新版被删了，旧版留着，至少还能看出它是旧版，不会什么都查不到。练习“元数据过滤与索引更新”把两条查询各跑两次，实验报告列出过滤记录，以及不过滤时混进结果的旧版片段数。",
+            "top_k 是预算，不是质量保证。k 太小，跨段、多跳这类需要两三个小节的查询容易缺一块；k 太大，后面的噪声跟着进入上下文，回答步骤也更容易被干扰。过滤只按写好的元数据判断：版本字段漏填或填错，过滤就会放过旧版或误删新版。真实系统常按权限、租户、生效时间过滤，道理相同：越权的片段一旦进了上下文就很难收回，所以过滤要放在检索这一层做。"
+          ]
+        },
+        {
+          "id": "mq-filter-order",
+          "type": "micro-quiz",
+          "question": {
+            "id": "filter-order",
+            "prompt": "前 5 条里有 2 条来自已被取代的旧版。为什么本课先过滤再取前 k 条？",
+            "options": [
+              {
+                "id": "a",
+                "text": "先过滤，后面的有效片段能补上来；先截取再过滤，结果只剩 3 条",
+                "feedback": "对。过滤在截取之前，k 个位置都留给有效片段。"
+              },
+              {
+                "id": "b",
+                "text": "先过滤能让 BM25 得分变高",
+                "feedback": "不对。本课的关键词检索在全部片段上算分，过滤不改分数，只决定谁能参加排名。"
+              },
+              {
+                "id": "c",
+                "text": "两种顺序结果一样，只是习惯",
+                "feedback": "不对。先截取再过滤会白白少几条结果。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "元数据过滤决定哪些片段能参加排名，截取前 k 条是排名之后的预算。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "索引更新与删除",
+          "paragraphs": [
+            "资料改了或删了，旧片段不能继续被检索到。向量索引存的是按某一版原文算出的向量。一条规则从每天 0.5 元改成 0.3 元，片段的文字变了，索引里那条向量却还是按旧文字算的；一份文档删了，它的片段仍躺在索引里。不更新索引，检索就可能把已经不存在的片段，或文字已经改过的片段，当作当前证据交出去。",
+            "怎样知道哪些向量过期了？给每个片段记一个指纹：送去算向量的那段原文的哈希值。资料变了以后重新分块、重新算指纹，逐个比对：新出现的片段要新算，指纹变了的要重算，旧索引里有、现在没有的要删掉，其余原样保留。本课的改动只碰了两份文件：一个片段要重算，旧版开放时间的片段全部删除（中文 3 个，英文 2 个），其余三十多个片段不用动。",
+            "index_update.py 把资料复制到 .runtime/ 下的工作副本里改，仓库里的资料不动。练习先建索引并存盘，向量和指纹分两个文件；然后修改工作副本，再模拟一次重启：只从磁盘读回旧索引，is_stale 发现它记录的资料版本和当前不一致，判为过期。故意用它做一次向量检索，报告列出结果里哪些片段“来源已删除”或“原文已修改”。最后用 plan_update 和 apply_update 只重算需要的片段，保存，再读回来核对五项检查。",
+            "增量更新省下的是 Embedding 请求，前提是送去算向量的文字没变。本课只拿片段原文算向量，所以文件开头的版本号改了不用重算；如果像上下文感知检索那样，把文档标题或一句背景说明拼在片段前面再算，标题一改，整份文档的片段都要重算。换了 Embedding 模型或向量维度，新旧向量不能混在一个索引里，apply_update 直接拒绝，只能整份重建。BM25 每次按当前文件重建，不会过期；会过期的是存下来的东西。"
+          ]
+        },
+        {
+          "id": "walkthrough-update",
+          "type": "walkthrough",
+          "title": "一次增量更新",
+          "description": "按步骤说明练习“元数据过滤与索引更新”在资料变化后做了什么，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "存盘",
+              "actor": "运行器",
+              "title": "建索引，连同指纹一起保存",
+              "body": "每个片段的向量和它原文的哈希分两个文件写到 .runtime/ 下，并记下资料版本。",
+              "code": "index_update.save(index, fingerprints(chunks), store)",
+              "language": "python",
+              "evidence": "前 4 次 Embedding 请求"
+            },
+            {
+              "id": "step-2",
+              "label": "变更",
+              "actor": "运行器",
+              "title": "在工作副本里改一条、删一份",
+              "body": "逾期费用 0.5 改成 0.3，删除 2025 年版开放时间；仓库里的资料不动。",
+              "code": "changes = apply_changes(folder)",
+              "language": "python",
+              "evidence": "实验报告“资料变更后，旧索引还能用吗”的表格"
+            },
+            {
+              "id": "step-3",
+              "label": "重启",
+              "actor": "运行器",
+              "title": "只从磁盘读回旧索引",
+              "body": "它记录的资料版本和重新算出的版本不同，判为过期；用它检索，失效片段出现在结果里。",
+              "code": "old_index, saved = load(store)\nstale = old_index.is_stale(...)",
+              "language": "python",
+              "evidence": "检查“载入的索引被判定为过期”"
+            },
+            {
+              "id": "step-4",
+              "label": "计划",
+              "actor": "运行器",
+              "title": "比对指纹，分成四组",
+              "body": "新增、修改的要算向量，删除的去掉，未变的原样保留。",
+              "code": "plan = plan_update(saved, current)",
+              "language": "python",
+              "evidence": "指标“修改片段”“删除片段”"
+            },
+            {
+              "id": "step-5",
+              "label": "更新",
+              "actor": "模型",
+              "title": "只为修改过的片段请求 Embedding",
+              "body": "这次只有 1 段文字，一次请求就够了。",
+              "code": "vectors, _ = embed_texts(context, [c.text for c in todo], next_round)",
+              "language": "python",
+              "evidence": "最后一次 Embedding 请求"
+            },
+            {
+              "id": "step-6",
+              "label": "核对",
+              "actor": "运行器",
+              "title": "保存后再读一次",
+              "body": "版本一致、片段逐个对应、结果里没有已删除或已修改的旧片段。",
+              "code": "loaded, loaded_prints = load(store)",
+              "language": "python",
+              "evidence": "实验报告“增量更新后重新载入”的五项检查"
+            }
+          ]
+        },
+        {
+          "id": "deep-dive-update",
+          "type": "deep-dive",
+          "title": "真实知识库怎样处理更新",
+          "summary": "资料是来源，索引是从某个版本生成的派生物；过期内容要在检索时就挡住。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第 3 章“知识应该如何更新”建议把知识库当成代码库：资料放进版本控制，每次改动像一次代码合并请求，审核通过后才合入；合入以后，再从这个版本增量重建受影响的分块、摘要和向量索引。按这个分法，索引只是可以重建的派生物，经过审核的资料才是来源，所以本课的索引要记下它是从哪个资料版本生成的。",
+            "同一节还提到失效内容的下线：一篇被新版取代的旧政策如果还留在库里，检索时可能和新版一起被找到，让回答自相矛盾。常见做法是给每个片段附上版本号、生效和失效时间等元数据，检索时就把已失效的过滤掉。本课的 newest_only 是它的最小版本：只看文档自己声明取代了谁。",
+            "多人共用的知识库还要按调用者的权限过滤，而且要在检索这一层做：越权的片段一旦进入模型的上下文，就很难保证它不在回答里露出来。Hugging Face Agents Course 讲 LlamaIndex 组件时也强调，把索引和元数据存起来是为了不必每次重建；存下来以后，判断它是否还对得上当前资料，就成了程序的责任。"
+          ]
+        },
+        {
+          "id": "mq-fingerprint",
+          "type": "micro-quiz",
+          "question": {
+            "id": "fingerprint",
+            "prompt": "只把 fees.md 文件开头的版本号从 2026-03 改成 2026-10，正文一个字没动。增量更新时要重算哪些片段的向量？",
+            "options": [
+              {
+                "id": "a",
+                "text": "一个都不用：本课只拿片段原文算向量，原文没变，指纹就不变",
+                "feedback": "对。资料版本变了，索引要记下新版本，但不用重新请求 Embedding。"
+              },
+              {
+                "id": "b",
+                "text": "fees.md 的所有片段",
+                "feedback": "不对。只有把版本号或标题也拼进送去算向量的文字时才需要。"
+              },
+              {
+                "id": "c",
+                "text": "整个索引都要重建",
+                "feedback": "不对。只有换了 Embedding 模型或向量维度才需要整份重建。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "指纹是送去算向量的那段文字的哈希；文字不变，旧向量仍然对应它。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "一次运行能证明什么",
+          "paragraphs": [
+            "命中只说明前 k 条里有标了答案的小节，不说明回答会用对它。本课三个练习都只检查检索：片段有没有进前 k 条、排第几、旧片段有没有被当作证据，一条回答也不生成。{{lesson:rag-citations}}会把检索到的片段交给模型回答，并要求回答指出用了哪一段，那时“检索命中”和“回答正确”要分开记。",
+            "离线测试的向量来自夹具：按一张人工写的概念词表数词，同义词落在同一维，编号没有维度。它只是为了让自动化测试有确定的结果，不代表任何真实 Embedding 模型的表现。真实运行时，不同模型在同一组查询上的命中可能差很多，本课的报告只说明你这一次运行里发生了什么。",
+            "读对照表时，按查询类型一行行看，比只看命中总数有用。精确名称和同义改写两类最能看出两路检索的分工；无答案的两条查询，三种检索都照样返回 5 条，说明检索本身不会说“没有”；版本冲突的两条，命中里混着旧版，提醒你过滤要在检索这一层做。这些现象都能在你自己的运行里逐行核对。",
+            "14 条查询也很少。一种检索在某条查询上赢了，可能只是这条查询碰巧适合它。能下的结论是“在这份资料、这组查询上，某种检索在某类查询上更稳，并且有某个失败例”，而不是“混合检索总是更好”。多跳查询要先查出一个事实再查下一个，一次检索给不全；{{lesson:agentic-rag}}会让 Agent 自己决定查几次、怎样换个说法再查。"
+          ]
+        },
+        {
+          "id": "mq-what-hit-proves",
+          "type": "micro-quiz",
+          "question": {
+            "id": "what-hit-proves",
+            "prompt": "对照表里混合检索 12 条有答案的查询全部命中。能得出什么结论？",
+            "options": [
+              {
+                "id": "a",
+                "text": "在这份资料和这组查询上，混合检索的前 k 条覆盖了这些查询的人工标注小节",
+                "feedback": "对。这是检索层面的结论，范围就是这次运行的资料和查询。"
+              },
+              {
+                "id": "b",
+                "text": "用混合检索的 Agent 能答对这 12 个问题",
+                "feedback": "不对。本课不生成回答，命中不等于回答正确。"
+              },
+              {
+                "id": "c",
+                "text": "混合检索在任何资料上都比单路检索好",
+                "feedback": "不对。14 条查询、一份资料，推不出对其他资料的结论。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "检索命中、回答正确、普遍更好是三个不同的结论，本课只证明第一个。"
+          }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch3",
+              "title": "混合检索、检索指标与知识更新（深入理解 AI Agent 第 3 章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter3.md"
+            },
+            {
+              "id": "book-retrieval-pipeline",
+              "title": "混合检索流水线：融合与重排序（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter3/retrieval-pipeline/README.md"
+            },
+            {
+              "id": "book-fusion",
+              "title": "RRF 与加权分数融合的实现（深入理解 AI Agent 配套代码）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter3/retrieval-pipeline/fusion.py"
+            },
+            {
+              "id": "cookbook-contextual",
+              "title": "上下文感知检索：混合检索与重排的组合和测量（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/capabilities/contextual-embeddings/guide.ipynb"
+            },
+            {
+              "id": "hf-invitees",
+              "title": "为宾客资料建检索工具（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit3/agentic-rag/invitees.mdx"
+            },
+            {
+              "id": "hf-components",
+              "title": "LlamaIndex 组件：加载、索引与存储（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/llama-index/components.mdx"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "embedding-retrieval"
+        },
+        {
+          "id": "code-fusion",
+          "type": "annotated-source",
+          "path": "lessons/lesson_hybrid_retrieval/fusion.py",
+          "start": 13,
+          "end": 53,
+          "notes": [
+            {
+              "id": "n13",
+              "line": 13,
+              "anchor": "def rrf(rankings: dict[str, list[Hit]], *, k: int = 60, top_k: int = 5) -> list[Hit]:",
+              "text": "输入是几份带名字的排名（本课是 keyword 和 vector）；k 默认 60，top_k 是合并后留几条。"
+            },
+            {
+              "id": "n15",
+              "line": 15,
+              "anchor": "if k < 0 or top_k < 1:",
+              "text": "k 可以是 0，此时第 1 名得 1/1；k 越大，前几名之间的差距越小。"
+            },
+            {
+              "id": "n20",
+              "line": 20,
+              "anchor": "for position, hit in enumerate(hits, start=1):",
+              "text": "名次就是列表里的位置，从 1 数。整个函数没有读过一次 hit.score。"
+            },
+            {
+              "id": "n21",
+              "line": 21,
+              "anchor": ".setdefault(name, position)",
+              "text": "同一片段在一份列表里重复出现时，只记第一次的位置。"
+            },
+            {
+              "id": "n24",
+              "line": 24,
+              "anchor": "parts = {name: 1 / (k + rank) for name, rank in by_list.items()}",
+              "text": "公式本身：每一路贡献 1/(k + 名次)。某一路没有这个片段，这里就没有这一项，等于贡献 0。"
+            },
+            {
+              "id": "n26",
+              "line": 26,
+              "anchor": "fused.sort(key=lambda item: (-item[0], item[1], item[2]))",
+              "text": "总分高的在前；同分时比最好的名次，再比 chunk_id，保证每次排序结果一样。"
+            },
+            {
+              "id": "n28",
+              "line": 28,
+              "anchor": "{\"ranks\": {name: by_list.get(name) for name in rankings},",
+              "text": "每路名次（没有就是 None）和每路贡献写进 detail，实验报告的“RRF 逐项计算”就从这里来。"
+            },
+            {
+              "id": "n33",
+              "line": 33,
+              "anchor": "def apply_filter(chunks: list[Chunk], *, doc_ids=None,",
+              "text": "元数据过滤：在排名之前决定哪些片段可以参加。"
+            },
+            {
+              "id": "n42",
+              "line": 42,
+              "anchor": "candidates = [chunk for chunk in chunks if allowed is None or chunk.doc_id in allowed]",
+              "text": "先按 doc_ids 圈出候选；下一行判断“新版在不在”只看这些候选。"
+            },
+            {
+              "id": "n43",
+              "line": 43,
+              "anchor": "replaced_by = {old: chunk.doc_id for chunk in candidates for old in chunk.supersedes} if newest_only else {}",
+              "text": "supersedes 来自文档开头的元数据，`hours` 写着取代 `hours-2025`。新版还在候选里，旧版才会被去掉。"
+            },
+            {
+              "id": "n47",
+              "line": 47,
+              "anchor": "\"reason\": \"doc_id_filter\"",
+              "text": "每个被去掉的片段都留一条记录。原因是代码，报告按运行语言翻译。"
+            },
+            {
+              "id": "n49",
+              "line": 49,
+              "anchor": "\"reason\": \"superseded\",",
+              "text": "被取代的记录多一个 by：取代它的新版。"
+            },
+            {
+              "id": "n53",
+              "line": 53,
+              "anchor": "return kept, removed",
+              "text": "留下的去排名，去掉的进实验报告；两份加起来正好是全部片段。"
+            }
+          ]
+        },
+        {
+          "id": "code-rerank",
+          "type": "annotated-source",
+          "path": "lessons/lesson_hybrid_retrieval/runtime.py",
+          "start": 80,
+          "end": 105,
+          "notes": [
+            {
+              "id": "n80",
+              "line": 80,
+              "anchor": "def run_rerank(context: RunContext, t: Texts, values: Inputs) -> str:",
+              "text": "重排练习：建索引、融合，再发一次聊天请求。"
+            },
+            {
+              "id": "n84",
+              "line": 84,
+              "anchor": "index, next_round = build_index(context, chunks, version, 1)",
+              "text": "建索引要 4 次 Embedding 请求（每批最多 10 段）。每次运行都重建，不读旧缓存，请求数才固定。"
+            },
+            {
+              "id": "n85",
+              "line": 85,
+              "anchor": "(vector,), next_round = embed_texts(context, [query.text], next_round)",
+              "text": "查询也用同一个 Embedding 模型转成向量，才能和片段的向量比较。"
+            },
+            {
+              "id": "n88",
+              "line": 88,
+              "anchor": "pool = run_all(bm25, index, query.text, vector, top_k=values.candidates, k=values.rrf_k)[\"hybrid\"]",
+              "text": "候选池就是融合结果的前 candidates 条（默认 8）。重排只在这里面挑。"
+            },
+            {
+              "id": "n91",
+              "line": 91,
+              "anchor": "body, labels = build_request(t.rerank_system, query.text, candidates)",
+              "text": "查询和每条候选原文放进一条用户消息，候选换成 `c1`、`c2` 这样的编号。"
+            },
+            {
+              "id": "n93",
+              "line": 93,
+              "anchor": "response = context.complete(body, next_round)",
+              "text": "唯一的一次聊天请求，和 Embedding 请求共用 max_rounds 预算。"
+            },
+            {
+              "id": "n96",
+              "line": 96,
+              "anchor": "parsed = parse_order(_content(response), labels)",
+              "text": "程序检查回答：未知编号丢掉、重复只算一次、漏掉的补在后面；不可用就保持融合顺序。"
+            },
+            {
+              "id": "n98",
+              "line": 98,
+              "anchor": "before = judge(candidates[:values.top_k], query)",
+              "text": "重排前后都只看前 top_k 条，用同一个 judge 和人工标注对照。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "anchor": "usage = response.get(\"usage\") if isinstance(response, dict) else None",
+              "text": "成本：服务商报告了 total_tokens 就记下；没报告记为未报告，不估算。"
+            },
+            {
+              "id": "n104",
+              "line": 104,
+              "anchor": "return _rerank_report(context, t, values, query, candidates, reranked, parsed, before, after,",
+              "text": "报告另外检查候选池是否覆盖人工标注：池里没有的，重排也变不出来。"
+            }
+          ]
+        },
+        {
+          "id": "code-update",
+          "type": "annotated-source",
+          "path": "lessons/lesson_hybrid_retrieval/runtime.py",
+          "start": 129,
+          "end": 155,
+          "notes": [
+            {
+              "id": "n131",
+              "line": 131,
+              "anchor": "changes = index_update.apply_changes(folder)",
+              "text": "改动只发生在 .runtime/ 下的工作副本：逾期费用 0.5 改成 0.3，删掉 2025 年版开放时间。"
+            },
+            {
+              "id": "n133",
+              "line": 133,
+              "anchor": "chunks, version = chunk_corpus(documents), index_update.folder_version(documents)",
+              "text": "按改动后的文件重新分块，重新算资料版本。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "current = index_update.fingerprints(chunks)",
+              "text": "每个片段的指纹是它原文的哈希。"
+            },
+            {
+              "id": "n136",
+              "line": 136,
+              "anchor": "old_index, saved = index_update.load(store)",
+              "text": "模拟重启：内存里的索引不用了，只从磁盘读回向量和指纹。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "anchor": "stale = old_index.is_stale(",
+              "text": "索引记录的资料版本和当前不一致，判为过期。"
+            },
+            {
+              "id": "n140",
+              "line": 140,
+              "anchor": "before = [run_all(bm25, old_index, q.text, v, top_k=values.top_k, k=values.rrf_k)[\"vector\"]",
+              "text": "故意用过期索引做一次向量检索，让失效片段在报告里现身。"
+            },
+            {
+              "id": "n144",
+              "line": 144,
+              "anchor": "plan = index_update.plan_update(saved, current)",
+              "text": "比对新旧指纹，分成新增、修改、删除、未变四组。"
+            },
+            {
+              "id": "n146",
+              "line": 146,
+              "anchor": "todo = [chunk for chunk in chunks if chunk.chunk_id in fresh]",
+              "text": "只有新增和修改的片段要重新请求 Embedding，本例只有 1 个。"
+            },
+            {
+              "id": "n148",
+              "line": 148,
+              "anchor": "updated = index_update.apply_update(old_index, chunks,",
+              "text": "按当前片段顺序重建：新向量替换旧向量，删除的片段不再带过来。"
+            },
+            {
+              "id": "n149",
+              "line": 149,
+              "anchor": "index_update.save(updated, current, store)",
+              "text": "先写向量，再写指纹清单；读回时两份文件互相校验。"
+            },
+            {
+              "id": "n151",
+              "line": 151,
+              "anchor": "loaded, loaded_prints = index_update.load(store)",
+              "text": "再模拟一次重启：报告里的五项检查都基于这次从磁盘读回的索引。"
+            },
+            {
+              "id": "n152",
+              "line": 152,
+              "anchor": "after = [run_all(bm25, loaded, q.text, v, top_k=values.top_k, k=values.rrf_k)",
+              "text": "用更新后的索引检索，确认已删除和已修改的旧片段都不再出现。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "合并只用名次，重排用聊天模型加程序校验",
+          "chosen": "rrf 只按名次合并，不碰两路分数；重排用已经配置好的聊天模型，回答只许是候选编号的顺序，由 parse_order 校验，不可用就保持融合顺序。这样不用另配服务，每一步都能在事件和报告里核对。",
+          "alternatives": [
+            {
+              "id": "weighted-scores",
+              "title": "把两路分数缩放到 0 到 1 后加权相加",
+              "why_not": "要决定缩放方法和权重，离群的高分会压扁同一列表里的其他分数；本课先用不需要调参的 RRF，加权融合放在深入块里比较。"
+            },
+            {
+              "id": "rerank-model",
+              "title": "接一个专门的重排模型或重排接口",
+              "why_not": "效果和速度通常更好，但要另外配置服务商和密钥。本课用聊天模型说明机制，请求和回答都在时间线上可见。"
+            },
+            {
+              "id": "json-mode",
+              "title": "用服务商的 JSON 输出模式保证回答格式",
+              "why_not": "不是每个服务商、每个模型都支持同样的参数；本课在提示词里要求 JSON，再由程序检查，任何服务商的回答都按同一规则处理。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "compare-three",
+          "title": "同一查询集比较三种检索",
+          "hypothesis": "同一份资料、同一组 14 条查询。关键词检索在编号、名称类查询上命中，在同义改写上漏检；向量检索大致相反；混合检索按名次合并两路结果，命中的查询不少于任何单路，但会有个别查询的名次比最好的单路靠后。",
+          "predict": "predict-embedding-requests",
+          "arms": [
+            {
+              "id": "compare",
+              "exercise": "compare",
+              "label": "三种检索，top_k=5，k=60"
+            }
+          ],
+          "observe": [
+            {
+              "id": "chunk-batch",
+              "text": "第 1 次请求：一批片段原文，最多 10 段，请求体里的 input 就是送去算向量的文字。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.input"
+              }
+            },
+            {
+              "id": "query-batch",
+              "text": "第 5 次请求：查询本身也要转成向量，用的是同一个 Embedding 模型。",
+              "selector": {
+                "event": "request",
+                "round": 5,
+                "path": "data.body.input"
+              }
+            },
+            {
+              "id": "keyword-report",
+              "text": "关键词检索的报告：括号里是 BM25 得分，只在这份列表内比较。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=keyword-hit]"
+              }
+            },
+            {
+              "id": "vector-report",
+              "text": "向量检索的报告：括号里是余弦相似度，和 BM25 得分不在一个尺度上。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=vector-hit]"
+              }
+            },
+            {
+              "id": "who-wins",
+              "text": "对照报告：哪些查询只有关键词命中、哪些只有向量命中。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=vector-only]"
+              }
+            },
+            {
+              "id": "rrf-rows",
+              "text": "“RRF 逐项计算”的表格：每一行的两路贡献相加，就是这一行的 RRF 分数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=rrf-k]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这次运行先建索引，再用三种检索查同一组问题。"
+            },
+            {
+              "text": "这是第一批送去算向量的片段原文。",
+              "observe": "chunk-batch",
+              "stage": "model"
+            },
+            {
+              "text": "14 条查询分两批转成向量，模型和片段用的是同一个。",
+              "observe": "query-batch"
+            },
+            {
+              "text": "关键词检索单独一份报告，先看它在同义改写上的判定。",
+              "observe": "keyword-report",
+              "stage": "runtime"
+            },
+            {
+              "text": "向量检索也单独一份，对比编号查询那几行。",
+              "observe": "vector-report"
+            },
+            {
+              "text": "对照报告只比较判定和名次，这里列出两路各自独有的命中。",
+              "observe": "who-wins"
+            },
+            {
+              "text": "最后逐行验算一条查询的 RRF：两路都给了名次的片段排在哪里？",
+              "observe": "rrf-rows",
+              "stage": "user"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里三种检索用的是同一份片段和同一组查询（报告里的检查和版本号可以核对），每种检索的命中各自独立判定。",
+              "在这份资料和这组查询上，各检索在哪些查询上命中、哪些查询上漏检，以及混合检索在哪些查询上比单路好或差。"
+            ],
+            "does_not_prove": [
+              "14 条查询太少，不能说明某种检索在别的资料或别的查询上也更好。",
+              "命中只说明前 k 条里有人工标注的小节，不说明模型会据此答对；本课不生成回答。",
+              "离线测试用的向量来自夹具，真实 Embedding 模型的命中要看你自己的真实运行。"
+            ]
+          }
+        },
+        {
+          "id": "rerank-before-after",
+          "title": "重排前后的命中与成本",
+          "hypothesis": "同一组融合结果的前 8 条交给聊天模型重排。正确片段已经在候选里时，重排可能把它排进前 3；它也可能排错。无论结果如何，重排都多一次模型调用和相应的 Token。",
+          "arms": [
+            {
+              "id": "synonym",
+              "exercise": "rerank-synonym",
+              "label": "同义改写查询"
+            },
+            {
+              "id": "exact",
+              "exercise": "rerank-exact",
+              "label": "精确编号查询"
+            }
+          ],
+          "observe": [
+            {
+              "id": "rerank-request",
+              "text": "重排请求：用户消息里是查询和 8 条候选原文，候选只用编号标识。",
+              "selector": {
+                "event": "request",
+                "path": "data.body.messages"
+              }
+            },
+            {
+              "id": "rerank-reply",
+              "text": "模型的回答：一个 order 列表，程序只认识候选编号。",
+              "selector": {
+                "event": "response",
+                "path": "data.body.choices[0].message.content"
+              }
+            },
+            {
+              "id": "reply-check",
+              "text": "检查“模型回答是可用的排序”：丢掉、去重或补上的编号写在说明里。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=reply-valid]"
+              }
+            },
+            {
+              "id": "before-after",
+              "text": "表格：左列融合顺序，右列重排顺序，带 ★ 的片段覆盖人工标注。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table.rows"
+              }
+            },
+            {
+              "id": "rerank-cost",
+              "text": "成本指标：重排请求的 Token 总数、耗时和用户消息字符数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=rerank-tokens]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "前面几次 Embedding 请求建好了索引，最后一次请求才是重排。"
+            },
+            {
+              "text": "模型看到的是查询和每条候选的原文。",
+              "observe": "rerank-request",
+              "stage": "model"
+            },
+            {
+              "text": "它只回了一个编号顺序。",
+              "observe": "rerank-reply"
+            },
+            {
+              "text": "程序先检查这个顺序能不能用。",
+              "observe": "reply-check",
+              "stage": "runtime"
+            },
+            {
+              "text": "对照两列，看带 ★ 的片段从第几名移到了第几名。",
+              "observe": "before-after"
+            },
+            {
+              "text": "这一步多花了多少，在成本指标里。换另一组再跑一次比较。",
+              "observe": "rerank-cost",
+              "stage": "user"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次重排用了一次聊天请求，模型返回的顺序经过程序校验，重排前后的前 3 条各自命中了什么。",
+              "这次重排多花的 Token（服务商报告了的话）、耗时和请求长度。"
+            ],
+            "does_not_prove": [
+              "一条查询上重排变好或变差，不说明它在其他查询上也一样。",
+              "聊天模型做重排的效果，不代表专门的重排模型的效果。",
+              "候选池里没有的片段，重排不会带回来；前 3 条没命中时先看候选池的检查。"
+            ]
+          }
+        },
+        {
+          "id": "filter-and-update",
+          "title": "元数据过滤与索引更新",
+          "hypothesis": "打开 newest_only 后，被取代的 2025 年版不再出现在结果里，并留下过滤记录。资料改动后，存盘的旧索引会被判为过期，用它检索会返回失效片段；增量更新只重算改过的片段，重新载入后版本一致、旧片段不再出现。",
+          "arms": [
+            {
+              "id": "update",
+              "exercise": "update",
+              "label": "过滤、变更、增量更新"
+            }
+          ],
+          "observe": [
+            {
+              "id": "filter-records",
+              "text": "过滤记录：每个被去掉的片段和它被谁取代。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=filtered-records]"
+              }
+            },
+            {
+              "id": "index-stale",
+              "text": "重启后读回的旧索引：记录的资料版本和当前不同，被判为过期。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=index-stale]"
+              }
+            },
+            {
+              "id": "stale-hits",
+              "text": "用旧索引做向量检索时出现的失效片段，以及失效原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=stale-hits]"
+              }
+            },
+            {
+              "id": "update-request",
+              "text": "增量更新的那次 Embedding 请求：只送了改过的片段。",
+              "selector": {
+                "event": "request",
+                "round": 6,
+                "path": "data.body.input"
+              }
+            },
+            {
+              "id": "update-plan",
+              "text": "更新计划：修改、删除、未变各有几个片段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=plan-changed]"
+              }
+            },
+            {
+              "id": "reload-checks",
+              "text": "重新载入后的检查：版本一致、片段对应、结果里没有失效片段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=version-match]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这次运行在 .runtime/ 下的工作副本上做全部改动。"
+            },
+            {
+              "text": "先看过滤：哪些片段因为被新版取代而没有参加排名。",
+              "observe": "filter-records",
+              "stage": "runtime"
+            },
+            {
+              "text": "资料改动以后，从磁盘读回的旧索引已经对不上当前资料。",
+              "observe": "index-stale"
+            },
+            {
+              "text": "硬用旧索引检索，失效片段就会出现在结果里。",
+              "observe": "stale-hits",
+              "stage": "user"
+            },
+            {
+              "text": "增量更新只为改过的片段请求了一次 Embedding。",
+              "observe": "update-request",
+              "stage": "model"
+            },
+            {
+              "text": "计划里写着改了几个、删了几个、几个原样保留。",
+              "observe": "update-plan"
+            },
+            {
+              "text": "最后核对重新载入的索引，五项检查都基于磁盘上的文件。",
+              "observe": "reload-checks"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，newest_only 在排名之前去掉了被取代的片段，并逐条记录了原因。",
+              "资料改动后旧索引被判为过期，用它检索会返回失效片段；增量更新后重新载入的索引版本与资料一致，结果里没有已删除或已修改的旧片段。"
+            ],
+            "does_not_prove": [
+              "过滤只按文档声明的 supersedes 判断；元数据写错时，它会放过旧版或误删新版。",
+              "本课只演示一处修改和一次删除；改动多、并发写入或换了 Embedding 模型的情况要另行处理。",
+              "检索结果正确不说明回答会正确使用新规则，回答步骤见后面的课。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "task",
+          "label": "练习内容",
+          "help": "三种检索对照、重排前后对照、过滤与索引更新。",
+          "options": [
+            {
+              "value": "compare",
+              "label": "三种检索对照"
+            },
+            {
+              "value": "rerank",
+              "label": "重排前后对照"
+            },
+            {
+              "value": "update",
+              "label": "过滤与索引更新"
+            }
+          ]
+        },
+        {
+          "name": "top_k",
+          "label": "前 k 条（top_k）",
+          "help": "每种检索最后留几条结果，1 到 8。重排练习里是比较重排前后的条数，不能大于候选数。"
+        },
+        {
+          "name": "rrf_k",
+          "label": "RRF 的平滑常数 k",
+          "help": "0 到 200，常用 60。越小，单路第 1 名越占便宜。"
+        },
+        {
+          "name": "candidates",
+          "label": "送去重排的候选数",
+          "help": "只在重排练习里用，2 到 10。候选越多，重排请求越长。"
+        },
+        {
+          "name": "query_id",
+          "label": "重排用的查询",
+          "help": "只在重排练习里用，从共享查询集里选一条。",
+          "options": [
+            {
+              "value": "q01",
+              "label": "q01 精确名称：借阅证代号"
+            },
+            {
+              "value": "q02",
+              "label": "q02 精确名称：房间编号"
+            },
+            {
+              "value": "q03",
+              "label": "q03 精确名称：费用上限"
+            },
+            {
+              "value": "q04",
+              "label": "q04 同义改写：滞纳金"
+            },
+            {
+              "value": "q05",
+              "label": "q05 同义改写：续借"
+            },
+            {
+              "value": "q06",
+              "label": "q06 同义改写：还书"
+            },
+            {
+              "value": "q07",
+              "label": "q07 无答案：停车场"
+            },
+            {
+              "value": "q08",
+              "label": "q08 无答案：储物柜"
+            },
+            {
+              "value": "q09",
+              "label": "q09 跨段：预约后迟到"
+            },
+            {
+              "value": "q10",
+              "label": "q10 跨段：预留书的取书期限"
+            },
+            {
+              "value": "q11",
+              "label": "q11 多跳：研讨室所在楼层的关闭时间"
+            },
+            {
+              "value": "q12",
+              "label": "q12 多跳：补办工本费怎么交"
+            },
+            {
+              "value": "q13",
+              "label": "q13 版本冲突：周日闭馆时间"
+            },
+            {
+              "value": "q14",
+              "label": "q14 版本冲突：工作日开放时间"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "why-not-add-scores",
+              "prompt": "为什么不把 BM25 得分和余弦相似度直接相加来合并两路结果？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "两种分数尺度不同，直接相加时 BM25 得分几乎决定一切",
+                  "feedback": "对。BM25 得分没有固定上限，余弦相似度最大是 1。"
+                },
+                {
+                  "id": "b",
+                  "text": "相加太慢，名次算起来更快",
+                  "feedback": "不对。速度不是原因，问题在于两个数没法放在一起比较。"
+                },
+                {
+                  "id": "c",
+                  "text": "余弦相似度可能是负数，不能相加",
+                  "feedback": "不对。负数也能相加；真正的问题是尺度不同。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "RRF 只用名次，绕开了尺度问题；加权融合要先缩放，还要定权重。"
+            },
+            {
+              "id": "rrf-small-k",
+              "prompt": "把 RRF 的 k 从 60 改成 0，会发生什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "名次之间的差距变大，单路第 1 名更占便宜",
+                  "feedback": "对。k = 0 时第 1 名得 1、第 2 名得 0.5，差距被放大。"
+                },
+                {
+                  "id": "b",
+                  "text": "所有片段的分数都变成 0",
+                  "feedback": "不对。k = 0 时贡献是 1/名次，不是 0。"
+                },
+                {
+                  "id": "c",
+                  "text": "RRF 改为使用原始分数",
+                  "feedback": "不对。无论 k 是多少，RRF 都只用名次。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "k 越小越看重单路的头名，k 越大越看重几路都给了名次。"
+            },
+            {
+              "id": "rerank-cannot-add",
+              "prompt": "候选池是融合结果的前 8 条，正确片段排在第 12 名。重排之后会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它仍然不在结果里：重排只在 8 条候选里重新排序",
+                  "feedback": "对。要让它出现，得先改检索或加大候选数。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型读懂了查询，会把它找回来",
+                  "feedback": "不对。模型根本没看到第 12 名的原文。"
+                },
+                {
+                  "id": "c",
+                  "text": "程序会自动补上人工标注的片段",
+                  "feedback": "不对。人工标注只用来判定命中，不参与检索。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "重排的上限由候选池决定。"
+            },
+            {
+              "id": "filter-before-cut",
+              "prompt": "newest_only 去掉被取代的旧版，为什么要在截取前 k 条之前做？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "这样 k 个位置都留给有效片段，后面的名次能补上来",
+                  "feedback": "对。先截取再过滤，结果会少几条。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为过滤会改变片段的原文",
+                  "feedback": "不对。过滤只决定谁参加排名，不改原文。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为截取之后就不能再读元数据了",
+                  "feedback": "不对。元数据一直在，问题是位置已经被占了。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "元数据过滤决定参赛者，top_k 决定名额。"
+            },
+            {
+              "id": "stale-index",
+              "prompt": "资料里删掉了一份文档，但没有更新索引。重启后直接载入旧索引检索，最可能出什么问题？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "结果里出现已经不存在的片段，被当作当前证据",
+                  "feedback": "对。旧索引里还存着那份文档的向量。"
+                },
+                {
+                  "id": "b",
+                  "text": "检索报错，什么都查不到",
+                  "feedback": "不对。旧索引照样能检索，正因为不报错才危险。"
+                },
+                {
+                  "id": "c",
+                  "text": "BM25 也会返回被删的片段",
+                  "feedback": "不对。本课的 BM25 每次按当前文件重建，过期的是存下来的向量索引。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "is_stale 比较索引记录的资料版本和当前版本，对不上就不能直接用。"
+            },
+            {
+              "id": "fingerprint-scope",
+              "prompt": "增量更新时，哪类片段需要重新请求 Embedding？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "新增的片段和原文变了的片段",
+                  "feedback": "对。指纹变了，旧向量就不再对应它的原文。"
+                },
+                {
+                  "id": "b",
+                  "text": "所在文件被改过的全部片段",
+                  "feedback": "不对。同一文件里原文没变的片段，指纹不变，向量可以保留。"
+                },
+                {
+                  "id": "c",
+                  "text": "被删除的片段",
+                  "feedback": "不对。删除的片段直接从索引里去掉，不用再算。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "比对指纹分出新增、修改、删除、未变四组，只有前两组需要算向量。"
+            },
+            {
+              "id": "hit-vs-answer",
+              "prompt": "混合检索在一条查询上“命中，第 1 名”。这说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "前 k 条里第 1 条就覆盖了这条查询人工标注的小节",
+                  "feedback": "对。这是检索层面的判定。"
+                },
+                {
+                  "id": "b",
+                  "text": "模型对这条查询的回答是正确的",
+                  "feedback": "不对。本课不生成回答，命中和答对要分开记。"
+                },
+                {
+                  "id": "c",
+                  "text": "混合检索的分数比关键词检索高",
+                  "feedback": "不对。不同检索的分数不在同一尺度上，不能这样比。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "命中说明证据进了前 k 条，回答是否用对它，要等生成回答的课再检查。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“元数据过滤与索引更新”，找出增量更新时的那次 Embedding 请求，看它送了几段文字。",
+          "target": {
+            "event": "request",
+            "round": 6,
+            "path": "data.body.input"
+          },
+          "explanation": "第 6 次请求只有 1 段文字：逾期费用改过的那个片段。其余片段的原文没变，向量直接沿用；删除的片段不用请求，直接从索引去掉。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我分别打开了三种检索的报告，说得出一个关键词检索赢、向量检索漏的查询，以及一个反过来的查询。"
+            },
+            {
+              "id": "item-2",
+              "text": "我按“RRF 逐项计算”的表格手算了至少一行，结果和报告一致。"
+            },
+            {
+              "id": "item-3",
+              "text": "我跑了两组重排，比较了前 3 条的变化和重排请求的 Token 总数。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在过滤与更新的报告里找到了过滤记录、失效片段和重新载入后的五项检查。"
+            },
+            {
+              "id": "item-5",
+              "text": "我把 rrf_k 改成 0 或 1 重跑了对照，看哪几条查询的名次变了。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "FUSION_DEPTH",
+      "note": "每路交出前 10 名参与合并，合并后再截取前 top_k 条。"
+    },
+    {
+      "name": "apply_filter",
+      "note": "元数据过滤：返回留下的片段，以及被去掉片段的记录和原因。"
+    },
+    {
+      "name": "newest_only",
+      "note": "过滤选项：新版还在候选里时，去掉被它取代的旧版。"
+    },
+    {
+      "name": "supersedes",
+      "note": "文档开头的元数据：本文档取代哪些 doc_id。"
+    },
+    {
+      "name": "parse_order",
+      "note": "检查重排回答：丢未知编号、去重、补漏；不可用就保持融合顺序。"
+    },
+    {
+      "name": "plan_update",
+      "note": "比对新旧指纹，分出新增、修改、删除、未变四组片段。"
+    },
+    {
+      "name": "apply_update",
+      "note": "只换新增和修改片段的向量，去掉删除的；向量维度不同就拒绝。"
+    },
+    {
+      "name": "is_stale",
+      "note": "索引记录的模型、维度或资料版本与当前不一致时为真。"
+    }
+  ]
+}

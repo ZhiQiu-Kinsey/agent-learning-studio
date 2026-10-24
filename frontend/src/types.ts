@@ -89,6 +89,8 @@ export type ProviderProfile = {
   requires_api_key?: boolean;
   base_url_configured: boolean;
   supports_custom_base_url: boolean;
+  /** Embedding model the server resolved for this provider; "" when none is configured. */
+  embedding_model?: string;
 };
 export type ProviderCatalog = {
   active_provider: string;
@@ -138,9 +140,15 @@ export type RunRecord = {
   representation: Representation | null;
   provenance: Provenance;
   schema_version: number;
-  status: "running" | "completed" | "error" | "cancelled" | "interrupted";
+  /** paused: the run waits at an approval gate for a person's decision. */
+  status:
+    "running" | "paused" | "completed" | "error" | "cancelled" | "interrupted";
   created_at: string;
   finished_at: string | null;
+  /** Shared by a run and every run resumed from its checkpoints. */
+  thread_id?: string | null;
+  resumed_from_run?: string | null;
+  resumed_from_checkpoint?: string | null;
   event_count: number;
   last_seq: number;
 };

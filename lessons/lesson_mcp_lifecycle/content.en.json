@@ -1,0 +1,1674 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "MCP / CONNECT · LOSE · RECONNECT",
+      "source": "1fd354cc1f58"
+    },
+    "hero.headline": {
+      "text": "Two services connected at once,",
+      "source": "d08168aeb375"
+    },
+    "hero.highlight": {
+      "text": "and one drops: what the host has to protect.",
+      "source": "a2a68c1d18b6"
+    },
+    "hero.takeaway": {
+      "text": "Last lesson had one service, and the connection was a single `async with`. Here the host keeps a catalog service and a loan desk service connected at once: it prefixes their tools, registers only the tools it means to offer, then really kills the loan desk's process. You see how calls fail, how reconnecting is limited, what the returning service has lost, and finally that no process is left at exit.",
+      "source": "5aed6fe328da"
+    },
+    "concepts.01-lifecycle.label": {
+      "text": "01 / LIFECYCLE",
+      "source": "744e4b38d85a"
+    },
+    "concepts.01-lifecycle.title": {
+      "text": "A connection has five stages, and each can fail",
+      "source": "2eccfb243a42"
+    },
+    "concepts.01-lifecycle.description": {
+      "text": "The Connection Lifecycle: start the server process, the `initialize` handshake, `tools/list` discovery, calls, close. The host gives every service one connection and records a `lesson.service_state` each time its state changes.",
+      "source": "80882aa69363"
+    },
+    "concepts.02-prefix.label": {
+      "text": "02 / PREFIX",
+      "source": "042eef0b9000"
+    },
+    "concepts.02-prefix.title": {
+      "text": "A service prefix tells same-named tools apart",
+      "source": "933789a024f0"
+    },
+    "concepts.02-prefix.description": {
+      "text": "A Service Prefix is the service identifier the host puts in front of a tool name: `catalog__search` and `loans__search` are two different tools. The host registers the prefix; the server does not name itself.",
+      "source": "b41585ebf9f0"
+    },
+    "concepts.03-unknown.label": {
+      "text": "03 / NO REPLY",
+      "source": "6e91e64cd34b"
+    },
+    "concepts.03-unknown.title": {
+      "text": "No reply means the outcome is unknown",
+      "source": "b22ddfdbf9d0"
+    },
+    "concepts.03-unknown.description": {
+      "text": "A request went out, the connection broke, and no reply came. The server may not have received it, may have received it without running it, or may have run it and lost the reply. The host records the write as outcome unknown: not a success, and not resent on its own.",
+      "source": "1c6766267d75"
+    },
+    "concepts.04-probe.label": {
+      "text": "04 / PROBE",
+      "source": "eedcf2005a97"
+    },
+    "concepts.04-probe.title": {
+      "text": "A live process does not mean a working tool",
+      "source": "32d20d8e2f2c"
+    },
+    "concepts.04-probe.description": {
+      "text": "An Availability Probe is one real read-only tool call. After a reconnect, the service counts as connected only when the probe succeeds.",
+      "source": "2ddf54687c01"
+    },
+    "section-1.title": {
+      "text": "The connection lifecycle",
+      "source": "ef04f104f694"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Start, initialize, call, close: every step can fail. {{lesson:mcp-basics}} connected one service: enter `async with`, connect, leave to close, raise on trouble. This lesson's host connects two services at once, and the loan desk keeps its loan records in its own process memory, so the process cannot be swapped casually. To manage such connections, first split one connection into five stages and see what the client observes when each one fails.",
+      "source": "0bca33b6f2f8"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Stage one is the start: `python_module_server` launches a child process with `python -m lessons.lesson_mcp_lifecycle.loans_server`, carrying only the SDK's safe environment variables. Stage two is initialization: the client sends `initialize`, the server answers with the protocol version it chose, its `serverInfo` and its capabilities, and the client then sends a notification without an `id`, `notifications/initialized`. Stage three is `tools/list` discovery, stage four is calls, stage five is closing. In the lab, the first three client messages of each service are exactly `initialize`, `notifications/initialized` and `tools/list`.",
+      "source": "5d46a5938fe6"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Initialization also performs Capability Negotiation: the client states the protocol version and capabilities it supports, and the server answers with a version both accept and the capabilities it offers. This host declares no capabilities, and both servers answer with the `tools` capability `{\"listChanged\": false}`. The second part matters: it means the server will not notify the client when its tool list changes, so the only way the host can learn of a change is to ask `tools/list` again. Section four depends on exactly that.",
+      "source": "c14e0a2284cc"
+    },
+    "section-1.paragraphs.3": {
+      "text": "A finished handshake is not yet a working connection. After it, `_own` lists the tools and then makes one real call to `service_info`, getting a process id and environment variable names, before it declares the service connected. A live process, a successful handshake and a non-empty tool list can all be true while the tool still cannot answer. Evidence of a working connection is a real call result, the same rule as {{lesson:mcp-basics}} gave: a started process does not mean the tool is connected.",
+      "source": "acdf9a8fa532"
+    },
+    "section-2.title": {
+      "text": "Several services and naming",
+      "source": "7cd9d34c9ec9"
+    },
+    "section-2.paragraphs.0": {
+      "text": "When two services both have a tool called `search`, a service prefix tells them apart. The catalog's `search` finds books by keyword and takes `query`; the loan desk's `search` looks up loans by member id and takes `member_id`. Merging the two tool lists as they are gives the model two `search` tools with two parameter sets, and when a call reaches the host there is nothing to say which service gets it. A malicious server can also name a tool the same on purpose, intercepting calls meant for a trusted service together with their arguments; the book calls this tool shadowing.",
+      "source": "454a594f1c1d"
+    },
+    "section-2.paragraphs.1": {
+      "text": "The host puts a Service Prefix in front of every tool name: the service identifier, two underscores, the name on the server, which gives `catalog__search` and `loans__search`. `qualified_name` builds the name and checks that it fits the function-name alphabet of model APIs: letters, digits, underscores and hyphens, at most 64 characters. `build_routes` creates one route per registered tool, recording which service it belongs to, its name on the server and whether it reads or writes; if two services produce the same name it raises ValueError rather than overwriting quietly.",
+      "source": "abfce6b8d979"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Some hosts rename instead of refusing. The Learn Claude Code MCP lesson replaces illegal characters with underscores and builds `mcp__{server}__{tool}`, then checks for a collision again after renaming, because otherwise `get.version` of `docs.one` and `get_version` of `docs_one` would quietly become one name. Here the service identifier is written by the host and the registered tool names are ones the host named itself, so an illegal name is refused, which surfaces problems more easily than renaming does. Unregistered tools are not even name-checked: they never reach the route table.",
+      "source": "c2161fdb9542"
+    },
+    "section-2.paragraphs.3": {
+      "text": "A prefix solves names, not trust. It lets the model and the host know which service a call belongs to, but it cannot guarantee that a server's description tells the truth. Tool descriptions enter the model's context unchanged, a channel whose risk {{lesson:mcp-basics}} covered; several services magnify it, because one service's descriptions sit in the same list as another service's tools. That is why the registration and permissions of section six matter more than the prefix itself.",
+      "source": "6c4e2449317b"
+    },
+    "predict-messages.prompt": {
+      "text": "Before running the \"Read-only (default)\" arm of \"Two services: handshake, names and permissions\", guess: how many `lesson.mcp_message` events will this run record? Hint: each service has one handshake (3 messages), one tool listing (2), one `service_info` call (2) and one probe call (2); whether the three calls beyond the host's permissions reach a server is yours to judge.",
+      "source": "3f240e14fe54"
+    },
+    "mq-bare-name.bare-name.prompt": {
+      "text": "The model proposes a call to `search` with no prefix. What should the host do?",
+      "source": "037648b64560"
+    },
+    "mq-bare-name.bare-name.a.text": {
+      "text": "Refuse it: no route has that name, and nothing is sent",
+      "source": "5e47daa4153d"
+    },
+    "mq-bare-name.bare-name.a.feedback": {
+      "text": "Right. The route table holds only prefixed names, and a bare name belongs to no service.",
+      "source": "46b1b2f8fb4e"
+    },
+    "mq-bare-name.bare-name.b.text": {
+      "text": "Send it to the catalog by default, because it is listed first",
+      "source": "1accc18413c9"
+    },
+    "mq-bare-name.bare-name.b.feedback": {
+      "text": "No. Guessing by order would send loan arguments to the catalog, or the reverse.",
+      "source": "50738297afc9"
+    },
+    "mq-bare-name.bare-name.c.text": {
+      "text": "Send it to both services and use whichever succeeds",
+      "source": "03e65442c379"
+    },
+    "mq-bare-name.bare-name.c.feedback": {
+      "text": "No. Same-named tools mean different things, and sending to both gives the wrong service the arguments too.",
+      "source": "61292275714e"
+    },
+    "mq-bare-name.bare-name.explanation": {
+      "text": "The host refuses at its own layer, and the server receives no `tools/call` at all. The three calls beyond permissions in the lab work this way.",
+      "source": "3f99754f1622"
+    },
+    "section-3.title": {
+      "text": "Disconnects and reconnects",
+      "source": "f3edbf422d9d"
+    },
+    "section-3.paragraphs.0": {
+      "text": "After a service process crashes it is restarted and its tools are discovered again, but the restart is only the beginning. The host learns that a service is gone from the next failed call and from nothing else. In \"The loan desk crashes: the second reconnect works\", one loan is registered, and then the runner uses `stop_process` to send `SIGKILL` to the loan desk's process: no closing of standard input, no grace period. The host does not know yet; `lesson.service_state` holds only a `stopped` note from the runner, whose source says it is fault injection.",
+      "source": "bf9535329163"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The second write goes out as usual: the host writes `tools/call` into a connection that is already dead, no reply comes, and the SDK raises MCPError with code -32000 and the message `Connection closed`. The host marks the service as connection lost, records the write as outcome unknown, and returns the structured error `ConnectionLost`. Why is it neither a failure nor a success? The request may never have reached the server, may have arrived without being run, or may have run with the reply lost on the way, and from the client all three look identical. {{lesson:reliable-tools}} answers an unknown outcome with an idempotency key; this lesson's servers have none, so the host can only be conservative: record it and not resend.",
+      "source": "ef93eed0b88e"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Reconnecting has three rules. The old client is never reused: `close` it first so the SDK reaps the dead process, then create a new one. The count is bounded: `max_reconnects` is charged once per service for the whole run, and when it is used up the host gives up, the state becomes gave up reconnecting, that service's tools are no longer offered to the model, and the run continues on the remaining service. Each attempt waits first, 0.2, 0.5 and 1.0 seconds. Every new connection handshakes, discovers and calls `service_info` again, and then runs an Availability Probe: a real read-only call that confirms the tools can answer, and only a passing probe counts as connected.",
+      "source": "a6507c6baca1"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Connected again, but the data is gone. The loan records live only in the loan desk's process memory and the new process is empty: after the reconnect in the exercise, a lookup of member M-07's loans gives a `count` of 0, though the first loan once had the id `L-0001`. That confirmation was true then and is not true now. Reconnecting restores the connection, not the data. So the host resends no write on its own: resending a confirmed write registers a duplicate in a service that keeps data durably, resending an unknown-outcome write does too, and the host cannot prove which kind of service it faces. Whether to put a record back is for a person to decide, looking at the write record.",
+      "source": "26e1cde880f6"
+    },
+    "walkthrough.title": {
+      "text": "A write that meets a disconnect",
+      "source": "e0ecf99b93e6"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, what happens to the second write in \"The loan desk crashes: the second reconnect works\"; the code is simplified, and the evidence of your own run is in the lab events.",
+      "source": "d6d51c66c0cc"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Record",
+      "source": "23b1604546bf"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Host",
+      "source": "d8456739a2ed"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Write it down before sending",
+      "source": "7d0d0e5adc87"
+    },
+    "walkthrough.step-1.body": {
+      "text": "`call` creates a record for the write with the state sent, and then sends `tools/call` to the loan desk.",
+      "source": "ffaf8c2a364e"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "tool_call",
+      "source": "99bd30a8e4c3"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Crash",
+      "source": "20618334758a"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-2.title": {
+      "text": "The process is killed",
+      "source": "6841db1e9c8f"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The runner sends `SIGKILL` to the loan desk's process. Standard input is not closed, there is no grace period, and the host does not know yet.",
+      "source": "f41ba70f1043"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.service_state",
+      "source": "181b48b13452"
+    },
+    "walkthrough.step-3.label": {
+      "text": "No reply",
+      "source": "f6a763c7f65f"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Protocol",
+      "source": "ab2f31f30acf"
+    },
+    "walkthrough.step-3.title": {
+      "text": "The client raises MCPError",
+      "source": "fa3669c021fa"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The request was written into a dead connection and the SDK raises code -32000 with the message `Connection closed`.",
+      "source": "c959452d0139"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.service_state",
+      "source": "181b48b13452"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Mark unknown",
+      "source": "ffbd0e6c71fe"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Host",
+      "source": "d8456739a2ed"
+    },
+    "walkthrough.step-4.title": {
+      "text": "The write's state becomes unknown",
+      "source": "24eb5f8df22a"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The host records it neither as a success nor as a failure and raises the structured error `ConnectionLost` for the caller.",
+      "source": "415a871b07f4"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Reconnect",
+      "source": "679571624355"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Host",
+      "source": "d8456739a2ed"
+    },
+    "walkthrough.step-5.title": {
+      "text": "A new process, a new handshake, a probe",
+      "source": "a60a0736fb80"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Reconnecting within the limit: the first process exits at once, the second works, and the service counts as connected only after the probe passes.",
+      "source": "b8a9cd044fc4"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.service_state",
+      "source": "181b48b13452"
+    },
+    "walkthrough.step-6.label": {
+      "text": "No resend",
+      "source": "9d9a9db7443e"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Host",
+      "source": "d8456739a2ed"
+    },
+    "walkthrough.step-6.title": {
+      "text": "The same write is stopped",
+      "source": "7bb74ff2e7aa"
+    },
+    "walkthrough.step-6.body": {
+      "text": "When the run resumes and submits the write again, the record says outcome unknown, `call` returns `WriteNotRepeated`, and no new `tools/call` goes out.",
+      "source": "d2e620ad978e"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "misconception-reconnect.claim": {
+      "text": "Once the reconnect succeeds, the loan desk is back to how it was.",
+      "source": "979d100741e1"
+    },
+    "misconception-reconnect.correction": {
+      "text": "A reconnect gives you only a new process and a new connection. The handshake, discovery and probe can all pass while the loan records are still empty and the process id has changed. In the exercise the first loan was `L-0001` and the lookup after the reconnect finds none; renewing or querying by the old loan id would only get \"no such loan\".",
+      "source": "8d8131490d47"
+    },
+    "deep-dive-unknown.title": {
+      "text": "What to do with a write whose outcome is unknown",
+      "source": "c4d58bcf542c"
+    },
+    "deep-dive-unknown.summary": {
+      "text": "Three routes: resend with an idempotency key, look first and then decide, or hand it to a person. This lesson's servers allow only the third.",
+      "source": "c1c05c8c21b7"
+    },
+    "deep-dive-unknown.paragraphs.0": {
+      "text": "A hand-worked example. Member M-07 wants to borrow B-104, the host sends `register_loan`, the connection breaks and no reply comes. Two worlds are possible: in one the server saved the loan in a database and only the reply was lost, so `L-0002` can be found now; in the other the process died before it received the request, and no record exists. At the time of sending the host cannot tell them apart, so resending risks registering one loan too many in one world, and not resending risks losing one in the other. That is what outcome unknown means: both mistakes are possible and neither can be judged in advance.",
+      "source": "8338fcb8c5e8"
+    },
+    "deep-dive-unknown.paragraphs.1": {
+      "text": "The first route is the idempotency key: the caller generates a key before the first send and passes it unchanged on a resend, and a server that has seen the key hands back the first result. {{lesson:reliable-tools}} demonstrated it with local storage. It needs server support, and this lesson's `register_loan` has no such parameter, so the host must not pretend to have one. The second route is to look first and then decide: query by business fields, such as the member and the book, treat a found record as success, and resend only if none is found. That too needs the server's data to survive a restart; after this lesson's loan desk restarts every query returns nothing, so a query proves nothing.",
+      "source": "55ac9f6568ed"
+    },
+    "deep-dive-unknown.paragraphs.2": {
+      "text": "The third route is to write it down and hand it to a person, which is what this lesson's host does: the write record says outcome unknown, the report and the model's answer both state it honestly, and a librarian checks. It is not convenient, but it creates no duplicates. To go further in a real system, the server should support idempotency keys or keep its state in durable storage, and then the host can handle these cases automatically; that is the server's responsibility, and the host cannot guess it.",
+      "source": "2e94ba9e7756"
+    },
+    "mq-after-reconnect.after-reconnect.prompt": {
+      "text": "After the reconnect succeeded, `loans__search` returns `count: 0`. Which statement holds?",
+      "source": "ca8e5244a1b2"
+    },
+    "mq-after-reconnect.after-reconnect.a.text": {
+      "text": "The new process's memory is empty and even the first confirmed loan is not in it: reconnecting does not restore the service's data",
+      "source": "f2df43e559b5"
+    },
+    "mq-after-reconnect.after-reconnect.a.feedback": {
+      "text": "Right. Zero records only says the new process holds none; it says nothing about whether any write succeeded back then.",
+      "source": "e28073600faf"
+    },
+    "mq-after-reconnect.after-reconnect.b.text": {
+      "text": "Neither write succeeded",
+      "source": "034d24f81a40"
+    },
+    "mq-after-reconnect.after-reconnect.b.feedback": {
+      "text": "No. The first write was confirmed at the time and was lost later along with the process.",
+      "source": "4ba1618c0786"
+    },
+    "mq-after-reconnect.after-reconnect.c.text": {
+      "text": "The host can safely resend the second write on this basis",
+      "source": "9b9b84f76409"
+    },
+    "mq-after-reconnect.after-reconnect.c.feedback": {
+      "text": "No. With a service that stores data durably the same query could look completely different; the host cannot conclude from one lookup that the other side is not durable.",
+      "source": "eadbf934242a"
+    },
+    "mq-after-reconnect.after-reconnect.explanation": {
+      "text": "After a reconnect, keep two things apart: the connection is back, and whether the data in the service survived.",
+      "source": "64e3cd58150e"
+    },
+    "section-4.title": {
+      "text": "A changed tool list must be confirmed again",
+      "source": "0ea836e67bbc"
+    },
+    "section-4.paragraphs.0": {
+      "text": "When a service updates its tool definitions, the client must notice the change rather than keep the old ones. What comes back after a restart is not necessarily the old version. In \"Reconnect timed out, and the service came back changed\", the first restarted process is alive but never reads standard input: the host sends `initialize`, waits the full read timeout of 5 seconds, and gets the code -32001, unlike the -32000 of a vanished process. The second connection reaches v2: `register_loan` gains a required `due_days` (7 to 30 days) and a `renew_loan` appears. Keeping the old definition, a model calling with the old parameter list is refused by the server; if only the description changed and the parameters did not, there is not even a refusal.",
+      "source": "cee1afb7d39f"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The host spots changes with a definition fingerprint. `fingerprint` hashes a tool's name, tool description and input Schema; `connect_all` records each tool's fingerprint as the baseline after the first successful connection, and after a reconnect `_recheck` compares them one by one, producing the changed, added and removed tools and `quarantined`, the tools to hold back. In the example `register_loan` changed and `renew_loan` was added. Because the server's `listChanged` is false it never notifies, so the comparison has to be started by the host, and `cache=None` makes sure every `tools/list` is a real request instead of an old result from the SDK's cache.",
+      "source": "17c300bd45b4"
+    },
+    "section-4.paragraphs.2": {
+      "text": "A changed tool is held first and confirmed later. A tool in `quarantined` is refused by `call` before anything is sent, with the structured error `ToolChanged`, and `model_tools` stops offering it to the model; unchanged tools of the same service work as before. The new `renew_loan` is not registered, so being discovered gives it no route and no permission. Confirmation happens outside the run: someone reads the new definition and updates the registration and baseline, and only then does the next run let it through. This lesson's run never confirms by itself; the two writes submitted again after recovery both get `ToolChanged`.",
+      "source": "7a0bf6d18b15"
+    },
+    "section-4.paragraphs.3": {
+      "text": "A fingerprint can prove one thing only: the definition now differs from the one confirmed last time. It cannot say whether the new definition is good, and it cannot see behavior changing behind an identical definition, such as a server switching its billing rules while the parameters stay put. The description is part of the fingerprint, so someone quietly editing it to slip in instructions also triggers the hold, a small line of defense against smuggled instructions. Conversely, an unchanged fingerprint is not proof of safety: the definition confirmed the first time may have been bad all along.",
+      "source": "088cab42338c"
+    },
+    "compare-signals.title": {
+      "text": "Five kinds of failure, each with its signal and handling",
+      "source": "8e0762e0437a"
+    },
+    "compare-signals.columns.0": {
+      "text": "Case",
+      "source": "d72058e6ef2e"
+    },
+    "compare-signals.columns.1": {
+      "text": "What the client sees",
+      "source": "e77f6a60c0b6"
+    },
+    "compare-signals.columns.2": {
+      "text": "What the host records",
+      "source": "7c05f135138e"
+    },
+    "compare-signals.columns.3": {
+      "text": "May a write be resent",
+      "source": "1831af149adb"
+    },
+    "compare-signals.rows.0.0": {
+      "text": "The service refuses the call (bad arguments, business rule)",
+      "source": "50d8842f45eb"
+    },
+    "compare-signals.rows.0.1": {
+      "text": "A reply with `isError: true`",
+      "source": "525e17dfb6a8"
+    },
+    "compare-signals.rows.0.2": {
+      "text": "A tool error; the write is recorded as rejected and the message goes to the model",
+      "source": "ee80cc36caa7"
+    },
+    "compare-signals.rows.0.3": {
+      "text": "Yes, once corrected",
+      "source": "05464d3f392e"
+    },
+    "compare-signals.rows.1.0": {
+      "text": "The process vanished",
+      "source": "f2604cd619ba"
+    },
+    "compare-signals.rows.1.1": {
+      "text": "No reply, MCPError -32000 `Connection closed`",
+      "source": "f705a1081a82"
+    },
+    "compare-signals.rows.1.2": {
+      "text": "Connection lost; the write is recorded as outcome unknown",
+      "source": "34083e5b72ef"
+    },
+    "compare-signals.rows.1.3": {
+      "text": "Not resent automatically",
+      "source": "ed3b6c476de9"
+    },
+    "compare-signals.rows.2.0": {
+      "text": "The process is alive but silent",
+      "source": "6451f6b2144b"
+    },
+    "compare-signals.rows.2.1": {
+      "text": "The read timeout runs out, MCPError -32001",
+      "source": "873d83fdff8c"
+    },
+    "compare-signals.rows.2.2": {
+      "text": "Reconnect failed, error code recorded, then retry or give up",
+      "source": "a08139e6f6fa"
+    },
+    "compare-signals.rows.2.3": {
+      "text": "No write has been sent during the handshake, so none to resend",
+      "source": "12bf2b0be551"
+    },
+    "compare-signals.rows.3.0": {
+      "text": "The definition changed after a reconnect",
+      "source": "8721d7137d5d"
+    },
+    "compare-signals.rows.3.1": {
+      "text": "No error; the fingerprint from `tools/list` differs from the baseline",
+      "source": "6bc31acdba8f"
+    },
+    "compare-signals.rows.3.2": {
+      "text": "Held back, `ToolChanged`",
+      "source": "786aa51fe269"
+    },
+    "compare-signals.rows.3.3": {
+      "text": "Not sent until the new definition is confirmed",
+      "source": "259d87f8f0a3"
+    },
+    "compare-signals.rows.4.0": {
+      "text": "The host refuses itself (unregistered, writes off, service unavailable)",
+      "source": "fd6fb79dd8ab"
+    },
+    "compare-signals.rows.4.1": {
+      "text": "Nothing: no message was sent",
+      "source": "6c4ce800bb8f"
+    },
+    "compare-signals.rows.4.2": {
+      "text": "A structured error, not a connection problem",
+      "source": "644c0b7cf5e8"
+    },
+    "compare-signals.rows.4.3": {
+      "text": "Not applicable, the call was never sent",
+      "source": "70a067a379ad"
+    },
+    "deep-dive-handshake.title": {
+      "text": "The handshake, capability negotiation and the 2026-07-28 discovery request",
+      "source": "e31b7dd253a0"
+    },
+    "deep-dive-handshake.summary": {
+      "text": "This lesson uses the 2025-11-25 handshake; the newer version replaces it with `server/discover`, and the connection carries less state.",
+      "source": "0005d5f33f43"
+    },
+    "deep-dive-handshake.paragraphs.0": {
+      "text": "The 2025-11-25 specification is specific: initialization must be the first interaction between client and server. The client sends `initialize` with the protocol version it supports, its capabilities and its `clientInfo`; if the server supports that version it answers with the same one, otherwise with another version it supports, and a client that cannot support it should disconnect. After a successful handshake the client sends `notifications/initialized`, and before the server has answered `initialize` the client should send nothing but `ping`. From then on both sides may use only negotiated capabilities, which is why the `listChanged` value of the `tools` capability is worth reading.",
+      "source": "1f85209802d3"
+    },
+    "deep-dive-handshake.paragraphs.1": {
+      "text": "The 2026-07-28 version has no such handshake. {{lesson:mcp-basics}} measured it: the first request is `server/discover`, asking which versions and capabilities the server supports; afterwards every request states the protocol version, client information and capabilities in `params._meta`, so the server need not remember who this connection is; replies gain cache hints such as `cacheScope` and `ttlMs`. For the lifecycle this means there is no handshake state to lose and one step fewer on a reconnect; but whether the server's own application data, such as loan records, survives has nothing to do with the protocol version.",
+      "source": "eca16fb3db9b"
+    },
+    "deep-dive-handshake.paragraphs.2": {
+      "text": "This lesson pins `legacy` mode so that the handshake step is visible. In the newer mode the SDK's `Client` also offers `listen`, which can subscribe to `tools_list_changed`; that path has not been run against this lesson's two services and exists only in the SDK interface, so do not take it as a measured conclusion. Both protocol versions are part of the official specification, so say which one is meant when explaining, and check which version someone else's tutorial or code assumes before copying it.",
+      "source": "2770883999da"
+    },
+    "mq-changed-tools.changed-tools.prompt": {
+      "text": "After the reconnect, the definition of `register_loan` changed and `renew_loan` is new. What does the host do with each?",
+      "source": "c818f0c64c62"
+    },
+    "mq-changed-tools.changed-tools.a.text": {
+      "text": "`register_loan` is held until someone confirms the new definition; `renew_loan` is not registered and gets no route",
+      "source": "3cd0c31e3f13"
+    },
+    "mq-changed-tools.changed-tools.a.feedback": {
+      "text": "Right. A changed registered tool is held, and a new tool gets no permission just by being discovered.",
+      "source": "5536d7774a1d"
+    },
+    "mq-changed-tools.changed-tools.b.text": {
+      "text": "Both can be used, since the server now lists them",
+      "source": "85b379f2659a"
+    },
+    "mq-changed-tools.changed-tools.b.feedback": {
+      "text": "No. What the server lists is not what the host authorizes.",
+      "source": "f32c14ffbc07"
+    },
+    "mq-changed-tools.changed-tools.c.text": {
+      "text": "Both are held, because the whole service changed",
+      "source": "f384442aea7a"
+    },
+    "mq-changed-tools.changed-tools.c.feedback": {
+      "text": "No. Only registered tools whose definition changed are held; `renew_loan` has no route at all, so there is nothing to hold.",
+      "source": "ad41ef1f951a"
+    },
+    "mq-changed-tools.changed-tools.explanation": {
+      "text": "Look at `recheck` in `lesson.service_state` after the reconnect: what `changed`, `added` and `quarantined` hold.",
+      "source": "dfdd585c7602"
+    },
+    "section-5.title": {
+      "text": "Exit and reaping processes",
+      "source": "c025a3c466bb"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Closing has to make every server process really disappear. On leaving `async with Client(...)` the SDK first closes the process's standard input and waits 2 seconds; if it has not exited, it sends `SIGTERM` to the process group and waits 2 more; if it still stays, `SIGKILL`. This runs inside a scope shielded from cancellation, so it also happens when the user presses stop and the run is cancelled. The cost of not cleaning up is concrete: the loan desk keeps holding memory and its data, the next run starts another, and two loan desks each hold their own records.",
+      "source": "481e8652519c"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The host does not trust \"it is closed\" and checks instead. `close_and_count` first closes every connection in order, then calls `wait_gone` for every process id this run started, using signal 0 to test whether the process still exists and waiting at most 3 seconds. The report check \"No server process is left after closing\" comes from this test, and the metric \"Processes left\" is a real count. \"The client left its code block\" and \"the process is gone\" are two different facts, and the report counts only the second as evidence.",
+      "source": "d0128070fedd"
+    },
+    "section-5.paragraphs.2": {
+      "text": "The check has a limit: process ids come from `service_info` after a successful handshake, so a process whose handshake failed is not on the list, such as the one with `hang-on-start` injected. The SDK reaps those when leaving the code block, and the lesson's tests additionally scan `/proc` on Linux to confirm that no server process of this lesson remains when a test ends. The count of processes left in the report therefore covers the processes that completed a handshake, not all of them.",
+      "source": "1d5f506ea252"
+    },
+    "section-5.paragraphs.3": {
+      "text": "The child's environment needs checking too. A server process inherits only the SDK's list of safe environment variables, and `service_info` reports the names it actually sees: `HOME`, `LC_CTYPE`, `PATH`, `SHELL` and `TERM` on Linux. The report checks whether any name contains KEY, TOKEN, SECRET, PASSWORD or CREDENTIAL, looking at names only and never values, and no event holds any variable's content. The model's key stays in the parent process, model calls go through `RunContext`, and neither service has a line of code that needs a key.",
+      "source": "9caf9f7296ba"
+    },
+    "mq-reaped.reaped.prompt": {
+      "text": "The report says \"Processes left\" is 0. What does that best prove?",
+      "source": "1bed95a33157"
+    },
+    "mq-reaped.reaped.a.text": {
+      "text": "Every server process that completed a handshake was gone after closing",
+      "source": "db0a6eeb2b34"
+    },
+    "mq-reaped.reaped.a.feedback": {
+      "text": "Right. The number comes from a real check of those process ids, and its scope ends there.",
+      "source": "bebc74cd3bb7"
+    },
+    "mq-reaped.reaped.b.text": {
+      "text": "Every process this run started, including those whose handshake failed",
+      "source": "3873a5cbc60e"
+    },
+    "mq-reaped.reaped.b.feedback": {
+      "text": "No. A process whose handshake failed has no recorded process id and is not on the checked list.",
+      "source": "793ee4bc1295"
+    },
+    "mq-reaped.reaped.c.text": {
+      "text": "The servers' data has been saved safely",
+      "source": "6f1c013f6c47"
+    },
+    "mq-reaped.reaped.c.feedback": {
+      "text": "No. A vanished process says nothing about where data went; the loan desk's data was only ever in memory.",
+      "source": "002dd524ca71"
+    },
+    "mq-reaped.reaped.explanation": {
+      "text": "When reading a report, look at what a check covers before its conclusion.",
+      "source": "67385be79dc4"
+    },
+    "section-6.title": {
+      "text": "Registration, permissions and availability probes",
+      "source": "42636362b591"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Discovered tools, registered tools and callable tools are three sets, each smaller than the last. Level one is registration: each `ServiceSpec` in `SERVICES` states the identifier the host gives the service, which module to start, the expected `serverInfo.name`, which tools are registered and whether each reads or writes. Over stdio, identity comes from which module the host started, and the name a server reports about itself is only cross-checked. The loan desk lists four tools and the host registers two: `purge_loans` would clear every loan record and `service_info` is the host's own diagnostic tool, so neither gets a route.",
+      "source": "f65c56c9f280"
+    },
+    "section-6.paragraphs.1": {
+      "text": "Level two is whether this run allows writes. `register_loan` is registered as a write, and when `allow_writes` is false `available` leaves it out of the allowlist: the model's request does not show it, and the runner submitting that name itself only gets \"unknown tool\". Level three is whether the service is usable now: if the connection is not connected, or the definition changed and is on hold, `call` refuses before sending. The `readOnlyHint` and `destructiveHint` on a tool are the server's own claims, and the host does not let them through; the read and write classification lives in the host's own `ServiceSpec`, the same idea as the host permission table in Learn Claude Code.",
+      "source": "418af8838ce8"
+    },
+    "section-6.paragraphs.2": {
+      "text": "An Availability Probe answers one question: can this service do its work right now? It is a real read-only call written into `ServiceSpec.probe`: the catalog searches for the keyword MCP, the loan desk looks up member M-07's loans. After a reconnect the service counts as connected only if `probe` succeeds, and on failure the host closes it and tries again. The protocol's own `ping` only shows that the other side can answer the protocol, not that the tools work; the health check in the book's `docker-compose.yml` is `python3 -c \"import sys; sys.exit(0)\"`, whose exit code is always 0 and which proves only that Python can run in the container, not that an MCP server is answering.",
+      "source": "d3cbea4cc22a"
+    },
+    "section-6.paragraphs.3": {
+      "text": "Every wait needs a budget. This lesson has four: the per-request read timeout `READ_TIMEOUT_SECONDS` is 5 seconds; the reconnect count `max_reconnects` is at most 3 and holds for the whole run; each reconnect waits 0.2, 0.5 and 1.0 seconds first; and the agent exercise makes at most `MAX_ROUNDS` model calls, which is 4. Multiplying gives the worst wait by hand: if all three reconnects meet `hang-on-start`, the waits total 0.2+0.5+1.0 = 1.7 seconds, the read timeouts 3×5 = 15 seconds, and a closing grace of up to about 4 seconds each adds 12, in all under 30 seconds. That is a hand-computed ceiling, not a measurement.",
+      "source": "061571a59f7e"
+    },
+    "misconception-listed.claim": {
+      "text": "If the service lists a tool, the host can let the model use it.",
+      "source": "ef8303dba8b7"
+    },
+    "misconception-listed.correction": {
+      "text": "`tools/list` only says what the server declares. The loan desk lists `purge_loans`; the host did not register it, the model's request does not contain it, the runner submitting the name is refused, and the server receives no `tools/call` at all. What may be used is decided jointly by the host's registration, this run's settings and the service's current state.",
+      "source": "2af912af7773"
+    },
+    "deep-dive-transport.title": {
+      "text": "Who owns the process: stdio, containers and remote transports",
+      "source": "8d03370f933d"
+    },
+    "deep-dive-transport.summary": {
+      "text": "Over stdio the connection is the child process; over a remote transport the service and the connection live separate lives.",
+      "source": "ae46a70bd63b"
+    },
+    "deep-dive-transport.paragraphs.0": {
+      "text": "In the stdio transport the client launches the server as a child process and exchanges one message per line over standard input and output; the server may write only valid MCP messages to standard output and logs to standard error. So connection and process are one life: when the process is gone the connection is gone, and when the host closes standard input it is telling the server it is time to exit. That also explains why this lesson checks processes: over stdio the service's life and death belong to the host.",
+      "source": "4a49557f312d"
+    },
+    "deep-dive-transport.paragraphs.1": {
+      "text": "Streamable HTTP differs: the server is an independent process that can serve several clients at once, and each message is an HTTP POST. According to the 2025-11-25 specification, a server may assign a session at initialization through the `MCP-Session-Id` response header, which the client must then send with every request; the server may end the session at any time and must answer 404 to requests carrying the old session, and the client must then send `initialize` again to open a new one. After a dropped connection the client can also resume an interrupted event stream with `Last-Event-ID`. So when the connection breaks, the service process and its data may be perfectly fine, and what the client rebuilds is the session. This lesson did not run a remote transport; this is what the specification says.",
+      "source": "23787eb91715"
+    },
+    "deep-dive-transport.paragraphs.2": {
+      "text": "The `docker-compose.yml` that accompanies chapter 4 of the book is a third approach: three MCP services each get a container, `restart: unless-stopped` has the orchestrator restart a process after it exits, `stdin_open: true` keeps standard input open, and data sits in named volumes that survive a restart. Against this lesson three things show: restarting a process is not reconnecting a client; data kept outside the process is what survives a restart, whereas the loan desk here keeps its state in memory; and all three services receive `OPENAI_API_KEY`, so the containers separate the processes but not the keys.",
+      "source": "1b26a76fcfba"
+    },
+    "mq-gates.gates.prompt": {
+      "text": "`register_loan` carries the annotation `destructiveHint: false`. Can the host let it through on that basis?",
+      "source": "543711e7d7d8"
+    },
+    "mq-gates.gates.a.text": {
+      "text": "No: the annotation is the server's own claim, and the host's registration and this run's settings decide",
+      "source": "a33e4483f584"
+    },
+    "mq-gates.gates.a.feedback": {
+      "text": "Right. The read and write classification lives in the host's `ServiceSpec`, and a write also needs this run to allow writes.",
+      "source": "5f2f88603935"
+    },
+    "mq-gates.gates.b.text": {
+      "text": "Yes, the protocol guarantees annotations are true",
+      "source": "20b47aca57e2"
+    },
+    "mq-gates.gates.b.feedback": {
+      "text": "No. The protocol only carries annotations and does not verify them.",
+      "source": "cd018b056267"
+    },
+    "mq-gates.gates.c.text": {
+      "text": "Yes, as long as the tool name contains `loan`",
+      "source": "0b165d380201"
+    },
+    "mq-gates.gates.c.feedback": {
+      "text": "No. The name is also written by the server and is no basis for authorization.",
+      "source": "ff5bda4c50ce"
+    },
+    "mq-gates.gates.explanation": {
+      "text": "Discovery, registration, allowed writes and a usable service narrow things in turn, and a missing one stops the call.",
+      "source": "a6b36a8e6736"
+    },
+    "section-7.title": {
+      "text": "The model calls through RunContext",
+      "source": "7d41d99ca4e1"
+    },
+    "section-7.paragraphs.0": {
+      "text": "The model sees only the tools that are usable now, and calls still pass the same gate. In the agent exercise the host builds the tool list every round with `model_tools`: only a tool that is registered, allowed in this run and on a service that is connected right now goes to the model, with a prefixed name and a description and `inputSchema` from each service's `tools/list`. The call proposals the model makes are checked against the allowlist by `context.execute_proposal`, travel back to the event loop through `bridge`, and are sent to the right service by `call`; `tool_call` and `tool_result` pair up by call id, with the protocol-level `tools/call` between them.",
+      "source": "9b18e5bbca31"
+    },
+    "section-7.paragraphs.1": {
+      "text": "The program handles a lost connection, not the model. The offline script has the model search first and then register a loan; once the registration is confirmed the runner kills the loan desk's process, and in the next round the model's `loans__search` to confirm gets `ConnectionLost`. After each round the host checks for services that dropped and reconnects them within the limit; the model never sees the reconnecting, only that the tools are back in the next round. The system prompt tells the model \"after a lost connection the outcome of that operation is unknown, do not call it a success and do not write again yourself\", and whether a real model obeys is something offline tests cannot show; the protection in `call` does not depend on it: if the same write is proposed again while the write record holds \"confirmed\" or \"outcome unknown\", it returns `WriteNotRepeated`.",
+      "source": "09baa5ea6c10"
+    },
+    "section-7.paragraphs.2": {
+      "text": "This section's exercise needs a model connection. In the offline test every choice of the model comes from a fixed script and the answer is scripted too, so what it proves is that the host mechanisms (two services, prefixes, disconnects, reconnects and the write record) really work on real processes; it does not prove that any real model handles a disconnect sensibly, still less that its answer is right. The report item \"Write record\" has no passed field, because it is the host's own bookkeeping and a person has to check it against the events. Two real runs were made (claude-haiku-5-5, one per language): after the disconnect the model retried one read-only lookup and the 4 rounds ran out before it wrote an answer, so these runs do not show whether it would report the disconnect honestly. Conclusions come from your own runs.",
+      "source": "5fcf08c9e02f"
+    },
+    "references.book-ch4.title": {
+      "text": "Tool ecosystem: MCP transports, risks, and too many tools (Understanding AI Agents)",
+      "source": "6412ff012934"
+    },
+    "references.book-compose.title": {
+      "text": "Container orchestration, restart policy and health checks for three MCP services (Understanding AI Agents)",
+      "source": "1b88a6eb86ff"
+    },
+    "references.book-docker.title": {
+      "text": "Docker deployment and secrets advice for MCP services (Understanding AI Agents)",
+      "source": "57072833c5ee"
+    },
+    "references.ms-protocols.title": {
+      "text": "Agent protocols: the one-to-one connection of host, client and server (Microsoft AI Agents for Beginners)",
+      "source": "623e2f2400cb"
+    },
+    "references.lcc-s14.title": {
+      "text": "MCP tools: service prefixes, name collisions and the host permission table (Learn Claude Code)",
+      "source": "9f9321838137"
+    },
+    "references.hf-tools.title": {
+      "text": "Tools and MCP: one tool interface (Hugging Face Agents Course)",
+      "source": "cf50004c4048"
+    },
+    "references.hf-smolagents.title": {
+      "text": "Importing a tool collection from an MCP server (Hugging Face Agents Course)",
+      "source": "56ade24763a8"
+    },
+    "references.spec-lifecycle.title": {
+      "text": "MCP specification 2025-11-25: lifecycle, capability negotiation, shutdown and timeouts (Model Context Protocol)",
+      "source": "5de009059c59"
+    },
+    "references.spec-transports.title": {
+      "text": "MCP specification 2025-11-25: the stdio and Streamable HTTP transports (Model Context Protocol)",
+      "source": "bfebe3392d7c"
+    },
+    "code-names.n-qualified.text": {
+      "text": "The host puts a prefix on each service's tool names: service identifier, two underscores, the name on the server.",
+      "source": "3cc5da449bbd"
+    },
+    "code-names.n-join.text": {
+      "text": "Builds a name such as `loans__search`.",
+      "source": "b7cc44431fe1"
+    },
+    "code-names.n-alphabet.text": {
+      "text": "The name must fit the function-name alphabet of model APIs: letters, digits, underscores, hyphens, at most 64 characters.",
+      "source": "7ddd4ae2a805"
+    },
+    "code-names.n-refuse.text": {
+      "text": "An illegal name is refused, not rewritten: rewriting could quietly turn two different names into one.",
+      "source": "718f3cd0dfb8"
+    },
+    "code-names.n-routes.text": {
+      "text": "Builds the route table from the registration: the key is the prefixed name, the value is a route.",
+      "source": "6b5f363b8cc5"
+    },
+    "code-names.n-listed.text": {
+      "text": "Walks only the tools the service really listed: a registered tool the service did not list gets no route either.",
+      "source": "756fb22c84b3"
+    },
+    "code-names.n-kind.text": {
+      "text": "Read or write is decided by the host's `ServiceSpec`, not by the server's annotations.",
+      "source": "1d9cdece5c73"
+    },
+    "code-names.n-hidden.text": {
+      "text": "Discovered but not registered: no route. `purge_loans` is stopped right here.",
+      "source": "44a4d0a2445e"
+    },
+    "code-names.n-collision.text": {
+      "text": "Two services produce the same name: fail loudly instead of overwriting quietly.",
+      "source": "87819c3592cd"
+    },
+    "code-names.n-route.text": {
+      "text": "A route records the prefixed name, the service identifier, the server-side name and the read or write kind.",
+      "source": "0610c5e89e27"
+    },
+    "code-names.n-fingerprint.text": {
+      "text": "The definition fingerprint: after a reconnect it is compared with the definition confirmed the first time.",
+      "source": "9586baee7006"
+    },
+    "code-names.n-material.text": {
+      "text": "Name, description and input Schema all take part, so a change in any of them changes the fingerprint.",
+      "source": "346a01ef8b7c"
+    },
+    "code-names.n-sorted.text": {
+      "text": "Sorted keys: the same definition always gives the same fingerprint.",
+      "source": "f813b3d47cec"
+    },
+    "code-names.n-hash.text": {
+      "text": "The first 12 hex digits of the hash: enough to compare in a report without taking space.",
+      "source": "701c02540b50"
+    },
+    "code-life.n-own.text": {
+      "text": "A connection's whole life happens in this one task: the same task enters, uses and leaves `async with`.",
+      "source": "839cb61ee63e"
+    },
+    "code-life.n-started.text": {
+      "text": "An error before the handshake finishes goes to the caller as an MCPError; one after it is left for the next call to find.",
+      "source": "04c862f60d35"
+    },
+    "code-life.n-client.text": {
+      "text": "1. Start, 2. initialize: in `legacy` mode `initialize` goes first, then `notifications/initialized`.",
+      "source": "6270e50196b7"
+    },
+    "code-life.n-timeout.text": {
+      "text": "Every request waits at most 5 seconds; `cache=None` makes every `tools/list` a real request.",
+      "source": "456dceccd6e9"
+    },
+    "code-life.n-list.text": {
+      "text": "3. Discovery: a real `tools/list`.",
+      "source": "47ef74b88f5c"
+    },
+    "code-life.n-info.text": {
+      "text": "A real call after the handshake, returning the process id and variable names, before the connection counts.",
+      "source": "23c3d3b3f2f8"
+    },
+    "code-life.n-started-call.text": {
+      "text": "Hands the client to the caller; other tasks then use it for calls.",
+      "source": "159c81556a5a"
+    },
+    "code-life.n-wait.text": {
+      "text": "4. Operate: this task waits here until someone closes the connection.",
+      "source": "5224e48decbb"
+    },
+    "code-life.n-except.text": {
+      "text": "A failure before the handshake goes to the caller, handled as an MCPError.",
+      "source": "29cdb1d48d27"
+    },
+    "code-life.n-closed.text": {
+      "text": "5. Close: leaving the block, the SDK closes standard input and terminates the process if needed; by this line the process has been reaped.",
+      "source": "f40ac084fcc5"
+    },
+    "code-life.n-reconnect.text": {
+      "text": "Reconnect: close the old one, then create new ones within the limit.",
+      "source": "4ca096ccb10e"
+    },
+    "code-life.n-old.text": {
+      "text": "The old client is never reused: closing it reaps the dead process.",
+      "source": "111189547fe4"
+    },
+    "code-life.n-limit.text": {
+      "text": "The limit holds for the whole run: `attempts` never resets.",
+      "source": "8fb8ec531f6d"
+    },
+    "code-life.n-backoff.text": {
+      "text": "Backoff: wait 0.2, 0.5, then 1.0 seconds before trying.",
+      "source": "07d2b0d69b8b"
+    },
+    "code-life.n-fault.text": {
+      "text": "Fault injection: the first restarts deliberately start a faulty process.",
+      "source": "b7de24ba7017"
+    },
+    "code-life.n-connect.text": {
+      "text": "Every attempt is a fresh process, handshake and discovery.",
+      "source": "5308b6d23a95"
+    },
+    "code-life.n-failed.text": {
+      "text": "A failure is recorded as `failed` with its error code, then the next attempt follows.",
+      "source": "3d7a0b8da55a"
+    },
+    "code-life.n-probe.text": {
+      "text": "A finished handshake is not enough: only a passing real read-only call counts as connected.",
+      "source": "0f46363e681b"
+    },
+    "code-life.n-gaveup.text": {
+      "text": "Attempts used up: give up, and this service's tools are no longer sent.",
+      "source": "0ae0b2c49473"
+    },
+    "code-call.n-call.text": {
+      "text": "Every call is sent from here, the model's and the runner's alike, through one gate.",
+      "source": "bed6c434542c"
+    },
+    "code-call.n-route-get.text": {
+      "text": "No route means not registered.",
+      "source": "e03ff2663c78"
+    },
+    "code-call.n-not-routable.text": {
+      "text": "Refusal happens before sending: the server receives nothing.",
+      "source": "54a354a9b357"
+    },
+    "code-call.n-state.text": {
+      "text": "1. Service unavailable: lost or given up, so nothing is sent.",
+      "source": "b860a04bffb9"
+    },
+    "code-call.n-quarantine.text": {
+      "text": "Definition changed and not yet confirmed: not sent.",
+      "source": "253ba4e07cc8"
+    },
+    "code-call.n-write.text": {
+      "text": "2. A write consults the ledger first.",
+      "source": "ccf0ed7bd488"
+    },
+    "code-call.n-key.text": {
+      "text": "A write is identified by its tool name and arguments.",
+      "source": "a6cb889fde16"
+    },
+    "code-call.n-earlier.text": {
+      "text": "The same write already confirmed or of unknown outcome is not sent again.",
+      "source": "92a9a2c651f7"
+    },
+    "code-call.n-not-repeated.text": {
+      "text": "Refuses to resend and says what state it was in.",
+      "source": "6a6c331a37b6"
+    },
+    "code-call.n-entry.text": {
+      "text": "Recorded before sending, with the state sent.",
+      "source": "adb0a7b27acc"
+    },
+    "code-call.n-call-tool.text": {
+      "text": "The real `tools/call`, using the name on the server.",
+      "source": "a06158670ea0"
+    },
+    "code-call.n-mcperror.text": {
+      "text": "3. No reply: the connection is lost and the write's outcome is unknown.",
+      "source": "4bc305768d73"
+    },
+    "code-call.n-lost.text": {
+      "text": "Marks the connection lost; the reconnect logic takes over from here.",
+      "source": "f49844e82c0d"
+    },
+    "code-call.n-unknown.text": {
+      "text": "Neither a success nor a failure.",
+      "source": "66b384193875"
+    },
+    "code-call.n-raise-lost.text": {
+      "text": "Turned into a structured error for the caller: the model sees a text message, not an MCPError.",
+      "source": "307751d511d7"
+    },
+    "code-call.n-confirmed.text": {
+      "text": "4. A reply: `isError` true means the service refused; only a clean result confirms the write.",
+      "source": "505c8cc31392"
+    },
+    "code-call.n-refused.text": {
+      "text": "The tool said no: the connection is fine, and the message goes to the model to correct.",
+      "source": "07ad53c2cdc2"
+    },
+    "code-call.n-return.text": {
+      "text": "On success the structured result is preferred.",
+      "source": "c723dcdded06"
+    },
+    "code-decision.title": {
+      "text": "Why do disconnects, reconnects and rechecks belong to the host program rather than the model?",
+      "source": "8f5da70e39b8"
+    },
+    "code-decision.chosen": {
+      "text": "The host holds each service's connection, the write record, the reconnect count and the definition baseline, and the model sees only the tools usable now and structured errors. Reconnects are bounded, writes are not resent automatically, a changed definition is held first: these rules live in `Host`, each step can be checked in `lesson.service_state` and `tool_result`, and none relies on the model behaving.",
+      "source": "ebd1510bb3da"
+    },
+    "code-decision.session-group.title": {
+      "text": "Merge the services with the SDK's `ClientSessionGroup`",
+      "source": "f8da2c15003f"
+    },
+    "code-decision.session-group.why_not": {
+      "text": "It merges by tool name, raises on a clash, and accepts a hook to add prefixes; this comes from reading its source and was not run in this lesson. A hand-written route table is clearer: every registration and read or write classification sits in `ServiceSpec`, and permissions hang in the same place.",
+      "source": "1ccf449f13dc"
+    },
+    "code-decision.model-retries.title": {
+      "text": "Let the model decide whether to retry after a disconnect",
+      "source": "b81261a46846"
+    },
+    "code-decision.model-retries.why_not": {
+      "text": "The model cannot see processes, cannot remember the state of each write, and will not stop by itself because it has already retried twice. Counts, states and limits are the code's job.",
+      "source": "8e4458cbd778"
+    },
+    "code-decision.auto-resend.title": {
+      "text": "Automatically resend failed writes after a reconnect",
+      "source": "7fde15b9b654"
+    },
+    "code-decision.auto-resend.why_not": {
+      "text": "A write of unknown outcome may already have taken effect and a resend would duplicate it; resending a confirmed write duplicates it too in a durable service. Without an idempotency key, nothing is resent and a person checks.",
+      "source": "fad5fc4f43d9"
+    },
+    "code-decision.orchestrator-restart.title": {
+      "text": "Leave it to a container orchestrator's restart policy",
+      "source": "8d9ab0d7ab67"
+    },
+    "code-decision.orchestrator-restart.why_not": {
+      "text": "An orchestrator can bring the process back, but it will not redo the handshake, compare tool definitions, or know which write's outcome is unknown. Restarting a process and restoring a connection are two layers, and the book's `docker-compose.yml` does only the first.",
+      "source": "020e1f5a937e"
+    },
+    "lifecycle-gates.title": {
+      "text": "Two services: handshake, names and permissions",
+      "source": "6cb17193cb96"
+    },
+    "lifecycle-gates.hypothesis": {
+      "text": "Each service completes one handshake; the same-named `search` becomes two tools through the service prefix; discovery grants no permission: a bare name and an unregistered tool are refused, a write runs only when this run allows it; and no process is left after closing.",
+      "source": "41226b4664a0"
+    },
+    "lifecycle-gates.readonly.label": {
+      "text": "Read-only (default)",
+      "source": "7c05363bbaca"
+    },
+    "lifecycle-gates.handshake.text": {
+      "text": "Each service's handshake reply: protocol version, `serverInfo` and the `tools` capability.",
+      "source": "08b83bfd7b06"
+    },
+    "lifecycle-gates.listed.text": {
+      "text": "The loan desk's `tools/list` reply: four tools, `purge_loans` among them.",
+      "source": "e3537dda2650"
+    },
+    "lifecycle-gates.prefixed.text": {
+      "text": "In the report the same-named `search` became two names.",
+      "source": "1d0db413a105"
+    },
+    "lifecycle-gates.bare.text": {
+      "text": "The first call the host refused: `search` without a prefix.",
+      "source": "5c2cf523e8a5"
+    },
+    "lifecycle-gates.write-gate.text": {
+      "text": "The write check: this run does not allow writes, so the write is refused; turn `allow_writes` on and run again, and the result flips.",
+      "source": "cf85451c9b52"
+    },
+    "lifecycle-gates.no-secret.text": {
+      "text": "No secret appears among the variable names the server processes saw.",
+      "source": "c1aedf308d41"
+    },
+    "lifecycle-gates.reaped.text": {
+      "text": "After closing, the process ids are checked: processes left.",
+      "source": "f25693678636"
+    },
+    "lifecycle-gates.guide.0.text": {
+      "text": "The runner starts two separate server processes, and every JSON-RPC message is recorded as `lesson.mcp_message`. Start with the handshake.",
+      "source": "a277cddb2e89"
+    },
+    "lifecycle-gates.guide.1.text": {
+      "text": "The handshake reply holds the negotiated protocol version, and `listChanged` of the `tools` capability is false.",
+      "source": "b2a263a3b527"
+    },
+    "lifecycle-gates.guide.2.text": {
+      "text": "The loan desk lists four tools, including `purge_loans`, which the host will not register.",
+      "source": "447e79d15168"
+    },
+    "lifecycle-gates.guide.3.text": {
+      "text": "Both services have `search`; in the report table they are `catalog__search` and `loans__search`.",
+      "source": "bfe01812d366"
+    },
+    "lifecycle-gates.guide.4.text": {
+      "text": "Three calls beyond permission are refused at the host's layer: look at the one without a prefix first.",
+      "source": "8b50ce507d2a"
+    },
+    "lifecycle-gates.guide.5.text": {
+      "text": "The write item compares the result with whether this run allows writes; turn `allow_writes` on and run again, and the write executes while `purge_loans` is still refused.",
+      "source": "d5d4645a5974"
+    },
+    "lifecycle-gates.guide.6.text": {
+      "text": "The server processes got only safe variable names, no keys.",
+      "source": "4bd56283b297"
+    },
+    "lifecycle-gates.guide.7.text": {
+      "text": "Finally the connections are closed and the process ids are really checked.",
+      "source": "4c2fda298285"
+    },
+    "lifecycle-gates.conclusion.proves.0": {
+      "text": "In this run two separate processes each completed a handshake, the same-named tools became two through the prefix, and the refused calls sent no message to any server; after closing, every server process that completed a handshake was gone.",
+      "source": "9dcb0fcf185d"
+    },
+    "lifecycle-gates.conclusion.proves.1": {
+      "text": "The write gate's result agrees with `allow_writes`: this run is read-only, the write was refused, and the server never received `register_loan`.",
+      "source": "d722218367a1"
+    },
+    "lifecycle-gates.conclusion.does_not_prove.0": {
+      "text": "Both services were written for this lesson; trusting them says nothing about other people's servers, and instructions in a tool description still enter the model's context.",
+      "source": "b7d5a73da20b"
+    },
+    "lifecycle-gates.conclusion.does_not_prove.1": {
+      "text": "The probe used one read-only call and cannot prove that the write tool works; the process check also covers only processes that completed a handshake.",
+      "source": "80c81aa318d9"
+    },
+    "crash-recovery.title": {
+      "text": "Disconnect: the write's outcome is unknown, and the data is gone after the reconnect",
+      "source": "280cba2b947e"
+    },
+    "crash-recovery.hypothesis": {
+      "text": "After the loan desk's process is killed the host finds out only at the next call and records that write as outcome unknown; reconnecting is bounded, the new process that comes back is empty, and no confirmed or unknown-outcome write is resent automatically; when the attempts run out the host gives up and the run continues.",
+      "source": "c0521e3e3390"
+    },
+    "crash-recovery.recover.label": {
+      "text": "The second reconnect works",
+      "source": "0e8f0c6754b5"
+    },
+    "crash-recovery.giveup.label": {
+      "text": "Both reconnects fail and the host gives up",
+      "source": "4bb2e6ba3481"
+    },
+    "crash-recovery.model.label": {
+      "text": "A model borrows through two services, with a disconnect midway",
+      "source": "eb00931a53fa"
+    },
+    "crash-recovery.killed.text": {
+      "text": "The runner's note that the process was killed, with fault injection as the source.",
+      "source": "bbc73a82343d"
+    },
+    "crash-recovery.lost.text": {
+      "text": "The host's first signal: code -32000, `Connection closed`.",
+      "source": "327f735af6cf"
+    },
+    "crash-recovery.unknown-write.text": {
+      "text": "The result of that same write: `ConnectionLost`, not a success.",
+      "source": "5f2b7eb77b99"
+    },
+    "crash-recovery.failed.text": {
+      "text": "The first reconnect fails: the process exits as soon as it starts.",
+      "source": "5ec5afc525ef"
+    },
+    "crash-recovery.memory-gone.text": {
+      "text": "The loan lookup after the reconnect: `count` is 0, the new process's memory is empty.",
+      "source": "d20ca9f5f0ec"
+    },
+    "crash-recovery.no-replay.text": {
+      "text": "No write is resent after recovery: each is stopped by the write record.",
+      "source": "9b0d20fc740d"
+    },
+    "crash-recovery.gave-up.text": {
+      "text": "The host gives up: the state is recorded as gave up, with the limit stated.",
+      "source": "5ccf11d1b402"
+    },
+    "crash-recovery.model-view.text": {
+      "text": "What the model gets when it calls `loans__search` during the disconnect.",
+      "source": "fc7abf08c581"
+    },
+    "crash-recovery.guide.0.text": {
+      "text": "All three arms use the same loan desk: one loan is registered, and then the runner kills its process.",
+      "source": "e53c9404c02a"
+    },
+    "crash-recovery.guide.1.text": {
+      "text": "The runner notes that the process was killed; the host does not know yet.",
+      "source": "8f0804e497e5"
+    },
+    "crash-recovery.guide.2.text": {
+      "text": "The next call gets no reply, the client raises -32000, and only then does the host mark the service lost.",
+      "source": "d5183cf69c86"
+    },
+    "crash-recovery.guide.3.text": {
+      "text": "In the first two arms that write is recorded as `ConnectionLost`: outcome unknown, not counted as a success. In the model arm the write was confirmed before the process was killed, and the disconnect lands on the following `loans__search`.",
+      "source": "19e249d4858f"
+    },
+    "crash-recovery.guide.4.text": {
+      "text": "In the \"second reconnect succeeds\" arm: the process of the first reconnect exits at once, the host records the code, and tries a second time.",
+      "source": "6cf321cfa33d"
+    },
+    "crash-recovery.guide.5.text": {
+      "text": "The second one connects, but the new process is empty: the lookup finds 0 loans.",
+      "source": "fa893c3d7d85"
+    },
+    "crash-recovery.guide.6.text": {
+      "text": "In the \"second reconnect succeeds\" arm: two writes submitted again after recovery are both stopped by the write record and not resent.",
+      "source": "ecf060b1751d"
+    },
+    "crash-recovery.guide.7.text": {
+      "text": "Switch to the arm where both reconnects fail: the attempts run out, the host gives up, and the run still ends.",
+      "source": "0dfca9fb70ec"
+    },
+    "crash-recovery.guide.8.text": {
+      "text": "In the third arm a model is calling: it gets the same disconnect result, and the reconnect happens between two rounds.",
+      "source": "d26f053ecfa7"
+    },
+    "crash-recovery.conclusion.proves.0": {
+      "text": "In this run, in the first two arms the first write after the process was killed got no reply and the host recorded it as outcome unknown; reconnecting stayed within the limit, the new process could not find the confirmed loan, no write was resent after recovery, and when the attempts ran out the host gave up and carried on. In the model arm the write was confirmed before the kill, the disconnect hit a read, one reconnect succeeded, and the lookup after it also returned 0 loans.",
+      "source": "249f1bebf519"
+    },
+    "crash-recovery.conclusion.does_not_prove.0": {
+      "text": "The process was killed with `SIGKILL`; real crashes, network breaks or a stuck server behave differently, and the reconnect interval and count were checked only under this setting.",
+      "source": "0e18bdb0c1d3"
+    },
+    "crash-recovery.conclusion.does_not_prove.1": {
+      "text": "In offline test mode the model arm's decisions and answer come from a fixed script, which says nothing about whether any real model would report a disconnect honestly. A real model may retry the read after the disconnect and use up the 4 rounds before answering (both real runs of this lesson did).",
+      "source": "4f49c2d7d5c3"
+    },
+    "definition-change.title": {
+      "text": "The returning service has changed its definition",
+      "source": "34a2f0bda7d0"
+    },
+    "definition-change.hypothesis": {
+      "text": "A restarted process may not answer the handshake, and the host retries after the full read timeout; if the service that connects the second time changed a registered tool's definition, the host notices and holds that tool, a new tool gets no permission by being discovered, and when nothing changed the recheck comes back empty.",
+      "source": "087a6b75e7c5"
+    },
+    "definition-change.changed.label": {
+      "text": "The second connection reaches v2",
+      "source": "a512293f0707"
+    },
+    "definition-change.unchanged.label": {
+      "text": "The service that returns is still v1",
+      "source": "b10ac88f58f2"
+    },
+    "definition-change.timeout.text": {
+      "text": "The first restart does not answer the handshake: read timeout, code -32001.",
+      "source": "8d6f999af53a"
+    },
+    "definition-change.new-schema.text": {
+      "text": "The `tools/list` after the reconnect: the new Schema of `register_loan`.",
+      "source": "c30ac5e4addc"
+    },
+    "definition-change.recheck.text": {
+      "text": "The recheck result: changed, added and held tools.",
+      "source": "78e6d6f226e4"
+    },
+    "definition-change.held.text": {
+      "text": "A write submitted after recovery: `ToolChanged`, never sent to the server.",
+      "source": "26b579abb95d"
+    },
+    "definition-change.rechecked.text": {
+      "text": "The report check that tool definitions were confirmed again, with the held tools.",
+      "source": "f62895d8210f"
+    },
+    "definition-change.reaped.text": {
+      "text": "The process check at closing, after two restarts.",
+      "source": "ac5c939babbe"
+    },
+    "definition-change.guide.0.text": {
+      "text": "This restart differs in two ways: the first process does not answer, and the second service that comes back is a new version.",
+      "source": "32f2a3779264"
+    },
+    "definition-change.guide.1.text": {
+      "text": "The process is alive but does not read standard input, the host waits the full read timeout, and the code is -32001, not -32000.",
+      "source": "076d7a73cad4"
+    },
+    "definition-change.guide.2.text": {
+      "text": "After the second connection `tools/list` runs again and `register_loan` has a required `due_days`.",
+      "source": "182813fb179b"
+    },
+    "definition-change.guide.3.text": {
+      "text": "The host compares fingerprints: `register_loan` changed, `renew_loan` is new, and the former is held.",
+      "source": "0a0ea88f0e03"
+    },
+    "definition-change.guide.4.text": {
+      "text": "When the write is submitted again, `call` refuses before sending, with the error `ToolChanged`.",
+      "source": "53d1aa69bd09"
+    },
+    "definition-change.guide.5.text": {
+      "text": "Compare the arm where v1 returns: the same check, with changed and held both empty.",
+      "source": "df9489d6b004"
+    },
+    "definition-change.guide.6.text": {
+      "text": "After two restarts every process that completed a handshake was reaped at closing.",
+      "source": "17f252102539"
+    },
+    "definition-change.conclusion.proves.0": {
+      "text": "In this run a reconnect that waited out the read timeout was recorded as failed, the definitions after the reconnect were compared one by one with the baseline confirmed the first time, the changed registered tool was held and never sent to the server, and the new tool got no route.",
+      "source": "5d7d1d33ee81"
+    },
+    "definition-change.conclusion.does_not_prove.0": {
+      "text": "A fingerprint says only that the definition differs from the one confirmed last time, not whether the new one is good or bad, and it cannot see behavior changes.",
+      "source": "e21cde13c8a8"
+    },
+    "definition-change.conclusion.does_not_prove.1": {
+      "text": "v2 is a version written on purpose for this lesson; real servers may change in descriptions, annotations or behavior the Schema does not list.",
+      "source": "94a0fd51aa0a"
+    },
+    "inputs.task.label": {
+      "text": "Task",
+      "source": "5253040db864"
+    },
+    "inputs.task.help": {
+      "text": "Each exercise is preset; changing it to agent needs a model connection.",
+      "source": "b55486e1678a"
+    },
+    "inputs.task.options.lifecycle.label": {
+      "text": "Handshake, names and permissions",
+      "source": "c31cb318bbdb"
+    },
+    "inputs.task.options.crash.label": {
+      "text": "Disconnects and reconnects",
+      "source": "f3edbf422d9d"
+    },
+    "inputs.task.options.agent.label": {
+      "text": "A model calls through two services",
+      "source": "cb6ebd31b13e"
+    },
+    "inputs.allow_writes.label": {
+      "text": "Allow writes",
+      "source": "c5ba2df3a6fb"
+    },
+    "inputs.allow_writes.help": {
+      "text": "When off, `register_loan` is not in the allowlist and not offered to the model; when on it is still bound by the write record and the reconnect rules.",
+      "source": "daa97df8af2b"
+    },
+    "inputs.restart_fault.label": {
+      "text": "Restart fault",
+      "source": "5d9591167df5"
+    },
+    "inputs.restart_fault.help": {
+      "text": "The fault injected into the first restarts: the process exits as soon as it starts, or stays alive without answering the handshake.",
+      "source": "aef8d972ea0a"
+    },
+    "inputs.restart_fault.options.exit-on-start.label": {
+      "text": "Exit as soon as it starts (-32000)",
+      "source": "91fec5c0ca96"
+    },
+    "inputs.restart_fault.options.hang-on-start.label": {
+      "text": "Never answer the handshake (read timeout -32001)",
+      "source": "5b2f023e4b40"
+    },
+    "inputs.failing_restarts.label": {
+      "text": "Faulty restarts",
+      "source": "a1407d8669f0"
+    },
+    "inputs.failing_restarts.help": {
+      "text": "How many of the first restarts are faulty, 0 to 3; above the reconnect limit, the host gives up.",
+      "source": "79916b47459c"
+    },
+    "inputs.max_reconnects.label": {
+      "text": "Reconnect limit",
+      "source": "556e18e11495"
+    },
+    "inputs.max_reconnects.help": {
+      "text": "How many times each service may reconnect in the whole run, 0 to 3; 0 means giving up as soon as it drops.",
+      "source": "7bf793616ff7"
+    },
+    "inputs.restart_variant.label": {
+      "text": "Version after the restart",
+      "source": "4f4565824db4"
+    },
+    "inputs.restart_variant.help": {
+      "text": "In v2, `register_loan` has one more required argument and a `renew_loan` appears.",
+      "source": "fed302b359c2"
+    },
+    "inputs.restart_variant.options.v1.label": {
+      "text": "v1 (definitions unchanged)",
+      "source": "dd356739f4b9"
+    },
+    "inputs.restart_variant.options.v2.label": {
+      "text": "v2 (definitions changed)",
+      "source": "cd1f00a9ee7d"
+    },
+    "inputs.query.label": {
+      "text": "Search term",
+      "source": "c03bdf14815c"
+    },
+    "inputs.query.help": {
+      "text": "The keyword for the catalog search, which also decides which book is registered.",
+      "source": "24f8570bd7db"
+    },
+    "inputs.member_id.label": {
+      "text": "Member id",
+      "source": "607df9af474a"
+    },
+    "inputs.member_id.help": {
+      "text": "The member for registering and looking up loans.",
+      "source": "e1b39e2288cf"
+    },
+    "inputs.member_id.options.M-07.label": {
+      "text": "M-07",
+      "source": "f403d97b8ff2"
+    },
+    "inputs.member_id.options.M-12.label": {
+      "text": "M-12",
+      "source": "1ac12370818e"
+    },
+    "quiz.q1.prompt": {
+      "text": "Both servers answer with the `tools` capability `{\"listChanged\": false}`. What does that mean for the host?",
+      "source": "01aa163164fc"
+    },
+    "quiz.q1.a.text": {
+      "text": "The server will not notify it when tools change; to know, the host has to run `tools/list` again itself",
+      "source": "93971200b8f8"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. That is why the host rechecks actively after a reconnect, and not from a cache.",
+      "source": "426839201bab"
+    },
+    "quiz.q1.b.text": {
+      "text": "The server's tools never change",
+      "source": "209068a0d3b3"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. A false `listChanged` means no notification, not no change; v2 is the example.",
+      "source": "cd5c734f3a61"
+    },
+    "quiz.q1.c.text": {
+      "text": "The host may skip the handshake",
+      "source": "af9117ab6f68"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. Capabilities are negotiated in the handshake, and skipping it loses this information.",
+      "source": "a956c7c95973"
+    },
+    "quiz.q1.explanation": {
+      "text": "`listChanged` is a negotiated promise: when it is false, changes can only be found by asking.",
+      "source": "1c4d30c45234"
+    },
+    "quiz.q2.prompt": {
+      "text": "During reconnecting the host sees -32000 and later -32001. What is the difference?",
+      "source": "2d2d4c3ceee7"
+    },
+    "quiz.q2.a.text": {
+      "text": "-32000: the connection is closed and the process is gone; -32001: the process did not respond and the read timeout ran out",
+      "source": "40bb359e4c2f"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. The first fails at once, the second waits the full 5 seconds.",
+      "source": "6ba9d64dda86"
+    },
+    "quiz.q2.b.text": {
+      "text": "-32000 is a business error and -32001 a protocol error",
+      "source": "557400b2abc9"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. Both are connection-level MCPError values, and neither comes from a tool.",
+      "source": "928e6c4630db"
+    },
+    "quiz.q2.c.text": {
+      "text": "-32001 means the server has already run the request",
+      "source": "dc2d850f527b"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. A timeout says only that no reply arrived, not what the server did.",
+      "source": "b394813180eb"
+    },
+    "quiz.q2.explanation": {
+      "text": "Read the code and the message: `Connection closed` and `timed out` are two different failures.",
+      "source": "46c1cdbec7fe"
+    },
+    "quiz.q3.prompt": {
+      "text": "The `register_loan` sent during the disconnect got no reply. What is the most accurate way to record it?",
+      "source": "84cfe0b87d4d"
+    },
+    "quiz.q3.a.text": {
+      "text": "Outcome unknown: neither counted as a success nor resent automatically",
+      "source": "6527ab097e14"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. The three possibilities look identical from the client.",
+      "source": "d8ce6af80272"
+    },
+    "quiz.q3.b.text": {
+      "text": "Failed: no reply means it did not run",
+      "source": "44bbee03a8ff"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. The server may have run it, with only the reply lost.",
+      "source": "de882332edd2"
+    },
+    "quiz.q3.c.text": {
+      "text": "Succeeded: the request was already written out",
+      "source": "dc4bcdb2da03"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. Being written out does not mean being run.",
+      "source": "43472d3700b9"
+    },
+    "quiz.q3.explanation": {
+      "text": "The tool result says `ConnectionLost` and the write record says outcome unknown.",
+      "source": "1ea93808b6e2"
+    },
+    "quiz.q4.prompt": {
+      "text": "Why does the host run an availability probe after a reconnect's handshake succeeded?",
+      "source": "f107a94cd2f4"
+    },
+    "quiz.q4.a.text": {
+      "text": "A finished handshake and a live process can still leave the tools unable to answer; only a passing real read-only call counts as connected",
+      "source": "ebd86bbd8a68"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. A probe shows the tools work, not that a process exists.",
+      "source": "042eeb62b2db"
+    },
+    "quiz.q4.b.text": {
+      "text": "To let the server know the host is back",
+      "source": "c1fb4314bfa1"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. The server does not care who is back; it just receives requests.",
+      "source": "162a9285909b"
+    },
+    "quiz.q4.c.text": {
+      "text": "To refresh the cache of tool definitions",
+      "source": "2b5a8678f619"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. This lesson's client uses `cache=None`, so there is no cache to refresh.",
+      "source": "67bf60e03467"
+    },
+    "quiz.q4.explanation": {
+      "text": "The health check in the book's `docker-compose.yml` only proves Python can run, a perfect counter-example.",
+      "source": "cae60a85320a"
+    },
+    "quiz.q5.prompt": {
+      "text": "`renew_loan` appears for the first time after the reconnect. Did the host offer it to the model?",
+      "source": "e128aa41883c"
+    },
+    "quiz.q5.a.text": {
+      "text": "No: it is not registered and so has no route",
+      "source": "a54effb42d4c"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. A new tool gets permission only when someone registers it.",
+      "source": "ed96bea26c3d"
+    },
+    "quiz.q5.b.text": {
+      "text": "Yes: every tool the server lists is usable",
+      "source": "6a4780e9f12b"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. Discovery is not authorization.",
+      "source": "bb0e8204176c"
+    },
+    "quiz.q5.c.text": {
+      "text": "Yes, but marked as held",
+      "source": "b4d0f4a1c233"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. Holding applies only to registered tools whose definition changed.",
+      "source": "f1f57a3aceb9"
+    },
+    "quiz.q5.explanation": {
+      "text": "Check whether `added` and `quarantined` in the recheck result contain it.",
+      "source": "16702956825c"
+    },
+    "quiz.q6.prompt": {
+      "text": "`max_reconnects` is 2 and both reconnects failed. What happens next?",
+      "source": "5d194e491063"
+    },
+    "quiz.q6.a.text": {
+      "text": "The host gives up: the loan desk's tools are no longer sent, and the run continues on the catalog",
+      "source": "f5db535dce8b"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. Giving up is an explicit state, not a hang.",
+      "source": "828d797cc340"
+    },
+    "quiz.q6.b.text": {
+      "text": "It keeps reconnecting until it succeeds",
+      "source": "f603f2fd71b5"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. The limit holds for the whole run and stops when used up.",
+      "source": "8c1dc7b455aa"
+    },
+    "quiz.q6.c.text": {
+      "text": "The whole run fails and returns no result",
+      "source": "d5d5a7ad815a"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The run records that service as given up and ends normally.",
+      "source": "6173b53e7b02"
+    },
+    "quiz.q6.explanation": {
+      "text": "Look for `gave_up` in the events, and for the `ServiceUnavailable` the loan tools return afterwards.",
+      "source": "455bc12719ba"
+    },
+    "quiz.q7.prompt": {
+      "text": "The report shows `processes_left` as 0. Which processes does it not cover?",
+      "source": "3c0324549eaf"
+    },
+    "quiz.q7.a.text": {
+      "text": "Processes whose handshake did not succeed and that have no recorded process id",
+      "source": "81af58588afd"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. The SDK reaps them, and the lesson's tests additionally scan `/proc` on Linux.",
+      "source": "e30a4c3e9d98"
+    },
+    "quiz.q7.b.text": {
+      "text": "The catalog service's process",
+      "source": "c1575349d924"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. Both services that completed a handshake are on the list.",
+      "source": "d2b024f335d1"
+    },
+    "quiz.q7.c.text": {
+      "text": "The loan desk's new process after the reconnect",
+      "source": "be06c97df49d"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. Every process id that completed a handshake was recorded in `pids`.",
+      "source": "776e12a75f59"
+    },
+    "quiz.q7.explanation": {
+      "text": "When you meet a number, ask about its scope first.",
+      "source": "18e43b6a4b50"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"The loan desk crashes: the second reconnect works\" and find the event where the host first records the loan desk as connection lost.",
+      "source": "2ac6b614540f"
+    },
+    "check-hunt.explanation": {
+      "text": "It is a `lesson.service_state` whose `state` is `lost`, `error_code` is -32000 and message is `Connection closed`. Before it comes the runner's `stopped`, after it `reconnecting`. Note that `stopped` is a fact the runner knows, while `lost` is what the host learned from a failed call.",
+      "source": "290a61284be1"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and this lesson's source, and tick only what you have done.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I counted the `lesson.mcp_message` events in the first experiment and can say how many each service has and why the refused calls have none.",
+      "source": "c05617a43e9b"
+    },
+    "check-points.item-2.text": {
+      "text": "In the disconnect experiment I found `stopped`, `lost`, `failed` and the successful reconnect, and can say who recorded each.",
+      "source": "971de7f71d04"
+    },
+    "check-points.item-3.text": {
+      "text": "I saw the loan lookup return 0 after the reconnect, and saw that neither write was resent after recovery.",
+      "source": "7dfee46fe15a"
+    },
+    "check-points.item-4.text": {
+      "text": "I changed `restart_variant` and saw the changed definition held and the new tool without a route.",
+      "source": "a1f600ea7314"
+    },
+    "check-points.item-5.text": {
+      "text": "I can say what the processes-left check covers and what it does not.",
+      "source": "aa4adf47c770"
+    },
+    "code_notes.qualified_name.note": {
+      "text": "Builds the service-prefixed tool name and checks it against the model API's function-name alphabet.",
+      "source": "33dd543984c2"
+    },
+    "code_notes.build_routes.note": {
+      "text": "Builds the route table from the registration, one route per registered tool; a clash is an error.",
+      "source": "924a6f5127f1"
+    },
+    "code_notes.fingerprint.note": {
+      "text": "The first 12 hex digits of a hash of tool name, description and input Schema, used to spot definition changes.",
+      "source": "d7ccb4962b69"
+    },
+    "code_notes.quarantined.note": {
+      "text": "Registered tools whose definition changed after a reconnect: not called and not offered to the model until confirmed.",
+      "source": "36c496a95340"
+    },
+    "code_notes._recheck.note": {
+      "text": "After a reconnect compares fingerprints one by one: changed, added, removed and held tools.",
+      "source": "fb94b1d68fde"
+    },
+    "code_notes._own.note": {
+      "text": "The task that owns one connection: handshake, discovery, waiting to close and reaping the process all happen here.",
+      "source": "a5a936736541"
+    },
+    "code_notes.connect_all.note": {
+      "text": "Connects every service and records the tools' fingerprints from first discovery as the baseline.",
+      "source": "115bd2f41990"
+    },
+    "code_notes.probe.note": {
+      "text": "Availability probe: one registered real read-only call confirms the service can work.",
+      "source": "ed94b9ffafb2"
+    },
+    "code_notes.service_info.note": {
+      "text": "A server diagnostic tool: reports the process id, loan count and received environment variable names.",
+      "source": "f665b4ebf1a7"
+    },
+    "code_notes.stop_process.note": {
+      "text": "Kills a process with no grace period to imitate a crash; used for fault injection only.",
+      "source": "588b95ed8b9d"
+    },
+    "code_notes.close_and_count.note": {
+      "text": "Closes every connection first, then checks that the processes this run started are really gone.",
+      "source": "29d8b6549bb8"
+    },
+    "code_notes.wait_gone.note": {
+      "text": "Checks process ids with signal 0, waits a few seconds at most, and returns the ids still running.",
+      "source": "a2b89a290f12"
+    },
+    "code_notes.ConnectionLost.note": {
+      "text": "The call was sent and no reply came: outcome unknown, not a success.",
+      "source": "26d3abccfdf2"
+    },
+    "code_notes.WriteNotRepeated.note": {
+      "text": "The same write is already confirmed or of unknown outcome: the host will not send it again.",
+      "source": "31bd0afa308b"
+    },
+    "code_notes.ToolChanged.note": {
+      "text": "The tool's definition changed after a reconnect; not called until confirmed.",
+      "source": "2f214bb3c47d"
+    },
+    "code_notes.ServiceSpec.note": {
+      "text": "The host's registration of one service: identifier, module, expected name, registered tools and probe call.",
+      "source": "6f4faa5d27be"
+    },
+    "code_notes.available.note": {
+      "text": "The allowlist handed to the platform: registered read tools, plus write tools when this run allows them.",
+      "source": "66a40e27433c"
+    },
+    "code_notes.model_tools.note": {
+      "text": "The tools given to the model: only those registered, allowed and on a service usable right now.",
+      "source": "71051b5ff5d6"
+    },
+    "code_notes.bridge.note": {
+      "text": "The platform calls it in a worker thread, and it sends the MCP call back to the event loop.",
+      "source": "0c3315a5cd63"
+    },
+    "code_notes.READ_TIMEOUT_SECONDS.note": {
+      "text": "The ceiling on waiting for a reply to any request, 5 seconds; a timeout is code -32001.",
+      "source": "9f7c07eb6879"
+    },
+    "code_notes.max_reconnects.note": {
+      "text": "How many times each service may reconnect in the whole run.",
+      "source": "8e9a21e2c0f6"
+    },
+    "code_notes.MAX_ROUNDS.note": {
+      "text": "The model-call limit of the agent exercise, 4.",
+      "source": "a4a23bd989d1"
+    },
+    "code_notes.lesson.service_state.note": {
+      "text": "One connection state change recorded by the host: service, state, process id, error code and so on.",
+      "source": "d0e3c4ce5434"
+    }
+  }
+}

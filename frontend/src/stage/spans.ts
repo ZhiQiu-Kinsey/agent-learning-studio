@@ -10,6 +10,10 @@ export const toolSpans = (spans: readonly StageSpan[]) =>
 export const openLlmSpan = (spans: readonly StageSpan[]) =>
   spans.find((span) => span.kind === "llm" && span.status === "open");
 
+/** The approval gate the run is paused at, if any. */
+export const openApprovalSpan = (spans: readonly StageSpan[]) =>
+  spans.find((span) => span.kind === "approval" && span.status === "open");
+
 export type ToolSpanStatus =
   "stopped" | "running" | "ok" | "failed" | "undeclared";
 

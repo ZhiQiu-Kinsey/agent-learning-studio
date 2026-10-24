@@ -1,0 +1,1466 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "MCP / DISCOVER · CALL · FAIL",
+      "source": "77dbe179908f"
+    },
+    "hero.headline": {
+      "text": "Move the search tool into its own process,",
+      "source": "02f0ccd0f2ec"
+    },
+    "hero.highlight": {
+      "text": "then discover it and call it over a protocol.",
+      "source": "18891ea8d1ad"
+    },
+    "hero.takeaway": {
+      "text": "So far every tool lived inside the agent's own code. In this lesson the official SDK turns the handbook search into an MCP server: the runner connects, lists the tools, makes real calls, and sees which layer each of four failures lands in. Finally the discovered tools go to the model, and you separate what the protocol does from what the agent decides.",
+      "source": "06c4c2474843"
+    },
+    "concepts.01-server.label": {
+      "text": "01 / SERVER",
+      "source": "90c584da3d2e"
+    },
+    "concepts.01-server.title": {
+      "text": "The tool lives in its own process",
+      "source": "9f4743ec441a"
+    },
+    "concepts.01-server.description": {
+      "text": "The Model Context Protocol is MCP for short. This lesson turns the handbook search into an MCP Server: a separate Python process that offers three tools, search_handbook, read_chunk and service_status, and knows nothing about models.",
+      "source": "7541dd3e4c16"
+    },
+    "concepts.02-client.label": {
+      "text": "02 / CLIENT",
+      "source": "9ceaa10c2ead"
+    },
+    "concepts.02-client.title": {
+      "text": "The client only connects",
+      "source": "e9d1f26a89a5"
+    },
+    "concepts.02-client.description": {
+      "text": "The MCP Client belongs to the runner: it starts the server process, exchanges JSON-RPC messages over standard input and output, lists tools, sends calls and brings results back. Every message is recorded as a lesson.mcp_message.",
+      "source": "ee675312a34c"
+    },
+    "concepts.03-discovery.label": {
+      "text": "03 / DISCOVERY",
+      "source": "d5872e24d556"
+    },
+    "concepts.03-discovery.title": {
+      "text": "Ask what exists, then call by the Schema",
+      "source": "ce67935579d5"
+    },
+    "concepts.03-discovery.description": {
+      "text": "Tool Discovery is one `tools/list` request: the server returns each tool's name, tool description and input Schema. The runner turns it into the model's tool definition unchanged, so nothing is hard-coded.",
+      "source": "11d746267425"
+    },
+    "concepts.04-layers.label": {
+      "text": "04 / TWO LAYERS",
+      "source": "798195ce87b0"
+    },
+    "concepts.04-layers.title": {
+      "text": "Two layers of failure",
+      "source": "b719588d9744"
+    },
+    "concepts.04-layers.description": {
+      "text": "When a tool refuses a call, the server still sends a result, flagged `isError: true`. When the connection is gone, the client gets no result at all and the call raises MCPError. The two show up in different places and are handled differently.",
+      "source": "9277b111f375"
+    },
+    "section-1.title": {
+      "text": "What problem MCP solves",
+      "source": "8091b93fe854"
+    },
+    "section-1.paragraphs.0": {
+      "text": "MCP turns a tool into a separate service that any client speaking the protocol can discover and call. Until now every tool was a Python function inside the agent's code: {{lesson:tool-selection}} looked functions up by name in an allowlist, {{lesson:fail-safely}} turned exceptions into structured errors. That is direct, but it ties the tool to the agent's process and code. Switch to another agent framework, or let the assistant in your editor use the same search, and you copy the tool definition and the calling code again.",
+      "source": "4d1a59709184"
+    },
+    "section-1.paragraphs.1": {
+      "text": "An analogy: calling a function directly is cooking in your own kitchen, with every pan at hand. Calling over MCP is ordering in a restaurant: you read the menu, place the order and wait for the dish; how the kitchen works is not your business. The menu is the tool list, the order is one call, the dish is the result. The point is that ordering works the same way in any restaurant: the protocol standardizes the format of the order, not the food.",
+      "source": "bed77f94cb11"
+    },
+    "section-1.paragraphs.2": {
+      "text": "This lesson's server is server.py. It reuses the BM25 search from {{lesson:keyword-retrieval}} and the handbook corpus from {{lesson:document-loading}}, and registers the search function as a tool with the official SDK's MCPServer. The runner does not import this module: python_module_server starts it as another process and talks to it through pipes. The `main` of server.py does one thing: it reads the run language and the fault argument and lets the server start reading standard input. So the events show a series of JSON-RPC messages instead of a direct call to a function.",
+      "source": "2decf9ed82a4"
+    },
+    "section-1.paragraphs.3": {
+      "text": "MCP does not make the model smarter and does not decide for the agent. It specifies three things: how to connect, how to ask which tools exist, and how to send a call and return a result. Whether to use a tool, how to fill in its arguments and when to stop are still up to the agent and the program; section four separates these in a single run. MCP also defines resources and prompt templates; this lesson uses only tools. The server in this lesson runs only on this machine; remote deployment and authentication are out of scope.",
+      "source": "ae2397bf6313"
+    },
+    "compare-direct-mcp.title": {
+      "text": "Calling a function directly vs. calling over MCP",
+      "source": "8da19c470bba"
+    },
+    "compare-direct-mcp.columns.0": {
+      "text": "Aspect",
+      "source": "5512242c5690"
+    },
+    "compare-direct-mcp.columns.1": {
+      "text": "Direct Python function",
+      "source": "b2df89fd6146"
+    },
+    "compare-direct-mcp.columns.2": {
+      "text": "Over MCP",
+      "source": "f9f6972f3db4"
+    },
+    "compare-direct-mcp.rows.0.0": {
+      "text": "Where the tool definition comes from",
+      "source": "606de8040956"
+    },
+    "compare-direct-mcp.rows.0.1": {
+      "text": "A constant in the agent's code",
+      "source": "bec4395b76ee"
+    },
+    "compare-direct-mcp.rows.0.2": {
+      "text": "Asked with `tools/list` after connecting",
+      "source": "093c3246ed95"
+    },
+    "compare-direct-mcp.rows.1.0": {
+      "text": "Who validates the arguments",
+      "source": "77547d514403"
+    },
+    "compare-direct-mcp.rows.1.1": {
+      "text": "The function signature in the agent's process",
+      "source": "0b30aabbb912"
+    },
+    "compare-direct-mcp.rows.1.2": {
+      "text": "The server, against the input Schema",
+      "source": "8f7cf69a5de5"
+    },
+    "compare-direct-mcp.rows.2.0": {
+      "text": "How the call travels",
+      "source": "eccdb4ab8048"
+    },
+    "compare-direct-mcp.rows.2.1": {
+      "text": "A direct call inside the same process",
+      "source": "296adee3c8eb"
+    },
+    "compare-direct-mcp.rows.2.2": {
+      "text": "JSON-RPC messages over standard input and output",
+      "source": "b9dbe7c50557"
+    },
+    "compare-direct-mcp.rows.3.0": {
+      "text": "What failure looks like",
+      "source": "9cd2e5d2532d"
+    },
+    "compare-direct-mcp.rows.3.1": {
+      "text": "An exception or a structured error",
+      "source": "0beabc062fc6"
+    },
+    "compare-direct-mcp.rows.3.2": {
+      "text": "A result with `isError: true`, or MCPError",
+      "source": "30b41bde50e4"
+    },
+    "compare-direct-mcp.rows.4.0": {
+      "text": "Who can reuse it",
+      "source": "48483613849b"
+    },
+    "compare-direct-mcp.rows.4.1": {
+      "text": "Only this agent",
+      "source": "81b29b4a7bfe"
+    },
+    "compare-direct-mcp.rows.4.2": {
+      "text": "Any client that speaks the protocol",
+      "source": "3f71bfb22a7b"
+    },
+    "compare-direct-mcp.rows.5.0": {
+      "text": "Extra cost",
+      "source": "09a22b3ceeee"
+    },
+    "compare-direct-mcp.rows.5.1": {
+      "text": "None",
+      "source": "f127804b9227"
+    },
+    "compare-direct-mcp.rows.5.2": {
+      "text": "A process, a connection negotiation, serialization on every call",
+      "source": "418523e35dc9"
+    },
+    "section-2.title": {
+      "text": "Client, server and transport",
+      "source": "7c854ddce7d1"
+    },
+    "section-2.paragraphs.0": {
+      "text": "A local server communicates over standard input and output: the client writes each JSON-RPC message as one line to the server process's standard input, and the server writes replies to standard output. The MCP specification calls this transport `stdio`. Keep three roles apart: the server is that separate process; the client is the object in the runner that holds the connection, one client per server; the application that owns the client and decides who gets the tools is the host, which in this lesson is the runner.",
+      "source": "cbdbcfb95bb3"
+    },
+    "section-2.paragraphs.1": {
+      "text": "After connecting, the two sides agree on a version. With version 2025-11-25 the first request is `initialize`, carrying the protocol version and capabilities the client supports; the server replies with the version it chose, its name and its capabilities; then the client sends `notifications/initialized`, a notification without an `id`, and the handshake is complete. If the handshake fails, for example when the two sides share no version, no further request is sent. Every later `tools/list` and `tools/call` has an `id`, and the reply carries the same `id`, the same idea as pairing a tool result with its call id in {{lesson:tool-selection}}.",
+      "source": "89f8d9a5a3d6"
+    },
+    "section-2.paragraphs.2": {
+      "text": "With version 2026-07-28 there is no handshake. The first request is `server/discover`, asking which versions and capabilities the server supports; after that every request states the protocol version and client information in `params._meta`, so the server need not remember who the connection is. Replies also carry cache hints such as `ttlMs` and `cacheScope`, which a client may use to cache the tool list. The lab has two discovery exercises, one per version, so you can compare the first messages of the two runs side by side.",
+      "source": "0c0f4d48cb74"
+    },
+    "section-2.paragraphs.3": {
+      "text": "These messages are recorded by the platform's recording_stdio as lesson.mcp_message, and the `captured` field says sdk_session_message. That means: this is the SDK's message object dumped with the protocol's field names. An outgoing message is serialized into its JSON line from exactly that object; an incoming one was parsed by the SDK from one line of standard output, so the original key order and whitespace are not kept. It is protocol evidence, not raw bytes. The server process's standard error is discarded because stack traces can contain local paths.",
+      "source": "e37b3931d709"
+    },
+    "deep-dive-sdk2.title": {
+      "text": "1.x tutorials online and the 2.x SDK in this lesson",
+      "source": "78552d04bc4a"
+    },
+    "deep-dive-sdk2.summary": {
+      "text": "Most tutorials target mcp 1.x; copied into 2.x they fail on the first line.",
+      "source": "9b5fc0897c19"
+    },
+    "deep-dive-sdk2.paragraphs.0": {
+      "text": "This lesson pins the 2.x line of the official Python SDK. The most common difference is the first line: 1.x tutorials write `from mcp.server.fastmcp import FastMCP`; 2.x removed that module, so the import fails with ModuleNotFoundError and a message that points to the migration guide. The new name is MCPServer, the decorator is still `@server.tool()`, and type hints and docstrings still become the input Schema and the tool description. The migration guide also notes a new default server name and transport settings moved from the constructor to `run()`.",
+      "source": "dc99a9919a74"
+    },
+    "deep-dive-sdk2.paragraphs.1": {
+      "text": "The client changed too. 1.x tutorials usually combine `stdio_client` and `ClientSession` themselves and call `initialize()` by hand. 2.x has a high-level Client: pass server parameters or a transport, and entering `async with` connects. It defaults to `mode=\"auto\"`: it sends `server/discover` to negotiate 2026-07-28 and falls back to `initialize` for older servers that only know the handshake; `mode=\"legacy\"` forces the 2025-11-25 handshake. This lesson uses both so you can compare.",
+      "source": "134753c5da6f"
+    },
+    "deep-dive-sdk2.paragraphs.2": {
+      "text": "Two behavior changes affect evidence and error handling. First, a 2.x client caches results such as `tools/list` according to the server's `ttlMs` by default; this lesson passes `cache=None` so every listing is a real request. Second, raising MCPError inside a tool function now produces a top-level JSON-RPC error, and the client call raises; 1.x wrapped it into an `isError: true` result. For errors the model should see and fix, 2.x recommends ToolError. When you read someone else's code, check which major version it pins first.",
+      "source": "d87da56b5b6a"
+    },
+    "deep-dive-sdk2.paragraphs.3": {
+      "text": "The companion servers of chapter 4 of Understanding AI Agents in Depth (深入理解 AI Agent) have also moved to MCPServer. Figure 4-1 in the book shows three steps, `server/discover`, `tools/list` and `tools/call`, which is the newer protocol version; the experiment client in the same chapter uses the low-level `ClientSession` with `stdio_client`. Both protocol versions are part of the official specification; say which one you mean and do not mix them.",
+      "source": "04c9b271ff19"
+    },
+    "predict-messages.prompt": {
+      "text": "Before you run the \"2025-11-25 handshake\" arm (in the experiment \"The course search MCP server: discovery and calls\"), guess: how many lesson.mcp_message events will this run record? Hint: one handshake, one listing, three calls.",
+      "source": "1759db9c5b3c"
+    },
+    "mq-notification.notification.prompt": {
+      "text": "In a 2025-11-25 connection, which message has no `id`?",
+      "source": "209258701b83"
+    },
+    "mq-notification.notification.a.text": {
+      "text": "`notifications/initialized`",
+      "source": "dedf26a74a1b"
+    },
+    "mq-notification.notification.a.feedback": {
+      "text": "Right. A notification expects no reply, so it carries no `id`.",
+      "source": "ce959b8e3457"
+    },
+    "mq-notification.notification.b.text": {
+      "text": "`initialize`",
+      "source": "a008cf8f7f83"
+    },
+    "mq-notification.notification.b.feedback": {
+      "text": "No. It is a request; the server replies with the same `id`.",
+      "source": "8ca0c1fdd9c2"
+    },
+    "mq-notification.notification.c.text": {
+      "text": "`tools/list`",
+      "source": "b303e87d8f00"
+    },
+    "mq-notification.notification.c.feedback": {
+      "text": "No. Listing tools is a request too, with an `id`.",
+      "source": "6acb832331f5"
+    },
+    "mq-notification.notification.explanation": {
+      "text": "A request carries an `id` and waits for a reply; a notification has no `id` and waits for nothing. Count the client's messages among the lesson.mcp_message events to see it.",
+      "source": "abd8eb558b03"
+    },
+    "section-3.title": {
+      "text": "Tool discovery and the input Schema",
+      "source": "0b4d7f13a678"
+    },
+    "section-3.paragraphs.0": {
+      "text": "The client lists the tools first, then calls by the Schema. In the `tools/list` reply every tool has `name`, `description` and `inputSchema`; this SDK also adds `outputSchema` and `annotations`. For search_handbook, `inputSchema` says `query` is a required string of at most 200 characters, and `top_k` is an integer from 1 to 5, default 3. None of this is separate configuration: the SDK reads it from the type hints and Field in the function signature. The parameter descriptions the model sees are these Field descriptions too.",
+      "source": "499c3d6ae62e"
+    },
+    "section-3.paragraphs.1": {
+      "text": "This is the same thing as the hand-written tool definition in {{lesson:tool-proposals}}, from a different source. Before, the tool definition was a constant in the agent's code, so changing the tool meant changing the agent; now it lives in the server's code and the agent asks for it on every connection. If the server raises the `top_k` limit from 5 to 10, every client sees the new limit the next time it lists tools, without code changes. Conversely, what the client gets is only a description: it can call what the server declared, nothing else.",
+      "source": "455f35f1e2ac"
+    },
+    "section-3.paragraphs.2": {
+      "text": "To call, the client sends `tools/call` with the tool name and an `arguments` object. The reply's `result` holds two things: `content`, text blocks for people and models to read, and `structuredContent`, an object shaped by `outputSchema`. This lesson's search returns `query`, `count` and `hits`, each hit with its chunk id, title, score and text. The SDK produces an `outputSchema` and a structured result only when the function's return annotation is a TypedDict or a Pydantic model; a plain `dict` gives just a JSON text. The JSON text in `content` matches `structuredContent`; it is there for older clients that read only text.",
+      "source": "edd6a636a1bf"
+    },
+    "section-3.paragraphs.3": {
+      "text": "\"No hits\" and \"error\" are different things. The exercise's second search asks \"Is there parking nearby?\"; the handbook has none of these words, so the server returns `count: 0` as usual, with `isError` false. The search ran and found nothing: that is a business answer, and the agent should reply that the handbook does not cover it, not retry or report a connection fault. The lab report checks hits and no hits separately; only when both pass were both cases treated as normal results.",
+      "source": "d3012ebfd62f"
+    },
+    "mq-schema-change.schema-change.prompt": {
+      "text": "The server raises the `top_k` limit of search_handbook from 5 to 10. What must change in this lesson's runner for the model to use the new limit?",
+      "source": "e08ed90dbf9f"
+    },
+    "mq-schema-change.schema-change.a.text": {
+      "text": "Nothing: the runner calls `tools/list` on every connection, so the converted tool definition carries the new limit",
+      "source": "57ae846b3101"
+    },
+    "mq-schema-change.schema-change.a.feedback": {
+      "text": "Right. The tool definition comes from the server; to_model_tool only copies it.",
+      "source": "554d78e8370d"
+    },
+    "mq-schema-change.schema-change.b.text": {
+      "text": "Change the limit to 10 in to_model_tool",
+      "source": "d5057cf24686"
+    },
+    "mq-schema-change.schema-change.b.feedback": {
+      "text": "No. to_model_tool sets no limit; it copies `inputSchema` as is.",
+      "source": "457ded30596a"
+    },
+    "mq-schema-change.schema-change.c.text": {
+      "text": "Tell the model in the system prompt that it may ask for 10",
+      "source": "ffb77fa825b1"
+    },
+    "mq-schema-change.schema-change.c.feedback": {
+      "text": "No. A prompt cannot change the server's validation; the server's Schema is what counts.",
+      "source": "2b6ec4f804be"
+    },
+    "mq-schema-change.schema-change.explanation": {
+      "text": "Tool discovery leaves the shape of a tool to the server's declaration, which the client reads on every connection.",
+      "source": "2ed5f161cc0a"
+    },
+    "section-4.title": {
+      "text": "Handing the discovered tools to the model",
+      "source": "a57f6c694e05"
+    },
+    "section-4.paragraphs.0": {
+      "text": "MCP only discovers and transports; which tool to pick and when to stop is still the agent's decision. The exercise \"The model picks from the discovered tools\" stacks the layers: the runner gets three tools with `tools/list`, converts each MCP tool definition into the model's tool definition with to_model_tool, keeping name, description and `inputSchema` unchanged, and sends it through `context.complete`. Each call the model proposes is checked by the platform and then sent by the MCP client.",
+      "source": "dc1e22f4d217"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Before conversion there is a filter. The runner gives the model only search_handbook and read_chunk and keeps service_status for itself: it reports a pid and environment variable names, which do not help answer library questions. That is the host's decision, written in MODEL_TOOLS; the protocol does not care. A server declaring a tool does not mean the model should see it; more tools mean more chances to pick the wrong one, as chapter 4 of Understanding AI Agents in Depth discusses under \"too many tools\". The MCP specification also recommends that applications show which tools are exposed to the model and let a person deny a call.",
+      "source": "06391f5577ab"
+    },
+    "section-4.paragraphs.2": {
+      "text": "In the events one call has two layers. The agent layer is tool_call and tool_result, paired by the call id as in earlier lessons; the protocol layer sits between them: one `tools/call` request and its reply. Each layer has its own numbering: the call id comes from the model, the JSON-RPC `id` is assigned by the client in request order. call_over_mcp bridges the two: the platform's execute_proposal calls it on a worker thread, and it hands the `tools/call` back to the MCP client on the event loop. When the server replies `isError: true` it raises McpToolError, and the platform turns that into an `ok: false` structured error for the model as usual.",
+      "source": "44fdb756c5be"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The stop conditions live in the runner too. When the model proposes no more calls, its text is the answer; after 3 model calls without an answer the runner stops and says so; when the connection drops the bridge raises McpConnectionError, no later call will be answered, and the runner stops without asking the model again. The table in the report lists five steps and who owns each: discovery and transport belong to the protocol, filtering tools and stopping to the runner, choosing the call to the model.",
+      "source": "908e9fb17a03"
+    },
+    "walkthrough.title": {
+      "text": "One tool call over MCP",
+      "source": "dd0fd1ba60db"
+    },
+    "walkthrough.description": {
+      "text": "A step-by-step account of one run of \"The model picks from the discovered tools\"; the code is simplified. The evidence of your run is in the lab's events.",
+      "source": "9f41475f9de0"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Discover",
+      "source": "10493d06b90f"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-1.title": {
+      "text": "List the tools",
+      "source": "73514e0cb178"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The MCP client sends `tools/list`; the server returns three tool definitions.",
+      "source": "33adfc999377"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.mcp_message",
+      "source": "60484aa57a38"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Filter and convert",
+      "source": "cc548b7c1752"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Give the model two tools only",
+      "source": "ef01a6824764"
+    },
+    "walkthrough.step-2.body": {
+      "text": "MODEL_TOOLS drops service_status; the rest become the model's tool definitions unchanged.",
+      "source": "bc7d65cf6c79"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "request.data.body.tools",
+      "source": "13eab0f036ef"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Decide",
+      "source": "710fba34d594"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Propose a call",
+      "source": "1d092865750f"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The model reads the question and the tool descriptions and proposes a search_handbook call with search terms.",
+      "source": "5088c415c1e7"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "response",
+      "source": "a9f4b3d22a52"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Transport",
+      "source": "a2f59f64d262"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Protocol",
+      "source": "ab2f31f30acf"
+    },
+    "walkthrough.step-4.title": {
+      "text": "The call goes over MCP",
+      "source": "405bedb06b92"
+    },
+    "walkthrough.step-4.body": {
+      "text": "After the platform checks the call proposal, call_over_mcp sends `tools/call`; the server runs the BM25 search and replies.",
+      "source": "517f21ff7107"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Stop",
+      "source": "ca4d973c0b00"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Answer or stop",
+      "source": "5dbf5e4acba0"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Next round the model proposes no call and its text is the answer; at the round limit or on a dropped connection the runner stops.",
+      "source": "2af648ad29a7"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "answer",
+      "source": "0db52f4076c0"
+    },
+    "mq-host-filter.host-filter.prompt": {
+      "text": "In the agent exercise's report only two tools were given to the model, while `tools/list` returned three. Who removed the third?",
+      "source": "ddc81a1168c9"
+    },
+    "mq-host-filter.host-filter.a.text": {
+      "text": "The runner: MODEL_TOOLS is the host's own allowlist",
+      "source": "6127527bce9a"
+    },
+    "mq-host-filter.host-filter.a.feedback": {
+      "text": "Right. The protocol lists; the host decides what reaches the model.",
+      "source": "24cc6926f47d"
+    },
+    "mq-host-filter.host-filter.b.text": {
+      "text": "The server: it never declared service_status",
+      "source": "8fc833b92ed6"
+    },
+    "mq-host-filter.host-filter.b.feedback": {
+      "text": "No. It is in the `tools/list` reply.",
+      "source": "c3e0ddd989cf"
+    },
+    "mq-host-filter.host-filter.c.text": {
+      "text": "The model: it found the tool useless and ignored it",
+      "source": "c3820d6cf40e"
+    },
+    "mq-host-filter.host-filter.c.feedback": {
+      "text": "No. The tool definitions in the request do not contain it; the model never sees it.",
+      "source": "1f4933ac1d77"
+    },
+    "mq-host-filter.host-filter.explanation": {
+      "text": "Compare `tools` in the first request with the `tools/list` reply: the filtering happens on the host's side.",
+      "source": "f971b17574fe"
+    },
+    "section-5.title": {
+      "text": "Protocol errors and business failures",
+      "source": "2d98d94f4dae"
+    },
+    "section-5.paragraphs.0": {
+      "text": "A connection failure and a tool returning an error are two different things and are recorded separately. The test is not the error text but where the failure shows up: if the server sent a result flagged `isError: true`, the protocol worked and the tool refused or could not do it; if the client got no result and the call raised MCPError, the request was never answered. This lesson calls the first a tool error and the second a protocol error, and classify sorts them by exactly that position. The specification names them protocol errors and tool execution errors.",
+      "source": "fca5cdfacdcc"
+    },
+    "section-5.paragraphs.1": {
+      "text": "The error-path exercise walks four paths. Bad arguments: `top_k` is 50, the SDK's validation against the input Schema fails, and the reply is an `isError: true` result whose text is Pydantic's validation message. Unknown tool: a call to `delete_handbook`, which the server never listed, gets a reply saying `Unknown tool`. Business error: read_chunk receives `../../local_config.py`; the server accepts only ids from its own index and answers with a ToolError message. Server crash: a second server started with `--fault exit-on-search` exits as soon as a search arrives; the client raises MCPError with code -32000, and afterwards even `tools/list` fails the same way.",
+      "source": "c703c9a271d3"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Telling the layers apart decides the next step. A tool error carries information that can be fixed and should go back to the model: the specification also recommends giving it to the model so it can retry with other arguments, as with the `top_k` case above. A protocol error means the connection or the process is broken; other arguments will not help and the model cannot fix it, so the program handles it: record, stop, or reconnect as {{lesson:mcp-lifecycle}} will show. That is why this lesson's agent stops asking the model once the connection drops.",
+      "source": "96512700245e"
+    },
+    "section-5.paragraphs.3": {
+      "text": "One point needs stating plainly. The specification lists \"unknown tool\" as a protocol error, with JSON-RPC code -32602 in its example; the SDK version this lesson pins actually returns it as an `isError: true` result. So the report's unknown-tool row shows the layering measured with this SDK version, not the only answer the specification allows, and client code must handle both. Also, a running server process does not mean the tools work: only real replies to `tools/list` and `tools/call` count as evidence of a working connection.",
+      "source": "e5ea3ac31026"
+    },
+    "deep-dive-errors.title": {
+      "text": "How the SDK layers errors (measured)",
+      "source": "2f5bd4777a8f"
+    },
+    "deep-dive-errors.summary": {
+      "text": "One call can end in several ways; the client only needs to look in two places.",
+      "source": "bafd97132ada"
+    },
+    "deep-dive-errors.paragraphs.0": {
+      "text": "These results were measured with the SDK version this lesson pins; both protocol versions behave the same. A search without hits: a normal result, `isError` false. Raising ToolError: `isError` true, text `Error executing tool <name>: ` followed by your message. Raising any other exception in a tool function, for example ValueError: `isError` is true too, but the text is only `Error executing tool <name>`; the SDK hides the details and writes them only to the server's standard error.",
+      "source": "0230d36fc463"
+    },
+    "deep-dive-errors.paragraphs.1": {
+      "text": "Arguments that break the input Schema: `isError` true, with Pydantic's full validation message, which a model can read and act on. An unknown tool name: also `isError` true, text `Unknown tool: <name>`. A read timeout: the client raises MCPError with code -32001 and a message saying the request timed out. The server process exiting mid-call: the client raises MCPError with code -32000 and the message `Connection closed`, and every later request on the same client fails the same way.",
+      "source": "af303195a0b6"
+    },
+    "deep-dive-errors.paragraphs.2": {
+      "text": "In short, the client checks two places: did the call raise MCPError, and if not, is the result's `isError` true. The first goes to the program, the second to the model. It also explains why this lesson writes business errors as ToolError instead of raising ValueError: both give `isError`, but only the first lets the model read the reason. The client in this lesson also sets a 20-second read timeout (READ_TIMEOUT_SECONDS), so no wait is unbounded.",
+      "source": "2fb93dfb0145"
+    },
+    "deep-dive-errors.paragraphs.3": {
+      "text": "The SDK hides the details of unexpected exceptions on purpose: a stack trace can contain file paths, internal variables or even pieces of credentials, and returning it as is would hand the server's internals to the model and the logs. When the caller should know the reason, write a ToolError with just the sentence they need. This lesson's recording_stdio discards the server's standard error for the same reason.",
+      "source": "b1bbfe9f2774"
+    },
+    "misconception-process.claim": {
+      "text": "The server process has started, so the tools are connected.",
+      "source": "b0162d2c509a"
+    },
+    "misconception-process.correction": {
+      "text": "A running process only shows the command started: it may still be loading, fail the handshake or exit at once. The evidence of a connection is protocol replies: a result for `initialize` or `server/discover`, tools listed by `tools/list`, a result returned by a `tools/call`. Every check in this lesson's reports comes from those replies.",
+      "source": "606a9843d3a6"
+    },
+    "mq-after-crash.after-crash.prompt": {
+      "text": "In the error-path exercise, after the server crashed the runner sent `tools/list` once more. What did the client see?",
+      "source": "e97f0376759e"
+    },
+    "mq-after-crash.after-crash.a.text": {
+      "text": "Another MCPError with code -32000: there is no server process behind this connection any more",
+      "source": "92100a3de148"
+    },
+    "mq-after-crash.after-crash.a.feedback": {
+      "text": "Right. The connection is gone; no later request gets a reply.",
+      "source": "74221e5dca8d"
+    },
+    "mq-after-crash.after-crash.b.text": {
+      "text": "A result with `isError: true`",
+      "source": "ef4ce2284029"
+    },
+    "mq-after-crash.after-crash.b.feedback": {
+      "text": "No. `isError` needs a reply from the server, and a crashed process cannot reply.",
+      "source": "ea0cc2ed1b61"
+    },
+    "mq-after-crash.after-crash.c.text": {
+      "text": "The tool list, because the SDK restarts the server automatically",
+      "source": "c0b22c774438"
+    },
+    "mq-after-crash.after-crash.c.feedback": {
+      "text": "No. The SDK does not restart it; reconnecting needs a new client.",
+      "source": "4a47045bc9a5"
+    },
+    "mq-after-crash.after-crash.explanation": {
+      "text": "A protocol error means the request went unanswered. The same client cannot be reused; reconnecting is covered in {{lesson:mcp-lifecycle}}.",
+      "source": "f2b2a1c5ef3f"
+    },
+    "section-6.title": {
+      "text": "Permission boundaries",
+      "source": "ea331460086f"
+    },
+    "section-6.paragraphs.0": {
+      "text": "What a service can do is decided by the server; the client can only ask. When read_chunk receives `../../local_config.py` it does not open that path: it looks the id up in its own index and reports a business error when nothing matches. However the client builds its arguments, it cannot exceed what the server's code allows. Likewise, tool annotations such as `readOnlyHint: true` are only the server's own claims; the specification says clients must treat them as untrusted unless the server is trusted. The Learn Claude Code tutorial keeps a permission table on the host side and never lets a tool through because of its annotations.",
+      "source": "1f15e9d62903"
+    },
+    "section-6.paragraphs.1": {
+      "text": "A local server is still a program running with your permissions, so control what it gets when it starts. python_module_server starts servers only from modules under the `lessons.` package and never builds a command string; the child inherits only the SDK's short list of safe environment variables. The discovery exercise ends with a service_status call, so the server reports which environment variable names it sees: usually HOME, PATH and the like, no keys. The lesson's tests also put a fake key into the parent process and confirm it does not reach the child.",
+      "source": "0ed3643f8484"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Compare the reference tutorials. The Hugging Face course's MCP example passes the parent's entire environment to the server child: convenient, but it hands over every key too. The companion servers of Understanding AI Agents in Depth call external services, so their deployment guide gives each server its own keys. This lesson's server needs no key at all, and model calls stay in the parent, recorded through RunContext. Putting model logic into an MCP server would open another model channel where the platform cannot see it.",
+      "source": "630ab332975d"
+    },
+    "section-6.paragraphs.3": {
+      "text": "Finally, tool results and tool descriptions are both outside text. Every chunk in a search result carries `trust: untrusted_data`, and the system prompt says chunks are material, not instructions. {{lesson:prompt-injection}} taught this rule, and moving to MCP does not enforce it for you: the protocol delivers text and does not check what it says. Before connecting a third-party server, read its tool descriptions, pin its version and grant the least privilege; the book calls this auditing whatever enters the context as untrusted input.",
+      "source": "0af3a42cc70c"
+    },
+    "deep-dive-risks.title": {
+      "text": "Three risks of third-party servers",
+      "source": "5d17564da648"
+    },
+    "deep-dive-risks.summary": {
+      "text": "Tool descriptions enter the model's context unchanged, and that is an attack surface in itself.",
+      "source": "8de8156c4849"
+    },
+    "deep-dive-risks.paragraphs.0": {
+      "text": "Chapter 4 of Understanding AI Agents in Depth sorts the risks of third-party MCP servers into three kinds. The first is tool description poisoning: the description enters the model's context with the tool definition, so a malicious server can hide instructions in it, for example asking for the contents of a private file as an argument. This lesson's to_model_tool copies descriptions word for word, which shows how direct that channel is: whatever the server writes, the model reads.",
+      "source": "78244962e78f"
+    },
+    "deep-dive-risks.paragraphs.1": {
+      "text": "The second is a replaced or tampered server: a server that was trustworthy can turn malicious in a later update, and a remote server can be compromised and change its results. The third is tool shadowing: when several servers offer tools with the same or similar names, a malicious one captures calls, arguments included, that were meant for a trusted server. Naming across several connected servers is handled in {{lesson:mcp-lifecycle}} with prefixes and a mapping table.",
+      "source": "a45ce91f46d2"
+    },
+    "deep-dive-risks.paragraphs.2": {
+      "text": "The mitigations are those of software supply-chain security: audit tool descriptions as untrusted input before connecting; pin the server version and audit again on upgrade; give each server only the least privilege it needs. In this lesson that means: server modules come only from this repository's `lessons.` package, the child gets no keys, the host decides with MODEL_TOOLS which tools the model sees, and tool results are always treated as material.",
+      "source": "85593519b0b3"
+    },
+    "deep-dive-risks.paragraphs.3": {
+      "text": "Beyond risk there is cost. The protocol does not say whether tool definitions all go into the context or load on demand, and the book notes that just 5 servers can bring tens of thousands of Token of tool definitions. With everything included, every new server makes each request longer, and more tools make wrong picks more likely. With only two tools for the model this lesson barely shows it, but the MODEL_TOOLS filter is the simplest form of exposing tools on demand.",
+      "source": "8a0f4ff5f008"
+    },
+    "mq-env.env.prompt": {
+      "text": "The environment variable names reported by service_status do not include DASHSCOPE_API_KEY, although the parent process set it. What does that show?",
+      "source": "cb16dad8deb8"
+    },
+    "mq-env.env.a.text": {
+      "text": "The server child never got the key: it inherited only the SDK's list of safe variables",
+      "source": "72c7306bb7f4"
+    },
+    "mq-env.env.a.feedback": {
+      "text": "Right. python_module_server passes the safe list, not the parent's environment.",
+      "source": "a895142e6f94"
+    },
+    "mq-env.env.b.text": {
+      "text": "The key was passed encrypted, so its name is hidden",
+      "source": "5eef57160139"
+    },
+    "mq-env.env.b.feedback": {
+      "text": "No. service_status lists the names of all variables in the process; nothing is hidden.",
+      "source": "c4811ef20297"
+    },
+    "mq-env.env.c.text": {
+      "text": "The server can read it from the parent's memory at any time",
+      "source": "598b0e3da98f"
+    },
+    "mq-env.env.c.feedback": {
+      "text": "No. The two processes have separate memory; the child sees only the environment passed to it.",
+      "source": "0ab595bac116"
+    },
+    "mq-env.env.explanation": {
+      "text": "The permission boundary starts when the child is spawned: it has only the environment variables you pass.",
+      "source": "ad9bf8dd7ed2"
+    },
+    "references.book-ch4.title": {
+      "text": "Tool ecosystem: MCP and Skill Hub; when there are too many tools — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "c159ec7297b6"
+    },
+    "references.book-docker.title": {
+      "text": "Deploying MCP servers with their own keys — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "81add88bf473"
+    },
+    "references.book-perception.title": {
+      "text": "A perception tool server written with MCPServer — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "b39a0c8fa7bd"
+    },
+    "references.ms-protocols.title": {
+      "text": "Agentic protocols: MCP hosts, clients and servers (Microsoft AI Agents for Beginners)",
+      "source": "6ac5aeee8583"
+    },
+    "references.hf-tools.title": {
+      "text": "Tools and MCP: a unified tool interface (Hugging Face Agents Course)",
+      "source": "cf50004c4048"
+    },
+    "references.hf-smolagents.title": {
+      "text": "Importing a tool collection from an MCP server (Hugging Face Agents Course)",
+      "source": "56ade24763a8"
+    },
+    "references.lcc-s14.title": {
+      "text": "MCP tools: discovery, naming and host-side permissions (Learn Claude Code)",
+      "source": "827628d5c8cf"
+    },
+    "references.spec-tools.title": {
+      "text": "MCP specification 2025-11-25: tools, the two kinds of errors and security requirements (Model Context Protocol)",
+      "source": "912c626d7abc"
+    },
+    "references.sdk-migration.title": {
+      "text": "Migrating the Python SDK from 1.x to 2.x (Model Context Protocol)",
+      "source": "2ae9c0cbe6e3"
+    },
+    "code-server.n-build.text": {
+      "text": "The server is assembled here. The same code gives tool descriptions in the run language from the start arguments; `fault` is used only by the error exercise.",
+      "source": "f10c2c0fa0ea"
+    },
+    "code-server.n-reuse.text": {
+      "text": "Reuses the chunking of the document-loading lesson and the BM25 of the keyword-retrieval lesson: imported, never changed.",
+      "source": "df7655bd0bb2"
+    },
+    "code-server.n-mcpserver.text": {
+      "text": "The high-level server class of mcp 2.x; FastMCP in 1.x tutorials was renamed to this.",
+      "source": "400213ab2e64"
+    },
+    "code-server.n-annotations.text": {
+      "text": "Tool annotations are the server's claims to clients, not enforcement: a client should not allow a tool because of them.",
+      "source": "acea40cdea5c"
+    },
+    "code-server.n-register.text": {
+      "text": "Registers the tool: its name and description appear in the `tools/list` reply.",
+      "source": "1e47b09a2ed3"
+    },
+    "code-server.n-query.text": {
+      "text": "The type hint and Field become the input Schema: a required string of at most 200 characters.",
+      "source": "3bbcec38b157"
+    },
+    "code-server.n-topk.text": {
+      "text": "`top_k` is limited to 1 to 5, default 3. Out-of-range calls are rejected by the SDK against the Schema; the function body never runs.",
+      "source": "128dd8007151"
+    },
+    "code-server.n-output.text": {
+      "text": "Because the return type is a TypedDict, the SDK publishes an `outputSchema` and the reply carries `structuredContent`.",
+      "source": "9cd0d3d0f574"
+    },
+    "code-server.n-fault.text": {
+      "text": "Fault injection: the process exits in the middle of the call and the client never gets a reply. Only the error exercise's second server starts like this.",
+      "source": "253c3720211e"
+    },
+    "code-server.n-toolerror.text": {
+      "text": "Anticipated business errors use ToolError: the message returns to the client in an `isError: true` result.",
+      "source": "1390868608b4"
+    },
+    "code-server.n-search.text": {
+      "text": "The BM25 search really runs; each hit carries its chunk id, score and text.",
+      "source": "24d8653a0a00"
+    },
+    "code-server.n-nohits.text": {
+      "text": "With no hits `count` is 0 and the result returns as usual: a business answer, not an error.",
+      "source": "0338c8267a74"
+    },
+    "code-server.n-read.text": {
+      "text": "The second tool reads by chunk id only; there is no path argument.",
+      "source": "6798ca972b94"
+    },
+    "code-server.n-lookup.text": {
+      "text": "It looks only in its own index: `../../local_config.py` is just an unknown id, and no file is opened.",
+      "source": "5c89ef8d3538"
+    },
+    "code-server.n-status.text": {
+      "text": "Reports the pid and the environment variable names it received, to check that no key got in.",
+      "source": "84c0f5263c9c"
+    },
+    "code-server.n-names.text": {
+      "text": "Names only, no values: no variable's content ever appears in the events.",
+      "source": "613fb5dacb03"
+    },
+    "code-server.n-return.text": {
+      "text": "Returns the assembled server; `main` runs it over standard input and output with `run()`.",
+      "source": "9a842430dafc"
+    },
+    "code-layers.n-attempt.text": {
+      "text": "The error exercise calls through this: a result if the server answered, the MCPError if nothing came back; neither is swallowed.",
+      "source": "3a30a655af11"
+    },
+    "code-layers.n-calltool.text": {
+      "text": "The SDK's `call_tool` sends one `tools/call` and waits for the reply with the same `id`.",
+      "source": "dec2d695de18"
+    },
+    "code-layers.n-mcperror.text": {
+      "text": "MCPError means the request got no normal result: the connection dropped, it timed out, or the server sent a JSON-RPC error.",
+      "source": "d44a89e52657"
+    },
+    "code-layers.n-classify.text": {
+      "text": "The layer comes from where the failure shows up, not from the error text.",
+      "source": "fef7d0d4bcb9"
+    },
+    "code-layers.n-protocol.text": {
+      "text": "The call raised and there is no result: a protocol error.",
+      "source": "6c2b0f367264"
+    },
+    "code-layers.n-tool.text": {
+      "text": "A result flagged `isError`: a tool error; the protocol itself worked.",
+      "source": "34e3386236d0"
+    },
+    "code-layers.n-count.text": {
+      "text": "For a normal result, look at the business: `count` 0 means no hits, still a normal result.",
+      "source": "5bc83b260136"
+    },
+    "code-layers.n-convert.text": {
+      "text": "Turns a discovered MCP tool definition into the model's tool definition.",
+      "source": "fa381a483d80"
+    },
+    "code-layers.n-params.text": {
+      "text": "`inputSchema` goes into `parameters` as is, and the description is unchanged: whatever the server writes, the model reads.",
+      "source": "58aeb8515c2b"
+    },
+    "code-layers.n-bridge.text": {
+      "text": "The platform calls this when it executes a call proposal. The slash makes the model's arguments go into `arguments` by name only; they cannot replace the first three parameters.",
+      "source": "6657e67e4007"
+    },
+    "code-layers.n-ledger.text": {
+      "text": "Records the call: the report uses it to check every call proposal went over MCP.",
+      "source": "46bac4e563d2"
+    },
+    "code-layers.n-fromthread.text": {
+      "text": "execute_proposal is synchronous and runs on a worker thread; this line hands the call back to the MCP client on the event loop.",
+      "source": "d859f4f5ec1f"
+    },
+    "code-layers.n-connection.text": {
+      "text": "No reply: it becomes a structured error, tool_result is still recorded, and the runner decides to stop.",
+      "source": "0d04227af8f2"
+    },
+    "code-layers.n-toolerr.text": {
+      "text": "A tool error: the platform turns it into `ok: false` and the message goes to the model to fix.",
+      "source": "879399779400"
+    },
+    "code-layers.n-success.text": {
+      "text": "On success the structured result is preferred, falling back to text.",
+      "source": "054bc1de13a4"
+    },
+    "code-agent.n-agent.text": {
+      "text": "The agent exercise: discovery, filtering, model decisions and execution over MCP, all on one connection.",
+      "source": "499d9cb8fc7a"
+    },
+    "code-agent.n-needs-model.text": {
+      "text": "This task needs a model; local exercises have no model connection, so it reports why.",
+      "source": "1e97deeb9b45"
+    },
+    "code-agent.n-connect.text": {
+      "text": "The connection lives until the loop ends; leaving this block, the SDK closes stdin and reaps the server process.",
+      "source": "e4a62a72b06e"
+    },
+    "code-agent.n-list.text": {
+      "text": "Tool discovery: one real `tools/list`.",
+      "source": "e46113a43e78"
+    },
+    "code-agent.n-offered.text": {
+      "text": "The host filters: only tools in MODEL_TOOLS reach the model; service_status stays with the runner.",
+      "source": "915c083f182b"
+    },
+    "code-agent.n-tools.text": {
+      "text": "Converted into the model's tool definitions, sent with every request below.",
+      "source": "1ce6e202ae74"
+    },
+    "code-agent.n-bridge-map.text": {
+      "text": "This is the allowlist handed to the platform: each name maps to a function that calls over MCP.",
+      "source": "975cbccd2291"
+    },
+    "code-agent.n-messages.text": {
+      "text": "The message history starts with the system prompt and the question, as in earlier tool loops.",
+      "source": "581a780c8453"
+    },
+    "code-agent.n-loop.text": {
+      "text": "The runner sets the round limit: at most 3 model calls.",
+      "source": "332956457990"
+    },
+    "code-agent.n-complete.text": {
+      "text": "The model call is recorded through RunContext; running it on a thread keeps the event loop free for MCP messages.",
+      "source": "c48f56e3384f"
+    },
+    "code-agent.n-answer.text": {
+      "text": "No call proposal: the model's text is the answer and the loop ends.",
+      "source": "de244c164110"
+    },
+    "code-agent.n-history.text": {
+      "text": "The assistant message with the proposals goes back into the history, so the tool messages pair up next round.",
+      "source": "5713776a6ad4"
+    },
+    "code-agent.n-execute.text": {
+      "text": "The platform checks the name and argument format, then calls the bridge; it records tool_call and tool_result itself.",
+      "source": "4effcfccecad"
+    },
+    "code-agent.n-toolmsg.text": {
+      "text": "The result goes back under the call id; successes and failures alike reach the model.",
+      "source": "13df3fe0c98e"
+    },
+    "code-agent.n-lost.text": {
+      "text": "A dropped connection is not the model's to fix; the stop reason is recorded.",
+      "source": "fdff8282e151"
+    },
+    "code-agent.n-stop.text": {
+      "text": "The program decides to stop: with the connection gone, the model is not asked again.",
+      "source": "9b37a49b6ccb"
+    },
+    "code-agent.n-return-agent.text": {
+      "text": "Only a real answer is returned as the model's text; otherwise the runner says why it stopped.",
+      "source": "5f1ad07e77b9"
+    },
+    "code-agent.fold-report.label": {
+      "text": "Platform: publish the lab report",
+      "source": "2f7b06582a58"
+    },
+    "code-decision.title": {
+      "text": "Why put the tool in a child process instead of importing it?",
+      "source": "eb67ea35d476"
+    },
+    "code-decision.chosen": {
+      "text": "The runner starts server.py as another process with python_module_server and talks to it over standard input and output. The events then hold real protocol messages, the server gets no keys, and a crash affects only that process.",
+      "source": "9e81f147430b"
+    },
+    "code-decision.in-process.title": {
+      "text": "In-process connection: pass the MCPServer object straight to Client",
+      "source": "9f2aeeab4bec"
+    },
+    "code-decision.in-process.why_not": {
+      "text": "The SDK supports it, and this lesson's tests use it to check the tools quickly; but it skips JSON-RPC encoding and the process boundary, so there is no real transport to see and no crash to show.",
+      "source": "55029dfa9518"
+    },
+    "code-decision.hand-rolled.title": {
+      "text": "Write the JSON-RPC reading and writing yourself",
+      "source": "e3d6bff5dd6e"
+    },
+    "code-decision.hand-rolled.why_not": {
+      "text": "Every byte would be visible, but the handshake, pairing and process shutdown would all be yours to write and easy to get wrong; this lesson pins the official SDK and only records messages on the transport.",
+      "source": "aa89020532fe"
+    },
+    "code-decision.http.title": {
+      "text": "Remote transport (Streamable HTTP)",
+      "source": "7e1f60c35996"
+    },
+    "code-decision.http.why_not": {
+      "text": "It needs a port and authentication, beyond one lesson; {{lesson:mcp-lifecycle}} compares the two transports.",
+      "source": "80b90a5cf8cd"
+    },
+    "discover-call.title": {
+      "text": "The course search MCP server: discovery and calls",
+      "source": "c283af6640d8"
+    },
+    "discover-call.hypothesis": {
+      "text": "The runner can connect for real to a separate server process, get tool definitions with `tools/list` and search results with `tools/call`; with no hits the server returns `count: 0` as usual, not an error. The two protocol versions differ only at the start of the connection: one shakes hands, the other begins with `server/discover`.",
+      "source": "3830e256045c"
+    },
+    "discover-call.legacy.label": {
+      "text": "2025-11-25 handshake",
+      "source": "6eccda32fef3"
+    },
+    "discover-call.discover.label": {
+      "text": "2026-07-28 discover",
+      "source": "c3df49bf3c02"
+    },
+    "discover-call.first-request.text": {
+      "text": "The first request of the connection: `initialize` in the older version, `server/discover` in the newer one.",
+      "source": "5aa7014cad32"
+    },
+    "discover-call.tools-list.text": {
+      "text": "The `tools/list` reply: the names, descriptions and input Schemas of three tools.",
+      "source": "a6a0eca690cd"
+    },
+    "discover-call.structured.text": {
+      "text": "The structured result of the first search: `count` and the matching chunks.",
+      "source": "3a8e7ffa6a9f"
+    },
+    "discover-call.miss.text": {
+      "text": "The search without hits counted as a normal result.",
+      "source": "a64405a01007"
+    },
+    "discover-call.no-secret.text": {
+      "text": "The environment variable names the server process sees, with no keys.",
+      "source": "3e6f211b7fe3"
+    },
+    "discover-call.version.text": {
+      "text": "The protocol version this connection negotiated.",
+      "source": "5150cd72775a"
+    },
+    "discover-call.guide.0.text": {
+      "text": "The runner starts a separate server process and every exchange is recorded as lesson.mcp_message. First, how the connection starts.",
+      "source": "cf65049c79a1"
+    },
+    "discover-call.guide.1.text": {
+      "text": "The first request shows the version's flow: `initialize` for the handshake version, `server/discover` for the newer one.",
+      "source": "f38ea2b24e23"
+    },
+    "discover-call.guide.2.text": {
+      "text": "Tool discovery: every tool in the reply carries `inputSchema`, where the bounds of `top_k` are written.",
+      "source": "f70393f05e1a"
+    },
+    "discover-call.guide.3.text": {
+      "text": "The first search had hits; `structuredContent` holds chunk ids, scores and text.",
+      "source": "ab3a2a9c0c50"
+    },
+    "discover-call.guide.4.text": {
+      "text": "The second search had no hits; `isError` stayed false and the report counts it as a normal result.",
+      "source": "f5beccb1f0d4"
+    },
+    "discover-call.guide.5.text": {
+      "text": "The variable names reported by service_status contain no keys.",
+      "source": "b15e4897a479"
+    },
+    "discover-call.guide.6.text": {
+      "text": "Finally check the negotiated version; this is where the two exercises differ.",
+      "source": "c163ba360e5e"
+    },
+    "discover-call.conclusion.proves.0": {
+      "text": "In this run discovery and calls came from real protocol exchanges with a separate process: every request and reply is recorded, the search results come from a real BM25 search in the server, and no hits counted as a normal result.",
+      "source": "3ba2746560e9"
+    },
+    "discover-call.conclusion.proves.1": {
+      "text": "The server child saw no key among its environment variable names in this run.",
+      "source": "59ccc3cba4bb"
+    },
+    "discover-call.conclusion.does_not_prove.0": {
+      "text": "The messages are SDK message objects dumped with field names, not raw bytes; key order and whitespace cannot be compared.",
+      "source": "9228fd3d5b31"
+    },
+    "discover-call.conclusion.does_not_prove.1": {
+      "text": "A working local `stdio` connection says nothing about remote transports, authentication or other SDK versions.",
+      "source": "817657aa114a"
+    },
+    "error-layers.title": {
+      "text": "Which layer each of four error paths lands in",
+      "source": "395f7bb9be6f"
+    },
+    "error-layers.hypothesis": {
+      "text": "Bad arguments, an unknown tool and a business error all get a reply from the server, flagged `isError: true`; when the server process exits mid-call the client gets no reply, the call raises MCPError, and every later request on the same client fails.",
+      "source": "5f98e250bc21"
+    },
+    "error-layers.errors.label": {
+      "text": "Error paths",
+      "source": "d68bb407eac4"
+    },
+    "error-layers.invalid-reply.text": {
+      "text": "The reply to bad arguments: `isError` true, with the validation message.",
+      "source": "3899329be2f0"
+    },
+    "error-layers.unknown.text": {
+      "text": "Unknown tool: a tool error with this lesson's SDK version too.",
+      "source": "ac6645b8c5dc"
+    },
+    "error-layers.business.text": {
+      "text": "Business error: the server accepts only ids from its own index.",
+      "source": "f6c8dfe6ad3e"
+    },
+    "error-layers.crash.text": {
+      "text": "Server crash: the call raises MCPError and there is no result.",
+      "source": "0065bc2c9a76"
+    },
+    "error-layers.after.text": {
+      "text": "Listing tools after the crash gets no reply either.",
+      "source": "69d3abecacbd"
+    },
+    "error-layers.fault.text": {
+      "text": "Where the fault came from: the second server's start arguments.",
+      "source": "9630f98594ec"
+    },
+    "error-layers.guide.0.text": {
+      "text": "The four paths run in order: three on the first server, the last on a fault-injected one.",
+      "source": "7ed70fca38f0"
+    },
+    "error-layers.guide.1.text": {
+      "text": "In the reply to bad arguments `isError` is true: the protocol worked and the tool refused.",
+      "source": "dd0289266c19"
+    },
+    "error-layers.guide.2.text": {
+      "text": "The unknown tool got a reply too. The specification counts it as a protocol error; this records what the SDK actually does.",
+      "source": "a289401097a3"
+    },
+    "error-layers.guide.3.text": {
+      "text": "The business error comes from the server's own rule; a path-like argument is just an unknown id.",
+      "source": "882f5aa3ab2b"
+    },
+    "error-layers.guide.4.text": {
+      "text": "After the server process exits, the client gets no reply and raises MCPError with code -32000.",
+      "source": "a244d68fe863"
+    },
+    "error-layers.guide.5.text": {
+      "text": "The same client sends `tools/list` again with the same result: the connection is gone.",
+      "source": "4003ec40040d"
+    },
+    "error-layers.guide.6.text": {
+      "text": "This crash was deliberate, and the report names the start argument.",
+      "source": "060f09327551"
+    },
+    "error-layers.conclusion.proves.0": {
+      "text": "With the SDK version this lesson pins, the first three paths got `isError: true` results and the last two raised MCPError; the two layers can be told apart just by whether a result arrived.",
+      "source": "6f93aee30cb1"
+    },
+    "error-layers.conclusion.does_not_prove.0": {
+      "text": "Another SDK or server may return an unknown tool as a JSON-RPC error; clients must handle both.",
+      "source": "cbc2ed329b26"
+    },
+    "error-layers.conclusion.does_not_prove.1": {
+      "text": "The fault injection shows only one protocol error, a process exit; timeouts and network failures do not appear here.",
+      "source": "eaeaf6211b7a"
+    },
+    "agent-over-mcp.title": {
+      "text": "An agent calling over MCP: who does what",
+      "source": "ff9e538b6485"
+    },
+    "agent-over-mcp.hypothesis": {
+      "text": "The model sees only the tool definitions the host gives it; its call proposals are checked by the platform and sent by the MCP client, results return to the message history under the call id, and the runner decides when to stop.",
+      "source": "1a90cb4f968c"
+    },
+    "agent-over-mcp.agent.label": {
+      "text": "The model picks from the discovered tools",
+      "source": "104dbcdf154d"
+    },
+    "agent-over-mcp.offered.text": {
+      "text": "The tool definitions in the first request: only two, and `parameters` is the server's `inputSchema`.",
+      "source": "c787c9ae9fb9"
+    },
+    "agent-over-mcp.proposal.text": {
+      "text": "The call the model proposed: tool name and search terms.",
+      "source": "4451411a2d0d"
+    },
+    "agent-over-mcp.mcp-call.text": {
+      "text": "The same call at the protocol layer: one `tools/call` request.",
+      "source": "55acd9e5ba09"
+    },
+    "agent-over-mcp.result.text": {
+      "text": "The tool result returns to the agent layer under the call id.",
+      "source": "8ff14190be96"
+    },
+    "agent-over-mcp.duties.text": {
+      "text": "The duty table: who owns each step and what this run's evidence is.",
+      "source": "2e05b67d9cd8"
+    },
+    "agent-over-mcp.stop.text": {
+      "text": "The stop reason, recorded by the runner.",
+      "source": "c57c82fb6458"
+    },
+    "agent-over-mcp.guide.0.text": {
+      "text": "This run stacks the protocol and the agent. First, which tools the model got.",
+      "source": "59aa826be1f1"
+    },
+    "agent-over-mcp.guide.1.text": {
+      "text": "The request has only two tools; the host kept service_status back, and `parameters` comes unchanged from `tools/list`.",
+      "source": "10aeab281dfe"
+    },
+    "agent-over-mcp.guide.2.text": {
+      "text": "The model decides which tool to call and with which search terms.",
+      "source": "4ab47001fc35"
+    },
+    "agent-over-mcp.guide.3.text": {
+      "text": "After the platform's check, the same arguments become a `tools/call` sent to the server.",
+      "source": "32c55e0daeb7"
+    },
+    "agent-over-mcp.guide.4.text": {
+      "text": "The server's result comes back as tool_result, with a `tool_call_id` that matches the call.",
+      "source": "e9d22ae8183e"
+    },
+    "agent-over-mcp.guide.5.text": {
+      "text": "The report's table lists who owns the five steps: discover, filter, decide, transport, stop.",
+      "source": "0a1c71f96cac"
+    },
+    "agent-over-mcp.guide.6.text": {
+      "text": "The runner writes the stop reason; the protocol does not supply it.",
+      "source": "7b5ff9054a71"
+    },
+    "agent-over-mcp.conclusion.proves.0": {
+      "text": "In this run the tool definitions in the model request came from a real `tools/list`, every call proposal went over MCP, results returned to the message history under the call id, and the runner recorded the stop reason.",
+      "source": "720a7c352c94"
+    },
+    "agent-over-mcp.conclusion.does_not_prove.0": {
+      "text": "Whether the answer is right needs a separate check against the chunk text; in offline test mode the decisions and answer come from a fixed script and stand for no real model.",
+      "source": "81689f5b29d3"
+    },
+    "agent-over-mcp.conclusion.does_not_prove.1": {
+      "text": "One run does not show whether the model would pick the wrong tool or arguments on other questions.",
+      "source": "d17518622043"
+    },
+    "inputs.task.label": {
+      "text": "Task",
+      "source": "5253040db864"
+    },
+    "inputs.task.help": {
+      "text": "Each exercise presets this; agent needs a model connection.",
+      "source": "feb80fc19054"
+    },
+    "inputs.task.options.tour.label": {
+      "text": "Discovery and calls",
+      "source": "f84c8e59be69"
+    },
+    "inputs.task.options.errors.label": {
+      "text": "Error paths",
+      "source": "d68bb407eac4"
+    },
+    "inputs.task.options.agent.label": {
+      "text": "Model calls over MCP",
+      "source": "a87c371e3ba1"
+    },
+    "inputs.protocol.label": {
+      "text": "Protocol version",
+      "source": "acbb40673c95"
+    },
+    "inputs.protocol.help": {
+      "text": "legacy uses the 2025-11-25 handshake; auto lets the SDK negotiate, and this server picks 2026-07-28.",
+      "source": "c0f2ef081a31"
+    },
+    "inputs.protocol.options.legacy.label": {
+      "text": "2025-11-25 (initialize handshake)",
+      "source": "a0d45d40774b"
+    },
+    "inputs.protocol.options.auto.label": {
+      "text": "Auto (2026-07-28, server/discover)",
+      "source": "8f2f400b799e"
+    },
+    "inputs.query.label": {
+      "text": "Search terms",
+      "source": "c03bdf14815c"
+    },
+    "inputs.query.help": {
+      "text": "The first search in the discovery exercise, also used in the error paths.",
+      "source": "def58334a6a6"
+    },
+    "inputs.miss_query.label": {
+      "text": "Search terms expected to find nothing",
+      "source": "20f84514380b"
+    },
+    "inputs.miss_query.help": {
+      "text": "The second search in the discovery exercise. Use words the handbook contains and the no-hit check in the report will honestly fail.",
+      "source": "639bc9ee0b2b"
+    },
+    "quiz.q1.prompt": {
+      "text": "What is MCP responsible for in an agent run?",
+      "source": "a9466068b853"
+    },
+    "quiz.q1.a.text": {
+      "text": "Connecting to the server, listing tool definitions, carrying calls and results",
+      "source": "969f98ef533f"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. Discovery and transport belong to the protocol.",
+      "source": "0406772388fd"
+    },
+    "quiz.q1.b.text": {
+      "text": "Deciding which tool to call and when to stop",
+      "source": "4be362e84dab"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. The model and the runner decide those.",
+      "source": "0bc59a646405"
+    },
+    "quiz.q1.c.text": {
+      "text": "Checking tool results for disguised instructions",
+      "source": "c66fdcc1f5e9"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. The protocol delivers text and does not inspect it.",
+      "source": "cad6548351b3"
+    },
+    "quiz.q1.explanation": {
+      "text": "The protocol provides the connection and the tool contract; scheduling and decisions stay with the agent.",
+      "source": "2b99437fbc3b"
+    },
+    "quiz.q2.prompt": {
+      "text": "A search for \"Is there parking nearby?\" returns `count: 0` with `isError` false. What should the agent do?",
+      "source": "072a0c8505dd"
+    },
+    "quiz.q2.a.text": {
+      "text": "Treat it as a normal result and answer that the handbook does not cover it",
+      "source": "835f66307dbb"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. The search ran; it just found nothing.",
+      "source": "15b18e0973ca"
+    },
+    "quiz.q2.b.text": {
+      "text": "Treat it as a connection fault and restart the server",
+      "source": "a83cad0aa59b"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The server replied, so the connection is fine.",
+      "source": "47ec3446c73d"
+    },
+    "quiz.q2.c.text": {
+      "text": "Treat it as a tool error and keep retrying with other arguments",
+      "source": "aaf1e70d3e54"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. There is no error to fix; retrying only wastes calls.",
+      "source": "d89772b0b563"
+    },
+    "quiz.q2.explanation": {
+      "text": "No hits is a business answer, not a failure.",
+      "source": "a2e7592d2ca9"
+    },
+    "quiz.q3.prompt": {
+      "text": "A `tools/call` makes the client raise MCPError with code -32000. What next?",
+      "source": "50c3353a506b"
+    },
+    "quiz.q3.a.text": {
+      "text": "The program handles it: record and stop, or reconnect with a new client",
+      "source": "0670317d9648"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. The connection is gone; other arguments will not help.",
+      "source": "1fb3c8bc7178"
+    },
+    "quiz.q3.b.text": {
+      "text": "Give the error to the model to retry with other arguments",
+      "source": "e07c4bbc96b8"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. Every later request on the same client fails the same way.",
+      "source": "7233cfda4c2d"
+    },
+    "quiz.q3.c.text": {
+      "text": "Treat it as no hits and answer anyway",
+      "source": "695d2c8525f0"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. There is no result at all, hits or otherwise.",
+      "source": "211337781179"
+    },
+    "quiz.q3.explanation": {
+      "text": "Protocol errors go to the program, tool errors to the model.",
+      "source": "836288da8c49"
+    },
+    "quiz.q4.prompt": {
+      "text": "Which best proves that the tools are connected?",
+      "source": "b180f85c285d"
+    },
+    "quiz.q4.a.text": {
+      "text": "`tools/list` listed the tools and a `tools/call` returned a result",
+      "source": "208bf0a6c27c"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. Protocol replies are the evidence of a connection.",
+      "source": "427430c3a184"
+    },
+    "quiz.q4.b.text": {
+      "text": "The server process's pid exists",
+      "source": "03e61c9e8fbe"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. A running process does not mean it answers requests.",
+      "source": "2a497ca8cb9e"
+    },
+    "quiz.q4.c.text": {
+      "text": "The server's code registers the tool",
+      "source": "80caf1f5f07c"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. Registered in code is not the same as reachable on this connection.",
+      "source": "f30ee64cb31b"
+    },
+    "quiz.q4.explanation": {
+      "text": "A running process cannot replace evidence of connectivity.",
+      "source": "6a85f672c044"
+    },
+    "quiz.q5.prompt": {
+      "text": "The server marks read_chunk with `readOnlyHint: true`. May the host allow it automatically because of that?",
+      "source": "d90cb09a9c0e"
+    },
+    "quiz.q5.a.text": {
+      "text": "No. The annotation is the server's own claim; the host should set its own rules",
+      "source": "f0e30dc979d8"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. The specification says to treat annotations as untrusted.",
+      "source": "9f2ddf6b4e32"
+    },
+    "quiz.q5.b.text": {
+      "text": "Yes. The protocol guarantees annotations are true",
+      "source": "65f52af0dc5d"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. The protocol does not verify annotations.",
+      "source": "6199b602bd9c"
+    },
+    "quiz.q5.c.text": {
+      "text": "Yes, as long as the tool name contains `read`",
+      "source": "9c9b329d9dcc"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. The name is written by the server too.",
+      "source": "4aa6962b52f4"
+    },
+    "quiz.q5.explanation": {
+      "text": "A server saying it is read-only does not make it so; its code decides what it can do, and the host's rules decide what is allowed.",
+      "source": "4be2dde85c48"
+    },
+    "quiz.q6.prompt": {
+      "text": "What happens to the 1.x tutorial line `from mcp.server.fastmcp import FastMCP` with this lesson's SDK?",
+      "source": "ac15639f4e39"
+    },
+    "quiz.q6.a.text": {
+      "text": "The import fails; use MCPServer instead",
+      "source": "baec47de01eb"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. 2.x removed the module, and the message points to the migration guide.",
+      "source": "c35c193e39a3"
+    },
+    "quiz.q6.b.text": {
+      "text": "It works, with a warning",
+      "source": "a223c68a7625"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. In 2.x the import fails outright.",
+      "source": "6dd9087c52ba"
+    },
+    "quiz.q6.c.text": {
+      "text": "It switches to `server/discover` automatically",
+      "source": "4181393e6fd3"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The protocol version is negotiated by the client and has nothing to do with this import.",
+      "source": "4ff8b22782a5"
+    },
+    "quiz.q6.explanation": {
+      "text": "Before copying a tutorial, check which major SDK version it pins.",
+      "source": "1dfa93b808a9"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"The model picks from the discovered tools\" and find the call request the protocol layer sent to the server.",
+      "source": "ed5e6419e79c"
+    },
+    "check-hunt.explanation": {
+      "text": "It is the lesson.mcp_message after tool_call and before tool_result, with direction client_to_server, `method` `tools/call`, and `params.arguments` equal to the arguments the model wrote in tool_call. The next one is the server's reply with the same `id`. The agent layer and the protocol layer each record the call, and only when the two match did the call really go over MCP.",
+      "source": "0c1e03556360"
+    },
+    "check-points.title": {
+      "text": "Hands-on check",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Check against your own runs and the lesson's source, then tick.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I ran discovery and calls with both protocol versions and can say how the first requests differ.",
+      "source": "1c84fea397aa"
+    },
+    "check-points.item-2.text": {
+      "text": "In the error-path report I split the four paths into two layers by whether a result arrived, and found where the fault injection is stated.",
+      "source": "4d4964f434df"
+    },
+    "check-points.item-3.text": {
+      "text": "In the agent exercise I found tool_call, `tools/call` and tool_result for the same call and checked the arguments and the call id.",
+      "source": "abc7b0e2f511"
+    },
+    "check-points.item-4.text": {
+      "text": "I can point to MODEL_TOOLS and explain why service_status is not given to the model.",
+      "source": "f83562ba94eb"
+    },
+    "code_notes.MODEL_TOOLS.note": {
+      "text": "The runner's allowlist of tools for the model; service_status is left out, for the runner only.",
+      "source": "978c44c646fe"
+    },
+    "code_notes.to_model_tool.note": {
+      "text": "Turns one MCP tool definition into the model's tool definition unchanged: name, description, input Schema.",
+      "source": "63ac2f60077d"
+    },
+    "code_notes.call_over_mcp.note": {
+      "text": "The bridge used when the platform executes a proposal: sends tools/call, raises McpToolError on isError.",
+      "source": "74c1361d60aa"
+    },
+    "code_notes.classify.note": {
+      "text": "Sorts failures by where they show up: MCPError is a protocol error, isError a tool error.",
+      "source": "df48075aa978"
+    },
+    "code_notes.lesson.mcp_message.note": {
+      "text": "One JSON-RPC message recorded by the platform: direction, server name and the SDK's dump, not raw bytes.",
+      "source": "374144ff8128"
+    },
+    "code_notes.sdk_session_message.note": {
+      "text": "The value of the captured field: the message is the SDK object dumped with protocol field names.",
+      "source": "e365024ec7be"
+    },
+    "code_notes.service_status.note": {
+      "text": "Has the server report its pid and environment variable names, to check no key reached the child.",
+      "source": "51ff4b51a30f"
+    },
+    "code_notes.McpConnectionError.note": {
+      "text": "The structured error type when a call gets no reply at all (MCPError); the runner stops on it.",
+      "source": "9b849568b54a"
+    },
+    "code_notes.McpToolError.note": {
+      "text": "The structured error type when the server replied isError=true; it goes to the model to fix.",
+      "source": "502d863a4156"
+    },
+    "code_notes.ToolError.note": {
+      "text": "The SDK's exception: raise it and its message returns to the client with isError=true.",
+      "source": "a756c186a41c"
+    },
+    "code_notes.MCPServer.note": {
+      "text": "The high-level server class of mcp 2.x, called FastMCP in 1.x.",
+      "source": "d3ebb06a0153"
+    },
+    "code_notes.python_module_server.note": {
+      "text": "Platform function: starts server modules only from the lessons. package, with safe environment only.",
+      "source": "0848627c688e"
+    },
+    "code_notes.recording_stdio.note": {
+      "text": "Platform transport wrapper: records every JSON-RPC message both ways as lesson.mcp_message.",
+      "source": "11371f801af5"
+    },
+    "code_notes.READ_TIMEOUT_SECONDS.note": {
+      "text": "How long the client waits for each reply (20 seconds); a timeout raises MCPError.",
+      "source": "30b760088c2a"
+    }
+  }
+}

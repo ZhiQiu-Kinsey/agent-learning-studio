@@ -12,7 +12,7 @@
 [![Node.js 22.12+](https://img.shields.io/badge/node-22.12%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![课程](https://img.shields.io/badge/%E8%AF%BE%E7%A8%8B-24%20%E5%8F%AF%E5%AD%A6%20%2F%2053%20%E8%A7%84%E5%88%92-8A5CF6)](docs/course-plan.md)
+[![课程](https://img.shields.io/badge/%E8%AF%BE%E7%A8%8B-53%20%E5%8F%AF%E5%AD%A6-8A5CF6)](docs/course-plan.md)
 [![CI](https://github.com/ZhiQiu-Kinsey/agent-learning-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/ZhiQiu-Kinsey/agent-learning-studio/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#参与贡献)
 
@@ -23,7 +23,7 @@
 </div>
 
 > [!NOTE]
-> **完整的中英双语。**在顶栏随时切换。界面、导学、24 门可学课程、课程目录和术语表都有英文版，**运行时也是**：英文界面下，运行发给模型的系统提示词、工具描述、预设问题和实验报告都是英文，读码场景显示的就是实际运行的英文消息目录。每次运行记录自己的语言，回放总按当时的样子显示。
+> **完整的中英双语。**在顶栏随时切换。界面、导学、53 门可学课程、课程目录和术语表都有英文版，**运行时也是**：英文界面下，运行发给模型的系统提示词、工具描述、预设问题和实验报告都是英文，读码场景显示的就是实际运行的英文消息目录。每次运行记录自己的语言，回放总按当时的样子显示。
 
 <details>
 <summary><b>目录</b></summary>
@@ -137,6 +137,7 @@ Windows（PowerShell）把 `npm` 换成 `npm.cmd`，用 `.\.venv\Scripts\python.
 | OpenAI 兼容服务 | `CUSTOM_API_KEY` | `CUSTOM_MODEL` / `CUSTOM_API_BASE` |
 
 - **百炼**：复制 `local_config.example.py` 为 `local_config.py`，填写接入地址和支持工具调用的模型 ID。这个文件已被 `.gitignore` 排除。
+- **Embedding 模型**（检索课使用）：百炼默认 `text-embedding-v4`，地址由 `API_URL` 推导，也可在 `local_config.py` 写 `EMBEDDING_MODEL` / `EMBEDDING_API_URL`；OpenAI 默认 `text-embedding-3-small`；其他服务商设置 `<服务商>_EMBEDDING_MODEL`（如 `GEMINI_EMBEDDING_MODEL`、`OLLAMA_EMBEDDING_MODEL`）或在网页的“Embedding 模型”里填写。没有配置时，需要 Embedding 的练习会提示先配置，不会改用别的模型。
 - **凭据互不借用**：每家服务商的凭据独立，切换服务商不会借用别家的密钥。
 - **Ollama**：需要自己准备本地服务和支持工具调用的模型，平台不会自动下载。
 
@@ -223,13 +224,13 @@ npm --prefix frontend run i18n:check              # 各语言翻译键一致
 
 - [x] 原生基础、任务与接口、上下文与状态、推理与控制模式（24 课）
 - [x] 7 章前置导学、课程地图、导览回放、实验报告
-- [ ] 知识与检索（RAG）
-- [ ] LangChain / LangGraph、人工介入与恢复
+- [x] 知识与检索（RAG）
+- [x] LangChain / LangGraph、人工介入与恢复
 - [ ] 编码 Agent 与沙箱
-- [ ] 评估、可观测性与可靠工具
-- [ ] MCP 与 A2A
-- [ ] 多 Agent、长时任务与毕业项目
-- [x] 英文界面与课程译文（导学、24 课、课程目录、术语表）
+- [x] 评估、可观测性与可靠工具
+- [x] MCP 与 A2A
+- [x] 多 Agent、长时任务与毕业项目
+- [x] 英文界面与课程译文（导学、53 课、课程目录、术语表）
 - [x] 双语运行时：提示词、工具描述、预设和报告使用学习者的语言；课程代码注释改为英文
 - [x] 开源必备：贡献指南、行为准则、安全策略、issue/PR 模板、持续集成
 - [ ] 更多语言

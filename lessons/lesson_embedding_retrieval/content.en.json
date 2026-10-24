@@ -1,0 +1,1402 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "KNOWLEDGE / EMBEDDING",
+      "source": "2533c5b51b35"
+    },
+    "hero.headline": {
+      "text": "Find chunks by meaning,",
+      "source": "e475c4deb78e"
+    },
+    "hero.highlight": {
+      "text": "and make the index remember where it came from.",
+      "source": "8f3022f0fdd5"
+    },
+    "hero.takeaway": {
+      "text": "An embedding turns text into a vector, and cosine similarity compares vectors by direction. Vectors are computed once and saved, but they can be reused only while the model, the dimensions and the documents stay the same.",
+      "source": "374b9763993a"
+    },
+    "concepts.01-embedding.label": {
+      "text": "01 / EMBEDDING",
+      "source": "6a5a0d9e957e"
+    },
+    "concepts.01-embedding.title": {
+      "text": "One text, one list of numbers",
+      "source": "3e639648a8e3"
+    },
+    "concepts.01-embedding.description": {
+      "text": "An embedding model turns a piece of text into a fixed-length list of numbers. Texts with similar meanings point in similar directions, so \"late fee\" can find a chunk that only says \"overdue charge\".",
+      "source": "789d61a6a439"
+    },
+    "concepts.02-cosine.label": {
+      "text": "02 / COSINE",
+      "source": "9229dcf9a118"
+    },
+    "concepts.02-cosine.title": {
+      "text": "Direction, not length",
+      "source": "903e6f621614"
+    },
+    "concepts.02-cosine.description": {
+      "text": "Cosine similarity is the cosine of the angle between two vectors; the closer to 1, the more they point the same way. It says the meanings are close, not that a chunk answers the question.",
+      "source": "cffa6638b6a9"
+    },
+    "concepts.03-index.label": {
+      "text": "03 / INDEX",
+      "source": "71e6095ac4f0"
+    },
+    "concepts.03-index.title": {
+      "text": "The index remembers where it came from",
+      "source": "15d23a0c4f7b"
+    },
+    "concepts.03-index.description": {
+      "text": "A vector index saves the chunk vectors together with the embedding model, the dimensions and the corpus version. It can be reused only while all three stay the same; if any changes, it is rebuilt.",
+      "source": "78456bfd2363"
+    },
+    "concepts.04-compare.label": {
+      "text": "04 / BASELINE",
+      "source": "8d9272e29466"
+    },
+    "concepts.04-compare.title": {
+      "text": "Compare it with keyword retrieval",
+      "source": "b3082fb2406f"
+    },
+    "concepts.04-compare.description": {
+      "text": "Vector retrieval finds chunks by meaning; BM25 finds them by shared words. Only a query-by-query comparison of hits and misses on the same query set shows what each is good at.",
+      "source": "7a7b31ed3dd0"
+    },
+    "section-1.title": {
+      "text": "An embedding is a list of numbers",
+      "source": "3cdd50c78964"
+    },
+    "section-1.paragraphs.0": {
+      "text": "An embedding turns a piece of text into a fixed-length list of numbers, and texts with similar meanings get similar numbers. BM25 in {{lesson:keyword-retrieval}} only matches words: the query asks \"How much is the late fee for returning a book late?\", the documents only say \"overdue charge\", the two share no word, so that section never reaches the top 5 and becomes a retrieval miss. This happens all the time in real questions: readers ask in their own words, the documents use the library's wording, and the two rarely match word for word. To let \"late fee\" find \"overdue charge\" we need a representation that compares meaning instead of wording.",
+      "source": "020d892a1a2b"
+    },
+    "section-1.paragraphs.1": {
+      "text": "Think of an embedding as a point on a map for every piece of text. A made-up example with only three dimensions: the first means \"about money\", the second \"about time\", the third \"about rooms\". \"How much is the late fee for returning a book late?\" lands at (0.9, 0.6, 0.0), \"Overdue charges are 0.5 yuan per day\" at (0.8, 0.7, 0.1), and \"How many seats does R-305 have?\" at (0.0, 0.1, 0.9). The first two points sit close together; the third is far away. A vector is exactly such a set of coordinates, and the dimensions are how many coordinates it has; comparing two texts becomes comparing where two points are.",
+      "source": "9476cff6165d"
+    },
+    "section-1.paragraphs.2": {
+      "text": "A real embedding model never tells you what each dimension means, and it has far more of them, usually hundreds to a few thousand. The numbers are learned during training, so the same text gets completely different numbers from a different model. This lesson's runner hands each chunk to the platform's context.embed, which sends an embedding request (the text it hands over has the section marks removed; the reason is in the deep dive \"Dimensions, cost and the text that gets embedded\"); in the response each text gets one embedding array whose length equals the dimensions in the request. These requests are recorded like chat requests: the request and response events carry one more field, endpoint, whose value is embeddings, and the vectors are recorded in full in the response body.",
+      "source": "5340406f1667"
+    },
+    "section-1.paragraphs.3": {
+      "text": "This lesson calls an embedding model, not a chat model, and writes no answer: it only finds chunks. An embedding is a model's compression of meaning. It can say \"these two are alike\", not \"this one answers the question\". Whether the chunks it finds are the right ones is still judged with the query set and human annotation from {{lesson:keyword-retrieval}}, which is what the second half of this lesson does. Later lessons hand the chunks to a chat model to write an answer; whatever retrieval misses, the model never sees.",
+      "source": "658a52a9b4cf"
+    },
+    "section-2.title": {
+      "text": "Cosine similarity",
+      "source": "a4f07e819564"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Cosine similarity compares two vectors by the angle between them: it looks at direction, not length. Why not just measure the distance between two points? A long text and a short text may say the same thing, yet their vectors have different lengths; compared by distance, the difference in length would pass for a difference in meaning. The angle ignores length: two texts pointing the same way count as similar. In vector space, direction roughly stands for \"what it is about\", while length depends more on how long the text is and how many words it uses.",
+      "source": "0dc8d0c3b252"
+    },
+    "section-2.paragraphs.1": {
+      "text": "It takes three steps: multiply matching dimensions and add them up to get the dot product; compute each vector's length, the square root of the sum of squares; divide the dot product by the product of the two lengths. With the made-up three-dimensional example from the previous section, the cosine between the \"late fee\" and \"overdue charge\" sentences is about 0.99, and between \"late fee\" and the R-305 sentence only about 0.06. A large dot product means both vectors have weight in the same dimensions; dividing by the lengths removes the question of which vector is longer. The full hand calculation is in the deep dive below.",
+      "source": "354c1006d490"
+    },
+    "section-2.paragraphs.2": {
+      "text": "cosine in this lesson's vector_index.py is exactly these three steps: it returns 0 when a length is 0 and raises an error when the two vectors have different dimensions. VectorIndex.search computes the cosine between the query vector and every chunk vector, sorts from high to low and keeps the first top_k. With only thirty-odd chunks, comparing them one by one takes a few milliseconds, so this lesson uses no approximate search and the ranking is exact. Ties keep the chunks' original order, so the same input always gives the same ranking and tests can be exact.",
+      "source": "ca2a52212603"
+    },
+    "section-2.paragraphs.3": {
+      "text": "Cosine similarity ranges from -1 to 1, but score distributions differ a lot between models: one model gives unrelated text 0.7, another gives related text only 0.5. So scores only rank chunks within one model and one set of chunks. A fixed number cannot serve as a \"relevant\" threshold, and scores cannot be compared across models. When the documents have no answer at all, vector retrieval still returns the highest-scoring chunks: offline, for `q07`, which the documents cannot answer, the first result still has a cosine above 0.75.",
+      "source": "11c322ead455"
+    },
+    "deep-dive-cosine.title": {
+      "text": "Cosine similarity by hand",
+      "source": "dbc0ab7f4526"
+    },
+    "deep-dive-cosine.summary": {
+      "text": "Work out the dot product, the lengths and the cosine for three made-up three-dimensional vectors, then check that only direction matters.",
+      "source": "2062fced4806"
+    },
+    "deep-dive-cosine.paragraphs.0": {
+      "text": "Take the three-dimensional example from the main text all the way through. A is \"How much is the late fee for returning a book late?\", `A = (0.9, 0.6, 0.0)`; B is \"Overdue charges are 0.5 yuan per day\", `B = (0.8, 0.7, 0.1)`; C is \"How many seats does R-305 have?\", `C = (0.0, 0.1, 0.9)`. The three dimensions say how much the text is about money, time and rooms. The numbers are made up to keep the arithmetic easy; a real model's dimensions have no such plain meaning.",
+      "source": "3e27297d2c54"
+    },
+    "deep-dive-cosine.paragraphs.1": {
+      "text": "A and B: dot product `0.9×0.8 + 0.6×0.7 + 0.0×0.1 = 1.14`; lengths `|A| = √1.17 ≈ 1.082` and `|B| = √1.14 ≈ 1.068`; cosine `1.14 ÷ (1.082 × 1.068) ≈ 0.99`. A and C: the dot product is only `0.6×0.1 = 0.06`, `|C| = √0.82 ≈ 0.906`, cosine `0.06 ÷ (1.082 × 0.906) ≈ 0.06`. 0.99 against 0.06: which sentence is closer is obvious at a glance. Note that the dot product of A and C comes from the second dimension only, because in the other two one of them is always 0.",
+      "source": "7cd79cf1f051"
+    },
+    "deep-dive-cosine.paragraphs.2": {
+      "text": "Now check that only direction matters: multiply every dimension of B by 2 to get `(1.6, 1.4, 0.2)`. The dot product doubles to 2.28, the length of B doubles to about 2.136, and after dividing the cosine is still 0.99. This is why long and short chunks can be compared fairly. Measured by straight-line distance, the enlarged B moves a long way from A, although its meaning has not changed at all.",
+      "source": "4915d413cc31"
+    },
+    "deep-dive-cosine.paragraphs.3": {
+      "text": "Many embedding models return normalized vectors of length 1; then the cosine equals the dot product, and vector stores often use this to do nothing but multiply and add. A cosine can be negative, meaning opposite directions, but real text vectors rarely produce clearly negative scores, and many models squeeze their scores into a narrow band, so this lesson only compares order and sets no threshold. The offline test vectors are word counts, with no negative numbers and no normalization, and the cosine formula works on them just the same.",
+      "source": "1b532fa2e3c3"
+    },
+    "predict-requests.prompt": {
+      "text": "Run it first. Before running \"Build the index and search\" in the experiment \"Build the index and search\", guess: if this is the first time an index is built for this model and these dimensions, how many request events will the run send?",
+      "source": "6ecf104f877b"
+    },
+    "mq-scale.scale.prompt": {
+      "text": "Multiply every dimension of a chunk vector by 3. What happens to its cosine similarity with the query vector?",
+      "source": "419416109067"
+    },
+    "mq-scale.scale.a.text": {
+      "text": "Nothing changes",
+      "source": "494bdd740cf0"
+    },
+    "mq-scale.scale.a.feedback": {
+      "text": "Right. The dot product and that vector's length both grow 3 times and cancel out when divided.",
+      "source": "a69018631424"
+    },
+    "mq-scale.scale.b.text": {
+      "text": "It becomes 3 times larger",
+      "source": "876cc6296d14"
+    },
+    "mq-scale.scale.b.feedback": {
+      "text": "No. The cosine is divided by both lengths, so it always stays between -1 and 1.",
+      "source": "2cf4faaac8d9"
+    },
+    "mq-scale.scale.c.text": {
+      "text": "It drops, because the vector is now farther from the query",
+      "source": "487f050421d4"
+    },
+    "mq-scale.scale.c.feedback": {
+      "text": "No. What grows is the distance between the points; the angle stays the same.",
+      "source": "524c3f426d18"
+    },
+    "mq-scale.scale.explanation": {
+      "text": "Cosine similarity only looks at direction. Saying the same thing at greater length makes the vector longer without changing the score.",
+      "source": "2a344ccb5e32"
+    },
+    "section-3.title": {
+      "text": "Building and saving the index",
+      "source": "c00328b62eb9"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A vector index is saved together with the embedding model, the dimensions and the corpus version, so that it can be reused safely next time. Why save it? Vectors cost model calls: the 36 default English chunks (38 in Chinese) go out in batches of at most 10, which is 4 embedding requests. Re-embedding everything for every search is slow and costs money; computed once and saved, the vectors leave only one request per query. BM25 in {{lesson:keyword-retrieval}} is different: its word counts are recomputed locally in milliseconds and need no saving.",
+      "source": "3f4a9d765319"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The runner does the batching itself. The platform's embedding_batch_limit says how many texts one request may carry (10 on Bailian's compatible endpoint); Embedder.embed slices by that number, calls context.embed once per batch, and puts the vectors back in their original order by the index in the response. Each batch's request and response are a pair of events, and the batch number is the round. If the provider ignores dimensions and returns another length, the runner stops instead of mixing vectors of different sizes into the index. Once built, VectorIndex.save writes a temporary file and then renames it, so an interruption halfway never leaves a broken file that looks complete.",
+      "source": "f04be95edd2f"
+    },
+    "section-3.paragraphs.2": {
+      "text": "Saved vectors are usable only while three things stay the same: the same embedding model, the same dimensions and the same version of the documents. With another model, the two models' vectors live in separate coordinate systems, and the angle between an old chunk vector and a new query vector means nothing; with other dimensions the lengths do not match and nothing can be computed; with changed documents the old vectors describe text that no longer exists. is_stale compares the three, and stale_reasons spells out what differs; a changed chunk list, such as the same documents chunked another way, also counts as stale. So reuse does not depend on whether the file exists, but on whether what the file records still matches the present.",
+      "source": "0eefeb54ab14"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Index files live under `.runtime/rag-index/` and are never committed. The file name carries the locale, the model and the dimensions, so other dimensions mean another file: that is the first guard. is_stale is the second; search refusing a query vector of another size is the third. The corpus version, corpus_version, is a digest over the content digests of all documents, so changing one character in any document changes it. Offline test mode never touches that folder and uses a temporary folder per run, so tests always build; tests that check reuse name a folder shared by several runs explicitly.",
+      "source": "f9dd67d024e7"
+    },
+    "misconception-reuse.claim": {
+      "text": "Once built, an index can be used forever.",
+      "source": "758b7f0d25d7"
+    },
+    "misconception-reuse.correction": {
+      "text": "Vectors stay valid only while the model, the dimensions and the corpus version stay the same. After a model change, old vectors and new query vectors are not in the same coordinate system, so the scores mean nothing; after the documents change, an old index may bring back chunks that were taken offline. In the report of \"Changed documents: the old index cannot be used\", the misused old index puts the 2025 opening hours in its top 5.",
+      "source": "849822c69100"
+    },
+    "mq-stale.stale.prompt": {
+      "text": "The index was built at 256 dimensions, and requests now ask for 512. What is the right thing to do?",
+      "source": "5e241c161cde"
+    },
+    "mq-stale.stale.a.text": {
+      "text": "Keep the old index and cut the 512-dimension query vector down to 256 before comparing",
+      "source": "fd47fda6eebc"
+    },
+    "mq-stale.stale.a.feedback": {
+      "text": "No. Vectors of the two sizes are not in the same coordinate system; comparing after truncation has no basis.",
+      "source": "0983dedd19ff"
+    },
+    "mq-stale.stale.b.text": {
+      "text": "Judge the old index stale and re-embed every chunk at 512 dimensions",
+      "source": "e6018d192dac"
+    },
+    "mq-stale.stale.b.feedback": {
+      "text": "Right. The dimensions are part of the index's identity; when they change, the index is rebuilt.",
+      "source": "e50b1efbac7c"
+    },
+    "mq-stale.stale.c.text": {
+      "text": "Leave the chunk vectors alone and only switch the query back to 256",
+      "source": "d4afa404fbc8"
+    },
+    "mq-stale.stale.c.feedback": {
+      "text": "That computes, but the condition is no longer 512 dimensions; it amounts to not changing the size at all.",
+      "source": "bc9c4a113c3f"
+    },
+    "mq-stale.stale.explanation": {
+      "text": "If any of the model, the dimensions or the corpus version changes, the old vectors can no longer answer new queries.",
+      "source": "10990918ffb8"
+    },
+    "section-4.title": {
+      "text": "Compared with keyword retrieval",
+      "source": "7d3ff981a01e"
+    },
+    "section-4.paragraphs.0": {
+      "text": "Only by comparing hits on the same query set can you see what each retriever is good at and what it misses. \"Vector retrieval is smarter\" cannot be tested. Hand the 14 queries of {{lesson:keyword-retrieval}} unchanged to both retrievers, take the top 5 chunks from each, judge hits against the same human annotation, and the differences land on specific queries: which ones only one side finds, which ones both miss. That is also why {{lesson:keyword-retrieval}} built the query set before talking about how good retrieval is.",
+      "source": "32a7879b705b"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The compare function does exactly that: it builds a BM25Index over the same chunks and uses the same vector index; the 14 query vectors are also embedded in batches, two requests; each query runs through both retrievers and both results go to judge; both sides take the top 5, the same depth, so neither gains by seeing more chunks. judge compares the section anchors a chunk covers with the human annotation and reports whether it hit, whether it gave full coverage and the rank of the first hit. Two checks in the report state that both sides used the same query set and the same chunks.",
+      "source": "d9fd89530d49"
+    },
+    "section-4.paragraphs.2": {
+      "text": "In offline test mode, the fixture builds test vectors from a concept vocabulary: synonyms share a dimension, and codes such as room numbers and card codes have no dimension of their own. On these test vectors, of the 12 answerable queries BM25 hits 9 and vector retrieval hits 11; the three paraphrased queries `q04`–`q06` are hit only by vector retrieval, and `q02`, which asks how many seats R-305 has, only by BM25. The BM25 column is deterministic and stays the same whatever embedding model you use; only the vector retrieval column changes. The split is constructed by design and says nothing about any real model.",
+      "source": "b86a3fa4feaa"
+    },
+    "section-4.paragraphs.3": {
+      "text": "Two more cases in the table deserve a close look. For `q07` and `q08`, which the documents cannot answer, both retrievers still return 5 chunks, and none of them should be taken as an answer. For `q13`, which asks when the library closes on Sunday, vector retrieval puts a reader's comment wishing the library stayed open until 9 p.m. on Sundays in its top 3 (first in the Chinese run, third in the English run), and the first chunk that covers an annotated section only shows up at rank 5: the comment is close in meaning, but being similar is not being a rule. Cross-section and multi-hop queries also need the full coverage rate: hitting only half still leaves the answer short of material. In a live run, the numbers in the table depend on the embedding model you choose; your own run is what counts.",
+      "source": "285735e7d434"
+    },
+    "compare-retrievers.title": {
+      "text": "BM25 and vector retrieval",
+      "source": "c406fe9c6d27"
+    },
+    "compare-retrievers.columns.0": {
+      "text": "Aspect",
+      "source": "3fc5b79e6d29"
+    },
+    "compare-retrievers.columns.1": {
+      "text": "BM25",
+      "source": "9aecf15305b9"
+    },
+    "compare-retrievers.columns.2": {
+      "text": "Vector retrieval",
+      "source": "75629b61467e"
+    },
+    "compare-retrievers.rows.0.0": {
+      "text": "What it compares",
+      "source": "5b7910373d43"
+    },
+    "compare-retrievers.rows.0.1": {
+      "text": "Words the query and the chunk share",
+      "source": "a4053b62e46c"
+    },
+    "compare-retrievers.rows.0.2": {
+      "text": "The angle between two vectors",
+      "source": "2b5304d412c5"
+    },
+    "compare-retrievers.rows.1.0": {
+      "text": "Good at",
+      "source": "60124c8b699c"
+    },
+    "compare-retrievers.rows.1.1": {
+      "text": "Exact terms such as codes, names and amounts",
+      "source": "7cbeab2f2535"
+    },
+    "compare-retrievers.rows.1.2": {
+      "text": "Paraphrases and questions worded differently",
+      "source": "450808ddb0f6"
+    },
+    "compare-retrievers.rows.2.0": {
+      "text": "Tends to miss",
+      "source": "065ea7f073fe"
+    },
+    "compare-retrievers.rows.2.1": {
+      "text": "Wording that does not appear in the documents",
+      "source": "da401a3c13d9"
+    },
+    "compare-retrievers.rows.2.2": {
+      "text": "Content told apart only by a code or a proper name",
+      "source": "8cbf231b50ea"
+    },
+    "compare-retrievers.rows.3.0": {
+      "text": "When the documents have no answer",
+      "source": "cf6f7533dbec"
+    },
+    "compare-retrievers.rows.3.1": {
+      "text": "Returns only chunks sharing at least one word, possibly fewer than 5",
+      "source": "1060b183ae9b"
+    },
+    "compare-retrievers.rows.3.2": {
+      "text": "Still returns the 5 highest-scoring chunks",
+      "source": "366cd03e7796"
+    },
+    "compare-retrievers.rows.4.0": {
+      "text": "Cost",
+      "source": "639de58eb608"
+    },
+    "compare-retrievers.rows.4.1": {
+      "text": "Computed locally, no model call",
+      "source": "e85fc140007c"
+    },
+    "compare-retrievers.rows.4.2": {
+      "text": "Building the index and every query need embedding requests",
+      "source": "40239c715ba6"
+    },
+    "compare-retrievers.rows.5.0": {
+      "text": "Can you take it apart?",
+      "source": "8120facbb6aa"
+    },
+    "compare-retrievers.rows.5.1": {
+      "text": "Each word's share of the score is plain to see",
+      "source": "0c42bf71bebd"
+    },
+    "compare-retrievers.rows.5.2": {
+      "text": "The dimensions have no readable meaning; only the final score is visible",
+      "source": "f284e6dccfc9"
+    },
+    "mq-code.code.prompt": {
+      "text": "Offline, `q02` (How many seats does R-305 have?) is hit only by BM25. Which explanation fits best?",
+      "source": "416b6d8ca65f"
+    },
+    "mq-code.code.a.text": {
+      "text": "Codes have no dimension of their own in the test vectors, and what is left of the query is not enough to locate that section",
+      "source": "b28b320670fa"
+    },
+    "mq-code.code.a.feedback": {
+      "text": "Right. The whole point of this query is R-305, and keyword retrieval treats it as one complete word.",
+      "source": "11592b4bbb83"
+    },
+    "mq-code.code.b.text": {
+      "text": "BM25 understood what \"seats\" means",
+      "source": "8b1e1cdebfbc"
+    },
+    "mq-code.code.b.feedback": {
+      "text": "No. BM25 only compares words; it hits because R-305 and \"seats\" happen to appear in that section.",
+      "source": "c0db1768f9c5"
+    },
+    "mq-code.code.c.text": {
+      "text": "The vector retrieval code has a bug",
+      "source": "cefa2bb97ded"
+    },
+    "mq-code.code.c.feedback": {
+      "text": "No. The same index hits on `q04`–`q06`; the problem lies in this kind of query.",
+      "source": "95fbc288cb33"
+    },
+    "mq-code.code.explanation": {
+      "text": "The meaning of a code query sits in a few characters, and vector retrieval easily blurs it with other codes; that is exactly where keyword retrieval is strong.",
+      "source": "68742c4a2409"
+    },
+    "section-5.title": {
+      "text": "Cost and limits",
+      "source": "4ede25ee8bd4"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Embeddings cost model calls billed by input, and for queries about numbers or proper names, vector retrieval is not necessarily better. The cost has two parts: every chunk is embedded once when the index is built, and every query is embedded once when it is searched. This lesson's reports keep them apart: the index report gives the requests used to build the index, and the results report gives the requests of the whole run and the sum of the total_tokens the provider reported; if the provider reports no usage, it says \"not reported\" and estimates nothing. The vectors also take storage; the deep dive below does the arithmetic.",
+      "source": "5b231d0e7f64"
+    },
+    "section-5.paragraphs.1": {
+      "text": "These requests share the call limit in lesson.json with chat requests; this lesson's max_rounds is 12. The two stale-index exercises cost the most: 4 to build the old index, 1 for the query, 4 more to build the new one, 9 in all; when the index exists and is not stale, \"Build the index and search\" sends just 1 request. The call limit is there to stop runaway loops, not normal index building, so it is set by the most expensive exercise; if it is too low, the run stops at the request that crosses it instead of quietly building fewer batches. Before switching dimensions or embedding models, think about how many requests the rebuild will cost.",
+      "source": "249d123211b8"
+    },
+    "section-5.paragraphs.2": {
+      "text": "Vector retrieval's blind spots are the opposite of BM25's. For codes, model numbers and amounts, the meaning sits in a few characters: R-301 and R-305 may be very close as vectors but are two different words to keyword retrieval. Proper names, newly coined words and spellings the model never saw in training may also be embedded somewhere vague. Offline, `q02`, which asks how many seats R-305 has, is missed exactly this way. That is why real systems rarely use only one retriever; {{lesson:hybrid-retrieval}} combines the two result lists.",
+      "source": "fa7132dad602"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Finally, vector retrieval only moves likely relevant chunks to the front; it does not judge whether a chunk is trustworthy or out of date. In this corpus, the reader comments and the 2025 opening hours are as close to the query in vector space as anything else. \"Build the index and search\" can filter by document: the where parameter of search drops other documents' chunks before ranking. Which version counts and whether a comment can be taken as a rule still depend on metadata and on how answers state their sources, which {{lesson:rag-citations}} covers. Retrieval only decides what is alike; what is correct and what counts come in later lessons.",
+      "source": "d2488bec6aae"
+    },
+    "deep-dive-dimensions.title": {
+      "text": "Dimensions, cost and the text that gets embedded",
+      "source": "e5f26a874c7a"
+    },
+    "deep-dive-dimensions.summary": {
+      "text": "The dimensions decide how many numbers each vector has: they affect storage, the work of comparing and retrieval quality, and whether an old index can be reused. Removing the section marks before embedding is a trade-off.",
+      "source": "d8ac910c3269"
+    },
+    "deep-dive-dimensions.paragraphs.0": {
+      "text": "The dimensions are how many numbers each vector has. This lesson asks for 256 by default. At 4 bytes per floating-point number, 38 chunks × 256 dimensions is about 38 KB, and 1024 dimensions about 152 KB. This lesson stores the vectors as JSON text, so the actual file is somewhat larger, but of the same order. At a million chunks, 1024 dimensions come to about 4 GB, and only then do storage and memory become a real problem.",
+      "source": "3f4bdddbf8cf"
+    },
+    "deep-dive-dimensions.paragraphs.1": {
+      "text": "The work grows with the dimensions too. Brute-force search computes the cosine between the query and every chunk, so one search takes roughly chunks times dimensions multiplications: 38 × 256 is under ten thousand, a million × 1024 is a billion. That is why large vector stores use approximate nearest-neighbor indexes, such as the HNSW and ANNOY compared in chapter 3 of Understanding AI Agents in Depth (深入理解 AI Agent): narrow the candidates first, then compare exactly, trading a little accuracy for speed. With few chunks, exact comparison is easier to follow and never misses the truly nearest vector.",
+      "source": "e96b9ee1da8a"
+    },
+    "deep-dive-dimensions.paragraphs.2": {
+      "text": "More dimensions can express more detail, but more is not always better. Some embedding models let a request ask for a shorter vector with dimensions, for example Bailian's `text-embedding-v4` and OpenAI's `text-embedding-3` family; shorter vectors save storage and computation, possibly at a small cost in retrieval quality. Which sizes are allowed is up to the provider's documentation. A model that does not support the parameter may raise an error or silently ignore it; this lesson's runner stops as soon as a returned length is wrong.",
+      "source": "898632a67e90"
+    },
+    "deep-dive-dimensions.paragraphs.3": {
+      "text": "As for money, embeddings are billed by input tokens, usually at a much lower price than chat models, and the index is built only once. What really costs is rebuilding: a new model, new dimensions or changed documents mean re-embedding every chunk. Real systems often re-embed only the chunks that changed, provided the model and dimensions are unchanged and the text of the untouched chunks is known to be identical; to keep the staleness rule clear, this lesson always rebuilds everything.",
+      "source": "08620ffd8aae"
+    },
+    "deep-dive-dimensions.paragraphs.4": {
+      "text": "There is one more trade-off before embedding. The original chunk text carries section marks such as `{#anchor}`, and this lesson's embedding_text removes them before the text is embedded. The marks only label sections so that judge can compare against the human annotation; readers never see them. BM25's tokenizer drops them too, so both retrievers read the same words, which keeps the comparison fair and keeps English label names out of the vectors of Chinese chunks. The cost is that the embedded text is no longer identical to the original chunk text: to check which text a vector stands for, look at what embedding_text returns. {{lesson:hybrid-retrieval}} embeds the original chunk text directly, so its vectors include those marks; the two lessons keep separate indexes, and their vectors cannot be reused for each other.",
+      "source": "0f9f9ec82c36"
+    },
+    "deep-dive-dimensions.paragraphs.5": {
+      "text": "The trade-off leaves a blind spot: corpus_version only digests the document contents. If embedding_text is changed later, the old index still matches on model, dimensions and corpus version, so the staleness check cannot notice and you have to remember to rebuild. A new way of chunking is guarded by chunk_ids; a change to the text before embedding is guarded by nobody.",
+      "source": "8ebcecb9803b"
+    },
+    "deep-dive-evaluation.title": {
+      "text": "How to score retrieval: hit rate, full coverage rate and Pass@k",
+      "source": "dddb9093e773"
+    },
+    "deep-dive-evaluation.summary": {
+      "text": "This lesson's table separates the hit rate from the full coverage rate; the references measure in different ways, so check the definition before comparing numbers.",
+      "source": "72ef8f8218bd"
+    },
+    "deep-dive-evaluation.paragraphs.0": {
+      "text": "This lesson's table separates a \"hit\" from \"full coverage\". A hit means at least one of the top 5 chunks covers a labeled section; full coverage means every labeled section is covered. The share of queries that hit is the hit rate, and the share with full coverage is the full coverage rate. Cross-section, multi-hop and version-conflict queries need two sections for a complete answer; hitting only half still leaves the answer step short of material. Counting hits alone overstates how well retrieval works.",
+      "source": "7df88f18d4cf"
+    },
+    "deep-dive-evaluation.paragraphs.1": {
+      "text": "The references measure in different ways. Chapter 3 of Understanding AI Agents in Depth (深入理解 AI Agent) points out that what the book calls `recall@k` is really a hit rate: one relevant document in the top k is enough. The contextual embeddings guide in Claude Cookbooks uses Pass@k, averaging the share of labeled chunks found per query; a query with several labeled chunks gets partial credit, so it is stricter than the hit rate and looser than this lesson's full coverage rate. Before comparing numbers across sources, check which definition each one uses.",
+      "source": "fcefbf5647ca"
+    },
+    "deep-dive-evaluation.paragraphs.2": {
+      "text": "The same guide offers an improvement: chunking makes a chunk lose the context it came from, so a model can first write, for each chunk, a short prefix saying where it comes from, and the chunk is embedded together with that prefix. On its codebase dataset, the guide reports that this cut the retrieval failure rate at the top 5, 10 and 20 results by about 30% to 40%, at the cost of one more model call per chunk when building the index. This lesson does not do it; the original is in the references if you want to go further.",
+      "source": "5da4082bf968"
+    },
+    "misconception-score.claim": {
+      "text": "The higher the cosine similarity, the better the chunk answers the question.",
+      "source": "6ce507ef6e27"
+    },
+    "misconception-score.correction": {
+      "text": "Cosine similarity only says two texts are close in meaning. Offline, asking when the library closes on Sunday puts a reader's comment wishing it stayed open until 9 p.m. on Sundays in the top 3, while the first chunk that covers an annotated section only appears at rank 5, and that comment is a wish, not a rule; for queries the documents cannot answer, the top score is not low either. Whether a chunk answers the question is checked against human annotation or by reading the text.",
+      "source": "a3e334f94ce9"
+    },
+    "mq-reuse.reuse.prompt": {
+      "text": "Same model, same dimensions, unchanged documents, and the index already exists. How many embedding requests does running \"Build the index and search\" again send?",
+      "source": "13afd7642b61"
+    },
+    "mq-reuse.reuse.a.text": {
+      "text": "1, only to embed the query",
+      "source": "87f5d81bad77"
+    },
+    "mq-reuse.reuse.a.feedback": {
+      "text": "Right. The chunk vectors are read from the index file without calling the model.",
+      "source": "44b48e2a1f16"
+    },
+    "mq-reuse.reuse.b.text": {
+      "text": "5, the same as the first time",
+      "source": "3c7d38a55337"
+    },
+    "mq-reuse.reuse.b.feedback": {
+      "text": "No. An index that is not stale is reused, and the index report says reused.",
+      "source": "db1eb03f3b15"
+    },
+    "mq-reuse.reuse.c.text": {
+      "text": "0, the query can be read from the index too",
+      "source": "62007243445d"
+    },
+    "mq-reuse.reuse.c.feedback": {
+      "text": "No. The index holds only chunk vectors; a new query's vector has to be computed.",
+      "source": "1a2c5a2b7b70"
+    },
+    "mq-reuse.reuse.explanation": {
+      "text": "Saving the index saves embedding the chunks; every new query still needs one embedding request.",
+      "source": "23bc066cf9f2"
+    },
+    "walkthrough.title": {
+      "text": "The steps of one \"Build the index and search\" run",
+      "source": "7d94edb40b8c"
+    },
+    "walkthrough.description": {
+      "text": "Teaching illustration, not a run record: one pass in the order of this lesson's code, with numbers from the default Chinese chunks.",
+      "source": "75d62a518fc4"
+    },
+    "walkthrough.batch.label": {
+      "text": "Batch",
+      "source": "80dc2211106b"
+    },
+    "walkthrough.batch.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.batch.title": {
+      "text": "38 chunks in 4 batches",
+      "source": "bcb47668d89d"
+    },
+    "walkthrough.batch.body": {
+      "text": "Embedder.embed slices by embedding_batch_limit: 10, 10, 10, 8, one embedding request per batch, each naming its dimensions.",
+      "source": "f385f6e031ce"
+    },
+    "walkthrough.batch.evidence": {
+      "text": "data.body.input of request events 1 to 4",
+      "source": "bd1e4e799969"
+    },
+    "walkthrough.encode.label": {
+      "text": "Embed",
+      "source": "e66883ffd17e"
+    },
+    "walkthrough.encode.actor": {
+      "text": "Embedding model",
+      "source": "6ac9d692b3a5"
+    },
+    "walkthrough.encode.title": {
+      "text": "One vector per text",
+      "source": "e10e18913e8a"
+    },
+    "walkthrough.encode.body": {
+      "text": "Each item in the response's data carries index and embedding; the runner puts them back in order by index and checks that each length equals dimensions.",
+      "source": "46746a7a3d99"
+    },
+    "walkthrough.encode.evidence": {
+      "text": "data.body.data of the response event",
+      "source": "3c30208ecf98"
+    },
+    "walkthrough.save.label": {
+      "text": "Save",
+      "source": "a3030bf8f16d"
+    },
+    "walkthrough.save.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.save.title": {
+      "text": "Saved with where it came from",
+      "source": "b4ed78d0d8fa"
+    },
+    "walkthrough.save.body": {
+      "text": "VectorIndex records the model, the dimensions, the corpus version and the chunk list, and is written under `.runtime/rag-index/` to a file named by locale, model and dimensions.",
+      "source": "770b6a6863df"
+    },
+    "walkthrough.save.evidence": {
+      "text": "The model, dimensions and corpus version in the index report",
+      "source": "eb97c08cc19f"
+    },
+    "walkthrough.query.label": {
+      "text": "Query",
+      "source": "bcd6771e08ec"
+    },
+    "walkthrough.query.actor": {
+      "text": "Embedding model",
+      "source": "6ac9d692b3a5"
+    },
+    "walkthrough.query.title": {
+      "text": "The query is embedded too",
+      "source": "ede8e901f35e"
+    },
+    "walkthrough.query.body": {
+      "text": "The query about the late fee gets its own embedding request, with the same model and the same dimensions.",
+      "source": "82cedd927717"
+    },
+    "walkthrough.query.evidence": {
+      "text": "The last request event",
+      "source": "455040c7fbb8"
+    },
+    "walkthrough.rank.label": {
+      "text": "Rank",
+      "source": "a96c9a854190"
+    },
+    "walkthrough.rank.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.rank.title": {
+      "text": "A cosine for each chunk, top 5 kept",
+      "source": "c072994bcdcd"
+    },
+    "walkthrough.rank.body": {
+      "text": "search computes the cosine similarity between the query vector and all 38 chunk vectors, keeps the first top_k from high to low, and writes them into the results report.",
+      "source": "0fb7c07ebeac"
+    },
+    "walkthrough.rank.evidence": {
+      "text": "The table in the results report",
+      "source": "0d1187e41fb9"
+    },
+    "references.book-ch3-dense.title": {
+      "text": "Dense embeddings, cosine similarity and retrieval metrics — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "40d9d28608ce"
+    },
+    "references.book-dense-embedding.title": {
+      "text": "A dense vector search service: exact search versus ANN indexes — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "168a37356f9f"
+    },
+    "references.cookbook-contextual-embeddings.title": {
+      "text": "Embedding in batches, saving the vectors and comparing retrieval results (Claude Cookbooks)",
+      "source": "e5f61e9974f1"
+    },
+    "references.ms-agentic-rag.title": {
+      "text": "Handing retrieval to an agent: results must be checkable and traceable (Microsoft AI Agents for Beginners)",
+      "source": "4419ea3ac5e1"
+    },
+    "references.hf-llamaindex-components.title": {
+      "text": "Loading, nodes and vector stores: queries must use the embedding model the index was built with (Hugging Face Agents Course)",
+      "source": "e90d58b16dd9"
+    },
+    "code-embedder.n69.text": {
+      "text": "Every embedding request of the run goes out from here: batching, round numbers and usage live in one place, and the request count in the reports is calls.",
+      "source": "241721cf91ce"
+    },
+    "code-embedder.n77.text": {
+      "text": "Chunks and queries both go through this method. The caller passes dimensions: the new-dimensions exercise uses two sizes one after the other.",
+      "source": "0789244c0b8a"
+    },
+    "code-embedder.n81.text": {
+      "text": "Slice by embedding_batch_limit. 38 chunks at 10 per batch are four batches of 10, 10, 10 and 8; the platform refuses a batch over the limit.",
+      "source": "e7b93a020da9"
+    },
+    "code-embedder.n83.text": {
+      "text": "One context.embed per batch: the platform records the request and response events (endpoint is embeddings) and counts the call against the limit. The round is the request number, one slot per batch on the timeline.",
+      "source": "d3a3b8c287af"
+    },
+    "code-embedder.n85.text": {
+      "text": "Put the vectors back in input order by index instead of trusting the order of the reply; once vectors and chunks are misaligned, every result is wrong.",
+      "source": "a43a6683b4b2"
+    },
+    "code-embedder.n87.text": {
+      "text": "A provider that ignores dimensions returns another length. Better to stop with an error than to mix vectors of different sizes into the index.",
+      "source": "f3dd8e92b71d"
+    },
+    "code-embedder.n90.text": {
+      "text": "Only the total_tokens the provider reported is recorded; a request without it is recorded as None, never as 0.",
+      "source": "6369c21f8f92"
+    },
+    "code-embedder.n95.text": {
+      "text": "If nothing was reported it says \"not reported\"; if some requests were not reported it gives the sum and how many are missing, never an estimate.",
+      "source": "2368e335742c"
+    },
+    "code-open-index.n103.text": {
+      "text": "Whether an old index may be used, as a list of reasons; only an empty list means it can be reused. The reasons go into the report, so the learner sees why it was rebuilt.",
+      "source": "36a9c55707de"
+    },
+    "code-open-index.n107.text": {
+      "text": "is_stale compares model, dimensions and corpus version at once; for each that differs, the old and new values are written out.",
+      "source": "dbf539afc96b"
+    },
+    "code-open-index.n113.text": {
+      "text": "The chunk list is checked on its own: with unchanged documents but different chunking, the corpus version is the same, yet the old vectors no longer match the new chunks.",
+      "source": "5d835cffb3b2"
+    },
+    "code-open-index.n121.text": {
+      "text": "The lesson's key decision: reuse or rebuild. save=False is for the simulated document change, so the index of the real documents is not overwritten.",
+      "source": "e039d541f50f"
+    },
+    "code-open-index.n127.text": {
+      "text": "The path depends on locale, model and dimensions, so other dimensions look for another file; a file that is found still has to pass stale_reasons.",
+      "source": "284ed89a14ec"
+    },
+    "code-open-index.n132.text": {
+      "text": "A damaged file or a wrong format version is treated as stale and rebuilt, with no guessing about whether its data can still be used.",
+      "source": "e94dfa198ba8"
+    },
+    "code-open-index.n135.text": {
+      "text": "Reused only if all three match: no embedding request at all, the report says reused, and the index took 0 requests.",
+      "source": "0b5cbb0f3241"
+    },
+    "code-open-index.n139.text": {
+      "text": "Otherwise every chunk is embedded again. embedding_text first removes the {#anchor} marks, which BM25's tokenizer drops too, so both retrievers read the same text; the trade-off is in the deep dive \"Dimensions, cost and the text that gets embedded\".",
+      "source": "d98da4556b25"
+    },
+    "code-open-index.n140.text": {
+      "text": "The vectors are packed with where they came from: model, dimensions, corpus version and chunk ids. Without any one of them, there is no telling next time whether they can be used.",
+      "source": "22680a3cf526"
+    },
+    "code-open-index.n142.text": {
+      "text": "Written to a file under .runtime/; offline test mode writes to a temporary folder.",
+      "source": "22225747e3e4"
+    },
+    "code-open-index.n144.text": {
+      "text": "The index report records the status (built, reused or rebuilt after going stale), how many requests building took and the stale reasons.",
+      "source": "0a9bb2df8067"
+    },
+    "code-vector-index.v23.text": {
+      "text": "Cosine similarity: the dot product divided by the product of the two lengths; only direction counts.",
+      "source": "285e7347fb7e"
+    },
+    "code-vector-index.v25.text": {
+      "text": "Two vectors of different dimensions cannot be compared: an error is raised, with no padding and no truncation.",
+      "source": "6f19d0578d24"
+    },
+    "code-vector-index.v27.text": {
+      "text": "Step one is the dot product, step two multiplies the two lengths, step three divides; a length of 0 returns 0 instead of dividing by zero.",
+      "source": "22e05b9c03a9"
+    },
+    "code-vector-index.v33.text": {
+      "text": "An index is five things: model, dimensions, corpus version, chunk ids and vectors. The first three are its identity.",
+      "source": "d94177f72a94"
+    },
+    "code-vector-index.v40.text": {
+      "text": "Construction already checks that ids and vectors match one to one and that every vector has the declared dimensions, so a broken index cannot be built.",
+      "source": "858730f10354"
+    },
+    "code-vector-index.v46.text": {
+      "text": "Brute-force search: the query is compared with every chunk. With thirty-odd chunks the ranking is exact, not approximate.",
+      "source": "f9e33f02706f"
+    },
+    "code-vector-index.v51.text": {
+      "text": "The third guard: a query vector whose size differs from the index is refused; the new-dimensions exercise shows this error in its report.",
+      "source": "6a77a6a2e374"
+    },
+    "code-vector-index.v53.text": {
+      "text": "where filters before ranking: chunks that do not match never take part in the comparison. This is filtering by metadata.",
+      "source": "7536a2e48680"
+    },
+    "code-vector-index.v56.text": {
+      "text": "Ties keep the chunks' original order, so the same input always gives the same result.",
+      "source": "bc1c2ee784e4"
+    },
+    "code-vector-index.v60.text": {
+      "text": "If any of the three identity fields differs, the index is stale. It only says whether the index may be used; stale_reasons says why not.",
+      "source": "10baf855d9dd"
+    },
+    "code-decision.title": {
+      "text": "Vectors saved in one JSON file, searched one by one",
+      "source": "6f380a415998"
+    },
+    "code-decision.chosen": {
+      "text": "With a few dozen chunks, the vectors and where they came from go into one JSON file and every search computes each cosine, so every step can be opened and checked by hand; reuse is decided by model, dimensions and corpus version.",
+      "source": "1f228836ae49"
+    },
+    "code-decision.vector-db.title": {
+      "text": "Plug in a vector database",
+      "source": "90bb15127890"
+    },
+    "code-decision.vector-db.why_not": {
+      "text": "It adds a service to install and hides storage details inside a library. This lesson is about what an index must remember and when it goes stale, which shows more clearly in code you write yourself.",
+      "source": "0422c09ef0b8"
+    },
+    "code-decision.ann.title": {
+      "text": "Use an approximate nearest-neighbor index",
+      "source": "2556c8e77bd7"
+    },
+    "code-decision.ann.why_not": {
+      "text": "With few chunks it brings no speed-up, and its results may differ from exact comparison, so the learner cannot check them by hand.",
+      "source": "20f321d562fc"
+    },
+    "code-decision.no-cache.title": {
+      "text": "Re-embed every chunk for every search",
+      "source": "5bfe490d48a5"
+    },
+    "code-decision.no-cache.why_not": {
+      "text": "Every run would spend 4 more embedding requests, and there would be no reuse or staleness decision to see.",
+      "source": "5d26ae230800"
+    },
+    "index-build.title": {
+      "text": "Build the index and search",
+      "source": "9fefce7b3b7b"
+    },
+    "index-build.hypothesis": {
+      "text": "A first run embeds every chunk in batches: 36 default English chunks (38 in Chinese), at most 10 per batch, so building the index takes 4 embedding requests, plus 1 for the query; once the index is saved, a run with the same model, dimensions and documents needs only that 1 query request.",
+      "source": "7c8db68b7aa4"
+    },
+    "index-build.build.label": {
+      "text": "Build the index and search",
+      "source": "9fefce7b3b7b"
+    },
+    "index-build.first-batch.text": {
+      "text": "The chunk texts in the first embedding request.",
+      "source": "84a66543c27b"
+    },
+    "index-build.batch-dimensions.text": {
+      "text": "The dimensions named in the request.",
+      "source": "5b9b8581f2b8"
+    },
+    "index-build.first-vector.text": {
+      "text": "The first vector in the first response.",
+      "source": "1f136e738876"
+    },
+    "index-build.index-model.text": {
+      "text": "The embedding model recorded in the index report.",
+      "source": "7af0b6f8cd88"
+    },
+    "index-build.index-version.text": {
+      "text": "The corpus version recorded in the index report.",
+      "source": "7af3f19e88cf"
+    },
+    "index-build.index-status.text": {
+      "text": "Whether the index was built or reused this time.",
+      "source": "f8cec3bf8f23"
+    },
+    "index-build.results.text": {
+      "text": "The search results: each chunk's cosine similarity and the sections it covers.",
+      "source": "3a3b4a7b1d7c"
+    },
+    "index-build.guide.0.text": {
+      "text": "This exercise builds the index first, then runs vector search with a paraphrased query. Start with the first batch of index building.",
+      "source": "c83d75dc2895"
+    },
+    "index-build.guide.1.text": {
+      "text": "The runner cuts batches by embedding_batch_limit; the first batch carries 10 chunk texts.",
+      "source": "5383cd7a8c09"
+    },
+    "index-build.guide.2.text": {
+      "text": "Every batch names its dimensions, which decide how long the returned vectors are.",
+      "source": "23c5742908fd"
+    },
+    "index-build.guide.3.text": {
+      "text": "The embedding model returns one vector per text, recorded in full in the response.",
+      "source": "b73d6a448ae9"
+    },
+    "index-build.guide.4.text": {
+      "text": "The index report records the embedding model and the dimensions that produced these vectors.",
+      "source": "0d7095ae3820"
+    },
+    "index-build.guide.5.text": {
+      "text": "The corpus version is a digest of all document content. If the model, the dimensions or the version changes, this index can no longer be used.",
+      "source": "5d567116682b"
+    },
+    "index-build.guide.6.text": {
+      "text": "A first run says built; run it again under the same conditions and this says reused, with no index-building requests.",
+      "source": "7002b4f254d0"
+    },
+    "index-build.guide.7.text": {
+      "text": "Finally, the results: is the first chunk the section on overdue charges, and what is its score?",
+      "source": "90464d35a3e3"
+    },
+    "index-build.conclusion.proves.0": {
+      "text": "How many embedding requests this run sent, how many texts each batch carried, how long the vectors are, and the model, dimensions and corpus version the index recorded.",
+      "source": "b8a6f5a6b138"
+    },
+    "index-build.conclusion.proves.1": {
+      "text": "Which chunks came first for the late-fee query, and their cosine similarities.",
+      "source": "831a9d0e2e9d"
+    },
+    "index-build.conclusion.does_not_prove.0": {
+      "text": "A high cosine similarity does not mean the chunk answers the question; read the text or check the human annotation.",
+      "source": "a5ae32fde0ae"
+    },
+    "index-build.conclusion.does_not_prove.1": {
+      "text": "One query's results do not show that vector retrieval is better overall; the comparison has to cover the whole query set.",
+      "source": "d6cad8d6497f"
+    },
+    "index-build.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the vectors are built by the fixture from a concept vocabulary; they are not output of an embedding model.",
+      "source": "3afbfa86d2be"
+    },
+    "vector-vs-bm25.title": {
+      "text": "Vector retrieval against the keyword baseline",
+      "source": "462645c6f9c6"
+    },
+    "vector-vs-bm25.hypothesis": {
+      "text": "Vector retrieval hits paraphrased queries more easily; keyword retrieval hits queries told apart only by a code more easily. Only when both run on the same query set and the same chunks do the differences land on specific queries.",
+      "source": "238aa5ae5e63"
+    },
+    "vector-vs-bm25.compare.label": {
+      "text": "Vector retrieval against the keyword baseline",
+      "source": "462645c6f9c6"
+    },
+    "vector-vs-bm25.same-queries.text": {
+      "text": "Both retrievers use the same query set.",
+      "source": "5c6ceef31a0e"
+    },
+    "vector-vs-bm25.same-chunks.text": {
+      "text": "Both retrievers search the same chunks.",
+      "source": "c223f5cbfcc3"
+    },
+    "vector-vs-bm25.bm25-hits.text": {
+      "text": "BM25's hit rate: how many answerable queries it hits.",
+      "source": "885ad9cc5478"
+    },
+    "vector-vs-bm25.vector-hits.text": {
+      "text": "Vector retrieval's hit rate.",
+      "source": "ac6548c07bb3"
+    },
+    "vector-vs-bm25.only-vector.text": {
+      "text": "Queries hit by vector retrieval only.",
+      "source": "d61d839837cb"
+    },
+    "vector-vs-bm25.only-bm25.text": {
+      "text": "Queries hit by BM25 only.",
+      "source": "9ef55faf675e"
+    },
+    "vector-vs-bm25.table.text": {
+      "text": "The per-query table: both retrievers' results and the verdict for each query.",
+      "source": "a01b1d2e8cd7"
+    },
+    "vector-vs-bm25.no-answer.text": {
+      "text": "Chunks vector retrieval still returns when the documents have no answer.",
+      "source": "149f4ce9b363"
+    },
+    "vector-vs-bm25.guide.0.text": {
+      "text": "This exercise does not look at single queries; the whole query set goes to both retrievers and is judged against the same human annotation.",
+      "source": "4437ff697ee9"
+    },
+    "vector-vs-bm25.guide.1.text": {
+      "text": "First make sure the comparison is fair: the same query set.",
+      "source": "4b2c75b0cbc8"
+    },
+    "vector-vs-bm25.guide.2.text": {
+      "text": "And the same chunks, from the same version of the documents.",
+      "source": "bf623b90ce08"
+    },
+    "vector-vs-bm25.guide.3.text": {
+      "text": "BM25's hit rate; the denominator is the queries with a human-labeled answer.",
+      "source": "48bbb6f40097"
+    },
+    "vector-vs-bm25.guide.4.text": {
+      "text": "Vector retrieval's hit rate. When the totals are close, the difference hides in the per-query results.",
+      "source": "882f7f651030"
+    },
+    "vector-vs-bm25.guide.5.text": {
+      "text": "The queries only vector retrieval hits are mostly paraphrases.",
+      "source": "46d3c6cf7729"
+    },
+    "vector-vs-bm25.guide.6.text": {
+      "text": "For the ones only BM25 hits, see whether they are told apart by a code.",
+      "source": "424fa4e64721"
+    },
+    "vector-vs-bm25.guide.7.text": {
+      "text": "Read the table row by row: which kind of query each side wins, and which hits lack full coverage.",
+      "source": "5df2d6a80e1c"
+    },
+    "vector-vs-bm25.guide.8.text": {
+      "text": "Last, the queries the documents cannot answer: vector retrieval still returns 5 chunks, none of which should be taken as an answer.",
+      "source": "6b694ca189ee"
+    },
+    "vector-vs-bm25.conclusion.proves.0": {
+      "text": "On this query set and these chunks, which queries each retriever hit and which it missed.",
+      "source": "28b32f6312ea"
+    },
+    "vector-vs-bm25.conclusion.proves.1": {
+      "text": "Both retrievers used the same queries and the same human annotation.",
+      "source": "f9fc0fc4075b"
+    },
+    "vector-vs-bm25.conclusion.does_not_prove.0": {
+      "text": "14 queries are too few to say which retriever wins on other documents or other queries.",
+      "source": "fe1ba41b4ca6"
+    },
+    "vector-vs-bm25.conclusion.does_not_prove.1": {
+      "text": "A hit only means a relevant section is in the top 5, not that a correct answer can be written from it.",
+      "source": "eb6f4e40615b"
+    },
+    "vector-vs-bm25.conclusion.does_not_prove.2": {
+      "text": "The offline test vectors are constructed by design; the split they reproduce says nothing about any real embedding model.",
+      "source": "c57bcb1ce321"
+    },
+    "stale-index.title": {
+      "text": "Stale index check",
+      "source": "aee0b8f0f3a3"
+    },
+    "stale-index.hypothesis": {
+      "text": "As soon as the dimensions or the documents change, the old index is judged stale and not used to answer. With new dimensions the old index cannot even be compared; with changed documents, a misused old index would bring back chunks that were taken offline.",
+      "source": "002010cd476b"
+    },
+    "stale-index.dims.label": {
+      "text": "New dimensions: the old index cannot be used",
+      "source": "fa8beb9f7fdd"
+    },
+    "stale-index.corpus.label": {
+      "text": "Changed documents: the old index cannot be used",
+      "source": "166b0892628c"
+    },
+    "stale-index.stale-detected.text": {
+      "text": "The old index is judged stale, and what differs.",
+      "source": "1a0f9e3a29ba"
+    },
+    "stale-index.size-guard.text": {
+      "text": "The old index refuses a query vector of another size.",
+      "source": "52d617f8bdd6"
+    },
+    "stale-index.separate-files.text": {
+      "text": "Indexes of different sizes are separate files.",
+      "source": "c203157741e2"
+    },
+    "stale-index.leak.text": {
+      "text": "Misused, the old index returns chunks that were taken offline.",
+      "source": "2046d91db66a"
+    },
+    "stale-index.rebuild-reasons.text": {
+      "text": "The stale reasons recorded when the new index was built.",
+      "source": "c04762e34ecc"
+    },
+    "stale-index.new-clean.text": {
+      "text": "The new index returns current chunks only.",
+      "source": "8043886eeaf3"
+    },
+    "stale-index.guide.0.text": {
+      "text": "Each arm changes one thing: one switches the dimensions, the other takes the 2025 opening hours offline. First, see whether the old index is recognized as stale.",
+      "source": "812147c84cb6"
+    },
+    "stale-index.guide.1.text": {
+      "text": "The staleness check writes out what differs, with the old and new values.",
+      "source": "0bb1aee12649"
+    },
+    "stale-index.guide.2.text": {
+      "text": "In the new-dimensions arm: even if the old file were read by mistake, vectors of different sizes cannot be compared. That is the third guard.",
+      "source": "cb1e4754ac04"
+    },
+    "stale-index.guide.3.text": {
+      "text": "The file name carries the dimensions, so each size gets its own file. That is the first guard.",
+      "source": "93bc06228267"
+    },
+    "stale-index.guide.4.text": {
+      "text": "In the changed-documents arm: if the old index were used by mistake, the 2025 chunks that were taken offline would show up in the results.",
+      "source": "7a21b7c81be7"
+    },
+    "stale-index.guide.5.text": {
+      "text": "When the new index was built, the report recorded why the old one could not be used.",
+      "source": "06118939c3c2"
+    },
+    "stale-index.guide.6.text": {
+      "text": "Last, confirm that the new index returns only current chunks.",
+      "source": "bf8977ae9dfb"
+    },
+    "stale-index.conclusion.proves.0": {
+      "text": "After the dimensions or the documents changed, the old index was judged stale and not used to answer, with every reason on record.",
+      "source": "76f65fd950e6"
+    },
+    "stale-index.conclusion.proves.1": {
+      "text": "What goes wrong when an old index is misused: vectors of different sizes cannot be compared, and changed documents bring back chunks that were taken offline.",
+      "source": "f5acbf9154bf"
+    },
+    "stale-index.conclusion.does_not_prove.0": {
+      "text": "The document change is simulated within this run; the real documents did not change, and this new index was not saved.",
+      "source": "57bd18279016"
+    },
+    "stale-index.conclusion.does_not_prove.1": {
+      "text": "The staleness check only looks at the model, dimensions, corpus version and chunk list; if the provider updates the model behind the same name, or this lesson changes how embedding_text prepares the text, it cannot tell.",
+      "source": "995e6d5a90f5"
+    },
+    "stale-index.conclusion.does_not_prove.2": {
+      "text": "In offline test mode the vectors are test vectors, so the rankings of the old and new index say nothing about a real model.",
+      "source": "048b12272bdc"
+    },
+    "inputs.task.label": {
+      "text": "Exercise",
+      "source": "7ab136020e66"
+    },
+    "inputs.task.options.search.label": {
+      "text": "Build the index and search",
+      "source": "9fefce7b3b7b"
+    },
+    "inputs.task.options.compare.label": {
+      "text": "Vector retrieval against BM25",
+      "source": "3b96db4f3cf5"
+    },
+    "inputs.task.options.stale.label": {
+      "text": "Stale index check",
+      "source": "aee0b8f0f3a3"
+    },
+    "inputs.query.label": {
+      "text": "Query",
+      "source": "bcd6771e08ec"
+    },
+    "inputs.query.help": {
+      "text": "Build the index and search uses it for vector search; the stale index check uses it to compare the old and new index. The comparison exercise uses the fixed query set and ignores this field.",
+      "source": "f71677011742"
+    },
+    "inputs.top_k.label": {
+      "text": "Chunks returned",
+      "source": "ae6f1a771b25"
+    },
+    "inputs.top_k.help": {
+      "text": "Only for Build the index and search, 1 to 10.",
+      "source": "4a1d67f5a3bf"
+    },
+    "inputs.dimensions.label": {
+      "text": "Dimensions",
+      "source": "4fa164bacd53"
+    },
+    "inputs.dimensions.help": {
+      "text": "dimensions in the request, one of 64, 128, 256, 512, 768, 1024, 1536 or 2048. Indexes are saved in separate files by locale, model and dimensions; an embedding model that does not support the parameter or the value raises an error.",
+      "source": "458273dff384"
+    },
+    "inputs.doc_filter.label": {
+      "text": "Filter by document",
+      "source": "6109438f84d2"
+    },
+    "inputs.doc_filter.help": {
+      "text": "Only for Build the index and search: other documents' chunks are dropped before ranking.",
+      "source": "710e49d8eb93"
+    },
+    "inputs.doc_filter.options.all.label": {
+      "text": "No filter",
+      "source": "dbcbd0615e5f"
+    },
+    "inputs.doc_filter.options.borrowing.label": {
+      "text": "Borrowing Rules",
+      "source": "08fd0a507733"
+    },
+    "inputs.doc_filter.options.fees.label": {
+      "text": "Charges and Compensation",
+      "source": "fa0f56f10fce"
+    },
+    "inputs.doc_filter.options.membership.label": {
+      "text": "Library Cards",
+      "source": "465b99cd0c7f"
+    },
+    "inputs.doc_filter.options.rooms.label": {
+      "text": "Study Rooms",
+      "source": "7b9e77d4fd3a"
+    },
+    "inputs.doc_filter.options.hours.label": {
+      "text": "Opening Hours (2026)",
+      "source": "3900123d43ea"
+    },
+    "inputs.doc_filter.options.hours-2025.label": {
+      "text": "Opening Hours (2025)",
+      "source": "b497678d9b51"
+    },
+    "inputs.doc_filter.options.digital.label": {
+      "text": "Digital Services",
+      "source": "3578ca0c7531"
+    },
+    "inputs.doc_filter.options.conduct.label": {
+      "text": "Visitor Guidelines",
+      "source": "be86960158a2"
+    },
+    "inputs.doc_filter.options.floors.label": {
+      "text": "Building Guide",
+      "source": "cfa98e3ea9c4"
+    },
+    "inputs.doc_filter.options.reader-notes.label": {
+      "text": "Selected Reader Comments",
+      "source": "87abdd5a9519"
+    },
+    "inputs.change.label": {
+      "text": "What changes",
+      "source": "a3b4c6c01432"
+    },
+    "inputs.change.help": {
+      "text": "Only for the stale index check.",
+      "source": "baf158e4589f"
+    },
+    "inputs.change.options.dimensions.label": {
+      "text": "Dimensions",
+      "source": "4fa164bacd53"
+    },
+    "inputs.change.options.corpus.label": {
+      "text": "Documents: the 2025 opening hours go offline",
+      "source": "84a030fad12a"
+    },
+    "inputs.new_dimensions.label": {
+      "text": "New dimensions",
+      "source": "25d82f8af0d2"
+    },
+    "inputs.new_dimensions.help": {
+      "text": "Only for new dimensions: same allowed values as above, and different from dimensions.",
+      "source": "6ebf21d5c47f"
+    },
+    "quiz.why-cosine.prompt": {
+      "text": "Why compare two text vectors by their angle (cosine) rather than by the distance between the points?",
+      "source": "784318f49821"
+    },
+    "quiz.why-cosine.a.text": {
+      "text": "The angle only looks at direction, so saying the same thing at any length does not change the score",
+      "source": "c5e3126f76db"
+    },
+    "quiz.why-cosine.a.feedback": {
+      "text": "Right. A vector's length often reflects the text's length, not its meaning.",
+      "source": "b362f92aa4fd"
+    },
+    "quiz.why-cosine.b.text": {
+      "text": "Cosine is much faster to compute than distance",
+      "source": "7de58d5378a3"
+    },
+    "quiz.why-cosine.b.feedback": {
+      "text": "No. The work is about the same; cosine is chosen because length does not affect it.",
+      "source": "6e268ce1b2aa"
+    },
+    "quiz.why-cosine.c.text": {
+      "text": "Distance cannot be used on high-dimensional vectors",
+      "source": "1ad3956eb99b"
+    },
+    "quiz.why-cosine.c.feedback": {
+      "text": "No. Distance can be computed too, but differences in length leak into the result.",
+      "source": "a84a71a572b0"
+    },
+    "quiz.why-cosine.explanation": {
+      "text": "Two texts with the same meaning and different lengths point the same way with different lengths; cosine compares only the direction.",
+      "source": "29d216ff72b4"
+    },
+    "quiz.model-change.prompt": {
+      "text": "Same chunks, but the embedding model changes from A to B, and the dimensions happen to be the same. Can the old index still be used?",
+      "source": "6301de7063c9"
+    },
+    "quiz.model-change.a.text": {
+      "text": "Yes, the same dimensions mean the cosine can be computed",
+      "source": "8724157080c5"
+    },
+    "quiz.model-change.a.feedback": {
+      "text": "A number comes out, but the two models' vectors live in separate coordinate systems, so it means nothing.",
+      "source": "a2b331fc8328"
+    },
+    "quiz.model-change.b.text": {
+      "text": "No, the model is part of the index's identity; every chunk has to be re-embedded",
+      "source": "315933d6d8df"
+    },
+    "quiz.model-change.b.feedback": {
+      "text": "Right. is_stale returns true because the model differs.",
+      "source": "f2700f5972ea"
+    },
+    "quiz.model-change.c.text": {
+      "text": "Yes, as long as the corpus version has not changed",
+      "source": "88ef5dd06645"
+    },
+    "quiz.model-change.c.feedback": {
+      "text": "No. The model, the dimensions and the corpus version must all match.",
+      "source": "44f956c69caa"
+    },
+    "quiz.model-change.explanation": {
+      "text": "Query vectors and chunk vectors must come from the same model for the comparison to mean anything.",
+      "source": "9ee83872041a"
+    },
+    "quiz.batches.prompt": {
+      "text": "There are 36 default English chunks and embedding_batch_limit is 10. How many embedding requests does the first index build send?",
+      "source": "e806d11b6682"
+    },
+    "quiz.batches.a.text": {
+      "text": "1",
+      "source": "35cf44ac0fcb"
+    },
+    "quiz.batches.a.feedback": {
+      "text": "No. One request carries at most 10 texts.",
+      "source": "1c35e49d0e15"
+    },
+    "quiz.batches.b.text": {
+      "text": "4",
+      "source": "5641872dab77"
+    },
+    "quiz.batches.b.feedback": {
+      "text": "Right. 10, 10, 10, 6.",
+      "source": "41156d4770e7"
+    },
+    "quiz.batches.c.text": {
+      "text": "36",
+      "source": "58559d99776f"
+    },
+    "quiz.batches.c.feedback": {
+      "text": "No. Batching exists precisely so that it is not one request per text.",
+      "source": "a3a0b9d15ab6"
+    },
+    "quiz.batches.explanation": {
+      "text": "36 texts at 10 per batch make 4 batches; add the query and there are 5 request events.",
+      "source": "11ea4154c7d8"
+    },
+    "quiz.no-answer.prompt": {
+      "text": "The documents say nothing about parking. What does vector retrieval return for \"Does the library have a car park?\"",
+      "source": "dd42c1350147"
+    },
+    "quiz.no-answer.a.text": {
+      "text": "An empty list, because no chunk is relevant",
+      "source": "926b0ac780c9"
+    },
+    "quiz.no-answer.a.feedback": {
+      "text": "No. Vector retrieval can always compute a cosine, so it still ranks a top 5.",
+      "source": "c1ce2730e216"
+    },
+    "quiz.no-answer.b.text": {
+      "text": "The 5 highest-scoring chunks, none of which is an answer",
+      "source": "1f7360f083d1"
+    },
+    "quiz.no-answer.b.feedback": {
+      "text": "Right. Getting results back does not mean the documents contain an answer.",
+      "source": "3ce095cb31be"
+    },
+    "quiz.no-answer.c.text": {
+      "text": "An error",
+      "source": "a43717b95564"
+    },
+    "quiz.no-answer.c.feedback": {
+      "text": "No. Retrieval itself does not fail because there is no answer.",
+      "source": "7daca4e9b586"
+    },
+    "quiz.no-answer.explanation": {
+      "text": "Whether the documents contain an answer is decided by human annotation or by checks in the later answer step, not by whether retrieval returned anything.",
+      "source": "d8ea1f264e7d"
+    },
+    "quiz.same-set.prompt": {
+      "text": "Why does the comparison give both retrievers the same query set and the same chunks?",
+      "source": "7690fdad8e54"
+    },
+    "quiz.same-set.a.text": {
+      "text": "So that differences in hits come only from the retrieval method",
+      "source": "7414a6d2d1ec"
+    },
+    "quiz.same-set.a.feedback": {
+      "text": "Right. With other queries or chunks, there is no telling where a difference comes from.",
+      "source": "af89cb7816e4"
+    },
+    "quiz.same-set.b.text": {
+      "text": "So that fewer requests are sent",
+      "source": "0450338236c1"
+    },
+    "quiz.same-set.b.feedback": {
+      "text": "No. The point is a fair comparison; the number of requests is a separate matter.",
+      "source": "67f28bb40d70"
+    },
+    "quiz.same-set.c.text": {
+      "text": "Because BM25 can only handle fixed queries",
+      "source": "431d4cc511cc"
+    },
+    "quiz.same-set.c.feedback": {
+      "text": "No. BM25 can handle any query.",
+      "source": "030cb50ad6bc"
+    },
+    "quiz.same-set.explanation": {
+      "text": "A controlled comparison changes one condition. Here it is the retrieval method; the queries, the chunks and the human annotation stay the same.",
+      "source": "7f9ab90a1b99"
+    },
+    "quiz.q13.prompt": {
+      "text": "Offline, for \"What time does the library close on Sunday?\", a reader's comment wishing the library stayed open until 9 p.m. on Sundays is in the top 3 of vector retrieval, and the first chunk that covers an annotated section only appears at rank 5. What does this show?",
+      "source": "e2a68cea1a29"
+    },
+    "quiz.q13.a.text": {
+      "text": "Vector retrieval made a mistake",
+      "source": "51d227e524f4"
+    },
+    "quiz.q13.a.feedback": {
+      "text": "No. The comment really is close to the query in meaning, so ranking it high is not surprising.",
+      "source": "0334ef22af69"
+    },
+    "quiz.q13.b.text": {
+      "text": "Being similar in meaning is not being a rule; whether a chunk can serve as an answer has to be judged separately",
+      "source": "52318e83eaa2"
+    },
+    "quiz.q13.b.feedback": {
+      "text": "Right. Retrieval ranks relatedness; it does not judge trustworthiness.",
+      "source": "f57e5938a643"
+    },
+    "quiz.q13.c.text": {
+      "text": "The cosine threshold should be raised to 0.99",
+      "source": "fef226324956"
+    },
+    "quiz.q13.c.feedback": {
+      "text": "No. A threshold cannot stop a distractor that is close in meaning, and it would also cut the real answers.",
+      "source": "9f3f308cf453"
+    },
+    "quiz.q13.explanation": {
+      "text": "Whether a source is trustworthy and which version counts are handled with metadata and by the answer steps of later lessons.",
+      "source": "b3f6fea86259"
+    },
+    "check-hunt.prompt": {
+      "text": "In a run of \"Build the index and search\", find the last batch request of index building and count how many texts it carries.",
+      "source": "dead0d263f5a"
+    },
+    "check-hunt.explanation": {
+      "text": "There are 36 default English chunks: the first three batches carry 10 each and the 4th carries the remaining 6 (with 38 Chinese chunks the last batch has 8). The 5th request is the query itself. If the index was reused this time, the run has only 1 request; change the dimensions and run again to see the index being built.",
+      "source": "088c6f43df70"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and this lesson's source, and tick an item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I found dimensions in a request event and checked the length of a vector in the response.",
+      "source": "8fb81e6004ff"
+    },
+    "check-points.item-2.text": {
+      "text": "I ran \"Build the index and search\" twice in a row; the second time the index report said reused and only 1 request was sent.",
+      "source": "75dcdb87416a"
+    },
+    "check-points.item-3.text": {
+      "text": "I read the comparison table row by row and can say which kind of query vector retrieval wins and which kind BM25 wins.",
+      "source": "046f957efc83"
+    },
+    "check-points.item-4.text": {
+      "text": "I can name the three changes after which an old index cannot be used, and the three guards this lesson uses against misuse.",
+      "source": "670615c6b307"
+    },
+    "code_notes.embedding_batch_limit.note": {
+      "text": "How many texts one embedding request may carry, set by the platform (10 on Bailian's compatible endpoint); the runner batches by it.",
+      "source": "8aacb55ab527"
+    },
+    "code_notes.is_stale.note": {
+      "text": "A VectorIndex method: true if the model, dimensions or corpus version differ, meaning the old index cannot be used.",
+      "source": "d2c82c00b238"
+    },
+    "code_notes.stale_reasons.note": {
+      "text": "Lists each reason an old index cannot be used, including a changed chunk list; an empty list means it can be reused.",
+      "source": "fc838ffcf728"
+    },
+    "code_notes.judge.note": {
+      "text": "Compares the section anchors a chunk covers with the human annotation: hit or not, full coverage or not, rank of the first hit.",
+      "source": "5d7fae7ccf5b"
+    },
+    "code_notes.corpus_version.note": {
+      "text": "The corpus version: a digest over every document's id and content digest; changing one character in any document changes it.",
+      "source": "4f1f09ac5fe0"
+    },
+    "code_notes.where.note": {
+      "text": "The filter parameter of VectorIndex.search: chunks that do not match are dropped before ranking.",
+      "source": "ca0219264c29"
+    }
+  }
+}

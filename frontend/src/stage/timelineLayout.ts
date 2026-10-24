@@ -5,7 +5,7 @@ export type TimelineScale = "uniform" | "time";
 
 export interface Lane {
   id: string;
-  kind: "llm" | "tool";
+  kind: "llm" | "tool" | "approval";
   name?: string;
   bars: { span: StageSpan; left: number; width: number }[];
 }
@@ -28,7 +28,7 @@ export function layoutTimeline(
     ((useTime ? times[index] - t0 : index) / total) * 100;
   const lanes = new Map<string, Lane>();
   for (const span of spans) {
-    const id = span.kind === "llm" ? "llm" : `tool:${span.name}`;
+    const id = span.kind === "tool" ? `tool:${span.name}` : span.kind;
     if (!lanes.has(id))
       lanes.set(id, { id, kind: span.kind, name: span.name, bars: [] });
     const left = position(span.startIndex);

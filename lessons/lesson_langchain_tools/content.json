@@ -1,0 +1,1293 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "langchain-tools",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "FRAMEWORK / TOOLS",
+          "headline": "框架接手解析，",
+          "highlight": "判断仍归程序。",
+          "takeaway": "用 LangChain 的工具装饰器和结构化输出接入前面课程的任务卡契约，再逐项核对：工具失败还算不算失败，解析失败会不会被吞掉，服务商到底支持哪些能力。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-decorator",
+              "label": "01 / DECORATOR",
+              "title": "工具装饰器",
+              "description": "从函数名、类型注解和描述生成工具定义；执行时还按同一个 Schema 校验实参。",
+              "token": "lookup_lesson"
+            },
+            {
+              "id": "02-parser",
+              "label": "02 / PARSER",
+              "title": "输出解析器",
+              "description": "with_structured_output 先强制模型调用 TaskCard，再用解析器校验实参；结果分成 raw、parsed、parsing_error 三项。",
+              "token": "with_structured_output"
+            },
+            {
+              "id": "03-business",
+              "label": "03 / BUSINESS",
+              "title": "业务校验仍归程序",
+              "description": "解析成功只说明形状对。business_checks 再把课程卡和可信事实逐字段比较。",
+              "token": "business_checks"
+            },
+            {
+              "id": "04-matrix",
+              "label": "04 / MATRIX",
+              "title": "能力矩阵",
+              "description": "每项能力写本次运行的证据和状态：本次实测、适配回退或未验证。",
+              "token": "cap_forced_tool"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "框架接手什么，程序留下什么",
+          "paragraphs": [
+            "本课把前面课程写好的业务契约原样交给 LangChain 的模型、工具和解析组件，再检查错误和证据的含义有没有变。{{lesson:structured-output}}里，课程卡要过三层检查：能解析成 JSON、符合 TaskCard 的 Schema、事实与可信数据一致，解析和校验都是自己写的 Python。框架提供了现成的组件，问题是换上它们以后，原来的失败还会不会如实报告。",
+            "本课的任务是为课程 task-contract 生成课程卡，运行器分两步。第一步让模型调用 lookup_lesson 查出课程事实，这个工具读的就是那一课的 trusted_facts；第二步用 with_structured_output 要求模型按 TaskCard 写出课程卡。TaskCard 和可信事实都从{{lesson:structured-output}}直接导入，一个字段都没改。业务规则因此只有一份：那一课怎样判对错，本课就怎样判，变的只是中间那层解析。",
+            "框架接手的是格式转换：把函数签名翻译成工具定义，把模型返回的调用实参解析成对象。程序留下的是判断：工具失败了要不要继续，解析失败了重试几次，解析出来的对象对不对。这些判断写在运行器里，不交给框架的默认值。",
+            "{{lesson:langchain-vs-native}}已经讲过模型调用怎样经适配层记录。本课所有调用同样经过 RunContextChatModel，request 和 response 事件照常记录，同一次运行里能把服务商原始响应和框架对象并排对照。四个练习分别对应四种情况：一切正常、课程卡缺字段、事实写错、工具报错。后三种是在提示词里注入的，真实模型不一定照做，以你自己的运行为准。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "工具装饰器与参数 Schema",
+          "paragraphs": [
+            "工具装饰器（Tool Decorator）从函数的类型注解生成工具定义，省掉手写 JSON Schema，也省掉两份定义走散的机会。手写定义和函数是两份东西：函数加了参数、定义忘了改，模型就看不到这个参数；定义的 required 里写了函数没有的参数，调用一来就是 TypeError。参考资料里就有现成的例子：一份结构化提取示例的 required 列了 `counterpoint`，properties 里却没有定义它。",
+            "拿本课的 lookup_lesson 手算一遍。参数写成 `lesson_id: Annotated[str, Field(min_length=1, max_length=48)]`，装饰器读到三件事：参数名 lesson_id、类型是字符串、长度 1 到 48。生成的 parameters 里于是有 `\"type\": \"string\"`、`\"minLength\": 1`、`\"maxLength\": 48`，lesson_id 进了 required，因为它没有默认值；如果写成带默认值的参数，它就会从 required 里消失。工具名取函数名，工具描述取装饰器的 description 参数，不传时取文档字符串。手写同样一份定义，要对着函数逐项抄这几样，漏一项就是一处不一致。",
+            "装饰器返回一个 StructuredTool 对象，它带着两样东西：给模型看的参数 Schema，和调用时真正执行的 Pydantic 校验。bind_tools 把前者转换成请求里的工具定义；本课第一份实验报告把它和 handwritten_definition 手写的定义逐字段比较，第 1 轮请求的 tools 里发出去的就是它。后者在执行时起作用：模型传来空字符串，函数还没运行，校验就失败了，平台记成 error_type 为 ValidationError 的结构化错误。",
+            "生成的定义只表达类型和约束，说不清什么时候该用。工具描述仍要人写，而且要写边界：本课的描述写明只接受 `slug`，不接受课名、课号或目录名，这一句是给模型做决策用的。复用业务模型还有一个坑：TaskCard 没有文档字符串，框架会发出一条空的工具描述。card_schema 用一个不加字段的子类补上描述，校验规则一条没动；实验报告里“业务模型自带的工具描述”一项能看到原来那条是空的。"
+          ]
+        },
+        {
+          "id": "deep-dive-three-frameworks",
+          "type": "deep-dive",
+          "title": "同一个函数，三个框架三种登记法",
+          "summary": "框架做的都是同一件事：把函数翻译成名字、描述和参数 Schema，差别在信息从哪里来。",
+          "paragraphs": [
+            "Hugging Face Agents Course 用同一个宾客检索函数演示了三个框架。`smolagents` 要求写一个工具类，名字、描述和输入字典逐项手填；LlamaIndex 的 FunctionTool 从文档字符串和类型注解自动推断；LangChain 那一版用的是只接收一个字符串的旧式 Tool，参数没有类型 Schema。三种写法给模型的信息量不同：手填的最灵活也最容易漏，自动推断的取决于注解写得多细。对 Agent 来说，后两者的差别会直接落到请求里：没有类型 Schema，模型只能把所有信息塞进一个字符串，工具再自己去拆。",
+            "《深入理解 AI Agent》第 4 章讲工具描述时强调三点：写清什么时候用，而不只是能做什么；列出边界，做不到什么、不接受什么输入；参数用具体例子，写 `task-contract` 比只写“小写加连字符”管用。装饰器只能自动完成第三点里的类型部分，前两点永远要人写。lookup_lesson 的工具描述和参数说明就是按这三点写的，读码页的运行时文本里能看到原文。写好之后还要回到运行记录里看模型怎样用它，描述的效果只能靠运行检验。",
+            "生成和手写也不是二选一。手写的好处是逐字控制模型看到的定义，坏处是要和函数同步维护；生成的好处是只有一处真相，坏处是定义随注解变化，改一个默认值就改了请求。本课让两者并存并逐字段比较，相当于给生成结果加了一道升级检查：哪天升级框架、生成规则变了，“生成的 lookup_lesson 定义与手写定义一致”这一项就会变成未通过，差异路径写在详情里。"
+          ]
+        },
+        {
+          "id": "predict-requests",
+          "type": "predict",
+          "prompt": "在实验台运行“故意缺字段”之前先猜：这次运行会出现几个 request 事件？提示：检索一次，第一次生成课程卡缺字段，修复上限是 1 次。",
+          "experiment": "structured-adapter",
+          "arm": "missing-field",
+          "rule": {
+            "kind": "count_events",
+            "event": "request"
+          }
+        },
+        {
+          "id": "mq-schema-source",
+          "type": "micro-quiz",
+          "question": {
+            "id": "schema-source",
+            "prompt": "lookup_lesson 工具定义里的 `\"maxLength\": 48` 是从哪里来的？",
+            "options": [
+              {
+                "id": "a",
+                "text": "参数的类型注解：Field 里写了长度上限，装饰器把它翻译成了 Schema",
+                "feedback": "对。参数 Schema 来自类型注解，执行时还会按它校验。"
+              },
+              {
+                "id": "b",
+                "text": "工具描述里写的那句话",
+                "feedback": "不对。工具描述只是给模型读的文字，装饰器不会从里面提取约束。"
+              },
+              {
+                "id": "c",
+                "text": "模型调用工具时自己补上的",
+                "feedback": "不对。工具定义在请求发出前就生成好了，模型只读不改。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "类型注解是参数 Schema 的唯一来源；工具描述和参数说明仍要人写。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "结构化结果与解析器",
+          "paragraphs": [
+            "with_structured_output 让框架替你解析模型输出，但它报告失败的方式不止一种，有两种失败根本不抛异常。在{{lesson:structured-output}}里，JSON 解析失败和 Schema 不符都会抛错，程序都能接住。换成框架以后，你拿到的是一个结果字典，要自己看清里面是什么；只写一个异常处理分支，等于默认另外两种失败不会发生。",
+            "输出解析器是把模型的原始输出变成程序对象的组件。with_structured_output 由两半拼成：先用 bind_tools 把 TaskCard 登记成唯一的工具，并强制模型调用它；再接一个解析器，从 AIMessage 的第一个工具调用里取实参，用 TaskCard 校验。适配层把框架的强制选项翻译成请求里的 `\"tool_choice\": \"required\"`，第 2 轮 request 事件里能看到。传 include_raw=True 时，结果有三个键：raw 是原始 AIMessage，parsed 是 TaskCard 或 None，parsing_error 是解析时抛出的异常。",
+            "手算三种失败。模型漏了 prerequisite：实参是合法 JSON，Pydantic 抛出缺字段错误，parsing_error 里能读到 `prerequisite: missing`。模型写出 `{broken`：这是一次无效调用，适配层把它放进 invalid_tool_calls，解析器在有效调用里什么也没找到，parsed 和 parsing_error 都是 None。模型没调用工具、只写了一段文字：结果同样是两个 None。不传 include_raw 时，第一种直接抛异常，后两种安静地返回 None。classify 给这几种情况分别命名，程序检查 parsed 是不是 None，而不是只等异常。",
+            "解析成功也只说明形状对。“Schema 合法，事实写错”这一组里，如果模型把 prerequisite 写成 dependent-calls，类型和长度都合格，框架照样交回一个 TaskCard 对象。business_checks 拿它和可信事实逐字段比，发现不一致，判为未通过。框架替掉的是{{lesson:structured-output}}三层检查里的前两层，第三层业务校验仍由程序做，而且只在拿到对象之后才执行；没拿到对象时这一项写“未执行”，既不算失败，也不算通过。"
+          ]
+        },
+        {
+          "id": "deep-dive-inside-structured-output",
+          "type": "deep-dive",
+          "title": "with_structured_output 里面是什么",
+          "summary": "在 langchain-core 1.6.12 的源码里，它只是绑定工具再接一个解析器，还会悄悄丢掉两个参数。",
+          "paragraphs": [
+            "本课用的 RunContextChatModel 继承 BaseChatModel，没有自己实现 with_structured_output，走的是基类的默认实现。读 langchain-core 1.6.12 的源码，这个实现只有几步：用 `tool_choice=\"any\"` 调用 bind_tools，只登记 Schema 这一个工具；Schema 是 Pydantic 类时接 PydanticToolsParser，只取第一个工具调用；include_raw 为真时，再用一个带回退的组合，把解析异常放进 parsing_error，parsed 置为 None。整段逻辑不到三十行，没有重试，也没有任何服务商相关的分支。",
+            "有一处容易踩坑：基类实现在开头就把 `method` 和 `strict` 两个关键字参数取出来丢掉。写 `with_structured_output(TaskCard, method=\"json_schema\")` 不会报错，请求里也不会出现服务商原生的 JSON Schema 输出选项，发出去的仍是强制工具调用。服务商专用的集成包会覆盖这个方法，真正支持这些参数；通用实现只认工具调用这一条路。反过来，你也不能因为某个集成包支持原生输出，就假定换回通用实现时它仍然生效。",
+            "这正是《深入理解 AI Agent》第 4 章说的参数保真问题：调用方以为传进去的参数生效了，实际被中间层悄悄改掉或丢掉。对策只有一个，看实际发出去的请求。本课的能力矩阵把“服务商原生 JSON Schema 输出”和“strict 严格 Schema”都标为未验证，理由就是请求里没有这两个选项；以后换用支持它们的集成包，也要先在 request 事件里确认选项真的出现了，再改这两行的状态。"
+          ]
+        },
+        {
+          "id": "misconception-no-exception",
+          "type": "misconception",
+          "claim": "with_structured_output 出了问题一定会抛异常；没抛异常，就说明拿到了合格的课程卡。",
+          "correction": "实参不是 JSON 对象、或者模型根本没调用工具时，include_raw 的结果里 parsed 和 parsing_error 都是 None，不传 include_raw 时直接返回 None，都不抛异常。即使拿到了 TaskCard 对象，也只说明形状对，事实对不对要看业务校验。"
+        },
+        {
+          "id": "mq-silent-none",
+          "type": "micro-quiz",
+          "question": {
+            "id": "silent-none",
+            "prompt": "模型把 TaskCard 的实参写成了 `{broken`。传了 include_raw=True，结果会是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "parsed 是 None，parsing_error 也是 None，原始字符串留在 raw 的 invalid_tool_calls 里",
+                "feedback": "对。这种失败不抛异常，程序要自己检查 parsed。"
+              },
+              {
+                "id": "b",
+                "text": "parsing_error 里是一个 JSON 解析错误",
+                "feedback": "不对。这次无效调用在适配层就进了 invalid_tool_calls，解析器只看有效调用，什么也没找到，也就没有异常。"
+              },
+              {
+                "id": "c",
+                "text": "invoke 直接抛出异常，运行中止",
+                "feedback": "不对。include_raw 为真时连 Pydantic 的校验错误都被收进 parsing_error，更不会因为找不到调用而抛错。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "classify 把这种情况命名为 invalid_arguments，和缺字段的 schema_error 分开报告。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "统一接口与服务商差异",
+          "paragraphs": [
+            "统一接口把每家服务商的响应都变成同一种 AIMessage，但各家实际支持什么，要在每次运行里逐项核对。同一行 `model.invoke(history)`，背后可能是百炼的原生 HTTP，也可能是经 LiteLLM 接入的其他服务商。代码不变，不等于行为不变：有的服务商不支持强制工具调用，有的不报告用量，有的不给调用 id。",
+            "先看同一次调用的两层数据。第 2 轮 response 事件是服务商原始响应：工具调用的 arguments 是一个 JSON 字符串，用量在 usage 里，没给就是没有。紧随其后的 lesson.framework_output 是框架对象：tool_calls 里的 args 已经解析成字典，用量放进 usage_metadata，服务商没报告时为 None，事件里同时写 `usage_reported: false`。服务商没给的调用 id 由适配层补成 `framework_call_` 开头，并记进 synthesized_call_ids。",
+            "两层不是一一对应。字符串变成字典，键的顺序和空白就丢了；放回消息历史的调用实参是适配层重新序列化的，不再是模型写的原文；无效调用进了 invalid_tool_calls，保留原字符串。所以排查问题时，原始字符串以 response 事件为准，框架对象只说明框架怎样理解了它。",
+            "能力矩阵（Capability Matrix）把这些差异写成一张表：每行一项能力，写本次运行里的证据和状态。状态只有三种：本次实测，说明这次的响应里真的出现过；适配回退，说明服务商没给、由适配层或运行器补上；未验证，说明本课根本没发送相关选项。离线测试模式下响应来自夹具，状态一律写“离线夹具”，不冒充服务商实测。这张表只说明这一次运行，换模型、换服务商都要重新跑。"
+          ]
+        },
+        {
+          "id": "section-fallback",
+          "type": "prose",
+          "title": "不支持的能力要显式回退",
+          "paragraphs": [
+            "服务商不支持某项能力时，回退要写在代码里、记进报告，不能让框架默默换一条路。以强制工具调用为例：有的服务商收到 `\"tool_choice\": \"required\"` 会照做，有的会忽略，模型照样写一段文字回来。这时 with_structured_output 交回两个 None，课程卡就这样丢了，而且没有任何异常提醒你。",
+            "本课的回退只有一条，条件很窄：模型没有调用任何工具、却写了一段文字时，运行器从文字里找出 JSON，用同一个 TaskCard 校验。校验通过，结果记为 text_fallback，能力矩阵里强制工具调用这一行写“适配回退”；校验不过，记为 text_fallback_failed，照常进入修复。缺字段和无效调用不走这条路：模型确实调用了工具，只是写错了，该修复而不是换格式。",
+            "回退的边界也要写清。它说明这一次服务商没照强制选项做，不说明服务商完全不支持：也许这次是模型忽略了指令，下次又照做了。所以矩阵只描述这一次运行，要下结论，就用同一个模型多跑几次，比较每次的状态。离线测试模式的夹具总是照做，这条回退只在本课的测试里用构造的响应走过，还没有服务商实测记录。"
+          ]
+        },
+        {
+          "id": "compare-layers",
+          "type": "compare",
+          "title": "同一次调用的两层数据",
+          "columns": [
+            "项目",
+            "服务商原始响应（response）",
+            "框架对象（lesson.framework_output）"
+          ],
+          "rows": [
+            [
+              "工具调用实参",
+              "arguments：一个 JSON 字符串",
+              "tool_calls 里的 args：已解析的字典"
+            ],
+            [
+              "无效调用的实参",
+              "原样的字符串",
+              "invalid_tool_calls：保留原字符串和错误说明"
+            ],
+            [
+              "调用 id",
+              "服务商给什么就是什么，可能没有",
+              "缺了就补 framework_call_ 开头的 id，写进 synthesized_call_ids"
+            ],
+            [
+              "用量",
+              "usage，可能没有",
+              "usage_metadata，没报告时为 None，usage_reported 为 false"
+            ],
+            [
+              "结束原因",
+              "finish_reason",
+              "response_metadata 里的 finish_reason"
+            ]
+          ]
+        },
+        {
+          "id": "mq-usage",
+          "type": "micro-quiz",
+          "question": {
+            "id": "usage-row",
+            "prompt": "真实运行后，能力矩阵的“用量报告”一行证据写“未报告”。这说明什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "这次运行里，服务商的响应没有给出用量",
+                "feedback": "对。证据只说明这一次运行；换模型或服务商要重新看。"
+              },
+              {
+                "id": "b",
+                "text": "这次运行的用量是 0",
+                "feedback": "不对。没报告不等于 0，框架也不会用 0 去填。"
+              },
+              {
+                "id": "c",
+                "text": "这家服务商从来不报告用量",
+                "feedback": "不对。一次运行只能说明这一次；别的模型、别的请求可能有用量。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "usage_metadata 为 None 时 usage_reported 为 false，能力矩阵照实写“未报告”，不估算。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "错误转换与有上限的修复",
+          "paragraphs": [
+            "解析失败时最多修复一次，原始输出留在 response 事件里；工具异常转换成结构化错误回给模型，不能变成一条看似成功的字符串。两件事都是在框架和程序的边界上转换错误，转换错了，失败就被藏起来了：报告里一片通过，模型和学习者都不知道中途出过什么事。",
+            "先看工具异常。lookup_lesson 查不到时抛出 ToolException，这是工具有意报告的业务失败。tools_as_callables 把它换成 ValueError，平台的执行器接住后返回 ok 为 false、error_type 为 ValueError 的结构化错误，记成 tool_result 事件，再作为 ToolMessage 回给模型。“工具报错”这一组里，模型第一次用目录名 `task_contract` 查询，读到错误里列出的可用名字后改正。最终报告的“工具失败次数”仍是 1：修好了，失败也照样计数。",
+            "LangChain 自己也有处理这类异常的开关：把工具的 handle_tool_error 设为真，异常文字会被当作工具的正常输出返回。在 langchain-core 1.6.12 上试过：查一个不存在的名字，得到的只是一句错误文字，没有任何字段说明它失败了。模型也许读得懂，程序却分不清“查到了内容”和“查询失败”。本课不打开它，失败一律走结构化错误。",
+            "再看解析失败。模型上一条消息里有一个 TaskCard 调用，下一次请求必须先用同一个调用 id 回答它，否则消息历史不合法。feedback_messages 为它写一条状态为错误的工具消息，内容是同样形状的结构化错误，next 字段写明怎样修。这条消息由运行器写，不是工具执行结果，所以没有 tool_call 和 tool_result 事件。修复上限是 REPAIR_LIMIT，等于 1，第二次还不过就停下，停止原因写进最终报告；检索也有自己的上限 LOOKUP_LIMIT，等于 2。"
+          ]
+        },
+        {
+          "id": "deep-dive-hidden-failures",
+          "type": "deep-dive",
+          "title": "别让工具把失败藏进返回值",
+          "summary": "参考教程里常见的“优雅处理”，会把失败变成一个看起来正常的结果。",
+          "paragraphs": [
+            "Hugging Face Agents Course 的文档分析示例里，提取文字的工具捕获所有异常，打印一行日志后返回空字符串。Microsoft AI Agents for Beginners 的时间工具查不到城市时，返回时间字段为 `\"unknown\"` 的 JSON。两种写法都不会让程序崩溃，可模型看到的是“文字为空”“时间不明”，分不清是没有内容还是出了错，也无从改正输入。对程序来说更糟：报告里这次调用算成功，统计出来的成功率比实际高。",
+            "本课分三层处理。查不到是能预料的业务失败：抛 ToolException，变成结构化错误，并带上可用的名字，模型能据此改正。参数不合 Schema：由工具自己的 Pydantic 校验拦下，同样是结构化错误。真正的程序错误，比如代码写错引发的 KeyError：平台的执行器不接，运行直接停下，由开发者去修，不包装成业务失败。tools_as_callables 只转换 ToolException 一种异常，就是为了守住这条线。",
+            "解析失败的修复也有同样的取舍。LangChain 的 Agent 组件在结构化输出校验失败时，默认把错误作为工具消息发回模型，让它重写；官方文档没有写明最多重试几次。本课把次数写死在 REPAIR_LIMIT，理由和{{lesson:structured-output}}一样：每次修复都是一次计费的模型调用，没有上限的修复会把一个格式问题变成一笔费用问题。上限之外，停止原因也要写进报告，让人看得出是通过了才停，还是次数用完才停。"
+          ]
+        },
+        {
+          "id": "walkthrough-missing-field",
+          "type": "walkthrough",
+          "title": "“故意缺字段”的一次运行",
+          "description": "按步骤说明这一组的流程，代码是简化的示意，非运行记录；你自己的运行证据在实验台。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "检索",
+              "actor": "模型",
+              "title": "第 1 轮：模型调用 lookup_lesson",
+              "body": "bind_tools 发出带工具定义的请求，tool_choice 为 auto，模型提出一次调用。",
+              "code": "proposal = bound.invoke(history)",
+              "language": "python",
+              "evidence": "第 1 轮 request / response"
+            },
+            {
+              "id": "step-2",
+              "label": "执行",
+              "actor": "运行器",
+              "title": "工具经 RunContext 真实执行",
+              "body": "execute_tool_calls 记录调用和工具结果，ToolMessage 放回消息历史。",
+              "code": "replies = execute_tool_calls(context, proposal, allowed)",
+              "language": "python",
+              "evidence": "tool_call / tool_result"
+            },
+            {
+              "id": "step-3",
+              "label": "解析",
+              "actor": "模型",
+              "title": "第 2 轮：课程卡缺了 prerequisite",
+              "body": "with_structured_output 强制调用 TaskCard；Pydantic 报缺字段，parsing_error 不为空，业务校验未执行。",
+              "code": "output = structured.invoke(history)",
+              "language": "python",
+              "evidence": "第 1 次生成课程卡的实验报告"
+            },
+            {
+              "id": "step-4",
+              "label": "反馈",
+              "actor": "运行器",
+              "title": "回答失败的那个调用 id",
+              "body": "运行器写一条状态为错误的工具消息，说明缺了什么、怎样修。",
+              "code": "history.extend([raw, *feedback_messages(raw, outcome, reasons, t)])",
+              "language": "python",
+              "evidence": "第 3 轮 request 的最后一条消息"
+            },
+            {
+              "id": "step-5",
+              "label": "修复",
+              "actor": "程序",
+              "title": "第 3 轮：解析通过，业务校验通过",
+              "body": "修复用掉唯一的一次机会，两项检查都通过后停止。",
+              "code": "checks = [parse_check(outcome, error, t)] + business_checks(card, context.locale)",
+              "language": "python",
+              "evidence": "最终结论里的课程卡生成次数"
+            }
+          ]
+        },
+        {
+          "id": "mq-failure-count",
+          "type": "micro-quiz",
+          "question": {
+            "id": "failure-count",
+            "prompt": "“工具报错”这一组最后通过了。最终报告里的“工具失败次数”是多少？",
+            "options": [
+              {
+                "id": "a",
+                "text": "1，第一次查询失败照样计数",
+                "feedback": "对。修好了也不抹掉失败，第一条 tool_result 仍是 ok 为 false。"
+              },
+              {
+                "id": "b",
+                "text": "0，最后成功了就不算失败",
+                "feedback": "不对。最终结论和过程记录是两回事，失败要如实计数。"
+              },
+              {
+                "id": "c",
+                "text": "2，失败和修复各算一次",
+                "feedback": "不对。第二次查询成功了，只有第一次的结果是 ok 为 false。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "工具失败次数数的是 ok 为 false 的工具结果，与最终是否通过无关。"
+          }
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "组件复用和依赖管理",
+          "paragraphs": [
+            "复用业务契约的正确做法是导入，不是复制；框架版本也要锁住，并记进每次运行。本课的 TaskCard、trusted_facts 和夹具里的练习文字都从 structured-output 一课导入。那一课改了可信事实，本课的业务表和业务校验自动跟着变；复制一份的话，两份事实迟早对不上，业务校验就会拿过期的数据去判。",
+            "复用也有边界。业务模型是为程序校验写的，不一定适合直接交给框架：TaskCard 没有文档字符串，生成的工具描述就是空的。card_schema 的做法是在适配这一侧加一个子类，只补描述，不改字段，也不加校验器。这样业务契约只有一份，适配层的改动都看得见：本课的测试逐项检查了子类的参数 Schema 与 TaskCard 完全相同，多余字段同样被拒绝。",
+            "依赖方面，本课只用 langchain-core，不装整包，也不装任何服务商集成包，模型调用全部经平台的适配层发出。版本锁在 1.6 系列的范围内，每条 lesson.framework_input 事件都记着当时的框架名称和版本号。前面几节提到的行为，比如基类会丢掉 `method`、无效调用会被安静地放进 invalid_tool_calls，都是在 1.6.12 上核对的；换了版本，先重跑本课的测试和实验，再相信正文里的这些说法。",
+            "还有一个容易忽视的依赖：langchain-core 自带的 LangSmith 追踪。相关环境变量一打开，框架就会把消息上传到外部服务。本课的框架代码都包在 local_tracing_only 里；即使有人忘了包，适配层也会在追踪开着时拒绝发请求。课程的运行记录只留在本机，这和平台“密钥与数据只在后端”的约束是同一回事。"
+          ]
+        },
+        {
+          "id": "mq-reuse",
+          "type": "micro-quiz",
+          "question": {
+            "id": "reuse-import",
+            "prompt": "本课为什么从 structured-output 一课导入 TaskCard 和可信事实，而不是复制一份？",
+            "options": [
+              {
+                "id": "a",
+                "text": "业务契约只有一份，那一课改了事实或字段，本课的业务校验自动跟着变",
+                "feedback": "对。复制的两份迟早会走散，校验就会拿过期的数据去判。"
+              },
+              {
+                "id": "b",
+                "text": "LangChain 只接受从别的模块导入的模型",
+                "feedback": "不对。框架不管模型定义在哪里，这是维护上的选择。"
+              },
+              {
+                "id": "c",
+                "text": "导入能让模型调用更快",
+                "feedback": "不对。导入与否不影响请求，影响的是业务规则有几份。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "需要补的只是适配层的东西（比如工具描述），用 card_schema 这样的子类加在适配一侧。"
+          }
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "ms-tool-use",
+              "title": "工具使用设计模式：函数 Schema、执行逻辑与错误处理（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/04-tool-use/README.md"
+            },
+            {
+              "id": "hf-invitees",
+              "title": "为宾客信息写一个检索工具：三个框架的登记方式（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit3/agentic-rag/invitees.mdx"
+            },
+            {
+              "id": "hf-llamaindex-tools",
+              "title": "LlamaIndex 的工具：FunctionTool 从函数推断定义（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/llama-index/tools.mdx"
+            },
+            {
+              "id": "hf-langgraph-document-agent",
+              "title": "LangGraph 文档分析示例：工具与错误处理（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/document_analysis_agent.mdx"
+            },
+            {
+              "id": "ai-agent-book-ch4",
+              "title": "工具：工具设计的通用原则、工具描述与参数保真（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "cookbook-structured-json",
+              "title": "用工具调用提取结构化 JSON（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/tool_use/extracting_structured_json.ipynb"
+            },
+            {
+              "id": "cookbook-pydantic",
+              "title": "用 Pydantic 校验工具调用的实参（Claude Cookbooks）",
+              "url": "https://github.com/anthropics/claude-cookbooks/blob/d7265d6ae994ccd8429db0594b000073b2f9ad43/tool_use/tool_use_with_pydantic.ipynb"
+            },
+            {
+              "id": "langchain-models",
+              "title": "模型：工具调用与结构化输出（LangChain 文档）",
+              "url": "https://docs.langchain.com/oss/python/langchain/models"
+            },
+            {
+              "id": "langchain-tools-doc",
+              "title": "工具：装饰器、参数 Schema 与错误处理（LangChain 文档）",
+              "url": "https://docs.langchain.com/oss/python/langchain/tools"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "structured-output"
+        },
+        {
+          "id": "code-lookup-tool",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langchain_tools/components.py",
+          "start": 34,
+          "end": 51,
+          "notes": [
+            {
+              "id": "n-lookup-factory",
+              "line": 34,
+              "anchor": "def make_lookup_tool(locale: str):",
+              "text": "每次运行按运行语言造一个工具：工具名和参数名是代码，各语言相同；描述来自运行时文本。"
+            },
+            {
+              "id": "n-lookup-facts",
+              "line": 37,
+              "anchor": "facts = lesson_facts(locale)",
+              "text": "业务表：目标课程的事实直接取自 structured-output 一课的 trusted_facts，没有另抄一份。"
+            },
+            {
+              "id": "n-lookup-decorator",
+              "line": 41,
+              "anchor": "@tool(description=t.lookup_description)",
+              "text": "工具装饰器：名字取函数名，工具描述取这个参数；不传时取文档字符串。"
+            },
+            {
+              "id": "n-lookup-annotation",
+              "line": 43,
+              "anchor": "Annotated[str, Field(description=t.lookup_parameter",
+              "text": "参数 Schema 全部来自这一行：类型、说明、长度上下限。执行时也按它校验，空字符串到不了函数体。"
+            },
+            {
+              "id": "n-lookup-raise",
+              "line": 48,
+              "anchor": "raise ToolException(",
+              "text": "查不到是可以预料的失败：抛 ToolException，错误里列出可用的名字，模型读了能改正。"
+            },
+            {
+              "id": "n-lookup-return",
+              "line": 51,
+              "anchor": "return lookup_lesson",
+              "text": "返回的是 StructuredTool 对象，不是函数：bind_tools 用它生成工具定义，tools_as_callables 用它执行。"
+            }
+          ]
+        },
+        {
+          "id": "code-lookup-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langchain_tools/runtime.py",
+          "start": 43,
+          "end": 64,
+          "notes": [
+            {
+              "id": "n-loop-bind",
+              "line": 45,
+              "anchor": "bound = model.bind_tools([lookup], tool_choice=\"auto\")",
+              "text": "bind_tools 把工具转成请求里的工具定义；tool_choice 为 auto，调不调用由模型决定。"
+            },
+            {
+              "id": "n-loop-allowed",
+              "line": 46,
+              "anchor": "allowed = tools_as_callables([lookup])",
+              "text": "白名单：适配层把 ToolException 换成 ValueError，平台的执行器就会返回结构化错误。"
+            },
+            {
+              "id": "n-loop-limit",
+              "line": 47,
+              "anchor": "for _ in range(LOOKUP_LIMIT):",
+              "text": "检索最多两次模型调用：第二次留给模型读了错误之后改正。"
+            },
+            {
+              "id": "n-loop-invoke",
+              "line": 50,
+              "anchor": "proposal = bound.invoke(history)",
+              "text": "一次框架调用：前后各有一条框架事件，中间是 RunContext 记录的 request 与 response。"
+            },
+            {
+              "id": "n-loop-no-call",
+              "line": 53,
+              "anchor": "if not (proposal.tool_calls or proposal.invalid_tool_calls):",
+              "text": "无效调用也要执行：它在 invalid_tool_calls 里，不检查它就会被当成没有调用。"
+            },
+            {
+              "id": "n-loop-execute",
+              "line": 56,
+              "anchor": "replies = execute_tool_calls(context, proposal, allowed)",
+              "text": "不用框架自带的工具节点：每个调用都经 RunContext 执行，tool_call 与 tool_result 成对记录。"
+            },
+            {
+              "id": "n-loop-facts",
+              "line": 62,
+              "anchor": "if result.get(\"ok\") and result[\"result\"].get(\"lesson_id\") == TARGET_LESSON:",
+              "text": "只有成功、而且是目标课程的结果才算事实；失败的结果留在历史里给模型看。"
+            },
+            {
+              "id": "n-loop-none",
+              "line": 64,
+              "anchor": "return None",
+              "text": "两次都没查到就返回 None，运行器据此停下，不让模型凭记忆写课程卡。"
+            }
+          ]
+        },
+        {
+          "id": "code-structured",
+          "type": "annotated-source",
+          "path": "lessons/lesson_langchain_tools/runtime.py",
+          "start": 67,
+          "end": 105,
+          "notes": [
+            {
+              "id": "n-card-structured",
+              "line": 70,
+              "anchor": "structured = model.with_structured_output(schema, include_raw=True)",
+              "text": "include_raw=True：结果是 raw、parsed、parsing_error 三项，校验失败也不抛异常，程序自己判断。"
+            },
+            {
+              "id": "n-card-limit",
+              "line": 71,
+              "anchor": "limit = 1 + (REPAIR_LIMIT if context.inputs[\"repair\"] else 0)",
+              "text": "修复上限写在代码里：最多第一次加一次修复；输入关掉修复时只试一次。"
+            },
+            {
+              "id": "n-card-invoke",
+              "line": 76,
+              "anchor": "output = structured.invoke(history)",
+              "text": "这次请求带 tool_choice 为 required，只登记 TaskCard 一个工具。"
+            },
+            {
+              "id": "n-card-classify",
+              "line": 79,
+              "anchor": "outcome = classify(raw, card, error)",
+              "text": "先给结果命名，再决定下一步：缺字段、无效调用、没调用工具是三种不同的失败。"
+            },
+            {
+              "id": "n-card-fallback",
+              "line": 81,
+              "anchor": "if outcome == \"no_structured_call\" and _text(raw):",
+              "text": "显式回退：服务商没理会强制调用、写了文字时，用同一个 Schema 校验文字里的 JSON，并在能力矩阵里标为适配回退。"
+            },
+            {
+              "id": "n-card-checks",
+              "line": 86,
+              "anchor": "checks = [parse_check(outcome, error, t)] + business_checks(card, context.locale)",
+              "text": "解析检查之后是业务校验：Schema 合法的课程卡也要和可信事实一致。"
+            },
+            {
+              "id": "n-card-stop",
+              "line": 90,
+              "anchor": "if accepted or attempt == limit:",
+              "text": "停止条件：通过就停，用完上限也停；没通过时返回 None，不把失败的课程卡交出去。"
+            },
+            {
+              "id": "n-card-feedback",
+              "line": 93,
+              "anchor": "history.extend([raw, *feedback_messages(raw, outcome, reasons, t)])",
+              "text": "把失败的消息和运行器写的反馈一起放回历史；反馈回答了失败消息里的每个调用 id。"
+            },
+            {
+              "id": "n-classify-error",
+              "line": 101,
+              "anchor": "if error is not None:",
+              "text": "只有这一种失败带着异常：Pydantic 的校验错误被收进 parsing_error。"
+            },
+            {
+              "id": "n-classify-silent",
+              "line": 103,
+              "anchor": "if raw.invalid_tool_calls:",
+              "text": "下面两种失败里 parsed 与 parsing_error 都是 None，只能看原始消息才分得清。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "框架负责解析，程序负责判断和上限",
+          "chosen": "用工具装饰器登记业务工具，用 with_structured_output 加 include_raw 解析课程卡；工具一律经 RunContext 执行，ToolException 变成结构化错误；解析和业务校验失败最多修复 1 次；能力矩阵只把本次运行里出现过的能力标为实测。",
+          "alternatives": [
+            {
+              "id": "prebuilt-tool-node",
+              "title": "用框架预置的工具节点或 Agent 自动执行工具",
+              "why_not": "预置组件直接调用工具，不经过 RunContext，tool_call 与 tool_result 事件会缺失，回放里看不到工具执行。"
+            },
+            {
+              "id": "handle-tool-error",
+              "title": "打开 handle_tool_error，让异常文字直接回给模型",
+              "why_not": "异常变成了普通输出，没有任何字段标明失败，程序和报告都分不清成功与失败。"
+            },
+            {
+              "id": "json-schema-method",
+              "title": "改用服务商原生的 JSON Schema 输出",
+              "why_not": "通用的 BaseChatModel 实现会悄悄丢掉 `method` 参数；没有在请求里确认这个选项真的发出去之前，只能标为未验证。"
+            },
+            {
+              "id": "retry-until-valid",
+              "title": "解析失败就一直重试，直到通过",
+              "why_not": "每次重试都是一次计费的模型调用，失败原因也可能根本修不好；上限加上停止原因才能如实收尾。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "structured-adapter",
+          "title": "结构化学习任务工具适配",
+          "hypothesis": "同一个 TaskCard 契约交给框架后：框架在 parsing_error 里报告 Schema 校验错误（缺字段、字段超长），这时业务校验不执行，修复 1 次后可通过；卡片 Schema 合法但事实写错时，框架照样解析成功，只有业务校验能拦住。模型不一定照注入写，也可能自己写出超长字段，以你的运行为准。",
+          "predict": "predict-requests",
+          "arms": [
+            {
+              "id": "normal",
+              "exercise": "normal",
+              "label": "正常"
+            },
+            {
+              "id": "missing-field",
+              "exercise": "missing-field",
+              "label": "故意缺字段"
+            },
+            {
+              "id": "wrong-fact",
+              "exercise": "wrong-fact",
+              "label": "Schema 合法，事实写错"
+            }
+          ],
+          "observe": [
+            {
+              "id": "definitions",
+              "text": "第一份实验报告：装饰器生成的工具定义与手写定义逐字段比较的结果。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=definition_match]"
+              }
+            },
+            {
+              "id": "lookup-parameters",
+              "text": "第 1 轮请求里发出去的参数 Schema，由类型注解生成。",
+              "selector": {
+                "event": "request",
+                "round": 1,
+                "path": "data.body.tools[0].function.parameters"
+              }
+            },
+            {
+              "id": "forced-choice",
+              "text": "第 2 轮请求的 tool_choice：with_structured_output 要求必须调用工具。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.tool_choice"
+              }
+            },
+            {
+              "id": "raw-arguments",
+              "text": "第 2 轮服务商原始响应里 TaskCard 的实参：一个 JSON 字符串。",
+              "selector": {
+                "event": "response",
+                "round": 2,
+                "path": "data.body.choices[0].message.tool_calls[0].function.arguments"
+              }
+            },
+            {
+              "id": "framework-args",
+              "text": "同一轮框架对象里的实参：已经解析成字典。",
+              "selector": {
+                "event": "lesson.framework_output",
+                "round": 2,
+                "path": "data.message.tool_calls[0].args"
+              }
+            },
+            {
+              "id": "first-outcome",
+              "text": "第 1 次生成课程卡的框架结果：parsed 或 schema_error。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=outcome_1]"
+              }
+            },
+            {
+              "id": "first-business",
+              "text": "第 1 次生成课程卡的业务校验：通过、未通过，或者未执行。",
+              "selector": {
+                "event": "lesson.report",
+                "round": 2,
+                "path": "data.checks[id=business_facts]"
+              }
+            },
+            {
+              "id": "feedback",
+              "text": "第 3 轮请求的最后一条消息：运行器写给模型的修复反馈。",
+              "selector": {
+                "event": "request",
+                "round": 3,
+                "path": "data.body.messages[5].content"
+              }
+            },
+            {
+              "id": "attempts",
+              "text": "最终结论里的课程卡生成次数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=structured_attempts]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三组都为同一门课生成课程卡，设计上只差第一次生成时的注入；模型自己的写法也会改变路径。"
+            },
+            {
+              "text": "先看工具定义：装饰器从类型注解生成的结果，和手写的那份一字不差。",
+              "observe": "definitions",
+              "stage": "runtime"
+            },
+            {
+              "text": "这就是发给模型的参数 Schema，长度上下限来自 Field。",
+              "observe": "lookup-parameters",
+              "stage": "model"
+            },
+            {
+              "text": "生成课程卡这一轮，框架把强制调用翻译成了 required。",
+              "observe": "forced-choice"
+            },
+            {
+              "text": "服务商交回来的是字符串。缺字段那组里找一找，prerequisite 不在里面。",
+              "observe": "raw-arguments"
+            },
+            {
+              "text": "框架把同一段字符串解析成了字典，键名和值都没变。",
+              "observe": "framework-args"
+            },
+            {
+              "text": "对照三组的框架结果：缺字段那组是 schema_error。事实写错那组，只有模型照注入写了、卡片又合 Schema 时才是 parsed。",
+              "observe": "first-outcome",
+              "stage": "runtime"
+            },
+            {
+              "text": "业务校验只在拿到课程卡后执行。框架没给出课程卡的运行（缺字段，或字段超长）这里是未执行；事实写错且通过 Schema 的卡片会在这里被拦下。",
+              "observe": "first-business"
+            },
+            {
+              "text": "走了修复的运行多一轮请求。最后这条工具消息由运行器写，回答的是失败的 TaskCard 调用；没有修复的运行里找不到它。",
+              "observe": "feedback"
+            },
+            {
+              "text": "最后数一数：第一次就通过的生成 1 次，用掉那唯一一次修复的生成 2 次。哪几组走了修复，以你的运行为准。",
+              "observe": "attempts"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里，工具定义由类型注解生成，与手写定义逐字段相同。",
+              "框架的解析结果和程序的业务校验是两项独立检查：Schema 合法的课程卡仍可能被业务校验拦下。",
+              "解析或业务校验失败后，运行器只修复了 1 次，反馈消息和原始响应都在事件里。"
+            ],
+            "does_not_prove": [
+              "真实模型不一定照注入行事：服务商若按 Schema 约束生成，缺字段的注入可能根本不生效。",
+              "修复 1 次能否成功取决于模型；一次运行说明不了成功率。",
+              "离线测试模式下的响应来自夹具，不是服务商。"
+            ]
+          }
+        },
+        {
+          "id": "tool-error-semantics",
+          "title": "工具错误保持失败语义",
+          "hypothesis": "lookup_lesson 抛出的 ToolException 经适配层变成 ok 为 false 的结构化错误，作为工具消息回给模型；模型改正后检索成功，最终报告仍把这次失败计为 1。",
+          "arms": [
+            {
+              "id": "normal",
+              "exercise": "normal",
+              "label": "正常"
+            },
+            {
+              "id": "tool-error",
+              "exercise": "tool-error",
+              "label": "工具报错"
+            }
+          ],
+          "observe": [
+            {
+              "id": "failed-result",
+              "text": "第一次查询的工具结果：error_type 是 ValueError，错误里列出可用的名字。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.error_type",
+                "name": "lookup_lesson"
+              }
+            },
+            {
+              "id": "tool-message",
+              "text": "第 2 轮请求里回给模型的工具消息：内容就是那条结构化错误。",
+              "selector": {
+                "event": "request",
+                "round": 2,
+                "path": "data.body.messages[3].content"
+              }
+            },
+            {
+              "id": "second-lookup",
+              "text": "模型改正后的第二次查询。",
+              "selector": {
+                "event": "tool_call",
+                "round": 2,
+                "path": "data.function.arguments",
+                "name": "lookup_lesson"
+              }
+            },
+            {
+              "id": "failure-count",
+              "text": "最终结论里的工具失败次数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=tool_failures]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组只差第一次查询用的名字。"
+            },
+            {
+              "text": "工具真实执行，查不到就抛 ToolException，平台把它记成结构化错误，而不是一句普通文字。",
+              "observe": "failed-result",
+              "stage": "tool"
+            },
+            {
+              "text": "下一次请求原样带着这条错误。正常那组的同一个位置是成功的事实。",
+              "observe": "tool-message",
+              "stage": "model"
+            },
+            {
+              "text": "模型读了错误里的可用名字，第二次查对了。",
+              "observe": "second-lookup"
+            },
+            {
+              "text": "最终通过了，失败次数仍是 1，过程记录没有被结局覆盖。",
+              "observe": "failure-count",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "ToolException 变成了 ok 为 false 的工具结果，并作为工具消息回到下一次请求。",
+              "检索有上限，最终报告如实计入失败次数。"
+            ],
+            "does_not_prove": [
+              "真实模型读了错误不一定会改正；两次都失败时运行器停下，不生成课程卡。",
+              "本组没有演示程序错误（比如 KeyError）：那类异常不会被转换，运行会直接停下。"
+            ]
+          }
+        },
+        {
+          "id": "capability-matrix",
+          "title": "能力矩阵：实测、回退与未验证",
+          "hypothesis": "能力矩阵只把这次运行里出现过的能力标为实测；离线测试模式下标为离线夹具；本课没发送的选项标为未验证。",
+          "arms": [
+            {
+              "id": "normal",
+              "exercise": "normal",
+              "label": "正常"
+            }
+          ],
+          "observe": [
+            {
+              "id": "usage-flag",
+              "text": "框架对象记下的用量是否报告。",
+              "selector": {
+                "event": "lesson.framework_output",
+                "round": 1,
+                "path": "data.usage_reported"
+              }
+            },
+            {
+              "id": "matrix-source",
+              "text": "能力矩阵的数据来源：离线夹具还是服务商响应。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=capability_source]"
+              }
+            },
+            {
+              "id": "forced-status",
+              "text": "强制工具调用这一行的状态。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=cap_forced_tool]"
+              }
+            },
+            {
+              "id": "json-schema-status",
+              "text": "服务商原生 JSON Schema 输出这一行：本课没有发送，状态是未验证。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=cap_json_schema]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这张表只回答一个问题：这次运行里，服务商实际给了什么。"
+            },
+            {
+              "text": "先看框架对象的用量标记。为 false 时，矩阵里的用量一行写未报告。",
+              "observe": "usage-flag",
+              "stage": "model"
+            },
+            {
+              "text": "数据来源决定状态的写法：离线运行写离线夹具，不写本次实测。",
+              "observe": "matrix-source",
+              "stage": "runtime"
+            },
+            {
+              "text": "强制工具调用的状态来自生成课程卡那一轮的响应里有没有工具调用。",
+              "observe": "forced-status"
+            },
+            {
+              "text": "没发送过的选项不猜，一律写未验证。",
+              "observe": "json-schema-status"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "矩阵的每个状态都能对回这次运行里的事件。",
+              "没发送的选项没有被写成支持或不支持。"
+            ],
+            "does_not_prove": [
+              "一次运行的矩阵不代表这家服务商的全部能力；换模型、换参数都要重测。",
+              "离线运行的矩阵只说明夹具的写法，不是服务商实测。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "样例",
+          "help": "第一次检索或生成课程卡时注入哪一种问题。真实模型可能不照注入行事。",
+          "options": [
+            {
+              "value": "normal",
+              "label": "正常"
+            },
+            {
+              "value": "missing_field",
+              "label": "故意缺字段"
+            },
+            {
+              "value": "wrong_fact",
+              "label": "Schema 合法，事实写错"
+            },
+            {
+              "value": "tool_error",
+              "label": "工具报错"
+            }
+          ]
+        },
+        {
+          "name": "repair",
+          "label": "允许修复 1 次",
+          "help": "关掉后，第一次生成课程卡没通过就停止。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "definition-drift",
+              "prompt": "升级框架后，“生成的 lookup_lesson 定义与手写定义一致”变成了未通过。先做什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "看详情里的差异路径，确认请求里的工具定义变了哪里、是不是你想要的",
+                  "feedback": "对。这项检查的作用就是提醒你：发给模型的定义变了。"
+                },
+                {
+                  "id": "b",
+                  "text": "删掉手写定义，以后只用生成的",
+                  "feedback": "不对。那样就没人发现生成规则的变化了。"
+                },
+                {
+                  "id": "c",
+                  "text": "忽略它，工具还能执行就行",
+                  "feedback": "不对。模型按定义写实参，定义变了，调用的行为也可能跟着变。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "生成和手写并存，差异就是一条提醒：发给模型的定义变了。"
+            },
+            {
+              "id": "method-dropped",
+              "prompt": "在 RunContextChatModel 上写 `with_structured_output(TaskCard, method=\"json_schema\")` 会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不报错，`method` 被基类实现丢掉，请求里仍是强制工具调用",
+                  "feedback": "对。所以要看 request 事件，而不是相信传进去的参数。"
+                },
+                {
+                  "id": "b",
+                  "text": "抛出异常，提示不支持这个参数",
+                  "feedback": "不对。langchain-core 1.6.12 的基类实现取出 `method` 后直接丢弃，不报错。"
+                },
+                {
+                  "id": "c",
+                  "text": "改用服务商原生的 JSON Schema 输出",
+                  "feedback": "不对。通用实现只走工具调用；原生输出要服务商专用的集成包支持。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "统一接口下的参数可能被悄悄忽略，能力以实际请求为准。"
+            },
+            {
+              "id": "tool-error-text",
+              "prompt": "把 lookup_lesson 的 handle_tool_error 设为真，再查一个不存在的名字，会发生什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "异常文字被当作工具的正常输出返回，没有字段标明失败",
+                  "feedback": "对。程序和报告从此分不清查到了内容还是查询失败。"
+                },
+                {
+                  "id": "b",
+                  "text": "运行中止，报告工具崩溃",
+                  "feedback": "不对。这个开关的作用正是吞掉异常，把文字当输出。"
+                },
+                {
+                  "id": "c",
+                  "text": "工具结果自动带上 ok 为 false",
+                  "feedback": "不对。ok 字段是本平台执行器加的；框架这个开关只返回一句文字。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "本课让 ToolException 走 tools_as_callables，失败才保留明确的结构。"
+            },
+            {
+              "id": "feedback-role",
+              "prompt": "解析失败后，运行器为什么把反馈写成工具消息，而不是一条用户消息？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "失败的助手消息里有 TaskCard 调用，下一次请求必须先用同一个调用 id 回答它",
+                  "feedback": "对。没有回答的调用会让消息历史不合法。"
+                },
+                {
+                  "id": "b",
+                  "text": "工具消息会被记成 tool_result 事件，方便统计",
+                  "feedback": "不对。这条消息由运行器写，没有工具执行，也没有 tool_result 事件。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型只读工具消息，不读用户消息",
+                  "feedback": "不对。模型两种都读；用工具消息是协议要求。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "模型没调用任何工具时，运行器才改用用户消息反馈，因为那时没有要回答的调用 id。"
+            },
+            {
+              "id": "fixture-status",
+              "prompt": "离线测试模式下，能力矩阵把强制工具调用写成“离线夹具”，为什么不写“本次实测”？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "响应来自课程的测试夹具，不是服务商返回的",
+                  "feedback": "对。实测只能指服务商真的这样响应了。"
+                },
+                {
+                  "id": "b",
+                  "text": "离线运行不发请求",
+                  "feedback": "不对。请求照常构造和记录，只是由夹具回答。"
+                },
+                {
+                  "id": "c",
+                  "text": "离线运行里工具不真实执行",
+                  "feedback": "不对。工具在离线运行里同样真实执行，只有模型响应来自夹具。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "数据来源写进报告，状态才不会冒充服务商的能力。"
+            },
+            {
+              "id": "business-skipped",
+              "prompt": "第 1 次生成课程卡时框架解析失败，那一次的业务校验显示什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "未执行：没有可校验的课程卡，这一项不标通过也不标失败",
+                  "feedback": "对。没做过的检查不能写结果。"
+                },
+                {
+                  "id": "b",
+                  "text": "未通过，因为课程卡是坏的",
+                  "feedback": "不对。业务校验根本没有运行，失败已经记在解析检查那一项。"
+                },
+                {
+                  "id": "c",
+                  "text": "通过，因为没有发现事实错误",
+                  "feedback": "不对。没检查就没有发现，不能算通过。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "只有真正执行过的检查才写通过或未通过。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "在“故意缺字段”的运行里，找出运行器写给模型的那条修复反馈。",
+          "target": {
+            "event": "request",
+            "round": 3,
+            "path": "data.body.messages[5]"
+          },
+          "explanation": "它是第 3 轮请求的最后一条消息：角色是 tool，调用 id 与第 2 轮失败的 TaskCard 调用相同，内容是 ok 为 false、error_type 为 schema_validation 的结构化错误。它前面那条是放回历史的失败消息，后面没有 tool_result 事件，因为没有工具执行。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在同一轮里对照了 response 的 arguments 字符串和 lesson.framework_output 的 args 字典。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能说出 with_structured_output 哪种失败会写进 parsing_error，哪两种只会得到 None。"
+            },
+            {
+              "id": "item-3",
+              "text": "我弄清了“Schema 合法，事实写错”那组里框架结果和业务校验各是什么：卡片合 Schema 时框架是 parsed、业务校验未通过；模型没照注入写时，两项都可能通过。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在“工具报错”那组确认了失败的 tool_result 是 ok 为 false，最终报告仍计入这次失败。"
+            },
+            {
+              "id": "item-5",
+              "text": "小扩展：给 lookup_lesson 加一个带默认值的参数，重启后端再跑，看定义一致那一项怎样报出差异路径。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "with_structured_output",
+      "note": "LangChain 模型方法：强制模型调用 Schema 工具，再用解析器把实参变成 Pydantic 对象。"
+    },
+    {
+      "name": "include_raw",
+      "note": "为真时结果分成 raw、parsed、parsing_error 三项，解析失败不抛异常。"
+    },
+    {
+      "name": "parsing_error",
+      "note": "解析时抛出的异常；无效调用或没调用工具时它也是 None。"
+    },
+    {
+      "name": "ToolException",
+      "note": "LangChain 的工具异常，表示工具有意报告的失败；适配层把它变成结构化错误。"
+    },
+    {
+      "name": "tools_as_callables",
+      "note": "适配层函数：把 LangChain 工具变成白名单，只把 ToolException 转成结构化错误。"
+    },
+    {
+      "name": "execute_tool_calls",
+      "note": "适配层函数：把 AIMessage 里的每个调用交给 RunContext 执行，返回 ToolMessage。"
+    },
+    {
+      "name": "card_schema",
+      "note": "TaskCard 的子类，不加字段，只补上工具描述；校验规则不变。"
+    },
+    {
+      "name": "business_checks",
+      "note": "程序的业务校验：课程卡与可信事实逐字段比较；没有课程卡时不执行。"
+    },
+    {
+      "name": "classify",
+      "note": "给 with_structured_output 的结果命名，分清缺字段、无效调用和没调用工具。"
+    },
+    {
+      "name": "feedback_messages",
+      "note": "运行器写的修复反馈：为失败消息里的每个调用 id 写一条错误状态的工具消息。"
+    },
+    {
+      "name": "REPAIR_LIMIT",
+      "note": "解析或业务校验失败后最多再试几次，本课为 1。"
+    },
+    {
+      "name": "LOOKUP_LIMIT",
+      "note": "检索最多几次模型调用，第二次留给模型改正失败的查询。"
+    },
+    {
+      "name": "invalid_tool_calls",
+      "note": "AIMessage 字段：实参不是 JSON 对象的调用，保留原字符串和错误说明。"
+    },
+    {
+      "name": "usage_metadata",
+      "note": "AIMessage 的用量字段；服务商没报告时为 None，不填 0。"
+    },
+    {
+      "name": "synthesized_call_ids",
+      "note": "lesson.framework_output 字段：适配层补的调用 id，不是服务商给的。"
+    },
+    {
+      "name": "trusted_facts",
+      "note": "structured-output 一课的可信事实：task-contract 的 lesson_id、课名和先修课。"
+    },
+    {
+      "name": "handwritten_definition",
+      "note": "同一个工具的手写定义，用来和装饰器生成的定义逐字段比较。"
+    }
+  ]
+}

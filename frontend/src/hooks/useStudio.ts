@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
+  type ApprovalSubmission,
   cancelRun,
   createRun,
   followRunEvents,
   jsonFetch,
+  resumeRun,
+  submitApproval,
 } from "../api";
 import { resolveLessonId } from "../lib/lessonIds";
 import { useContentLanguage } from "./useContentLanguage";
@@ -63,6 +66,14 @@ export function useStudio() {
   // 当前运行的服务端 ID；断线续读、停止与页面关闭时的取消都作用于它。
   const activeRun = useRef<string | null>(null);
   const [runId, setRunId] = useState("");
+  // The event stream of the live run, separate from the run itself: detaching
+  // closes only this; the run goes on at the server.
+  const streamController = useRef<AbortController | null>(null);
+  const reattachWaiter = useRef<(() => void) | null>(null);
+  const lastSeq = useRef(0);
+  const [detached, setDetached] = useState(false);
+  // Stop was requested; the page waits for the server's done event.
+  const [stopping, setStopping] = useState(false);
   // 当前这份事件属于哪个练习：实验只拿自己对照组的运行核对证据。
   const [runExerciseId, setRunExerciseId] = useState("");
   // Set while the events on screen were read back from an earlier run (runCache).
@@ -389,14 +400,48 @@ export function useStudio() {
     // Custom runtimes may accept only structured inputs; standard lessons keep
     // the same question/exercise contract. The server validates the payload.
     if (!question.trim() && !detail.capabilities?.supports_inputs) return;
+    await follow(
+      () =>
+        createRun({
+          lesson_id: lessonId,
+          mode: "live",
+          question,
+          exercise_id: exerciseId,
+          inputs: runInputs,
+          locale: language,
+        }),
+      runKey(detail, exerciseId, question, runInputs),
+    );
+  }
+
+  /**
+   * Starts a new run from a checkpoint of the finished run on screen
+   * (POST /api/runs/{id}/resume). The server reruns nothing from the old run;
+   * the new run's requests are real new requests. Not cached: its events
+   * depend on the checkpoint, not only on the question.
+   */
+  async function resume(checkpointId: string) {
+    const from = runId;
+    if (!from || runController.current || !detail) return;
+    await follow(() => resumeRun(from, checkpointId), null);
+  }
+
+  /**
+   * Creates a run (or a resumed run) and follows its events until `done`.
+   * The stream may be detached on purpose (detach): the run goes on at the
+   * server, and reattach() continues after the last event on screen.
+   */
+  async function follow(create: () => Promise<string>, key: string | null) {
     const abort = new AbortController();
     runController.current = abort;
     restoreToken.current++;
     setRestored(null);
-    const key = runKey(detail, exerciseId, question, runInputs);
     let last: Trace | null = null;
     eventCount.current = 0;
+    lastSeq.current = 0;
     setRunning(true);
+    setStopping(false);
+    setDetached(false);
     setPlaying(false);
     setEvents([]);
     setRunExerciseId(exerciseId);
@@ -413,20 +458,14 @@ export function useStudio() {
         return;
       const index = eventCount.current++;
       last = event;
+      if (typeof event.seq === "number") lastSeq.current = event.seq;
       setEvents((previous) => [...previous, event]);
       setCursor(index + 1);
       setSelected(index);
     };
     try {
       // 创建请求不随停止中断：必须拿到 run_id，才能让服务端停止已开始的运行。
-      const id = await createRun({
-        lesson_id: lessonId,
-        mode: "live",
-        question,
-        exercise_id: exerciseId,
-        inputs: runInputs,
-        locale: language,
-      });
+      const id = await create();
       if (abort.signal.aborted) {
         void cancelRun(id).catch(() => undefined);
         throw new DOMException(clientError("stopped"), "AbortError");
@@ -436,12 +475,39 @@ export function useStudio() {
         if (mounted.current) setRunId(id);
       }
       // 断线时按最后收到的 seq 自动续读；服务端存储保证不重不漏。
-      await followRunEvents(id, addEvent, { signal: abort.signal });
+      // 学习者主动断开（detach）时停在这里，等重新连接后从最后一个 seq 继续。
+      while (true) {
+        const stream = new AbortController();
+        streamController.current = stream;
+        const stopStream = () => stream.abort();
+        abort.signal.addEventListener("abort", stopStream, { once: true });
+        try {
+          await followRunEvents(id, addEvent, {
+            signal: stream.signal,
+            fromSeq: lastSeq.current + 1,
+          });
+          break;
+        } catch (reason) {
+          if (abort.signal.aborted || !stream.signal.aborted) throw reason;
+          await new Promise<void>((resolve, reject) => {
+            reattachWaiter.current = resolve;
+            abort.signal.addEventListener(
+              "abort",
+              () => reject(abort.signal.reason),
+              { once: true },
+            );
+          });
+          if (mounted.current) setDetached(false);
+        } finally {
+          abort.signal.removeEventListener("abort", stopStream);
+          streamController.current = null;
+        }
+      }
       // Reached the server's done event: one real run, counted once per run_id.
       track.runCompleted(lessonId, id);
       // A completed run answers this question until something that shapes it changes.
       const final = last as Trace | null;
-      if (final?.type === "done" && final.data.status === "completed")
+      if (key && final?.type === "done" && final.data.status === "completed")
         runCache.remember(key, id);
     } catch (reason) {
       if (!mounted.current) return;
@@ -461,15 +527,58 @@ export function useStudio() {
       if (runController.current === abort) {
         runController.current = null;
         activeRun.current = null;
-        if (mounted.current) setRunning(false);
+        reattachWaiter.current = null;
+        if (mounted.current) {
+          setRunning(false);
+          setStopping(false);
+          setDetached(false);
+        }
       }
     }
   }
 
+  /**
+   * Stop button: asks the server to stop (reason user_stop) and keeps reading
+   * until the server records how the run ended, so the screen shows the real
+   * terminal state (for a stream: what had arrived). Only when the stop request
+   * itself fails does the page stop following, as before.
+   */
   function cancel() {
     const id = activeRun.current;
-    if (id) void cancelRun(id).catch(() => undefined);
-    runController.current?.abort();
+    if (!id) {
+      runController.current?.abort();
+      return;
+    }
+    setStopping(true);
+    reattach();
+    void cancelRun(id, false, "user_stop")
+      .then((response) => {
+        // 409: the run had already ended; its done event is on the way.
+        if (!response.ok && response.status !== 409)
+          runController.current?.abort();
+      })
+      .catch(() => runController.current?.abort());
+  }
+
+  /** Closes the event stream on purpose; the run keeps going at the server. */
+  function detach() {
+    if (!activeRun.current || !streamController.current) return;
+    setDetached(true);
+    streamController.current.abort();
+  }
+
+  /** Reads on from the last event on screen after detach(). */
+  function reattach() {
+    const resume = reattachWaiter.current;
+    reattachWaiter.current = null;
+    resume?.();
+  }
+
+  /** Sends a person's decision on the pending approval of the live run on screen. */
+  async function decide(submission: ApprovalSubmission) {
+    const id = activeRun.current;
+    if (!id) throw new Error(clientError("approvalNotLive"));
+    await submitApproval(id, submission);
   }
   function selectEvent(index: number) {
     if (Number.isInteger(index) && index >= 0 && index < cursor)
@@ -559,6 +668,12 @@ export function useStudio() {
     canRun,
     requiresModel,
     cancel,
+    stopping,
+    detached,
+    detach,
+    reattach,
+    decide,
+    resume,
     running,
     runId,
     runExerciseId,

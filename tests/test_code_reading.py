@@ -375,6 +375,10 @@ class CodeApiTests(unittest.TestCase):
         self.assertNotIn("content", data["files"][0])  # 源码正文仍由课程详情提供
 
     def test_unknown_planned_and_invalid_locale_use_error_codes(self):
+        # 目录里已没有 planned 课：临时把 document-loading 从可执行课程里拿掉，它就只剩目录登记（未开放）。
+        hidden = [item for item in LESSONS if item["id"] != "document-loading"]
+        self.enterContext(patch.object(web, "LESSONS", hidden))
+        self.enterContext(patch("server.catalog.LESSONS", hidden))
         cases = {"/api/lessons/no-such-lesson/code": (404, "lesson_not_found"),
                  "/api/lessons/document-loading/code": (404, "lesson_not_available"),
                  "/api/lessons/tool-selection/code?lang=bad%20code": (400, "invalid_locale")}

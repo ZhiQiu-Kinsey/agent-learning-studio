@@ -128,12 +128,62 @@ export async function createRun(payload: RunRequest, signal?: AbortSignal) {
   return run_id;
 }
 
+/**
+ * Why a run is asked to stop, recorded in the run's events (`done.data.cancel_reason`):
+ * the Stop button or the page going away. Closing only the event stream is not a stop.
+ */
+export type CancelReason = "user_stop" | "page_closed";
+
 /** 请求停止指定运行的后续步骤；keepalive 用于页面关闭时仍能送达。 */
-export function cancelRun(runId: string, keepalive = false) {
+export function cancelRun(
+  runId: string,
+  keepalive = false,
+  reason: CancelReason = keepalive ? "page_closed" : "user_stop",
+) {
   return fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
     keepalive,
   });
+}
+
+export type ApprovalSubmission = {
+  approval_id: string;
+  decision: "approve" | "reject";
+  /** Must equal the request's digest: the decision is about the payload on screen. */
+  payload_digest: string;
+  note?: string;
+  /** Only for an editable request, only with approve. */
+  edited_payload?: Record<string, unknown>;
+};
+
+/** A person's decision on the run's pending approval; the run records it as an event. */
+export async function submitApproval(
+  runId: string,
+  submission: ApprovalSubmission,
+) {
+  return jsonFetch<{ status: string }>(
+    `/api/runs/${encodeURIComponent(runId)}/approvals`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submission),
+    },
+  );
+}
+
+/** Starts a new run from a checkpoint of a finished run; returns the new run id. */
+export async function resumeRun(runId: string, checkpointId: string) {
+  const { run_id } = await jsonFetch<{ run_id: string }>(
+    `/api/runs/${encodeURIComponent(runId)}/resume`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checkpoint_id: checkpointId }),
+    },
+  );
+  return run_id;
 }
 
 function wait(ms: number, signal?: AbortSignal) {
@@ -165,10 +215,12 @@ export async function followRunEvents(
     signal?: AbortSignal;
     retries?: number;
     retryDelayMs?: number;
+    /** Continue after events already on screen (reconnecting after a detach). */
+    fromSeq?: number;
   } = {},
 ) {
-  const { signal, retries = 5, retryDelayMs = 400 } = options;
-  let lastSeq = 0;
+  const { signal, retries = 5, retryDelayMs = 400, fromSeq = 1 } = options;
+  let lastSeq = Math.max(0, fromSeq - 1);
   let failures = 0;
   while (true) {
     const before = lastSeq;

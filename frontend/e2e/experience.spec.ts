@@ -5,6 +5,7 @@ import { isRunCreation, runOffline } from "./runs";
 import { t } from "./i18n";
 import { openLessonById } from "./navigation";
 import { chapterView, lessonView } from "../src/content/view";
+import { routePlannedLesson, withPlannedLesson } from "./catalog";
 
 const capture = (name: string) =>
   fileURLToPath(new URL(`../../.runtime/${name}`, import.meta.url));
@@ -13,6 +14,9 @@ test("first visit teaches prerequisites, cites sources and exposes the real cour
   page,
   request,
 }) => {
+  // 验的是导学内容与课程树，不是动效；无头浏览器没有 GPU，首页与导学的 WebGL 背景靠软件渲染，
+  // 这条点遍所有章节的用例会因此逼近 30 秒上限。
+  await page.emulateMedia({ reducedMotion: "reduce" });
   let runs = 0;
   page.on("request", (req) => {
     if (isRunCreation(req)) runs++;
@@ -91,9 +95,10 @@ test("unimplemented navigation stays disabled and an onboarding request failure 
   page,
   request,
 }) => {
-  const curriculum: CurriculumData = await (
-    await request.get("/api/curriculum")
-  ).json();
+  await routePlannedLesson(page);
+  const curriculum: CurriculumData = withPlannedLesson(
+    await (await request.get("/api/curriculum")).json(),
+  );
   const plannedLesson = curriculum.lessons.find(
     (lesson) => lesson.status === "planned",
   )!;

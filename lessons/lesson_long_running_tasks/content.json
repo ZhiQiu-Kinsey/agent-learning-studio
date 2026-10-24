@@ -1,0 +1,1499 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "long-running-tasks",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "orchestration",
+    "planning"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "BACKGROUND / SCHEDULE",
+          "headline": "耗时的活放到后台，",
+          "highlight": "结果在之后的轮次里交回来。",
+          "takeaway": "巡检助手把校验提交包和统计成绩放到后台，立刻拿到任务编号，继续做别的事。任务结束后，运行层在下一轮请求前把结果作为一条标明来源的消息交给模型；每轮结束时，运行层自己判断目标是完成、无法完成还是继续，预算用完就明确停止。定时触发则按间隔反复启动，上一次没跑完时有规则可循。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-background",
+              "label": "01 / BACKGROUND",
+              "title": "先拿编号，不等结果",
+              "description": "后台任务（Background Job）在执行器的线程里真实运行。启动它的工具调用立刻返回任务编号和 running 状态，模型这一轮可以接着做别的事。",
+              "token": "start_background_job"
+            },
+            {
+              "id": "02-injection",
+              "label": "02 / INJECTION",
+              "title": "下一轮请求前交回结果",
+              "description": "结果注入（Result Injection）：任务结束后，运行层在下一次请求之前，把结果作为一条标明来源的单独消息放进消息历史。注入之前，请求里没有它。",
+              "token": "lesson.harness_injected"
+            },
+            {
+              "id": "03-trigger",
+              "label": "03 / TRIGGER",
+              "title": "到点就开始，重叠要有规则",
+              "description": "定时触发（Scheduled Trigger）按固定间隔启动一次运行。上一次没结束时下一次又到点，由重叠策略（Overlap Policy）决定：跳过、排队，还是限量并行。",
+              "token": "Scheduler"
+            },
+            {
+              "id": "04-cleanup",
+              "label": "04 / CLEANUP",
+              "title": "停得下来，查得到终态",
+              "description": "任务可以被取消、超时或失败，每种终态都带退出码。运行结束时还在跑的任务一并取消，否则就成了孤儿任务（Orphan Job）：运行早已结束，线程还在后台跑。",
+              "token": "shutdown"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "什么任务要放到后台",
+          "paragraphs": [
+            "耗时的任务不该卡住对话，结果稍后再交回来。本课的巡检助手要替助教做两件事：校验 6 份作业提交包的 SHA-256，要 12 秒；统计 12 位同学的成绩，要 6 秒。这里的秒都是虚拟时钟上的秒，第二节会讲原因。两件事如果都同步执行，每次工具调用都得等到返回，模型整整 18 秒什么也做不了；读一条评分规则、整理简报格式这类不依赖结果的事，也只能排在后面。",
+            "后台任务的做法，是把“启动”和“完成”拆开。像餐厅先领一个取餐号：人去做别的事，餐好了再叫号。模型调用 `start_background_job`，立刻拿到任务编号 `job-1` 和 running 状态，没有结果。任务在执行器的线程里真实运行，模型这一轮可以接着读规则、再启动第二个任务，或者直接说“我先等着”。",
+            "不是所有任务都值得放后台。适合的任务有三个特点：慢，通常几秒到几分钟；下一步不依赖它的结果；晚一点拿到结果也没关系。反过来，几毫秒就返回的查询（本课的 `read_policy`），或者模型下一句话就要用的结果，同步执行更简单：放后台要多一次启动调用、多一条结果消息，还要管状态和取消。是否放后台由模型显式提出，它自己调用 `start_background_job`；运行层不会因为看到 `build`、`install` 这类字眼，就猜这是慢任务替它决定。",
+            "{{lesson:delegation-budget}}的子任务也是并行的，但协调者要等齐才往下走，等待发生在同一轮里。本课的后台任务不等：模型启动它，转身做别的，结果在之后的轮次里回来。代价是边界更多：结果什么时候进对话，任务失败了怎么办，运行结束时还在跑的任务怎么办，这三个问题就是后面几节。还有一条总的边界：这一切只发生在一次运行里，运行结束，任务和触发规则就都没了；要跨运行保留，得靠外部调度器或持久队列，本课不做。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "任务句柄与执行器",
+          "paragraphs": [
+            "启动后台任务只返回一个任务编号，真正的工作在执行器的线程里跑。这个编号就是句柄：之后查询、取消、对照结果，都靠它。工具的名字和描述要把“启动”说成启动：`start_background_job` 的描述写明“立刻返回任务编号，不等它跑完”，返回里也只有编号、running 状态和一句备注。原因是模型很容易把“任务已启动”读成“任务已完成”，然后在结果到达之前，就写出依赖结果的结论。",
+            "执行器在 executor.py 里：每个任务一条线程，按步骤干活。以 `checksum_pack` 为例，它有 3 步、每步声明 4 秒，第 0 秒启动，就该在第 4、8、12 秒各完成一步。每一步做的是真实计算：第 1 步把前两个文件喂进 SHA-256，第 3 步算出摘要。任务结束时有四种终态，各带一个退出码：已完成 0，失败 1（任务自己抛了错），超时 124，取消 143。这几个数借用了 Unix 的习惯，本课用线程，没有起子进程。",
+            "任务声明的时间不是真等出来的，而是虚拟时钟上的秒。线程不 `sleep`，而是停在时钟上等某个时刻；只有运行器能推进时钟，每次推进后调用 `settle`，等所有线程要么停到下一个时刻、要么结束，再往下走。这样做有两个好处：同一次运行的时间线每次都一样，对照实验才可比；测试推进 120 秒也不必真等。手算一下：时钟推进到第 5 秒，`checksum_pack` 完成 1 步，进度是 1/3；推进到第 15 秒，它早在第 12 秒结束，`finished_at` 记 12，运行层第 15 秒才看到，`observed_at` 记 15。",
+            "线程里的任务从不直接发事件。事件只能由运行器的线程通过 RunContext 发布，让工作线程去发，会和“停止”、事件顺序搅在一起，所以运行器在线程停稳之后读状态，替它们记录。同时有多少个任务在跑也有上限：`max_running` 默认是 3，第 4 个启动会得到结构化错误 `too_many_jobs`，模型要等一个结束或取消一个。并发有上限，是为了资源有限时拒绝得明确，而不是排着队悄悄变慢；Microsoft 的部署一课也把有上限的并发和回压（拒绝并告诉调用方）列为规模化的基本手段。真实系统里这里换成墙上时钟、进程池和队列，机制一样。"
+          ]
+        },
+        {
+          "id": "predict-injections",
+          "type": "predict",
+          "prompt": "运行“每轮 5 秒”之前先猜：grade_stats 在第 6 秒结束，checksum_pack 在第 12 秒结束，整次运行里，运行层会向对话注入几条后台结果消息？",
+          "experiment": "inject-timing",
+          "arm": "basic",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.harness_injected"
+          }
+        },
+        {
+          "id": "mq-handle",
+          "type": "micro-quiz",
+          "question": {
+            "id": "handle-return",
+            "prompt": "模型调用 `start_background_job` 之后，立刻拿到的工具结果里有什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "任务编号和 running 状态，没有结果",
+                "feedback": "对。启动只是把任务交出去，结果之后由运行层单独交付。"
+              },
+              {
+                "id": "b",
+                "text": "任务的最终结果",
+                "feedback": "不对。任务才刚开始，结果还不存在；工具结果里也不会补上。"
+              },
+              {
+                "id": "c",
+                "text": "任务预计的结束时刻",
+                "feedback": "不对。返回里有启动时刻和期限，没有预测的结束时刻。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "启动调用只返回句柄；“已启动”不等于“已完成”。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "结果注入的时机",
+          "paragraphs": [
+            "后台结果在下一轮请求里注入，并标明来源与时间。模型只看请求：`checksum_pack` 第 12 秒结束了，运行层如果什么也不做，下一次请求里仍然没有它，模型什么也不会知道。所以要有人把结果放进去。做法是每轮请求发出前，运行器检查有没有任务自己结束了；有，就把它们的结果拼成一条单独的消息，追加到消息历史末尾。开头写着“后台任务结果 · 来源：运行层的后台执行器，不是用户说的话”和当前时刻，后面每个任务一行：编号、种类、状态、退出码、结束时刻，成功的带 `value=`。",
+            "为什么是单独的消息，不放进工具结果，也不冒充用户？不放进工具结果，是因为一次调用只有一个结果：`start_background_job` 那次调用在第 1 轮已经用 running 回答了，工具消息按调用 id 配对（见{{lesson:messages-context}}），没法再答第二次。不冒充用户，是因为这些文字来自运行层和任务：错误信息、文件名里都可能带着指令。标明来源，模型才分得清哪句是学习者说的，哪句是外部送来的数据；{{lesson:prompt-injection}}专门讲这类风险。运行层在{{lesson:todo-planning}}里插入提醒时，也是同样的做法：单独一条消息，写明来源。",
+            "再看时机。本课每轮请求前，时钟前进 `tick_seconds` 秒，默认 5 秒。巡检助手的时间线是这样：第 1 轮在第 0 秒，模型启动两个任务；第 2 轮在第 5 秒，两个都没结束；第 3 轮在第 10 秒，grade_stats 在第 6 秒结束，现在才被注入，晚了 4 秒；第 4 轮在第 15 秒，checksum_pack 在第 12 秒结束，晚了 3 秒。如果模型一轮什么都没做、只说“我先等着”，而下一个任务要很久才结束，运行层不会逐轮空转，而是把时钟一次拨到那个时刻（`idle_wait`），保证下一次请求里有新东西。每轮多长由 `tick_seconds` 决定：改成 10 秒，grade_stats 就在第 2 轮注入。",
+            "结果在注入之前，模型一个字也看不到。`check_job` 只给状态和进度；任务结束后，结果交付之前，它只会回答“结果还没有交付”。报告里的 `not_seen_early` 检查更直接：它拿注入消息里每个任务的那一行，到真正发出去的每一次请求里找，第一次出现必须正好是注入它的那一轮。这个检查证明的是顺序，证明不了模型会好好用：一条消息里带几个结果时，模型可能只回应最后一个。给每条编号、末尾写一句汇总，能减轻这个问题，但不能根治。"
+          ]
+        },
+        {
+          "id": "deep-dive-injection",
+          "type": "deep-dive",
+          "title": "注入的时机：三种处理办法",
+          "summary": "外部事件可以打断、排队或并行处理；后台结果属于排队。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第 6 章把外部事件分成三种处理办法，本课用的是第二种。取消式用于紧急事件：用户点“停止”时，立即取消正在进行的推理和同步工具，把队列里的事件连同这条一起追加，再重新请求，相当于主动制造一个安全点。队列式用于常规事件：新事件先排队，等当前这一步自然结束，在工具返回的边界一次性追加。并行式用于和主任务无关的轻量问题：另起一个会话回答，标明“与主任务并行”。",
+            "后台结果属于常规事件，所以走队列式：任务第 6 秒结束时，模型正在第 2 轮的请求里，这一轮不打断；下一轮请求前追加，同时结束的多个结果合成一条。书里还提醒了两件事。一是同步接口要求每个工具调用都有配对的结果，所以启动调用必须先用占位的“已启动”回答，真实结果再作为带任务编号和来源的新事件送入；占位本身有风险，模型可能把“已启动”当成“已完成”。二是批量事件里模型可能只回应最后一条，建议给每个事件编号，末尾写一句汇总。",
+            "Learn Claude Code 的后台任务一章做法相近：后台线程把完成结果放进队列，每次调用模型之前取出，格式化成 `task_notification` 并入对话，不复用原来的调用 id；是否放后台由工具参数显式请求，不靠关键词猜。书中还提到有些模型接口原生支持异步工具调用，工具没返回时模型可以继续工作；是否具备这种能力、怎么用，要以服务商的文档为准，运行层仍要管任务的生命周期。"
+          ]
+        },
+        {
+          "id": "misconception-instant",
+          "type": "misconception",
+          "claim": "后台任务一结束，模型马上就知道结果了。",
+          "correction": "模型只在收到请求时才“知道”东西。任务第 6 秒结束，第 5 秒那一轮的请求早已发出；结果要等运行层在下一轮请求前注入。注入之前，请求里没有它，报告里的 `not_seen_early` 检查核对的就是这一点。"
+        },
+        {
+          "id": "mq-timing",
+          "type": "micro-quiz",
+          "question": {
+            "id": "injection-round",
+            "prompt": "grade_stats 在第 6 秒结束，每轮前时钟前进 5 秒。模型在哪一轮的请求里第一次看到它的结果？",
+            "options": [
+              {
+                "id": "a",
+                "text": "第 2 轮（第 5 秒）",
+                "feedback": "不对。第 2 轮的请求发出时是第 5 秒，任务还没结束。"
+              },
+              {
+                "id": "b",
+                "text": "第 3 轮（第 10 秒）",
+                "feedback": "对。第 3 轮开始时时钟到第 10 秒，运行层发现它已结束，在请求前注入。"
+              },
+              {
+                "id": "c",
+                "text": "第 6 秒那一刻，不需要等轮次",
+                "feedback": "不对。模型只在收到请求时才看到东西，请求之间没有“那一刻”。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "注入发生在请求之前、任务结束之后的第一个轮次起点。"
+          }
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "每轮末尾的目标检查与预算",
+          "paragraphs": [
+            "每一轮结束时，运行层自己判断目标：完成、无法完成，还是继续。有了后台任务，这件事不能交给模型。模型不再调用工具，只说明这一轮它没有动作要做：它可能在等任务，也可能以为做完了。没有新的工具调用，证明不了目标已经达成，Learn Claude Code 的目标循环一章也是这样提醒的。",
+            "本课的目标检查在 goal.py，只看程序能核对的事实。每种必需任务有四种状态：已完成且结果已交付（`done`）、还在运行（`running`）、可以再启动或重试（`open`）、启动次数到上限仍没成功（`exhausted`）。除此之外还看简报：每个必需任务的值，必须等于已交付结果里的 value。结论有三种：所有任务 `done` 且简报一致，是 `ok`；某种任务 `exhausted`，是 `impossible`；其余都是 `continue`。每一轮的结论和理由都记进 `lesson.goal_check`，模型说了什么，不参与判定。",
+            "无法完成的例子：补交成绩表第 6 行写的是 8x，`late_import` 每次都在启动后第 6 秒抛出同一个错误。第一次失败后，检查的结论是继续：`late_import` 还没到启动上限（已启动 1 次，上限 2 次），可以再试。模型不一定马上重试：这次运行里它先判断“同一行还会报同样的错”，没有重试；第 4 轮结束时目标检查把“还需要启动：late_import”交还给它，它才在第 5 轮重启。第二次同样失败，已经启动 2 次（上限 `max_attempts` 默认是 2）、都没成功、也没有在运行，结论变成 `impossible`，运行停止。同样的任务再跑一遍还会同样失败，继续重试只是白白烧调用。",
+            "继续不能永远继续。每轮模型调用都算预算：`max_rounds` 用完而结论还是 `continue`，运行就以 `budget_exhausted` 停止，并写明理由。预算很紧时轮询最浪费：每次 `check_job` 都是一次模型调用，却不会让结果提前到达。预算用完时，还在运行的后台任务一并取消。这里的检查是最小版本：它只能核对有确定答案的事实，评判不了开放式的回答。{{lesson:goal-loops}}会把它做成独立于执行者的判断，并系统地讲预算和收手的规则。"
+          ]
+        },
+        {
+          "id": "mq-goal",
+          "type": "micro-quiz",
+          "question": {
+            "id": "goal-impossible",
+            "prompt": "“任务失败与重试”那组，假设模型在 late_import 失败后重试了一次，又失败了。第二次失败后，目标检查给出什么结论？",
+            "options": [
+              {
+                "id": "a",
+                "text": "continue，因为预算还没用完",
+                "feedback": "不对。预算没用完只在没有别的结论时才决定继续；这里已经能判定无法完成。"
+              },
+              {
+                "id": "b",
+                "text": "impossible：启动 2 次都没成功，也没有在运行",
+                "feedback": "对。再试同样的任务只会同样失败，运行以放弃结束。"
+              },
+              {
+                "id": "c",
+                "text": "ok，因为模型已经说明了失败原因",
+                "feedback": "不对。模型的说明不参与判定，ok 要求所有必需任务都已完成且简报一致。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "目标检查只看任务状态和简报，能判定无法完成时就停止。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "定时触发",
+          "paragraphs": [
+            "定时触发按时间重复启动一次运行，每次运行都有自己的记录。后台任务是“现在启动、以后结束”，定时触发是“以后启动、反复启动”：每晚 9 点巡检，每 5 分钟查一次状态，到点没有人发消息，得有东西盯着时钟，一到点就开跑。Learn Claude Code 的定时一章是这样安排的：调度线程每秒看一次时间，到点的任务先放进待交付队列，等 Agent 空闲，再作为一条新消息交给它。",
+            "scheduler.py 里的触发器是最简单的一种：固定间隔。间隔 5 秒，就在第 5、10、15……秒到点。运行器每推进一次时钟，调用一次 `poll`：到点的每一次都立刻做出决定，并记一条 `lesson.schedule_fire`，决定可能是开始、跳过、排队、丢弃或拒绝。开始的那一次得到自己的运行编号（`run-1`）和一个后台任务，所以每次运行都有独立的起止时刻和退出码。更常见的 `cron` 表达式把“到点”写成五段，见深入块。",
+            "难点在上一次还没结束，下一次又到点。本课的任务要 12 秒，间隔只有 5 秒，第 10 秒到点时 `run-1` 还在跑。重叠策略有三种：`skip` 跳过这次；`queue` 排队，最多等 2 个，再来的丢弃；`parallel` 并行，最多同时 2 个，再来的拒绝。手算 `skip`：第 5、10……40 秒共 8 次到点；`run-1` 第 5 秒开始、第 17 秒结束，所以第 10、15 秒的两次跳过，第 20 秒 `run-1` 已经结束，开始 `run-2`；以此类推，8 次里 3 次开始、5 次跳过。",
+            "三种策略各有代价。跳过最省，但会悄悄少做事，所以每次跳过都要记原因；排队保住了每一次，等待却越积越长：本课第 2 次触发要到第 17 秒才开始，比到点晚 7 秒（`delayed_by`）；并行不丢任务，却要求任务可以重复或同时执行，否则要靠{{lesson:reliable-tools}}的幂等键。还有一条边界：触发器和记录都只活在这次运行里。进程退出，它们就消失，停机期间错过的时间点也不会补跑；要在程序不运行时也按时执行，得用系统的 `cron`、定时器或持久队列。"
+          ]
+        },
+        {
+          "id": "deep-dive-cron",
+          "type": "deep-dive",
+          "title": "五段式定时表达式怎么读，调度为什么要持久",
+          "summary": "五段写法决定“到点”；持久化决定重启后还在不在。",
+          "paragraphs": [
+            "`cron` 表达式用五段写“到点”：分钟、小时、日、月、星期。`*/5 * * * *` 是每 5 分钟一次；`0 9 * * 1-5` 是周一到周五的 9 点整；`30 22 * * 0` 是每周日 22:30。Learn Claude Code 的定时一章支持 `*`、`*/N`、具体数字、`N-M` 范围和逗号列表，保存前先校验字段个数和取值范围。判断某一分钟是否到点，就是五段逐个匹配当前时间；日和星期都写了具体值时，满足任意一个即可。",
+            "到点以后，那一章把任务先放进待交付队列，等 Agent 空闲再作为新的用户消息交给它，带着 `[Scheduled]` 这样的前缀；同一分钟内用上次触发的分钟标记防止重复入队。这与本课的做法相通：触发和执行分开，触发本身不碰模型。",
+            "持久化是另一回事。那一章可以把任务存进一个 JSON 文件，用临时文件加替换的方式写，进程重启后重新加载；不持久的任务只在内存里，进程一退就没了。它明确采用至少一次交付：模型已经收到提示、状态还没写回时进程退出，重启后同一个任务可能再交付一次，所以被触发的动作要能重复执行。进程关闭后调度线程也停了，停机期间错过的时间点不补跑。要在程序不运行时也按时执行，用系统的 `cron`、`systemd` 定时器或云上的调度服务。本课的调度器比这些都轻：它只活在一次运行里。"
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "后台任务的取消与终态",
+          "paragraphs": [
+            "后台任务也要能停，终态要能查到。停下一个任务有三种来源：模型觉得它没用了，调用 `cancel_job`；任务超过自己的期限，被执行器终止；整个运行结束，或者学习者点了停止，所有还在跑的任务一并取消。三种来源留下不同的终态：取消是 143，超时是 124；取消还要记原因（`model_request` 或 `run_end`），事后才分得清是谁叫停的。",
+            "怎么停，在 Python 里是个实际问题：线程没法从外面杀掉。本课的做法是协作式的：每个任务有一个停止标志，取消时置位并叫醒它，任务停在时钟上等待时看到标志，就以“已取消”结束。如果它正在做一步计算，这一步会先做完。真实的进程可以发信号，先 SIGTERM，不行再 SIGKILL，还要杀掉整个进程组，否则子进程会留下来（见深入块）。无论哪种，取消只让任务不再往下做，已经做完的步骤和已经发出的请求都收不回；`cancel_job` 返回里的 `progress`（比如 1/8）说明它停在哪一步。",
+            "运行结束时的清理最容易漏。`run` 的 `finally` 里调用 `shutdown`：取消所有还在跑的任务，等每条线程结束。漏了它，就会留下孤儿任务：运行已经结束，线程还在后台跑，算出的结果没人读，副作用却照样发生。测试不只检查正常结束，还检查报错中途退出、被学习者停止、平台的调用预算用完三种情况，每次之后都数一遍线程。有一点要如实说明：运行被停止后，平台不再接受事件，所以清理的记录发布不出来，只能保证线程被回收。",
+            "终态要能查到，指三件事。每个任务的状态、退出码、结束时刻和注入轮次都在报告的表格里，没结束的也要写，被统一取消的写“已取消”；`check_job` 在结果交付之后才返回终态详情；任务结束了却一直没交付，是缺陷，不是一种状态。最后一条边界：退出码 0 只说明任务本身成功，不说明目标达成。grade_stats 完成了，简报里的数没填对，目标检查照样不通过。"
+          ]
+        },
+        {
+          "id": "deep-dive-stop",
+          "type": "deep-dive",
+          "title": "停一个进程要做什么：信号、进程组和退出码",
+          "summary": "线程只能协作式地停，进程可以被信号结束。",
+          "paragraphs": [
+            "Python 的线程没法从外面结束，只能让它自己看到停止信号后退出。进程不一样：操作系统允许给它发信号。常见顺序是先发 SIGTERM，请它收尾；等一小会儿还没退，再发 SIGKILL，强制结束。Learn Claude Code 的后台任务一章用 `shell` 起命令，并把它放进独立的进程组，停止时向整个进程组发信号，因为命令可能又起了子进程，只杀父进程，子进程会留下来成为孤儿。章节自己也说明：这只是生命周期清理，不是隔离，另起会话的进程仍可能逃出进程组。",
+            "退出码也有惯例。正常结束是 0，失败是非零；GNU 的 `timeout` 命令超时时返回 124；被 SIGTERM 终止的进程，在 `shell` 里看到的是 128 加信号编号，即 143。本课借用这几个数，让“超时”和“取消”在表格里一眼分得开。真实系统还要决定输出怎么留：命令输出可能很长，注入对话的只能是摘要，其余留在文件里，由模型按需读取。",
+            "如果后台任务要运行模型生成的命令，问题就不只是怎么停了：命令能读写什么，能不能联网，跑多久，都要由隔离执行环境来限制，本课的任务都是内置的固定代码，没有这个问题。《深入理解 AI Agent》第 6 章还给了一条原则：取消点必须是工具或推理能安全收尾的位置，没做完的结果用显式占位表示，不能伪造成成功。本课的 `cancel_job` 返回的，就是真实的取消时刻和进度。"
+          ]
+        },
+        {
+          "id": "misconception-cancel",
+          "type": "misconception",
+          "claim": "取消了任务，它做过的事也跟着撤销了。",
+          "correction": "取消只让任务不再往下做。已经算完的步骤、已经发出的请求和副作用都还在。`cancel_job` 返回的 `progress` 写明它停在哪一步，比如 1/8；要撤销已发生的事，得靠补偿，那是{{lesson:reliable-tools}}的内容。"
+        },
+        {
+          "id": "mq-cancel",
+          "type": "micro-quiz",
+          "question": {
+            "id": "run-end-cancel",
+            "prompt": "“预算很紧”那组，预算用完时 deep_scan 还在运行。运行结束时会发生什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "它的线程继续跑到结束，结果没人读",
+                "feedback": "不对。那就是孤儿任务；运行结束前 `shutdown` 会取消它并等线程结束。"
+              },
+              {
+                "id": "b",
+                "text": "被取消，退出码 143，原因是 run_end，线程已回收",
+                "feedback": "对。事件里的取消记录写明了原因，报告里存活线程是 0。"
+              },
+              {
+                "id": "c",
+                "text": "被标成超时，退出码 124",
+                "feedback": "不对。超时指超过任务自己的期限；统一取消是 143。"
+              }
+            ],
+            "correct": "b",
+            "explanation": "运行结束时统一取消、再等线程结束，这是不留孤儿任务的办法。"
+          }
+        },
+        {
+          "id": "compare-exercises",
+          "type": "compare",
+          "title": "六个练习",
+          "paragraphs": [
+            "下表是离线测试模式下的确定性结果，模型的回答由固定脚本给出；真实运行的结果可能不同，以你自己的实验报告为准。"
+          ],
+          "columns": [
+            "练习",
+            "看什么",
+            "模型调用数",
+            "结论"
+          ],
+          "rows": [
+            [
+              "后台任务与结果注入",
+              "两个任务各自结束，分两轮注入",
+              "4",
+              "完成"
+            ],
+            [
+              "任务失败与重试",
+              "失败带退出码 1 注入，重试再失败",
+              "5",
+              "放弃：无法完成"
+            ],
+            [
+              "预算很紧：轮询、取消与重启",
+              "轮询 2 次、取消、重启，预算用完",
+              "5",
+              "预算用完，还在跑的任务被统一取消"
+            ],
+            [
+              "定时触发：跳过、排队、有上限的并行",
+              "8 次到点，三种策略的决定不同",
+              "0（不调用模型）",
+              "按策略：跳过 5 次、排队 4 次、拒绝 2 次"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次后台运行从启动到结论",
+          "description": "按步骤说明“后台任务与结果注入”的一次运行，代码是简化的示意；这次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "启动",
+              "actor": "模型",
+              "title": "启动两个任务，顺手读规则",
+              "body": "第 1 轮，模型调用两次 `start_background_job` 和一次 `read_policy`；前两次立刻返回编号，规则同步返回。",
+              "code": "job = executor.start(kind, origin=\"model\")",
+              "language": "python",
+              "evidence": "lesson.background_job"
+            },
+            {
+              "id": "step-2",
+              "label": "推进",
+              "actor": "运行层",
+              "title": "时钟前进，线程停稳再往下走",
+              "body": "第 2 轮前时钟走到第 5 秒，两个任务各完成一步；模型这一轮只回复“我先等着”。",
+              "code": "executor.advance_to(target)",
+              "language": "python",
+              "evidence": "lesson.clock"
+            },
+            {
+              "id": "step-3",
+              "label": "注入",
+              "actor": "运行层",
+              "title": "第 3 轮前，把已结束的结果作为单独消息交回",
+              "body": "grade_stats 第 6 秒结束，第 10 秒被运行层看到；消息开头写明来源，成功的带 value；checksum_pack 到第 4 轮才注入。",
+              "code": "messages.append({\"role\": \"user\", \"content\": text})",
+              "language": "python",
+              "evidence": "lesson.harness_injected"
+            },
+            {
+              "id": "step-4",
+              "label": "简报",
+              "actor": "模型",
+              "title": "两个结果都在历史里，才提交简报",
+              "body": "第 4 轮，模型把两个 value 照抄进 `submit_report`；运行器只记录，不判定。",
+              "code": "state.report = {\"round\": state.round, \"items\": items}",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-5",
+              "label": "检查",
+              "actor": "运行层",
+              "title": "目标检查判定，运行停止",
+              "body": "两种任务都是 `done`，简报的值与结果一致，结论 `ok`；没有任务还在跑，`shutdown` 无事可做，存活线程为 0。",
+              "code": "goal = evaluate_goal(t, required, jobs, state.report, max_attempts)",
+              "language": "python",
+              "evidence": "lesson.goal_check"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "book-ch6-async",
+              "title": "异步与事件驱动：事件循环、三种处理办法、任务句柄（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter6.md"
+            },
+            {
+              "id": "book-async-agent",
+              "title": "带并行执行和打断能力的异步 Agent：异步任务、取消与状态查询（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/chapter6/async-agent/README.md"
+            },
+            {
+              "id": "lcc-background",
+              "title": "后台任务：慢操作放后台，后续轮次收集结果（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s11_background_tasks/README.zh.md"
+            },
+            {
+              "id": "lcc-background-docs",
+              "title": "后台任务：通知队列与每轮排空（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/docs/zh/s08-background-tasks.md"
+            },
+            {
+              "id": "lcc-cron",
+              "title": "定时调度：五段式表达式、待交付队列与持久化边界（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s12_cron_scheduler/README.zh.md"
+            },
+            {
+              "id": "lcc-goal",
+              "title": "目标循环：模型提出停止，独立判断器决定是否继续（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s17_goal_loop/README.zh.md"
+            },
+            {
+              "id": "ms-deploy",
+              "title": "部署可扩展的 Agent：并发、回压与可观测（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/16-deploying-scalable-agents/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "todo-planning"
+        },
+        {
+          "id": "code-worker",
+          "type": "annotated-source",
+          "path": "lessons/lesson_long_running_tasks/executor.py",
+          "start": 212,
+          "end": 243,
+          "notes": [
+            {
+              "id": "n-code-worker-1",
+              "line": 212,
+              "anchor": "def _work(self, job: Job):",
+              "text": "每个后台任务一条线程，跑的就是这个函数；只有它和下面的 _end 会改任务的状态。"
+            },
+            {
+              "id": "n-code-worker-2",
+              "line": 215,
+              "anchor": "deadline = job.started_at + job.timeout_seconds",
+              "text": "期限也是虚拟时刻：启动时刻加 timeout_seconds。"
+            },
+            {
+              "id": "n-code-worker-3",
+              "line": 218,
+              "anchor": "moment = job.started_at + (index + 1) * spec.step_seconds",
+              "text": "第 index 步应在这个虚拟时刻完成：任务声明的时间在这里变成时刻。"
+            },
+            {
+              "id": "n-code-worker-4",
+              "line": 219,
+              "anchor": "if moment > deadline:",
+              "text": "这一步要到期限之后才能完成：干脆等到期限，然后超时。"
+            },
+            {
+              "id": "n-code-worker-5",
+              "line": 224,
+              "anchor": "if not clock.wait_until(job.id, moment, job.stop):",
+              "text": "停在时钟上等这一刻；返回 False 说明等待期间被取消了。"
+            },
+            {
+              "id": "n-code-worker-6",
+              "line": 226,
+              "anchor": "spec.work(job.state, index, self.t)",
+              "text": "到了这一刻才真正计算这一步：SHA-256、求和、解析或查重。"
+            },
+            {
+              "id": "n-code-worker-7",
+              "line": 228,
+              "anchor": "job.progress = index + 1",
+              "text": "进度在一步做完后才加一，check_job 报的 1/3 就来自这里。"
+            },
+            {
+              "id": "n-code-worker-8",
+              "line": 229,
+              "anchor": "self._end(job, \"completed\"",
+              "text": "全部做完：终态 completed，结束时刻是最后一步的时刻，不是运行层看到的时刻。"
+            },
+            {
+              "id": "n-code-worker-9",
+              "line": 230,
+              "anchor": "except Exception as error:",
+              "text": "任务自己抛错：只让它失败（退出码 1），兄弟任务和运行层都不受影响。"
+            },
+            {
+              "id": "n-code-worker-10",
+              "line": 231,
+              "anchor": "self._end(job, \"failed\", self._failed_at(job),",
+              "text": "失败时刻取它失败的那一步的时刻，而不是运行层看到的时刻。"
+            },
+            {
+              "id": "n-code-worker-11",
+              "line": 234,
+              "anchor": "clock.finish_worker(job.id)",
+              "text": "无论怎么结束都向时钟报到：settle 靠它知道没有人还在跑。"
+            },
+            {
+              "id": "n-code-worker-12",
+              "line": 240,
+              "anchor": "def _end(self, job: Job",
+              "text": "状态在锁里一次改完并通知：运行层读到的要么是运行中，要么是完整的终态。"
+            }
+          ]
+        },
+        {
+          "id": "code-rounds",
+          "type": "annotated-source",
+          "path": "lessons/lesson_long_running_tasks/runtime.py",
+          "start": 142,
+          "end": 177,
+          "notes": [
+            {
+              "id": "n-code-rounds-1",
+              "line": 142,
+              "anchor": "def run_rounds(",
+              "text": "一次运行就是这个循环：每轮 时间前进、注入、请求、目标检查。"
+            },
+            {
+              "id": "n-code-rounds-2",
+              "line": 149,
+              "anchor": "context.check_cancelled()",
+              "text": "每轮开头响应停止：学习者点了停止，下一轮就不再开始。"
+            },
+            {
+              "id": "n-code-rounds-3",
+              "line": 153,
+              "anchor": "advance_clock(context, t, values, executor, round_number, wait_for_job=yielded)",
+              "text": "时间只在这里前进（第 1 轮除外）：模型上一轮没动手就等到下个任务结束，否则前进 tick_seconds。"
+            },
+            {
+              "id": "n-code-rounds-4",
+              "line": 155,
+              "anchor": "inject_results(context, t, executor, state, messages)",
+              "text": "结果只在这里进入消息历史：一条单独的消息，在本轮请求之前。"
+            },
+            {
+              "id": "n-code-rounds-5",
+              "line": 156,
+              "anchor": "state.sent[round_number] = json.dumps(messages",
+              "text": "记下这一轮真正发出的消息，not_seen_early 检查要用它。"
+            },
+            {
+              "id": "n-code-rounds-6",
+              "line": 158,
+              "anchor": "response = context.complete(",
+              "text": "每轮一次请求，所有工具都在这一次请求里可选。"
+            },
+            {
+              "id": "n-code-rounds-7",
+              "line": 165,
+              "anchor": "result = context.execute_proposal(call, tools)",
+              "text": "模型提议的调用由运行器执行：start_background_job 在这里立刻返回编号。"
+            },
+            {
+              "id": "n-code-rounds-8",
+              "line": 167,
+              "anchor": "yielded = not calls",
+              "text": "没有工具调用只表示模型让出了这一轮，不表示任务做完了。"
+            },
+            {
+              "id": "n-code-rounds-9",
+              "line": 169,
+              "anchor": "goal = evaluate_goal(",
+              "text": "运行层自己判断目标，只读任务状态和简报。"
+            },
+            {
+              "id": "n-code-rounds-10",
+              "line": 170,
+              "anchor": "decision = decide(goal, round_number, values.max_rounds)",
+              "text": "ok 或 impossible 就停；continue 而轮数用完，也停，并写明预算用完。"
+            },
+            {
+              "id": "n-code-rounds-11",
+              "line": 171,
+              "anchor": "record_goal(context, t, goal, decision, state, values, round_number)",
+              "text": "每一轮的结论和理由都记下来，继续也要记。"
+            },
+            {
+              "id": "n-code-rounds-12",
+              "line": 175,
+              "anchor": "if yielded and not executor.running():",
+              "text": "模型让出而又没有任务在跑，才把理由作为消息交还给它。"
+            },
+            {
+              "id": "n-code-rounds-13",
+              "line": 177,
+              "anchor": "return finish_rounds(",
+              "text": "停下之后先取消还在跑的任务，再出报告。"
+            }
+          ]
+        },
+        {
+          "id": "code-scheduler",
+          "type": "annotated-source",
+          "path": "lessons/lesson_long_running_tasks/scheduler.py",
+          "start": 29,
+          "end": 53,
+          "notes": [
+            {
+              "id": "n-code-scheduler-1",
+              "line": 29,
+              "anchor": "def poll(self, now: int)",
+              "text": "运行器每推进一次时钟就调用一次：返回到点的每次触发的决定。"
+            },
+            {
+              "id": "n-code-scheduler-2",
+              "line": 33,
+              "anchor": "while self.queue and len(self.active()) < self.capacity:",
+              "text": "先给空出来的位置：排队最久的触发先开始，只有 queue 策略会有排队。"
+            },
+            {
+              "id": "n-code-scheduler-3",
+              "line": 37,
+              "anchor": "while self.next_due <= now:",
+              "text": "每个到点的时刻各做一次决定；时钟一次跳过好几个间隔，就一次产生好几条记录。"
+            },
+            {
+              "id": "n-code-scheduler-4",
+              "line": 40,
+              "anchor": "records.append(self._decide(",
+              "text": "决定了就记录，无论开始、跳过还是丢弃：少做的事也要留下痕迹。"
+            },
+            {
+              "id": "n-code-scheduler-5",
+              "line": 43,
+              "anchor": "def _decide(",
+              "text": "上一次没结束时怎么办，就看这个函数。"
+            },
+            {
+              "id": "n-code-scheduler-6",
+              "line": 44,
+              "anchor": "if len(self.active()) < self.capacity:",
+              "text": "还有空位就开始一次运行；skip 和 queue 的容量是 1，parallel 是 max_concurrent。"
+            },
+            {
+              "id": "n-code-scheduler-7",
+              "line": 46,
+              "anchor": "if self.policy == \"skip\":",
+              "text": "skip：这次触发作废，记下原因 previous_running。"
+            },
+            {
+              "id": "n-code-scheduler-8",
+              "line": 49,
+              "anchor": "if len(self.queue) < QUEUE_LIMIT:",
+              "text": "queue：最多排 2 个，保住顺序。"
+            },
+            {
+              "id": "n-code-scheduler-9",
+              "line": 52,
+              "anchor": "\"dropped\", reason=\"queue_full\"",
+              "text": "队列满了就丢弃，同样记下原因。"
+            },
+            {
+              "id": "n-code-scheduler-10",
+              "line": 53,
+              "anchor": "return self._record(fire_no, due_at, now, \"denied\"",
+              "text": "parallel 到了并行上限：拒绝，原因是并行数已满。"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "固定任务、虚拟时钟、运行层记事件、运行层判目标",
+          "chosen": "后台任务是 jobs.py 里的固定代码，在执行器的线程里真实计算，只有声明的耗时用虚拟时钟；工作线程不发事件，运行器在线程停稳后读状态并记录；结果在下一轮请求前作为单独的、标明来源的消息注入；每轮结束时由运行层判定 ok、impossible 或 continue，预算用完明确停止；运行结束时取消还在跑的任务并等线程结束。",
+          "alternatives": [
+            {
+              "id": "real-sleep",
+              "title": "用真实的休眠和墙上时钟",
+              "why_not": "每次运行的时间线都不同，注入在哪一轮要看机器和模型的快慢，对照实验没法比；测试也得真等。真实产品用墙上时钟，本课换成虚拟时钟只为了确定性，并且在事件里写明。"
+            },
+            {
+              "id": "worker-emits",
+              "title": "让工作线程自己发事件",
+              "why_not": "事件只能从运行器的线程发布；工作线程发会和停止、事件顺序搅在一起，还要在线程里处理平台的取消异常。让线程只改自己的状态，运行器统一记录更简单，也更容易测。"
+            },
+            {
+              "id": "model-says-done",
+              "title": "以模型说“做完了”作为停止条件",
+              "why_not": "模型不调用工具只表示这一轮让出，可能在等任务，也可能记错了。停止由运行层按任务状态和简报判定，模型的话只记录、不参与。"
+            },
+            {
+              "id": "model-schedules",
+              "title": "每次到点都让模型决定要不要启动",
+              "why_not": "那样每次触发都多一次模型调用，预算和延迟都被占用，决定也不可重复。触发和重叠策略是确定的规则，写在调度器里，每个决定都有记录。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "inject-timing",
+          "title": "后台任务与结果注入",
+          "hypothesis": "两个任务放到后台后，模型一轮也没被卡住；它们在不同的时刻结束，结果各在结束之后的第一个轮次起点注入，在注入之前，任何一次请求里都没有它们。",
+          "predict": "predict-injections",
+          "arms": [
+            {
+              "id": "basic",
+              "exercise": "background-basic",
+              "label": "每轮 5 秒"
+            }
+          ],
+          "observe": [
+            {
+              "id": "started",
+              "text": "启动任务时的记录：任务编号、启动时刻和轮次。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.started_at"
+              }
+            },
+            {
+              "id": "start-result",
+              "text": "start_background_job 的工具结果：只有编号和 running 状态，没有结果。",
+              "selector": {
+                "event": "tool_result",
+                "name": "start_background_job"
+              }
+            },
+            {
+              "id": "clock",
+              "text": "每轮请求前时钟前进了多少，原因是什么。",
+              "selector": {
+                "event": "lesson.clock",
+                "path": "data.advanced_by"
+              }
+            },
+            {
+              "id": "finished",
+              "text": "第一个自己结束的任务：finished_at 是它按自己的时刻结束的时间，observed_at 是运行层看到它的时间。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.observed_at"
+              }
+            },
+            {
+              "id": "injected",
+              "text": "注入的那条消息：来源、包含哪些任务、在第几轮。",
+              "selector": {
+                "event": "lesson.harness_injected",
+                "path": "data.jobs"
+              }
+            },
+            {
+              "id": "waited",
+              "text": "任务结束到被注入隔了几秒。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.waited_seconds"
+              }
+            },
+            {
+              "id": "not-early",
+              "text": "报告里的 not_seen_early 检查：结果有没有在注入之前出现在请求里。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=not_seen_early]"
+              }
+            },
+            {
+              "id": "injections",
+              "text": "整次运行注入了几次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=injections]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组用的是同一个任务，只差每轮前时钟前进几秒。先看启动。"
+            },
+            {
+              "text": "第 1 轮，模型启动任务，记录里有启动时刻和轮次。",
+              "observe": "started",
+              "stage": "model"
+            },
+            {
+              "text": "启动的工具结果只有编号和 running，结果不在里面。",
+              "observe": "start-result",
+              "stage": "tool"
+            },
+            {
+              "text": "每轮请求前，运行器让时钟前进一次：这就是后台任务“过了多久”的唯一来源。",
+              "observe": "clock",
+              "stage": "runtime"
+            },
+            {
+              "text": "任务按自己的时刻结束，运行层看到它要晚一些。",
+              "observe": "finished"
+            },
+            {
+              "text": "看注入的消息：来源写在开头，每个结束的任务一行。",
+              "observe": "injected"
+            },
+            {
+              "text": "结束到注入之间隔了几秒，每轮越长，等得越久。",
+              "observe": "waited"
+            },
+            {
+              "text": "核对：每个结果第一次出现在请求里，正是注入它的那一轮。",
+              "observe": "not-early"
+            },
+            {
+              "text": "整次运行注入的次数，就是预测要对照的数。",
+              "observe": "injections"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每个任务的结束时刻、被运行层看到的时刻、注入的轮次，以及真正发出的请求里结果第一次出现在哪一轮。"
+            ],
+            "does_not_prove": [
+              "模型会不会正确使用注入的结果：离线脚本从消息里照抄 value，真实模型可能漏看、只回应最后一条，或者不等结果就写简报。",
+              "虚拟时钟上的秒不是测得的耗时，真实任务的快慢取决于机器；本课用它换取可重复的时间线。"
+            ]
+          }
+        },
+        {
+          "id": "goal-outcomes",
+          "title": "三种结局：完成、无法完成、预算用完",
+          "hypothesis": "同一个目标检查在三组里给出三种不同的结局：任务都成功、简报一致就完成；补交成绩表每次失败，重试到上限就判定无法完成；全量扫描要 80 秒、默认期限 40 秒，第一次启动会超时（退出码 124）；预算只有 5 轮，模型重启后预算用完就明确停止，并取消还在跑的任务。每一轮的理由都有记录。",
+          "arms": [
+            {
+              "id": "ok",
+              "exercise": "background-basic",
+              "label": "完成"
+            },
+            {
+              "id": "impossible",
+              "exercise": "failed-job",
+              "label": "无法完成"
+            },
+            {
+              "id": "budget",
+              "exercise": "budget-stop",
+              "label": "预算用完"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-check",
+              "text": "第 1 轮的检查：任务刚启动，结论是继续，理由写着在等谁。",
+              "selector": {
+                "event": "lesson.goal_check",
+                "round": 1,
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "exit-code",
+              "text": "第一个自己结束的任务的退出码：成功是 0，失败是 1。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.exit_code"
+              }
+            },
+            {
+              "id": "failure",
+              "text": "失败任务的错误类型和原因，随注入消息交给模型。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.error_type"
+              }
+            },
+            {
+              "id": "retry",
+              "text": "第三次启动：模型重试失败的任务，或在超时、取消之后重新启动。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.started_at",
+                "nth": 3
+              }
+            },
+            {
+              "id": "cancel-reason",
+              "text": "取消的原因：模型请求，还是运行结束。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "final-check",
+              "text": "让运行停下的那次检查：结局和理由。",
+              "selector": {
+                "event": "lesson.goal_check",
+                "path": "data.outcome"
+              }
+            },
+            {
+              "id": "polls",
+              "text": "check_job 轮询了几次：每次都是一次模型调用。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=polls]"
+              }
+            },
+            {
+              "id": "no-orphans",
+              "text": "报告里的 no_orphans 检查：运行结束时有没有存活的后台线程。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_orphans]"
+              }
+            },
+            {
+              "id": "outcome",
+              "text": "报告里的结论。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=outcome]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三组用同一个目标检查，只是任务和预算不同。先看第 1 轮。"
+            },
+            {
+              "text": "第 1 轮的结论一定是继续：任务刚启动，理由写着还在等哪些任务。",
+              "observe": "first-check",
+              "stage": "runtime"
+            },
+            {
+              "text": "第一个结束的任务带着退出码：成功 0，失败 1。",
+              "observe": "exit-code"
+            },
+            {
+              "text": "失败的任务把错误类型和原因交给模型，由它决定要不要重试。",
+              "observe": "failure",
+              "stage": "model"
+            },
+            {
+              "text": "再次启动：同样的任务重试，或者超时、取消之后重新启动，都消耗预算。",
+              "observe": "retry",
+              "stage": "tool"
+            },
+            {
+              "text": "取消的原因写在记录里，区分是模型叫停的还是运行结束统一取消的。",
+              "observe": "cancel-reason"
+            },
+            {
+              "text": "轮询的次数：每次 check_job 都是一次模型调用，却不会让结果提前到达。",
+              "observe": "polls"
+            },
+            {
+              "text": "让运行停下的那次检查写着结局和理由。",
+              "observe": "final-check"
+            },
+            {
+              "text": "无论哪种结局，结束时都没有存活的后台线程。",
+              "observe": "no-orphans"
+            },
+            {
+              "text": "报告里的结论和检查里的结局一致。",
+              "observe": "outcome"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每一轮目标检查的结论和理由，任务的退出码和取消原因，以及运行结束时线程是否回收。"
+            ],
+            "does_not_prove": [
+              "补交成绩表的失败是固定数据造成的，每次都一样，所以重试必然失败；真实任务的失败可能是暂时的，重试可能成功。",
+              "目标检查只核对简报里的值与任务结果是否一致，不判断这些值有没有意义。"
+            ]
+          }
+        },
+        {
+          "id": "overlap-policy",
+          "title": "重叠策略",
+          "hypothesis": "每 5 秒触发一次要 12 秒的任务，8 次到点里：跳过策略只开始 3 次，其余记为跳过；排队策略保住前面的触发，但队列只有 2 个位置，后面的被丢弃；限量并行最多同时 2 个，超过的被拒绝。每次到点都有一条记录，每个开始的运行都有自己的任务记录。",
+          "arms": [
+            {
+              "id": "skip",
+              "exercise": "schedule-skip",
+              "label": "跳过"
+            },
+            {
+              "id": "queue",
+              "exercise": "schedule-queue",
+              "label": "排队"
+            },
+            {
+              "id": "parallel",
+              "exercise": "schedule-parallel",
+              "label": "有上限的并行"
+            }
+          ],
+          "observe": [
+            {
+              "id": "first-fire",
+              "text": "第一次到点：没有任务在跑，直接开始，得到运行编号。",
+              "selector": {
+                "event": "lesson.schedule_fire",
+                "path": "data.run_id"
+              }
+            },
+            {
+              "id": "first-overlap",
+              "text": "第一次遇到上一次没结束：策略不同，决定和原因也不同。",
+              "selector": {
+                "event": "lesson.schedule_fire",
+                "path": "data.reason"
+              }
+            },
+            {
+              "id": "delay",
+              "text": "排队出队的触发，比到点晚了几秒才开始（只有排队策略有）。",
+              "selector": {
+                "event": "lesson.schedule_fire",
+                "path": "data.delayed_by"
+              }
+            },
+            {
+              "id": "run-record",
+              "text": "每个开始的运行都有一条任务记录，带运行编号。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.run_id"
+              }
+            },
+            {
+              "id": "run-end",
+              "text": "第一次运行结束：按它自己的时刻，退出码 0。",
+              "selector": {
+                "event": "lesson.background_job",
+                "path": "data.finished_at"
+              }
+            },
+            {
+              "id": "started",
+              "text": "开始了几次运行。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=runs_started]"
+              }
+            },
+            {
+              "id": "skipped",
+              "text": "跳过了几次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=skipped]"
+              }
+            },
+            {
+              "id": "queued",
+              "text": "排过几次队，最后还有几个在排。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=queued]"
+              }
+            },
+            {
+              "id": "denied",
+              "text": "被并行上限拒绝了几次。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=denied]"
+              }
+            },
+            {
+              "id": "cancelled-end",
+              "text": "结束时取消了几个还在运行的任务。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=cancelled_at_end]"
+              }
+            },
+            {
+              "id": "every-fire",
+              "text": "报告里的 every_fire 检查：每次到点都有一条触发记录。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=every_fire]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "三组触发间隔和任务都一样，只差上一次没结束时怎么办。"
+            },
+            {
+              "text": "第一次到点，没有任务在跑，直接开始，得到第一个运行编号。",
+              "observe": "first-fire"
+            },
+            {
+              "text": "第一次遇到上一次没结束：跳过、排队或拒绝，原因各写各的。",
+              "observe": "first-overlap"
+            },
+            {
+              "text": "排队的触发出队开始时，比到点晚了几秒。",
+              "observe": "delay"
+            },
+            {
+              "text": "每个开始的运行都有自己的任务记录和运行编号。",
+              "observe": "run-record"
+            },
+            {
+              "text": "运行按任务自己的时刻结束，退出码是 0。",
+              "observe": "run-end"
+            },
+            {
+              "text": "开始了几次运行，是三种策略最直接的差别。",
+              "observe": "started"
+            },
+            {
+              "text": "跳过的次数。",
+              "observe": "skipped"
+            },
+            {
+              "text": "排队的次数。",
+              "observe": "queued"
+            },
+            {
+              "text": "被并行上限拒绝的次数。",
+              "observe": "denied"
+            },
+            {
+              "text": "时间到了，还在运行的任务被统一取消。",
+              "observe": "cancelled-end"
+            },
+            {
+              "text": "无论哪种策略，每次到点都有一条记录，少做的事也有痕迹。",
+              "observe": "every-fire"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "在这次运行的时间范围里，每次到点的决定、原因、开始的运行和各自的起止时刻。"
+            ],
+            "does_not_prove": [
+              "哪种策略更好：取决于任务能不能重复、少做一次要不要紧、愿意等多久；本课只演示它们各自留下什么。",
+              "触发器只活在这一次运行里：进程退出，它和排队的触发都不会保留，也不会补跑错过的时间点。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "场景",
+          "help": "选择一种巡检场景；“定时触发”不调用模型。",
+          "options": [
+            {
+              "value": "nightly",
+              "label": "今晚巡检（两个任务都成功）"
+            },
+            {
+              "value": "late",
+              "label": "补交成绩（导入每次失败）"
+            },
+            {
+              "value": "deep",
+              "label": "全量扫描（要 80 秒）"
+            },
+            {
+              "value": "schedule",
+              "label": "定时触发（不调用模型）"
+            }
+          ]
+        },
+        {
+          "name": "tick_seconds",
+          "label": "每轮的虚拟秒数",
+          "help": "每轮请求前时钟前进的秒数，1 到 30。"
+        },
+        {
+          "name": "max_rounds",
+          "label": "轮数预算",
+          "help": "这次运行最多的模型调用数，1 到 12；用完就停止。"
+        },
+        {
+          "name": "max_running",
+          "label": "同时运行的任务数上限",
+          "help": "超过时 start_background_job 返回结构化错误。"
+        },
+        {
+          "name": "max_attempts",
+          "label": "同一种任务最多启动几次",
+          "help": "启动到这个次数仍没成功、也没有在运行，目标检查判定无法完成。"
+        },
+        {
+          "name": "overlap",
+          "label": "重叠策略",
+          "help": "上一次运行没结束、下一次又到点时怎么办；只在“定时触发”场景生效。",
+          "options": [
+            {
+              "value": "skip",
+              "label": "跳过"
+            },
+            {
+              "value": "queue",
+              "label": "排队（最多 2 个）"
+            },
+            {
+              "value": "parallel",
+              "label": "有上限的并行"
+            }
+          ]
+        },
+        {
+          "name": "interval_seconds",
+          "label": "触发间隔（秒）",
+          "help": "固定间隔的触发，2 到 20 秒；只在“定时触发”场景生效。"
+        },
+        {
+          "name": "horizon_seconds",
+          "label": "运行多久（虚拟秒）",
+          "help": "到这个时刻停止并取消还在运行的任务，10 到 120；只在“定时触发”场景生效。"
+        },
+        {
+          "name": "max_concurrent",
+          "label": "并行上限",
+          "help": "“有上限的并行”策略下同时运行的最多个数；只在“定时触发”场景生效。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "为什么后台任务的结果不能放进 `start_background_job` 那次调用的工具结果里？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "那次调用在启动时已经用 running 回答了，一次调用只有一个结果，结果只能作为新的消息交付",
+                  "feedback": "对。工具消息按调用 id 配对，不能答两次。"
+                },
+                {
+                  "id": "b",
+                  "text": "工具结果不能包含数字",
+                  "feedback": "不对。工具结果可以是任何可序列化的内容，限制来自“一次调用一个结果”。"
+                },
+                {
+                  "id": "c",
+                  "text": "模型不读工具结果",
+                  "feedback": "不对。模型会读工具结果，这正是每条工具消息都要配对的原因。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "启动调用先返回句柄，真实结果之后用一条标明来源的消息交付。"
+            },
+            {
+              "id": "q2",
+              "prompt": "第 2 轮模型只回复了“我先等着”，没有调用工具。运行层怎么处理？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "当成最终回答，运行结束",
+                  "feedback": "不对。没有工具调用只表示模型让出这一轮，任务还在后台跑，目标没有达成。"
+                },
+                {
+                  "id": "b",
+                  "text": "目标检查判定继续，时钟前进，下一轮请求前注入新结果",
+                  "feedback": "对。继续的理由写着还在等哪些任务；时钟前进后，结束的任务才会被注入。"
+                },
+                {
+                  "id": "c",
+                  "text": "把同样的请求立刻再发一次",
+                  "feedback": "不对。请求里没有新东西，只会白白消耗一次调用。"
+                }
+              ],
+              "correct": "b",
+              "explanation": "模型让出不等于完成，是否继续由运行层按事实判断。"
+            },
+            {
+              "id": "q3",
+              "prompt": "简报里 checksum_pack 的值和已交付的结果不一样，其他都对。目标检查的结论是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "continue，理由是简报与后台结果不一致",
+                  "feedback": "对。所有任务都 done，但简报核对不通过，所以不是 ok；也不是无法完成。"
+                },
+                {
+                  "id": "b",
+                  "text": "ok，因为模型已经提交了简报",
+                  "feedback": "不对。ok 要求简报里每个值都等于对应任务已交付的结果。"
+                },
+                {
+                  "id": "c",
+                  "text": "impossible，因为简报错了",
+                  "feedback": "不对。impossible 只在某种任务启动到上限仍没成功时给出；简报可以重新提交。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "目标检查只认任务状态和核对结果。"
+            },
+            {
+              "id": "q4",
+              "prompt": "第 10 秒到点时，上一次运行还没结束。`queue` 策略会怎么做？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "记录 queued，等前一次运行结束后出队开始，开始时比到点晚几秒",
+                  "feedback": "对。出队开始的记录带 delayed_by，等待越久越大；队列满了才丢弃。"
+                },
+                {
+                  "id": "b",
+                  "text": "直接丢弃，不留记录",
+                  "feedback": "不对。每次到点都有记录，丢弃也要写原因；只有队列满了才丢弃。"
+                },
+                {
+                  "id": "c",
+                  "text": "再并行开始一次",
+                  "feedback": "不对。queue 策略同一时刻只运行一个；并行是另一种策略。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "排队保住触发，代价是等待；每个决定都有记录。"
+            },
+            {
+              "id": "q5",
+              "prompt": "`cancel_job` 返回的 progress 是 1/8，退出码 143。下面哪句对？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它已经做完的 1 步和发出过的请求都还在，取消只让它不再往下做",
+                  "feedback": "对。撤销已发生的事要靠补偿，不是取消。"
+                },
+                {
+                  "id": "b",
+                  "text": "已经做完的那一步也被撤销了",
+                  "feedback": "不对。取消不会回滚。"
+                },
+                {
+                  "id": "c",
+                  "text": "143 表示任务超时",
+                  "feedback": "不对。超时是 124，143 是取消。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "取消停住的是后续动作，不是已发生的事。"
+            },
+            {
+              "id": "q6",
+              "prompt": "学习者在运行中点了停止。哪一件事本课能保证？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "所有后台线程都被回收，没有孤儿任务",
+                  "feedback": "对。`finally` 里的 `shutdown` 取消任务并等线程结束；测试在停止之后数过线程。"
+                },
+                {
+                  "id": "b",
+                  "text": "清理的每一步都写进事件",
+                  "feedback": "不对。停止之后平台不再接受事件，清理的记录发布不出来。"
+                },
+                {
+                  "id": "c",
+                  "text": "还在跑的任务会自己跑完并交回结果",
+                  "feedback": "不对。运行已经结束，没有人会读这些结果。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "线程回收是保证，事件记录不是。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“任务失败与重试”，找出模型第一次看到 late_import 失败的那一条证据。",
+          "target": {
+            "event": "lesson.harness_injected",
+            "path": "data.jobs"
+          },
+          "explanation": "lesson.harness_injected 是运行层在第 3 轮请求前注入的消息：`job-2` 的退出码是 1，错误写着第 6 行的成绩 8x 不是整数。此前的任何一次请求里都没有这条失败；第 2 轮的 check_job（如果有）也只会说结果还没有交付。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我把每个练习都跑了一遍，能说出每个结局是怎么来的。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在“后台任务与结果注入”里找到了任务结束的时刻和它被注入的轮次，算出了中间隔了几秒。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在“任务失败与重试”里读到了失败的退出码和错误原因，看到第二次失败后检查判定无法完成。"
+            },
+            {
+              "id": "item-4",
+              "text": "我改过“重叠策略”，对照了三种策略的跳过、排队、拒绝次数，和报告里的数一致。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "lesson.background_job",
+      "note": "任务生命周期的记录：started、finished、injected 或 cancelled，时间是虚拟秒。"
+    },
+    {
+      "name": "lesson.goal_check",
+      "note": "每轮结束时的目标检查：结论、理由、各任务状态；停止那次带结局。"
+    },
+    {
+      "name": "lesson.clock",
+      "note": "虚拟时钟每次前进的记录：从几秒到几秒，原因 round 或 idle_wait。"
+    },
+    {
+      "name": "lesson.schedule_fire",
+      "note": "触发器每次到点的决定：开始、跳过、排队、丢弃或拒绝，带原因和运行编号。"
+    },
+    {
+      "name": "lesson.harness_injected",
+      "note": "运行层插入的消息；本课有后台结果和目标反馈两种。"
+    },
+    {
+      "name": "settle",
+      "note": "时钟推进后等所有工作线程停到下一个时刻或结束，再往下走。"
+    },
+    {
+      "name": "finished_at",
+      "note": "任务按自己的时刻结束的时间，不是运行层看到它的时间。"
+    },
+    {
+      "name": "observed_at",
+      "note": "运行层第一次看到任务已结束的时刻。"
+    },
+    {
+      "name": "idle_wait",
+      "note": "模型没动手时，时钟直接拨到下一个任务结束的时刻。"
+    },
+    {
+      "name": "not_seen_early",
+      "note": "报告检查：每个结果第一次出现在请求里的轮次，正是注入它的那一轮。"
+    },
+    {
+      "name": "max_running",
+      "note": "同时运行的后台任务数上限，默认 3。"
+    },
+    {
+      "name": "max_attempts",
+      "note": "同一种任务最多启动几次，默认 2；到了仍没成功就判定无法完成。"
+    },
+    {
+      "name": "tick_seconds",
+      "note": "每轮请求前时钟前进的虚拟秒数，默认 5。"
+    },
+    {
+      "name": "delayed_by",
+      "note": "排队出队的触发比到点晚了几秒才开始。"
+    },
+    {
+      "name": "shutdown",
+      "note": "取消所有还在跑的任务并等线程结束，运行结束时必调用。"
+    },
+    {
+      "name": "too_many_jobs",
+      "note": "同时运行的任务数到上限时，启动返回的结构化错误。"
+    },
+    {
+      "name": "budget_exhausted",
+      "note": "轮数预算用完而目标仍未达成时的结局。"
+    },
+    {
+      "name": "exhausted",
+      "note": "目标检查里某种任务的状态：启动次数到上限，仍没成功。"
+    },
+    {
+      "name": "check_job",
+      "note": "查询后台任务的状态和进度；结果交付之前不显示结果。"
+    },
+    {
+      "name": "cancel_job",
+      "note": "取消还在运行的后台任务，返回取消后的状态和进度。"
+    }
+  ]
+}

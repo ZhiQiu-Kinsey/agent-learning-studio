@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Check, Code2, Copy } from "lucide-react";
+import { ArrowRight, Check, Code2, Copy, RotateCcw } from "lucide-react";
 import { useReducedMotion } from "../../../motion";
 import type { StudioState } from "../../../hooks/useStudio";
 import type { Trace } from "../../../types";
 import TextType from "../../react-bits/TextType";
 import { Code } from "../../Code";
 import { Button } from "../../ui/button";
+import {
+  SHOWN_VECTOR_NUMBERS,
+  isEmbeddingEvent,
+  truncateVectors,
+} from "./embeddings";
+import { checkpointOf } from "./approvals";
 import { useEvidenceFocus } from "./evidenceFocus";
+import { isStreamDelta, streamFacts } from "./streaming";
 import { printJson, shownPath, shownValue } from "./jsonLines";
 import { useEventText } from "./useEventText";
 
@@ -52,6 +59,36 @@ function EmptyDetail({ active }: { active: boolean }) {
 }
 
 /**
+ * A checkpoint of the learner's own finished run can start a new run from it.
+ * Nothing of the old run is replayed: the new run's requests are new requests.
+ */
+function ResumeFromCheckpoint({
+  studio: s,
+  event,
+}: {
+  studio: StudioState;
+  event: Trace;
+}) {
+  const { t } = useTranslation("lab", { keyPrefix: "bench.detail" });
+  const checkpoint = checkpointOf(event);
+  if (!checkpoint || !s.runId || s.running) return null;
+  return (
+    <p className="event-explanation event-resume">
+      <span>{t("resumeHint")}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void s.resume(checkpoint.id)}
+        data-testid="lab-resume-button"
+      >
+        <RotateCcw size={14} aria-hidden="true" />
+        {t("resume", { name: checkpoint.name || checkpoint.id })}
+      </Button>
+    </p>
+  );
+}
+
+/**
  * Inspector for the selected event: its complete JSON, labelled honestly as
  * SDK-standardised data or HTTP data, with a copy button. When the lab points
  * at a field of this event (guided replay, "locate"), those lines are framed.
@@ -77,7 +114,22 @@ export function EventDetail({
   const event = s.active;
   const body = event ? shownValue(event) : null;
   const activeIndex = event ? s.visible.indexOf(event) : -1;
-  const printed = useMemo(() => printJson(body), [body]);
+  // Embedding vectors run to thousands of numbers: the view keeps the first few of each
+  // and says so; the record, the copy button and "show full JSON" keep every number.
+  const [fullIndex, setFullIndex] = useState<number | null>(null);
+  const embedding = event ? isEmbeddingEvent(event) : false;
+  const shortened = useMemo(
+    () =>
+      embedding
+        ? truncateVectors(body, (hidden) =>
+            t("embeddingHidden", { count: hidden }),
+          )
+        : { value: body, truncated: false },
+    [body, embedding, t],
+  );
+  const showFull = fullIndex === activeIndex;
+  const shown = shortened.truncated && !showFull ? shortened.value : body;
+  const printed = useMemo(() => printJson(shown), [shown]);
   const field =
     event && focus?.index === activeIndex && focus.path !== null
       ? shownPath(event, focus.path)
@@ -121,12 +173,53 @@ export function EventDetail({
       {event ? (
         <div className="event-detail-body" key={activeIndex}>
           <p className="event-explanation">
-            {event.data.representation === "sdk_standardized"
-              ? t("sdk")
-              : isExchange(event)
-                ? t("http")
-                : t("generic")}
+            {isStreamDelta(event)
+              ? t("streamDelta")
+              : streamFacts(event)
+                ? t("streamAssembled", {
+                    count: streamFacts(event)!.chunkCount,
+                  })
+                : event.type.startsWith("approval_")
+                  ? t("approval")
+                  : event.type === "checkpoint"
+                    ? t("checkpoint")
+                    : event.data.representation === "sdk_standardized"
+                      ? t("sdk")
+                      : embedding
+                        ? t("embeddingHttp")
+                        : isExchange(event)
+                          ? t("http")
+                          : t("generic")}
           </p>
+          {(isStreamDelta(event) || streamFacts(event)) && (
+            <p className="event-explanation">
+              {event.representation === "sdk_standardized" ||
+              event.data.representation === "sdk_standardized"
+                ? t("streamSdk")
+                : t("streamHttp")}
+            </p>
+          )}
+          <ResumeFromCheckpoint studio={s} event={event} />
+          {shortened.truncated && (
+            <p
+              className="event-explanation"
+              data-testid="lab-embedding-truncated"
+            >
+              {!showFull && (
+                <span>
+                  {t("embeddingTruncated", { count: SHOWN_VECTOR_NUMBERS })}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-pressed={showFull}
+                onClick={() => setFullIndex(showFull ? null : activeIndex)}
+              >
+                {showFull ? t("embeddingShowShort") : t("embeddingShowFull")}
+              </Button>
+            </p>
+          )}
           <Code content={printed.text} mark={mark} markRef={markRef} />
         </div>
       ) : (

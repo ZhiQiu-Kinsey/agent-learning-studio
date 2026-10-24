@@ -2,7 +2,8 @@ import { TRACE_CONTRACT } from "./generated/trace-contract";
 import type { Trace, TraceV2 } from "./types";
 
 export type SpanRule = {
-  phase: "start" | "end" | "instant";
+  /** progress: belongs to the open span it pairs with but does not close it (stream chunks). */
+  phase: "start" | "end" | "instant" | "progress";
   span_kind?: string;
   closed_by?: string;
   opened_by?: string;

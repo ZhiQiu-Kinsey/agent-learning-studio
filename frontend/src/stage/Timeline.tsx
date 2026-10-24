@@ -60,11 +60,17 @@ export function Timeline({
       </header>
       <div className="run-timeline-lanes">
         {lanes.map((lane) => (
-          <div className="run-timeline-lane" key={lane.id} data-kind={lane.kind}>
+          <div
+            className="run-timeline-lane"
+            key={lane.id}
+            data-kind={lane.kind}
+          >
             <span className="run-timeline-lane-label">
               {lane.kind === "llm"
                 ? t("lane.llm")
-                : t("lane.tool", { name: lane.name })}
+                : lane.kind === "approval"
+                  ? t("lane.approval")
+                  : t("lane.tool", { name: lane.name })}
             </span>
             <div className="run-timeline-track">
               {lane.bars.map(({ span, left, width }) => {

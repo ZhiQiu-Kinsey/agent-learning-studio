@@ -1,0 +1,1774 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "DELIVERY / BACKUP AND UPGRADE",
+      "source": "6155d62092dc"
+    },
+    "hero.headline": {
+      "text": "A backup is not a copied file;",
+      "source": "c0f01aba5f2f"
+    },
+    "hero.highlight": {
+      "text": "it counts once it restores.",
+      "source": "1cea9aa29ee1"
+    },
+    "hero.takeaway": {
+      "text": "A SQLite file that is being written needs a consistent backup. Every backup carries a manifest that is checked before the restore, and the restore is accepted by reading the data the way the service does. Back up before an upgrade, because a transaction cannot save you from a mistake that already committed. This lesson calls no model.",
+      "source": "37ce2859fc1e"
+    },
+    "concepts.01-consistent.label": {
+      "text": "01 / SNAPSHOT",
+      "source": "855da8961463"
+    },
+    "concepts.01-consistent.title": {
+      "text": "Consistent backup",
+      "source": "67446f3aa6aa"
+    },
+    "concepts.01-consistent.description": {
+      "text": "While the database is still being written, a consistent backup captures one complete moment in time. Copying the file directly can produce a mix of old and new; SQLite's backup API and VACUUM INTO both avoid that.",
+      "source": "8f3c289db5e4"
+    },
+    "concepts.02-manifest.label": {
+      "text": "02 / MANIFEST",
+      "source": "1049cb08377a"
+    },
+    "concepts.02-manifest.title": {
+      "text": "The backup manifest",
+      "source": "787a8d0b0e45"
+    },
+    "concepts.02-manifest.description": {
+      "text": "A backup manifest records each file's name, size, sha256 and schema version. It is checked before restoring, and a changed file stops the restore. It proves the file did not change, not that the backup was right to begin with.",
+      "source": "c4bf86df4544"
+    },
+    "concepts.03-drill.label": {
+      "text": "03 / RESTORE",
+      "source": "c3177037a503"
+    },
+    "concepts.03-drill.title": {
+      "text": "Restore drill",
+      "source": "e9b8a1e9a563"
+    },
+    "concepts.03-drill.description": {
+      "text": "A restore drill restores the backup into a new directory and accepts it by reading the data the way the service does: runs can be read and memory can be recalled. A successful backup command only means the files were written.",
+      "source": "1af617c8bee3"
+    },
+    "concepts.04-rollback.label": {
+      "text": "04 / UPGRADE",
+      "source": "5d2fefa58412"
+    },
+    "concepts.04-rollback.title": {
+      "text": "Upgrade and rollback",
+      "source": "4a2a2137ba51"
+    },
+    "concepts.04-rollback.description": {
+      "text": "When a new version changes the data format, a data migration turns the old data into the new format. An upgrade rollback rests on two things: one transaction per file, which stops unfinished half-work, and a backup made before the upgrade, which stops a mistake that already committed.",
+      "source": "b4f03e137037"
+    },
+    "section-1.title": {
+      "text": "What to back up",
+      "source": "d41824eb6024"
+    },
+    "section-1.paragraphs.0": {
+      "text": "Runtime records, the memory store and the configuration cost different amounts when lost, so they are backed up in different ways and at different rates. {{lesson:local-delivery}} turned the study tool into a local app that starts, configures and keeps its keys in the backend. This lesson asks what happens when the data is damaged or an upgrade goes wrong. It calls no model: every exercise works on two real SQLite files in a temporary directory and never touches your own `.runtime/`.",
+      "source": "18b7f7337150"
+    },
+    "section-1.paragraphs.1": {
+      "text": "The two files stand for three kinds of thing. `runs.sqlite3` holds runs: redacted events that are only ever appended. Losing them costs time and the replay history, because the exercises can be run again. `memory.sqlite3` holds memory: plans and notes the learner saved by hand (see {{lesson:persistent-memory}} and {{lesson:memory-lifecycle}}). Nothing can redo those, so they are the most expensive to lose. The third kind is configuration: the template in the repository can be downloaded again, while `local_config.py` holds keys, stays where it is and goes into no backup.",
+      "source": "5be3e987c894"
+    },
+    "section-1.paragraphs.2": {
+      "text": "How often depends on how much you can afford to lose. Take a made-up example: the memory store changes a dozen times a day and each change is the learner's work, so back it up at least daily, and after each edit on busy days. The runs database gets dozens of events per exercise, so a weekly backup may be acceptable. The numbers depend on your own situation; there is no general answer. Configuration only changes when you move machines or rotate a key, so it needs no regular backup.",
+      "source": "3b66e5b09ad6"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The backup scope is written in the manifest's `scope` field, and exercise 2 really scans the backup directory for keys. Keep the scope small: every extra file is one more thing that can leak. Run events are redacted before they reach the database, and a backup only stores them a second time as they are; it does not redact anything for you.",
+      "source": "0687c412a483"
+    },
+    "section-2.title": {
+      "text": "Online backup",
+      "source": "b23d1a19e4b2"
+    },
+    "section-2.paragraphs.0": {
+      "text": "A database file that is being written cannot simply be copied; it needs a consistent backup. Tools like `cp` read the file in order: page 1 is read at one moment and page 50 after the data has changed, so the result is half new and half old. Take a made-up example: one write changes both the memory table and the version table. The copy tool reads the memory table before that write happens and the version table after it has finished, so the two tables in the copy disagree.",
+      "source": "546cc6218459"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Exercise 1 makes this happen for real. The program writes 8 runs and 8 memories, then lets a writer thread commit 6 more units, where a unit is one finished run plus one memory. It then backs up with “Copy the file while it is written”: after every page copied, the writer thread commits one more unit, up to 6 per file. The alternation is fixed, so the result is the same every time, and the commits in the middle are real commits, not a simulation.",
+      "source": "2fc95f866006"
+    },
+    "section-2.paragraphs.2": {
+      "text": "The result lands on the two files for different reasons. `memory.sqlite3` uses a rollback journal, so every commit changes pages in the file itself, and the copy reads pages of mixed age: `PRAGMA integrity_check` reports a wrong number of index entries and the memory table and the version table disagree. `runs.sqlite3` is in WAL (write-ahead log) mode: a new commit is written to the `-wal` file next to it and the main file barely moves. Copying only the main file gives the state at the last time the log was merged back: the structure is intact and `integrity_check` passes, yet the 6 runs committed before the backup began are missing.",
+      "source": "eeae2dc1e48f"
+    },
+    "section-2.paragraphs.3": {
+      "text": "SQLite offers two correct ways. The backup API copies a few pages at a time; if another connection writes in between it starts over, and in the end you get one complete snapshot. `VACUUM INTO` writes the whole database to a new file with one statement in one read transaction. Both pass the checks in the exercise. The cost of the backup API is visible: when there are writes, the step count is higher than the page count, and the surplus is wasted work. The simplest way is to stop the service and then copy, but the service has to stop.",
+      "source": "5e9115c598d4"
+    },
+    "compare-methods.title": {
+      "text": "Four ways to copy, side by side",
+      "source": "b21d62cfcd36"
+    },
+    "compare-methods.columns.0": {
+      "text": "Method",
+      "source": "91697a026c35"
+    },
+    "compare-methods.columns.1": {
+      "text": "Writes during the copy",
+      "source": "7ce46ef0f6a1"
+    },
+    "compare-methods.columns.2": {
+      "text": "What the copy is",
+      "source": "32cff6a8a061"
+    },
+    "compare-methods.columns.3": {
+      "text": "Cost",
+      "source": "20cfb027827a"
+    },
+    "compare-methods.rows.0.0": {
+      "text": "Copy after stopping the writer",
+      "source": "023d74acb660"
+    },
+    "compare-methods.rows.0.1": {
+      "text": "None (writing is stopped first)",
+      "source": "c56412668cd2"
+    },
+    "compare-methods.rows.0.2": {
+      "text": "The whole file as of the stop",
+      "source": "5a0a3ae65208"
+    },
+    "compare-methods.rows.0.3": {
+      "text": "The service stops; the log is only merged on close",
+      "source": "90c23743751f"
+    },
+    "compare-methods.rows.1.0": {
+      "text": "Copy the file while it is written",
+      "source": "c48036a4774d"
+    },
+    "compare-methods.rows.1.1": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-methods.rows.1.2": {
+      "text": "A mix of old and new, or missing what is in the log",
+      "source": "ac16c3ee9259"
+    },
+    "compare-methods.rows.1.3": {
+      "text": "Fastest, but the copy is unusable",
+      "source": "afb6d374d003"
+    },
+    "compare-methods.rows.2.0": {
+      "text": "SQLite backup API",
+      "source": "64a0e50599aa"
+    },
+    "compare-methods.rows.2.1": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-methods.rows.2.2": {
+      "text": "One complete snapshot when the backup ends",
+      "source": "ed4a4c8a41d9"
+    },
+    "compare-methods.rows.2.3": {
+      "text": "Redone on writes; may never finish if writes are too frequent",
+      "source": "6d64eed1c5da"
+    },
+    "compare-methods.rows.3.0": {
+      "text": "VACUUM INTO",
+      "source": "00d49f472e79"
+    },
+    "compare-methods.rows.3.1": {
+      "text": "Yes",
+      "source": "90ce0f66f094"
+    },
+    "compare-methods.rows.3.2": {
+      "text": "A complete snapshot as of the statement; deleted content is left out",
+      "source": "234c71549d40"
+    },
+    "compare-methods.rows.3.3": {
+      "text": "The target must not exist; more CPU, not incremental",
+      "source": "9a396fd8ee7a"
+    },
+    "deep-dive-sqlite-docs.title": {
+      "text": "What the SQLite documentation says",
+      "source": "f4f25ff35d03"
+    },
+    "deep-dive-sqlite-docs.summary": {
+      "text": "The assumptions and risks of the backup API, VACUUM INTO and copying after a stop.",
+      "source": "6ecdb25325fb"
+    },
+    "deep-dive-sqlite-docs.paragraphs.0": {
+      "text": "The documentation lists the backup API as the original way to back up a live database: set up the source and the target, then copy pages step by step. Between steps the source is not locked, so other connections can write; once something writes, the next step usually starts over. The documentation warns that if writes are frequent enough the backup may never finish. In the exercise there are only 6 units of writes, so the backup does finish; a real service has to leave quiet gaps for the backup or limit writes while it runs. This is a paraphrase of the English documentation.",
+      "source": "af79de2283f8"
+    },
+    "deep-dive-sqlite-docs.paragraphs.1": {
+      "text": "The advantage of `VACUUM INTO` is that the output is the smallest possible file and deleted content does not travel with it. The drawbacks are more CPU than the backup API and no incremental mode. The documentation says it produces a consistent snapshot, but if power is lost or the machine shuts down halfway the output file may be incomplete. So check it afterwards instead of assuming it is usable. In the exercise, while it copied `runs.sqlite3` (WAL mode) the writer thread kept committing 6 units; the copy is a snapshot of the moment the statement started, without those new commits and without a half-written record. For `memory.sqlite3` in rollback-journal mode, writes have to wait until the statement has finished reading. In the report the memory copy has 20 rows: the 6 units were committed to memory while runs.sqlite3 was being copied, before memory's own statement began, so they are inside its snapshot.",
+      "source": "9334828a9d0a"
+    },
+    "deep-dive-sqlite-docs.paragraphs.2": {
+      "text": "Another page describes how a database gets corrupted, and one of the items is a backup program copying the file while a transaction is active: the copy may contain old and new content. Copying when no transaction is active is safe; if the last write failed, the rollback journal or WAL file has to be copied together with the database file. The documentation also says that once a database file is separated from its WAL file, transactions that were committed earlier may be lost or the database may become corrupted. That is exactly what happened to `runs.sqlite3` in exercise 1.",
+      "source": "df0e6e0d5ad0"
+    },
+    "deep-dive-sqlite-docs.paragraphs.3": {
+      "text": "The documentation also mentions that since 3.47.0 there is a `sqlite3_rsync` program that copies a database in use to a remote machine over SSH, sending only what changed. It solves “put the backup on another machine”, which this lesson does not demonstrate.",
+      "source": "a0fa66e641da"
+    },
+    "deep-dive-sqlite-docs.paragraphs.4": {
+      "text": "Copying after a stop works because the writer thread closed its connections: when the last connection closes, SQLite merges the log back into the main file and no `-wal` is left in the directory. If the service was killed instead, the log is still there, and you have to copy it too, or use the backup API first.",
+      "source": "3bcf6d58e7d6"
+    },
+    "predict-online.prompt": {
+      "text": "Before running “Copy the file while it is written” in the lab, guess: how many lesson.backup_check events will this run produce?",
+      "source": "6fcc61990222"
+    },
+    "mq-wal-main.wal-main-file.prompt": {
+      "text": "`runs.sqlite3` is in WAL mode and 6 runs committed before the backup are still in its `-wal` file. If only `runs.sqlite3` is copied, what is the copy like?",
+      "source": "8369c83d403f"
+    },
+    "mq-wal-main.wal-main-file.a.text": {
+      "text": "Structurally sound, `integrity_check` passes, but the 6 runs are missing",
+      "source": "a4f7d46a4ca8"
+    },
+    "mq-wal-main.wal-main-file.a.feedback": {
+      "text": "Right. The main file stopped at the last time the log was merged; nothing is wrong structurally, it is just old.",
+      "source": "7091b8e7d0e8"
+    },
+    "mq-wal-main.wal-main-file.b.text": {
+      "text": "`integrity_check` reports an error because the log is missing",
+      "source": "e487ac04c58f"
+    },
+    "mq-wal-main.wal-main-file.b.feedback": {
+      "text": "No. The main file is complete in itself, and the check looks at structure, so it cannot see that committed runs are missing.",
+      "source": "79c5cb3c2628"
+    },
+    "mq-wal-main.wal-main-file.c.text": {
+      "text": "Complete, because the commits have finished",
+      "source": "4b12ea5662e9"
+    },
+    "mq-wal-main.wal-main-file.c.feedback": {
+      "text": "No. A finished commit means it reached the log, not that it is in the main file.",
+      "source": "ee662ea290c1"
+    },
+    "mq-wal-main.wal-main-file.explanation": {
+      "text": "integrity_check covers structure; it cannot tell you what is missing.",
+      "source": "6a89b2beaf76"
+    },
+    "section-3.title": {
+      "text": "The backup manifest",
+      "source": "787a8d0b0e45"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A backup manifest records each file's name, size, sha256, schema version and the time of the backup, and it is checked before restoring. Half a year later a backup directory holds three files and all you know is their names. Which one is complete? Which one is from before the upgrade? Has any been changed? Without a manifest you can only guess.",
+      "source": "f0452d52d91a"
+    },
+    "section-3.paragraphs.1": {
+      "text": "`create_backup` writes the manifest after the copy has finished, so it records the files that actually landed on disk, not the files it meant to copy. Each file gets `size`, `sha256` and `schema_version`, and a database file also gets the `integrity_check` result from the time of the backup. The manifest has two summaries as well: `counts` is how many rows of runs, events and memories there are, and `content_digest` reads the rows of both files in a fixed order and takes one sha256 of them. The byte digest says whether the file changed; the content digest says whether what comes back is the same rows.",
+      "source": "9dbebdfe0d69"
+    },
+    "section-3.paragraphs.2": {
+      "text": "A manifest has limits. It can only prove the file is the same as at backup time, not that the backup was right at that moment: the copy made while writing also has a neatly written manifest. The manifest answers “has it been touched” and the restore drill answers “does it work”; neither can stand in for the other. One more detail: when keeping backups, order them by the manifest's `created_at`, not by file modification time, because copying or syncing the backup directory can change modification times.",
+      "source": "2619393466d6"
+    },
+    "section-4.title": {
+      "text": "Restores must be verified",
+      "source": "00a3a3632ab6"
+    },
+    "section-4.paragraphs.0": {
+      "text": "After restoring into a new directory, run an acceptance check; only then do you know the data really works. The backup command exits with 0 and the manifest is written, and half a year later on another machine you find the file is missing pages, the versions disagree, or the backup was half-finished from the start. That is not rare. Microsoft's deployment lesson makes a similar point: a successful deployment only means the platform accepted the configuration, not that the service is answering, so a smoke test runs after every deployment. A restore drill is the same idea applied to data.",
+      "source": "54d964a760c6"
+    },
+    "section-4.paragraphs.1": {
+      "text": "Exercise 2 runs the whole flow: back up, check the manifest, restore into a new directory, accept. Acceptance is done by `service_check`, which lets the service read the data in its own way: runs must be readable, with continuous event sequence numbers and valid JSON in every event; memory must be recallable, with a count equal to the database; both files must pass `integrity_check`; and finally the digest of the logical content must equal the manifest's. Runs are read with the platform's real `RunStore` and recall uses the `MemoryStore` from {{lesson:persistent-memory}}, not reading code written for this lesson.",
+      "source": "d3e5034532f1"
+    },
+    "section-4.paragraphs.2": {
+      "text": "There are two kinds of damage and they are found in different ways. A truncated file makes `integrity_check` and reading fail outright, so any check sees it. A flipped byte is far more hidden: the program changes `plan-0003` to `plan-0002` inside one memory, the file structure is fine, `integrity_check` passes and memory still recalls 14 entries, except that one of them now says something different. Only the manifest's sha256 and the content digest can find it. All damage in this lesson is made on purpose by the program and is marked `fault_injection` in the events; it is not something the backup tool did.",
+      "source": "7d34d4c290ba"
+    },
+    "section-4.paragraphs.3": {
+      "text": "So check the manifest before restoring and accept after restoring; each gate catches a different kind of problem. The manifest stops “the file is no longer the one that was backed up” and acceptance stops “the file did not change but was never usable”. When the manifest finds damage and refuses, the service has read not a single row; skip that step and the damaged data is taken for real.",
+      "source": "e5af74156f62"
+    },
+    "deep-dive-integrity.title": {
+      "text": "What integrity_check can and cannot see",
+      "source": "18721e2785d2"
+    },
+    "deep-dive-integrity.summary": {
+      "text": "It checks structure; it does not know what the data should be.",
+      "source": "70a556785f7f"
+    },
+    "deep-dive-integrity.paragraphs.0": {
+      "text": "`PRAGMA integrity_check` checks the structure of the database: the pointers between pages, the format of every page, and whether index entries and table rows match one to one. In exercise 1 it did catch the torn `memory.sqlite3`, reporting a wrong number of index entries. It does not know what the memory `note_0003` should say, so a digit changed inside the content goes unseen.",
+      "source": "7448252d7e0c"
+    },
+    "deep-dive-integrity.paragraphs.1": {
+      "text": "A hand-worked example. The main file of `runs.sqlite3` stopped at the last merge and holds 8 runs; the log holds 6 more. A passing check says those 8 are stored correctly. It does not say “there should be 14”, because how many there should be is something the business knows and the database does not. That is why every check in this lesson has two layers: structure first, then business rules, such as event sequence numbers being continuous, the finished status matching the `done` event, and everything committed before the backup being present.",
+      "source": "4741e380e778"
+    },
+    "deep-dive-integrity.paragraphs.2": {
+      "text": "Business rules can also only prove what they spell out. The rules here do not check whether the text of a memory is sensible or whether the content of a run event is correct. The only way to notice that kind of problem is the digest taken at backup time: a different digest says the content changed, but not where it changed or whether the change was right.",
+      "source": "683168b1d742"
+    },
+    "deep-dive-integrity.paragraphs.3": {
+      "text": "SQLite also has a faster `PRAGMA quick_check` that skips checking whether index content matches the rows of the table. In the exercise it was exactly this step, reporting a wrong number of index entries, that caught the torn copy, so every check in this lesson uses the full `integrity_check`. The cheaper the check, the fewer problems it can find: time traded for coverage.",
+      "source": "0c6ff28bacb8"
+    },
+    "misconception-backup-ok.claim": {
+      "text": "The backup command exited successfully and the manifest is written, so the backup is usable.",
+      "source": "d01a81d89b82"
+    },
+    "misconception-backup-ok.correction": {
+      "text": "Not necessarily. A successful backup command only means the files were written, and the manifest records the files that were written, including a bad one: the copy made while writing has a tidy manifest too. Whether it is usable has to be shown by restoring into a new directory and accepting it by reading the data the way the service does.",
+      "source": "798cfe6a4d97"
+    },
+    "mq-flipped-byte.flipped-byte.prompt": {
+      "text": "One byte in a backup file was changed, inside the text of a memory. Which of these checks finds it first?",
+      "source": "1a636fa3bfc9"
+    },
+    "mq-flipped-byte.flipped-byte.a.text": {
+      "text": "`integrity_check`",
+      "source": "c7da5d952ec7"
+    },
+    "mq-flipped-byte.flipped-byte.a.feedback": {
+      "text": "No. The file structure is fine and it still passes.",
+      "source": "1fef8cffab29"
+    },
+    "mq-flipped-byte.flipped-byte.b.text": {
+      "text": "Recalling the memory",
+      "source": "ba99a4c77920"
+    },
+    "mq-flipped-byte.flipped-byte.b.feedback": {
+      "text": "No. Recall returns the memory as usual; its content is simply different.",
+      "source": "9545dc7ffe0a"
+    },
+    "mq-flipped-byte.flipped-byte.c.text": {
+      "text": "Comparing the manifest's sha256 with the file",
+      "source": "65537c8a43db"
+    },
+    "mq-flipped-byte.flipped-byte.c.feedback": {
+      "text": "Right. The digest of the whole file changed, so the restore can be refused before it starts.",
+      "source": "50bf11cc79ec"
+    },
+    "mq-flipped-byte.flipped-byte.explanation": {
+      "text": "A byte digest reacts to any changed bit; a structure check and reading do not.",
+      "source": "ff226cbea5b0"
+    },
+    "section-5.title": {
+      "text": "Upgrades and data migration",
+      "source": "efb8001016ca"
+    },
+    "section-5.paragraphs.0": {
+      "text": "When a new version changes the data format, a data migration has to be repeatable and checkable afterwards. Version 2 changes two things: `updated_at` in `memory.sqlite3` goes from a floating-point timestamp to ISO-8601 text, and the `provenance` column in `runs.sqlite3` is renamed `provenance_kind` and a column `event_count` is added. The version number lives in the file header as `user_version`: 1 for version 1, 2 for version 2.",
+      "source": "b74245de26df"
+    },
+    "section-5.paragraphs.1": {
+      "text": "SQLite cannot change a column's type in place, so `migrate_memory` rebuilds: create a new table, copy the old rows into it after converting them, drop the old table, rename the new one and finally write `user_version`. `migrate_runs` renames, adds the column, backfills `event_count` for every run, and also writes the version number last. The version number is always the final step: only when it is written do the earlier steps count as done.",
+      "source": "ebadb905a63b"
+    },
+    "section-5.paragraphs.2": {
+      "text": "A migration has to be repeatable. If the first attempt fails halfway, the second should not fail because “the table already exists” or “the column was already renamed”, so every step looks at where things stand first: a leftover temporary table is dropped before it is created, and the old column name is looked up before renaming. Repeating only lets you carry on once the cause is fixed; it does not guarantee that the first attempt got anything right.",
+      "source": "df01d8a5987a"
+    },
+    "section-5.paragraphs.3": {
+      "text": "After the migration there has to be a way to check it did the right thing. This lesson uses three checks: both files are at version 2; the version 2 service can read them, with `event_count` matching the event table and `updated_at` parsing as a time; and the content digest is the same before and after, which means reading both formats into one shape and taking a sha256. The third check matters most, because it finds “the migration committed fine but quietly lost a few rows”.",
+      "source": "200bdca29d7e"
+    },
+    "section-6.title": {
+      "text": "Three ways an upgrade fails",
+      "source": "13b4f79bd404"
+    },
+    "section-6.paragraphs.0": {
+      "text": "A transaction can undo changes that are not yet committed, but it cannot touch a result that already committed, and it cannot reach a second file. Exercise 3 splits failures into three kinds and safeguards into three levels: none, where every statement commits by itself; one transaction per file; and a backup before the upgrade plus one transaction per file. All failures are made by the program and marked `fault_injection` in the events.",
+      "source": "13947c378fd6"
+    },
+    "section-6.paragraphs.1": {
+      "text": "With the first kind of failure a transaction is enough. The migration of `memory.sqlite3` is interrupted halfway, the transaction rolls the whole file back, the logical content equals what it was before, and `runs.sqlite3` was never touched. Without a transaction this failure also only leaves a half-filled `memories_v2`, because the copy phase touches only the new table and leaves the old one alone. That is luck, not design.",
+      "source": "bf948c6fe5ec"
+    },
+    "section-6.paragraphs.2": {
+      "text": "The second kind of failure is beyond a transaction. `memory.sqlite3` has already committed as version 2 and `runs.sqlite3` is interrupted during the backfill. The transaction rolls back only `runs.sqlite3`, leaving one file at version 2 and the other at version 1, and the service insists on matching versions and refuses to start. Without a transaction it is worse: `provenance` has already been renamed, the version 1 `RunStore` cannot read runs, and the error is `no such column`.",
+      "source": "959399f97e88"
+    },
+    "section-6.paragraphs.3": {
+      "text": "The third kind of failure does not even raise an error: the migration code is wrong, drops the first row of every batch, and commits as usual. There is no exception and no rollback, only the check after the migration noticing that memory went from 14 entries to 11. A transaction cannot help because it already committed. The only way back is the backup made before the upgrade.",
+      "source": "4092e2953065"
+    },
+    "mq-two-files.two-files.prompt": {
+      "text": "`memory.sqlite3` has committed as version 2 and the migration of `runs.sqlite3` failed halfway and rolled back. With only “one transaction per file” as the safeguard, what state are we in?",
+      "source": "74d2271f6cf6"
+    },
+    "mq-two-files.two-files.a.text": {
+      "text": "`memory.sqlite3` is version 2, `runs.sqlite3` is version 1, and the service refuses to start",
+      "source": "d703219252f2"
+    },
+    "mq-two-files.two-files.a.feedback": {
+      "text": "Right. A transaction covers one file and cannot reach the one that already committed.",
+      "source": "1e859652e2a6"
+    },
+    "mq-two-files.two-files.b.text": {
+      "text": "Both files go back to version 1",
+      "source": "6cbe570bf952"
+    },
+    "mq-two-files.two-files.b.feedback": {
+      "text": "No. Only the file that failed was rolled back.",
+      "source": "2d7114fa9fe8"
+    },
+    "mq-two-files.two-files.c.text": {
+      "text": "Both files are version 2, only `event_count` is missing",
+      "source": "dd59b8241990"
+    },
+    "mq-two-files.two-files.c.feedback": {
+      "text": "No. The whole transaction of `runs.sqlite3` rolled back, and its version number was not written.",
+      "source": "aa727f71c0cb"
+    },
+    "mq-two-files.two-files.explanation": {
+      "text": "An upgrade that spans files needs the backup made before it.",
+      "source": "b4f64081943f"
+    },
+    "section-7.title": {
+      "text": "Rolling back",
+      "source": "8771e3682df1"
+    },
+    "section-7.paragraphs.0": {
+      "text": "When an upgrade fails and you go back to the previous version, the data has to stay consistent, and the way to ensure that is a backup made before the upgrade. The backup is made before the migration starts and the directory is scanned for keys. After a failure, whatever the transaction rolled back and whatever the migration committed, both files go back together to what the backup holds, and the restored files are checked against the manifest. The transaction is the first safeguard and handles small things; the backup is the last.",
+      "source": "c569e235d69b"
+    },
+    "section-7.paragraphs.1": {
+      "text": "The rollback itself needs care. `restore_into` first moves the current files into `_failed_upgrade` to keep the scene, then restores from the backup, and moves the `-wal` log away with them. The SQLite documentation says a database file and its log file belong together, and overwriting the database file while leaving the old log behind can corrupt it. The scene it keeps is useful too: afterwards you can find out which step broke.",
+      "source": "bec27ad54d01"
+    },
+    "section-7.paragraphs.2": {
+      "text": "A rollback must not end at “the command finished” either. It is checked like the upgrade: the version 1 service reads the runs and recalls the memory, both files are at version 1, and the content digest equals the one from before the upgrade. The report in exercise 3 lists “service available” and “data unchanged” as two items: in the second kind of failure with no safeguard, not one row is lost and the content digest is the same, but the service cannot start.",
+      "source": "bdbd5e92b4ae"
+    },
+    "section-7.paragraphs.3": {
+      "text": "Two things are not done here. If the service keeps writing between the upgrade and the rollback, those writes disappear with the rollback, so a real upgrade stops writes first or accepts the loss. And after a rollback the old version of the program has to come back together with the old data; this lesson only has the data half, and the program version is handled by the dependency locking in {{lesson:local-delivery}}.",
+      "source": "baa8c06a038c"
+    },
+    "deep-dive-books.title": {
+      "text": "What the books say: a staging area, stable versions and rollback",
+      "source": "d05aae010fdb"
+    },
+    "deep-dive-books.summary": {
+      "text": "How long-running systems leave a way back for knowledge and capabilities.",
+      "source": "e90aebd26f62"
+    },
+    "deep-dive-books.paragraphs.0": {
+      "text": "Chapter 3 of the book “Understanding AI Agents in Depth” treats a knowledge base like a code base: every change is like a pull request, kept in Git, with diff review, version history and one-step rollback, and no model edits the live store directly. The book splits the system into three layers: an evidence layer that is only appended to, a knowledge layer that can be revised, and a serving layer made of indexes built from a reviewed version. Indexes can be rebuilt; the reviewed knowledge is the source. For this lesson: the runs database is the evidence layer, and backing it up deserves as much care as backing up memory, because derived things can be rebuilt and original records cannot.",
+      "source": "ea2a6ba6ec6d"
+    },
+    "deep-dive-books.paragraphs.1": {
+      "text": "Chapter 9 discusses the safety boundary of continuous evolution: new capabilities enter a staging area first and only serve real traffic after the checks pass, and the business agent may not modify the validators, release gates, audit logs and stable-version backups that approve its own updates. Hermes, which the book describes, saves a snapshot before it tidies skills, so a bad tidy-up can be rolled back. That is the same idea as the backup before an upgrade: leave a known good state before changing anything, and do not let the thing being changed manage that backup.",
+      "source": "83f0a3fa6876"
+    },
+    "deep-dive-books.paragraphs.2": {
+      "text": "Microsoft's memory lesson has a related practice: as a knowledge base grows, content that is rarely used can move to cold storage to control cost. Cold data changes little and can be backed up less often; hot data changes a lot and needs frequent backups. That answers “what to back up and how often”: split it by how fast the data changes and how much loss you can take, not one rule for everything.",
+      "source": "6189de6fcdc4"
+    },
+    "deep-dive-books.paragraphs.3": {
+      "text": "Chapter 3 has one more practice you can use directly: the product of a periodic tidy-up does not overwrite the main store either, and after everything passes a set of typical searches and questions is replayed to confirm the new structure did not make known things unfindable. The restore drill and the check after an upgrade are the same thing: after the data has been touched, the question is not whether the action finished but whether a typical read still works.",
+      "source": "d0133315f5c5"
+    },
+    "misconception-transaction.claim": {
+      "text": "The upgrade used a transaction, so a failure can always be rolled back to how it was.",
+      "source": "5394d7b7ad2d"
+    },
+    "misconception-transaction.correction": {
+      "text": "Not necessarily. A transaction can only undo changes that are not yet committed, and one transaction lives in one database file. If the migration already committed with a wrong result, or the first of two files has already committed, the transaction cannot save you. Those two cases need the backup made before the upgrade.",
+      "source": "183a3116cccb"
+    },
+    "section-8.title": {
+      "text": "Keep the last N",
+      "source": "4d4731054a5e"
+    },
+    "section-8.paragraphs.0": {
+      "text": "Keeping the last N backups needs a rule that guarantees at least one restorable backup after the clean-up. Backups pile up and have to be pruned, and the simplest rule keeps only the newest N. That rule has a hole: it assumes the newest ones are good. If the newest two happen to be damaged and N is 2, what is left after pruning is two bad backups, and the older good ones are gone.",
+      "source": "9db9a3f2a40f"
+    },
+    "section-8.paragraphs.1": {
+      "text": "Exercise 4 makes it happen: 6 backups, each with one more run than the one before, and the newest few damaged by the program on purpose. “Keep only the newest N”, with N at 2 and 2 damaged, leaves two backups that both fail the manifest check, so nothing can be restored after pruning. “Keep the newest N, plus the newest one that verifies” keeps one more, restores from `backup-004`, and costs 2 runs compared with the newest data.",
+      "source": "0a56de44ba17"
+    },
+    "section-8.paragraphs.2": {
+      "text": "That gap is the recovery point: data written after the backup cannot be brought back by a restore. The sparser the backups, the more is lost, and the older the backup you restore from, the more is lost. How large N should be is a trade between disk space and how far back you can go. N is at most 5 in the exercise, just to demonstrate; a real number depends on the backup interval, how fast the data changes, and how much loss you can tolerate.",
+      "source": "dbd60282ff2e"
+    },
+    "section-8.paragraphs.3": {
+      "text": "Two more points. Pruning belongs after the new backup is finished and verified, or the day a backup fails you delete the old ones with it. The backup directory should preferably sit on another disk or machine, because if one disk fails the backup and the original go together. This lesson does not demonstrate off-site backups.",
+      "source": "8edbc26c5bc1"
+    },
+    "mq-retention.retention-rule.prompt": {
+      "text": "N is 2 and the two newest backups are both damaged. If only the newest 2 are kept, what happens after pruning?",
+      "source": "3e4d9d8a1970"
+    },
+    "mq-retention.retention-rule.a.text": {
+      "text": "Both backups left fail the manifest check and there is nothing to restore from",
+      "source": "e4ea34d06a6c"
+    },
+    "mq-retention.retention-rule.a.feedback": {
+      "text": "Right. The older good backups have been deleted.",
+      "source": "e7efbe4df15c"
+    },
+    "mq-retention.retention-rule.b.text": {
+      "text": "The older backups are still there and can be restored from",
+      "source": "b882699b92f8"
+    },
+    "mq-retention.retention-rule.b.feedback": {
+      "text": "No. “Keep only the newest 2” deletes everything older.",
+      "source": "2a3187563565"
+    },
+    "mq-retention.retention-rule.c.text": {
+      "text": "The pruning program automatically skips damaged backups",
+      "source": "31b1cce21eeb"
+    },
+    "mq-retention.retention-rule.c.feedback": {
+      "text": "No. A rule that only sorts by age does not look at whether a backup is good; “keep one that verifies” has to be added.",
+      "source": "ea57c260079b"
+    },
+    "mq-retention.retention-rule.explanation": {
+      "text": "A pruning rule has to guarantee at least one restorable backup.",
+      "source": "753b6218b47b"
+    },
+    "walkthrough.title": {
+      "text": "One failed upgrade and its rollback",
+      "source": "50defe5ec030"
+    },
+    "walkthrough.description": {
+      "text": "The steps of exercise 3 with “backup before the upgrade plus one transaction per file”. The code is simplified illustration, not a run record. See the lesson.migration and lesson.rollback events for the actual values.",
+      "source": "fa9d4d20a858"
+    },
+    "walkthrough.step-1.label": {
+      "text": "01",
+      "source": "938db8c9f82c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Back up before the upgrade",
+      "source": "6b7541cf19ae"
+    },
+    "walkthrough.step-1.body": {
+      "text": "Back up and scan for keys, all before the migration starts.",
+      "source": "1aaebc38ff03"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "lesson.backup",
+      "source": "9a31391e1a5d"
+    },
+    "walkthrough.step-2.label": {
+      "text": "02",
+      "source": "a953f09a1b6b"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "SQLite",
+      "source": "2d2eef3e092a"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Migrate memory.sqlite3",
+      "source": "75e021f387fa"
+    },
+    "walkthrough.step-2.body": {
+      "text": "Rebuild the table in one transaction, write the version last, commit.",
+      "source": "263363b9d0b5"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "lesson.migration (committed)",
+      "source": "01df56291ec1"
+    },
+    "walkthrough.step-3.label": {
+      "text": "03",
+      "source": "0b8efa5a3bf1"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-3.title": {
+      "text": "The migration of runs.sqlite3 is interrupted",
+      "source": "0e3f87296319"
+    },
+    "walkthrough.step-3.body": {
+      "text": "The program raises an exception on purpose while backfilling the 3rd run; the transaction rolls back and this file is still version 1.",
+      "source": "6c533e716f1c"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "lesson.fault, lesson.migration (rolled_back)",
+      "source": "33e55a3d9182"
+    },
+    "walkthrough.step-4.label": {
+      "text": "04",
+      "source": "6cd5b6e51936"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Check: the versions disagree",
+      "source": "aa1519dc3957"
+    },
+    "walkthrough.step-4.body": {
+      "text": "One file is version 2 and one is version 1, so the service refuses to start.",
+      "source": "26a18b160e2f"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "lesson.report (service_available)",
+      "source": "e261882a769f"
+    },
+    "walkthrough.step-5.label": {
+      "text": "05",
+      "source": "c97550ce8213"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-5.title": {
+      "text": "Restore from the backup",
+      "source": "65f6fab9067b"
+    },
+    "walkthrough.step-5.body": {
+      "text": "Move the current files into `_failed_upgrade` and restore both files from the backup, checked against the manifest.",
+      "source": "77185f6f5619"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "lesson.rollback",
+      "source": "2302bef0f128"
+    },
+    "walkthrough.step-6.label": {
+      "text": "06",
+      "source": "aacd834b5cdc"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Program",
+      "source": "5d942dbe52a4"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Check again after the rollback",
+      "source": "7f1dc14b6253"
+    },
+    "walkthrough.step-6.body": {
+      "text": "The version 1 service can read everything and the content digest equals the one from before.",
+      "source": "419fc2e67ee1"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "lesson.report (data_unchanged)",
+      "source": "94253c5e4b6f"
+    },
+    "references.sqlite-backup.title": {
+      "text": "The online backup API (SQLite documentation)",
+      "source": "6cf8e1f41d3f"
+    },
+    "references.sqlite-vacuum.title": {
+      "text": "VACUUM and VACUUM INTO (SQLite documentation)",
+      "source": "9d7d794cde27"
+    },
+    "references.sqlite-corrupt.title": {
+      "text": "How to corrupt an SQLite database file: backups and mismatched journals (SQLite documentation)",
+      "source": "8300cdd0e756"
+    },
+    "references.sqlite-wal.title": {
+      "text": "Write-ahead logging (SQLite documentation)",
+      "source": "5c49bac63b48"
+    },
+    "references.ms-deploy.title": {
+      "text": "Deploying scalable agents: lifecycle and smoke tests (Microsoft AI Agents for Beginners, deployment lesson)",
+      "source": "e919abb1b195"
+    },
+    "references.ms-memory.title": {
+      "text": "Managing and maintaining memory (Microsoft AI Agents for Beginners, agent memory lesson)",
+      "source": "f8e1e06362d1"
+    },
+    "references.ai-agent-book-ch3.title": {
+      "text": "How knowledge should be updated: incremental updates and periodic tidying — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "c20422ccb618"
+    },
+    "references.ai-agent-book-ch9.title": {
+      "text": "The loop of continuous evolution and its safety boundaries — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "d667234bb23c"
+    },
+    "code-copy-methods.n01.text": {
+      "text": "This is what `cp` does, slowed down to a pause per page; between is the other work happening during the copy.",
+      "source": "cdfb7cf0f6a4"
+    },
+    "code-copy-methods.n02.text": {
+      "text": "It reads page after page in order: by the time later pages are read, the earlier ones were read long ago, and data from two moments is joined.",
+      "source": "948f0c27fca9"
+    },
+    "code-copy-methods.n03.text": {
+      "text": "After every page copied, the exercise lets the writer thread commit one unit.",
+      "source": "c3b6bc58c0ac"
+    },
+    "code-copy-methods.n04.text": {
+      "text": "SQLite's backup API: it copies only a few pages at a time.",
+      "source": "bb26c2c5aef3"
+    },
+    "code-copy-methods.n05.text": {
+      "text": "Called after every step; total is the number of pages in the source.",
+      "source": "cd35693ebddf"
+    },
+    "code-copy-methods.n06.text": {
+      "text": "It keeps the step count and the page count: more steps than pages means writes interrupted the backup and it started over.",
+      "source": "aa5e4e58e533"
+    },
+    "code-copy-methods.n07.text": {
+      "text": "One connection reads the source and one writes the target; the writer thread uses a third.",
+      "source": "4c77292a5303"
+    },
+    "code-copy-methods.n08.text": {
+      "text": "One page per step. Between steps the source's read lock is not held, so other connections can write; if they do, the copy starts over.",
+      "source": "2bf1c2d8cf52"
+    },
+    "code-copy-methods.n09.text": {
+      "text": "The backup carries no `-wal`: one file is one complete backup.",
+      "source": "81f84fd663c4"
+    },
+    "code-copy-methods.n10.text": {
+      "text": "The other way: one statement, one read transaction.",
+      "source": "cea1bfb1d295"
+    },
+    "code-copy-methods.n11.text": {
+      "text": "In WAL mode the writer thread can commit while this reads, and the exercise lets it step in then; with a rollback journal it has to wait until the read is done, so there is nothing to interleave.",
+      "source": "4eae8c194596"
+    },
+    "code-copy-methods.n12.text": {
+      "text": "The target file must not exist; the output is a snapshot of the moment the statement started, so later commits are not in it and deleted content does not come along.",
+      "source": "704f44eafa29"
+    },
+    "code-copy-methods.n13.text": {
+      "text": "Switched to a single file as well.",
+      "source": "bc30829e943c"
+    },
+    "code-copy-methods.fold-1.label": {
+      "text": "Platform: switch the backup to a single file (turn off the WAL flag)",
+      "source": "c8a81f0e8d09"
+    },
+    "code-copy-methods.fold-2.label": {
+      "text": "Platform: close both connections",
+      "source": "0ccb1b9a42d1"
+    },
+    "code-copy-methods.fold-3.label": {
+      "text": "Platform: close the connection",
+      "source": "6f45100fa258"
+    },
+    "code-manifest.n01.text": {
+      "text": "Copy first, then write the manifest: it records the files as they landed on disk after the copy.",
+      "source": "fd88f6ceff59"
+    },
+    "code-manifest.n02.text": {
+      "text": "One database at a time; between is where the exercise lets the writer thread step in.",
+      "source": "2540901a738d"
+    },
+    "code-manifest.n03.text": {
+      "text": "The scope decides what else goes in: the config file only comes along with the whole directory.",
+      "source": "375d0fc7c128"
+    },
+    "code-manifest.n04.text": {
+      "text": "describe reads back the files just written: size, sha256, schema version, integrity_check.",
+      "source": "cadd4a0490fb"
+    },
+    "code-manifest.n05.text": {
+      "text": "The content digest is read from the backup file itself and records what the backup holds.",
+      "source": "43ea9130200e"
+    },
+    "code-manifest.n06.text": {
+      "text": "If the copy cannot be read the manifest is still written: it records facts and does not vouch for the copy.",
+      "source": "49008e8c7cda"
+    },
+    "code-manifest.n07.text": {
+      "text": "Check before restoring.",
+      "source": "33056ad5ab17"
+    },
+    "code-manifest.n08.text": {
+      "text": "Compute the sha256 again; if the file is gone it is None.",
+      "source": "659c78d6bcf5"
+    },
+    "code-manifest.n09.text": {
+      "text": "It passes only if both size and sha256 match.",
+      "source": "bb2df723cc20"
+    },
+    "code-manifest.n10.text": {
+      "text": "If one file does not match, the whole backup cannot be restored.",
+      "source": "31702da1b1a9"
+    },
+    "code-manifest.fold-1.label": {
+      "text": "Platform: create the directory, prepare the between hook",
+      "source": "d4ed2e5e6151"
+    },
+    "code-manifest.fold-2.label": {
+      "text": "Platform: assemble the manifest and write manifest.json",
+      "source": "0fc1d6fecea3"
+    },
+    "code-manifest.fold-3.label": {
+      "text": "Platform: read manifest.json",
+      "source": "f43dbf8e32f0"
+    },
+    "code-migration.n01.text": {
+      "text": "Rebuild the memories table: `updated_at` goes from a float to ISO-8601 text.",
+      "source": "20e7576c0347"
+    },
+    "code-migration.n02.text": {
+      "text": "Autocommit mode: transactions are controlled explicitly by the BEGIN and COMMIT below.",
+      "source": "1bd00be8ee0e"
+    },
+    "code-migration.n03.text": {
+      "text": "Begin the transaction: from here the changes commit together or roll back together. Without it every statement commits by itself.",
+      "source": "19c44841f1e8"
+    },
+    "code-migration.n04.text": {
+      "text": "Drop the temporary table left by an earlier failure first, so the migration can be repeated.",
+      "source": "68748884e4ea"
+    },
+    "code-migration.n05.text": {
+      "text": "In the new table `updated_at` is text.",
+      "source": "4282e908da0e"
+    },
+    "code-migration.n06.text": {
+      "text": "Convert and copy row by row: the longest step, and where the faults are injected.",
+      "source": "aacc5a9d9809"
+    },
+    "code-migration.n07.text": {
+      "text": "Exercise 3 raises an exception here on purpose; the events mark the source as `fault_injection`.",
+      "source": "aeb8f8d61e37"
+    },
+    "code-migration.n08.text": {
+      "text": "The conversion happens here: a float timestamp becomes ISO-8601 text.",
+      "source": "95ce8e0f81bd"
+    },
+    "code-migration.n09.text": {
+      "text": "Drop the old table and rename the new one.",
+      "source": "cf7ac6072864"
+    },
+    "code-migration.n10.text": {
+      "text": "The version is written last: only when it is written have the earlier steps finished.",
+      "source": "999381f77284"
+    },
+    "code-migration.n11.text": {
+      "text": "Commit. From this moment the transaction can no longer undo this migration.",
+      "source": "e9e8bd79b1f2"
+    },
+    "code-migration.n12.text": {
+      "text": "Any exception rolls back: none of the uncommitted changes are kept.",
+      "source": "d499a5d5b3ae"
+    },
+    "code-migration.fold-1.label": {
+      "text": "The remaining columns of the new table: the same as the old one except the type of `updated_at`",
+      "source": "8156eccbd3da"
+    },
+    "code-decision.title": {
+      "text": "Copy consistently, check the manifest, back up before upgrading",
+      "source": "a03acf87dd66"
+    },
+    "code-decision.chosen": {
+      "text": "Online backups use SQLite's backup API or VACUUM INTO. Every backup gets a manifest after the copy, the sha256 is checked before restoring, and the restore into a new directory is accepted by reading the data the way the service does. Before an upgrade there is a backup; the migration wraps each file in one transaction, the versions and content digest are checked afterwards, and on failure both files go back together from the backup. When pruning backups, keep at least one that verifies.",
+      "source": "9e1cd2e602ee"
+    },
+    "code-decision.plain-copy.title": {
+      "text": "Copy the file while the service runs",
+      "source": "2044dc6a621c"
+    },
+    "code-decision.plain-copy.why_not": {
+      "text": "A rollback-journal file tears and a WAL file loses the commits in its log, while `integrity_check` may still pass.",
+      "source": "99050635458f"
+    },
+    "code-decision.trust-integrity.title": {
+      "text": "Judge a backup by integrity_check alone",
+      "source": "844cfe424217"
+    },
+    "code-decision.trust-integrity.why_not": {
+      "text": "It only looks at structure: missing committed runs or one digit changed inside a memory pass unnoticed.",
+      "source": "9131f348896d"
+    },
+    "code-decision.transaction-only.title": {
+      "text": "Protect the upgrade with transactions only",
+      "source": "a685fd62614c"
+    },
+    "code-decision.transaction-only.why_not": {
+      "text": "A transaction covers one file and only uncommitted changes; it cannot go back when the second file fails or when the migration committed a wrong result.",
+      "source": "5b9c30cc0b1f"
+    },
+    "code-decision.keep-newest.title": {
+      "text": "Keep only the newest N backups",
+      "source": "1f3e4134cb1f"
+    },
+    "code-decision.keep-newest.why_not": {
+      "text": "It assumes the newest are good; when the newest ones are damaged, nothing can be restored after pruning.",
+      "source": "db0d470472e2"
+    },
+    "online-backup.title": {
+      "text": "Online backup: copying the file versus a consistent backup",
+      "source": "33d09cbdca67"
+    },
+    "online-backup.hypothesis": {
+      "text": "For the same data being written to, a directly copied file produces a copy that is missing data or internally inconsistent, while copies from the backup API and VACUUM INTO pass the checks; integrity_check alone cannot tell whether a copy is usable.",
+      "source": "3e261c6d2e3d"
+    },
+    "online-backup.naive.label": {
+      "text": "Copy the file while it is written",
+      "source": "c48036a4774d"
+    },
+    "online-backup.backup-api.label": {
+      "text": "SQLite backup API",
+      "source": "64a0e50599aa"
+    },
+    "online-backup.vacuum-into.label": {
+      "text": "VACUUM INTO",
+      "source": "00d49f472e79"
+    },
+    "online-backup.cold-copy.label": {
+      "text": "Copy after stopping the writer",
+      "source": "023d74acb660"
+    },
+    "online-backup.journal-mode.text": {
+      "text": "The journal mode of the two files: WAL for runs and a rollback journal for memory.",
+      "source": "ecf9836ad36b"
+    },
+    "online-backup.sidecar.text": {
+      "text": "The log files next to the database before the copy: `runs.sqlite3` has a non-empty `-wal`.",
+      "source": "43bc89b4273e"
+    },
+    "online-backup.writes.text": {
+      "text": "Writes committed during the copy: these writes are real.",
+      "source": "c60012f83a41"
+    },
+    "online-backup.steps.text": {
+      "text": "Steps and pages of the backup API: the steps beyond the page count were wasted after writes interrupted it.",
+      "source": "968bf334a674"
+    },
+    "online-backup.integrity-runs.text": {
+      "text": "The integrity_check item for the `runs.sqlite3` copy.",
+      "source": "47f75b9dc73c"
+    },
+    "online-backup.rows-runs.text": {
+      "text": "Whether the `runs.sqlite3` copy is complete: how many runs committed before the backup are missing.",
+      "source": "a4af8dcff4dc"
+    },
+    "online-backup.integrity-memory.text": {
+      "text": "The integrity_check item for the `memory.sqlite3` copy.",
+      "source": "040e178e61a4"
+    },
+    "online-backup.rows-memory.text": {
+      "text": "Whether the memory table and the version table agree in the `memory.sqlite3` copy.",
+      "source": "d371d9850180"
+    },
+    "online-backup.guide.0.text": {
+      "text": "This experiment calls no model. On the same data, one thread writes while another backs up.",
+      "source": "11fd76bf96fe"
+    },
+    "online-backup.guide.1.text": {
+      "text": "The two files are in different journal modes, which is why they go wrong in different ways.",
+      "source": "6d4dca7d1182"
+    },
+    "online-backup.guide.2.text": {
+      "text": "Next to `runs.sqlite3` is a non-empty log file, and the recent commits are all in it.",
+      "source": "a768b9b154fd"
+    },
+    "online-backup.guide.3.text": {
+      "text": "During the copy the writer thread really did commit several more times.",
+      "source": "13ad2515310e"
+    },
+    "online-backup.guide.4.text": {
+      "text": "In the copy that took only the main file, the structure check passed.",
+      "source": "bfa98b16ae1e"
+    },
+    "online-backup.guide.5.text": {
+      "text": "Yet the records item did not pass: runs committed before the backup are missing.",
+      "source": "e0be71897ef1"
+    },
+    "online-backup.guide.6.text": {
+      "text": "The `memory.sqlite3` copy already fails at the structure check.",
+      "source": "cf615eb15660"
+    },
+    "online-backup.guide.7.text": {
+      "text": "The memory table and the version table disagree: for the same write, the two tables were read at different moments.",
+      "source": "52be4b76ccb7"
+    },
+    "online-backup.guide.8.text": {
+      "text": "Run it again with the backup API and see the steps it spent on being interrupted.",
+      "source": "bedc54463513"
+    },
+    "online-backup.conclusion.proves.0": {
+      "text": "With real writes during the copy, a directly copied file is missing data (WAL) or internally inconsistent (rollback journal), while the integrity_check of `runs.sqlite3` still says ok.",
+      "source": "02487ae7c337"
+    },
+    "online-backup.conclusion.proves.1": {
+      "text": "The copies from the backup API, VACUUM INTO and copying after a stop pass both checks under the same writes.",
+      "source": "97061579bef2"
+    },
+    "online-backup.conclusion.does_not_prove.0": {
+      "text": "The lesson creates the overlap with a fixed alternation; in a real service whether the copy tears depends on when the writes land. With free-running writes the result of a direct copy may differ every time.",
+      "source": "5dccdbe81074"
+    },
+    "online-backup.conclusion.does_not_prove.1": {
+      "text": "Nothing here compares how long each method takes or tests large files or network drives, so it cannot say which is faster.",
+      "source": "7eb16f852b6a"
+    },
+    "restore-drill.title": {
+      "text": "Restore drill: a successful backup does not mean it restores",
+      "source": "e0debd2a5a8a"
+    },
+    "restore-drill.hypothesis": {
+      "text": "After the backup command succeeds, you still need to restore into a new directory and accept it. The manifest check finds a changed backup file, while the structure check and recall alone cannot find one changed byte. The pruning rule has to guarantee that at least one backup left can be restored.",
+      "source": "238564e3520e"
+    },
+    "restore-drill.clean.label": {
+      "text": "Intact backup, checked and restored",
+      "source": "53977ed98740"
+    },
+    "restore-drill.flip-verified.label": {
+      "text": "One byte changed, manifest checked before restoring",
+      "source": "9500aca0fd2b"
+    },
+    "restore-drill.flip-skipped.label": {
+      "text": "One byte changed, check skipped",
+      "source": "1b1bc5300e90"
+    },
+    "restore-drill.whole-directory.label": {
+      "text": "Back up the whole directory, config included",
+      "source": "bdca65c55a84"
+    },
+    "restore-drill.keep-newest.label": {
+      "text": "Keep the newest 2, with the newest two damaged",
+      "source": "30b62eedd0b7"
+    },
+    "restore-drill.keep-verified.label": {
+      "text": "Keep the newest 2, plus the newest one that passes the check",
+      "source": "4d2e5d58ea02"
+    },
+    "restore-drill.secret-scan.text": {
+      "text": "The files with keys found in the backup directory: empty for the data-only scope.",
+      "source": "0e79a0c50623"
+    },
+    "restore-drill.fault-origin.text": {
+      "text": "The origin of the damage: `fault_injection`, made on purpose by the program.",
+      "source": "e7d8eb94cc70"
+    },
+    "restore-drill.verify-integrity.text": {
+      "text": "The integrity_check of the altered memory file: still ok.",
+      "source": "a88000c39dc0"
+    },
+    "restore-drill.verify-files.text": {
+      "text": "The manifest check: whether each file's size and sha256 match.",
+      "source": "55891a14fa4b"
+    },
+    "restore-drill.restore-performed.text": {
+      "text": "Whether the restore was actually done: false when the manifest check fails.",
+      "source": "5632e180d309"
+    },
+    "restore-drill.recalled.text": {
+      "text": "The memory keys recalled after the restore.",
+      "source": "34b02a638864"
+    },
+    "restore-drill.check-damage.text": {
+      "text": "The report item \"the damage was found\": the detail says whether it was before or after the restore.",
+      "source": "fcda595a8d06"
+    },
+    "restore-drill.check-memory.text": {
+      "text": "The report item “memory can be recalled after the restore”.",
+      "source": "fa7b4162997e"
+    },
+    "restore-drill.check-digest.text": {
+      "text": "The report item on the content digest matching the manifest.",
+      "source": "cd67e92bc310"
+    },
+    "restore-drill.check-secrets.text": {
+      "text": "The report item “the backup contains no secrets”.",
+      "source": "edda723d2485"
+    },
+    "restore-drill.retention-check.text": {
+      "text": "Whether a restore is still possible after pruning.",
+      "source": "2d69db8db783"
+    },
+    "restore-drill.guide.0.text": {
+      "text": "This experiment calls no model. Every arm backs up first, restores into a new directory, and accepts last.",
+      "source": "3f2217edb391"
+    },
+    "restore-drill.guide.1.text": {
+      "text": "After an intact backup is restored, memory can be recalled.",
+      "source": "29b918c04636"
+    },
+    "restore-drill.guide.2.text": {
+      "text": "Nothing shaped like a key was found in the backup directory.",
+      "source": "1e42e6844ae8"
+    },
+    "restore-drill.guide.3.text": {
+      "text": "Now the damaged backups. The damage is made on purpose by the program, and its origin is in the event.",
+      "source": "bdf2ddb92c70"
+    },
+    "restore-drill.guide.4.text": {
+      "text": "For the file with one byte changed, the structure check still says ok.",
+      "source": "4858abee71fa"
+    },
+    "restore-drill.guide.5.text": {
+      "text": "The manifest check compares size and sha256 file by file, and the one that does not match is it.",
+      "source": "d7c06576674d"
+    },
+    "restore-drill.guide.6.text": {
+      "text": "When the check fails the restore is not done at all, and the damaged data never reaches the service.",
+      "source": "b121e71732ca"
+    },
+    "restore-drill.guide.7.text": {
+      "text": "Run again with the check skipped: memory can still be recalled.",
+      "source": "370831d6073b"
+    },
+    "restore-drill.guide.8.text": {
+      "text": "Only the content digest item fails, and it is the only check that finds the changed byte.",
+      "source": "04c5b76b3d27"
+    },
+    "restore-drill.guide.9.text": {
+      "text": "The report lists \"was the damage found\" as its own item. It passes in both ways; the difference is in the detail: one refused the restore through the manifest check before anything was restored, the other only found the damage in the acceptance run after the damaged data had been read by the service.",
+      "source": "e8b39979c3e4"
+    },
+    "restore-drill.guide.10.text": {
+      "text": "With the whole directory backed up, the key scan item fails.",
+      "source": "18d5ac0b9b21"
+    },
+    "restore-drill.guide.11.text": {
+      "text": "The last two arms are pruning: the newest two are damaged; keeping only the newest two leaves nothing restorable after pruning, and keeping one more that passes the check does.",
+      "source": "d384872bfa37"
+    },
+    "restore-drill.conclusion.proves.0": {
+      "text": "The manifest check before restoring refuses a changed backup; without it neither the structure check nor recall finds the changed byte, and only the content digest does.",
+      "source": "e42e98bc476b"
+    },
+    "restore-drill.conclusion.proves.1": {
+      "text": "Scanning the backup directory finds a config file that came along with the backup. Keeping only the newest N may leave nothing restorable when the newest ones are damaged; keeping one more that passes the check makes it restorable.",
+      "source": "63b494f042af"
+    },
+    "restore-drill.conclusion.does_not_prove.0": {
+      "text": "The damage is made on purpose by the program and covers only one flipped byte and truncation; real disk faults take more forms, and a faulty medium itself was not tested.",
+      "source": "b30423839326"
+    },
+    "restore-drill.conclusion.does_not_prove.1": {
+      "text": "The key scan only recognizes the marker this lesson planted and strings starting with `sk-`; it cannot prove the backup holds nothing else sensitive.",
+      "source": "4c1c52863b82"
+    },
+    "upgrade-rollback.title": {
+      "text": "A failed upgrade and the way back",
+      "source": "f5236e60f118"
+    },
+    "upgrade-rollback.hypothesis": {
+      "text": "When a migration fails halfway, a transaction can only undo the uncommitted changes in the failed file; a failure that spans files and a committed wrong result can only be undone from the backup made before the upgrade, and after the rollback the service and the data still have to be checked.",
+      "source": "b24afb3d8fcc"
+    },
+    "upgrade-rollback.none-second.label": {
+      "text": "No safeguard: the migration of runs.sqlite3 is interrupted",
+      "source": "c3e90b219d61"
+    },
+    "upgrade-rollback.tx-first.label": {
+      "text": "Transaction: the migration of memory.sqlite3 is interrupted",
+      "source": "e8da4dcd5e5e"
+    },
+    "upgrade-rollback.tx-second.label": {
+      "text": "Transaction: the migration of runs.sqlite3 is interrupted",
+      "source": "b8c8219e0ece"
+    },
+    "upgrade-rollback.tx-bad-result.label": {
+      "text": "Transaction: the migration code is wrong and commits",
+      "source": "d97765650946"
+    },
+    "upgrade-rollback.backup-second.label": {
+      "text": "Backup plus transaction: the migration of runs.sqlite3 is interrupted",
+      "source": "8f06953530fe"
+    },
+    "upgrade-rollback.fault-origin.text": {
+      "text": "The origin of the fault: `fault_injection`, made on purpose by the program.",
+      "source": "43fa1d41f337"
+    },
+    "upgrade-rollback.step-error.text": {
+      "text": "The error text of the step that failed.",
+      "source": "501569351a62"
+    },
+    "upgrade-rollback.step-version.text": {
+      "text": "The version in this file's header after the failure: still 1.",
+      "source": "60e17fa5cf02"
+    },
+    "upgrade-rollback.rollback-method.text": {
+      "text": "What the way back was: a transaction or a restore from backup.",
+      "source": "619d4d8be9e8"
+    },
+    "upgrade-rollback.check-upgrade.text": {
+      "text": "The report item “the upgrade completed and passed its checks”.",
+      "source": "a5bf828fa248"
+    },
+    "upgrade-rollback.check-service.text": {
+      "text": "The report item “the service starts normally”; its detail says what broke.",
+      "source": "5e5b5d2249fa"
+    },
+    "upgrade-rollback.check-data.text": {
+      "text": "The report item “the data equals what it was before the upgrade”.",
+      "source": "deeb67ca93b3"
+    },
+    "upgrade-rollback.final-versions.text": {
+      "text": "The final version numbers of the two files (runs and memory).",
+      "source": "fb9b5ae105d1"
+    },
+    "upgrade-rollback.recalled.text": {
+      "text": "The memory keys recalled in the final state: they only appear when the service is available.",
+      "source": "a9d00bc4c3c8"
+    },
+    "upgrade-rollback.guide.0.text": {
+      "text": "This experiment calls no model. First, with no safeguard at all, the migration of runs.sqlite3 fails halfway.",
+      "source": "117cc954ceb4"
+    },
+    "upgrade-rollback.guide.1.text": {
+      "text": "The failure is made on purpose by the program, and its origin is stated.",
+      "source": "eb7b49828d17"
+    },
+    "upgrade-rollback.guide.2.text": {
+      "text": "What error the failed step reported.",
+      "source": "1c186116b626"
+    },
+    "upgrade-rollback.guide.3.text": {
+      "text": "The version in the file header is still 1 although the column has already been renamed: the version is the last step, so it was never written.",
+      "source": "b7ad860fa9ac"
+    },
+    "upgrade-rollback.guide.4.text": {
+      "text": "With a transaction per file, a failure in memory.sqlite3 rolls back completely to before the upgrade.",
+      "source": "f6458d302123"
+    },
+    "upgrade-rollback.guide.5.text": {
+      "text": "The first item of the report says whether the upgrade completed.",
+      "source": "58799888259f"
+    },
+    "upgrade-rollback.guide.6.text": {
+      "text": "When the second file fails, the transaction only rolled back itself; the service check failed and its detail says the versions disagree.",
+      "source": "1f2182cf249b"
+    },
+    "upgrade-rollback.guide.7.text": {
+      "text": "The final version numbers sit side by side: one is 1 and one is 2.",
+      "source": "9f0db134197f"
+    },
+    "upgrade-rollback.guide.8.text": {
+      "text": "Not one row is lost and the content digest equals the one from before, yet the service cannot start. The two items have to be read separately.",
+      "source": "f5dd2829899e"
+    },
+    "upgrade-rollback.guide.9.text": {
+      "text": "With backup plus transaction, both files are restored together from the backup.",
+      "source": "4631128ba92b"
+    },
+    "upgrade-rollback.guide.10.text": {
+      "text": "After the restore the service is available and memory can be recalled.",
+      "source": "255fef8e5949"
+    },
+    "upgrade-rollback.conclusion.proves.0": {
+      "text": "A transaction can roll back the file that failed completely, but it cannot roll back another file that already committed or a wrong result that already committed; a restore from the backup made before the upgrade returns both cases to the data from before the upgrade.",
+      "source": "79a669480ff5"
+    },
+    "upgrade-rollback.conclusion.proves.1": {
+      "text": "After a rollback, the service starting and the data being unchanged are two independent checks, and one passing cannot stand in for the other.",
+      "source": "da700ed3ba5c"
+    },
+    "upgrade-rollback.conclusion.does_not_prove.0": {
+      "text": "The faults are made by the program at fixed places (after row 3); a real failure can come at any step and could be a power loss, which this lesson did not test.",
+      "source": "6a478f2bf924"
+    },
+    "upgrade-rollback.conclusion.does_not_prove.1": {
+      "text": "The service does not write between the upgrade and the rollback; in a real service, writes in that window would be lost by the rollback.",
+      "source": "6c9aca73c26e"
+    },
+    "inputs.scenario.label": {
+      "text": "Exercise",
+      "source": "3cae1f75ef71"
+    },
+    "inputs.scenario.help": {
+      "text": "Four kinds of exercise: online backup, restore drill, upgrade and rollback, keeping the last N backups; each kind has a few preset exercises that match the arms in the experiments. The parameters below apply to some of the kinds.",
+      "source": "9657df8ca9eb"
+    },
+    "inputs.scenario.options.online_backup.label": {
+      "text": "Online backup",
+      "source": "b23d1a19e4b2"
+    },
+    "inputs.scenario.options.restore_drill.label": {
+      "text": "Restore drill",
+      "source": "e9b8a1e9a563"
+    },
+    "inputs.scenario.options.upgrade_rollback.label": {
+      "text": "Upgrade and rollback",
+      "source": "4a2a2137ba51"
+    },
+    "inputs.scenario.options.retention.label": {
+      "text": "Keep the last N",
+      "source": "4d4731054a5e"
+    },
+    "inputs.method.label": {
+      "text": "Backup method",
+      "source": "2a29bff68a6b"
+    },
+    "inputs.method.help": {
+      "text": "Only for online backup.",
+      "source": "eee24ed208f8"
+    },
+    "inputs.method.options.cold_copy.label": {
+      "text": "Copy after stopping the writer",
+      "source": "023d74acb660"
+    },
+    "inputs.method.options.naive_copy.label": {
+      "text": "Copy the file while it is written",
+      "source": "c48036a4774d"
+    },
+    "inputs.method.options.backup_api.label": {
+      "text": "SQLite backup API",
+      "source": "64a0e50599aa"
+    },
+    "inputs.method.options.vacuum_into.label": {
+      "text": "VACUUM INTO",
+      "source": "00d49f472e79"
+    },
+    "inputs.schedule.label": {
+      "text": "Write pacing",
+      "source": "e6b4c26bc6f7"
+    },
+    "inputs.schedule.help": {
+      "text": "Only for online backup. Alternating is the same every time; free-running lets the writer thread run on its own, and results may differ per run.",
+      "source": "799a07edb4f0"
+    },
+    "inputs.schedule.options.lockstep.label": {
+      "text": "Writes and copy steps alternate",
+      "source": "7f03c2cd13cc"
+    },
+    "inputs.schedule.options.free.label": {
+      "text": "Free-running writer thread",
+      "source": "921fbdb1fea8"
+    },
+    "inputs.damage.label": {
+      "text": "Injected damage",
+      "source": "5431134c8b35"
+    },
+    "inputs.damage.help": {
+      "text": "Only for the restore drill: it damages the backup file of the memory store.",
+      "source": "e9e56e83805b"
+    },
+    "inputs.damage.options.none.label": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "inputs.damage.options.bit_flip.label": {
+      "text": "Flip one byte",
+      "source": "99184478f1cb"
+    },
+    "inputs.damage.options.truncated.label": {
+      "text": "Truncate the file",
+      "source": "64feb747d90f"
+    },
+    "inputs.scope.label": {
+      "text": "Backup scope",
+      "source": "e7bdd2b255e0"
+    },
+    "inputs.scope.help": {
+      "text": "Only for the restore drill: back up the two databases only, or the config file as well.",
+      "source": "37270ab01864"
+    },
+    "inputs.scope.options.data_only.label": {
+      "text": "The two database files only",
+      "source": "9055d7b8b78a"
+    },
+    "inputs.scope.options.whole_directory.label": {
+      "text": "The whole directory (config included)",
+      "source": "93e1bc5bcd40"
+    },
+    "inputs.verify_manifest.label": {
+      "text": "Check the manifest before restoring",
+      "source": "a52a5bf22159"
+    },
+    "inputs.verify_manifest.help": {
+      "text": "Only for the restore drill. Turn it off and a damaged backup is restored as it is.",
+      "source": "360714b4acb4"
+    },
+    "inputs.failure.label": {
+      "text": "Injected failure",
+      "source": "30d0e811ef1d"
+    },
+    "inputs.failure.help": {
+      "text": "Only for upgrade and rollback.",
+      "source": "02d73d6122fb"
+    },
+    "inputs.failure.options.none.label": {
+      "text": "None",
+      "source": "484d55613910"
+    },
+    "inputs.failure.options.fail_first_file.label": {
+      "text": "Interrupt the migration of memory.sqlite3 halfway",
+      "source": "cc5d1b42f7ed"
+    },
+    "inputs.failure.options.fail_second_file.label": {
+      "text": "memory.sqlite3 succeeds, runs.sqlite3 is interrupted halfway",
+      "source": "5f3c085c8e54"
+    },
+    "inputs.failure.options.bad_result.label": {
+      "text": "The migration code is wrong and commits anyway",
+      "source": "344c4d78c2df"
+    },
+    "inputs.safeguard.label": {
+      "text": "Safeguard",
+      "source": "043b4085ffef"
+    },
+    "inputs.safeguard.help": {
+      "text": "Only for upgrade and rollback.",
+      "source": "02d73d6122fb"
+    },
+    "inputs.safeguard.options.none.label": {
+      "text": "None (each statement commits by itself)",
+      "source": "564b28a46239"
+    },
+    "inputs.safeguard.options.transaction.label": {
+      "text": "One transaction per file",
+      "source": "1f26de842936"
+    },
+    "inputs.safeguard.options.backup.label": {
+      "text": "Backup before the upgrade, plus one transaction per file",
+      "source": "c82adc6a2af6"
+    },
+    "inputs.keep.label": {
+      "text": "Backups to keep (N)",
+      "source": "8c5e4960f4e2"
+    },
+    "inputs.keep.help": {
+      "text": "Only for keeping the last N: 1 to 5.",
+      "source": "eeaab1103cb4"
+    },
+    "inputs.corrupt_newest.label": {
+      "text": "Damage the newest backups",
+      "source": "785ceb4d7a74"
+    },
+    "inputs.corrupt_newest.help": {
+      "text": "Only for keeping the last N: 0 to 3.",
+      "source": "875a2c44b9ae"
+    },
+    "inputs.policy.label": {
+      "text": "Retention policy",
+      "source": "00213c7f272b"
+    },
+    "inputs.policy.help": {
+      "text": "Only for keeping the last N.",
+      "source": "8990654ec70c"
+    },
+    "inputs.policy.options.newest_n.label": {
+      "text": "Keep only the newest N",
+      "source": "1ba19fcc9248"
+    },
+    "inputs.policy.options.newest_n_keep_verified.label": {
+      "text": "Keep the newest N, plus the newest one that verifies",
+      "source": "f54bf7c2afd8"
+    },
+    "quiz.why-not-cp.prompt": {
+      "text": "Why can `memory.sqlite3` not simply be copied with `cp` while the service is writing?",
+      "source": "93020cec7810"
+    },
+    "quiz.why-not-cp.a.text": {
+      "text": "The copy reads the file in order and pages change while it reads, so the pages in the copy come from different moments",
+      "source": "f91760a7881f"
+    },
+    "quiz.why-not-cp.a.feedback": {
+      "text": "Right. That is a torn copy.",
+      "source": "6c4a04f66f10"
+    },
+    "quiz.why-not-cp.b.text": {
+      "text": "`cp` cannot read a file that is open",
+      "source": "21a3e3eb51c8"
+    },
+    "quiz.why-not-cp.b.feedback": {
+      "text": "No. `cp` can read it; the problem is that what it reads is a mix of old and new.",
+      "source": "add69e7f19e1"
+    },
+    "quiz.why-not-cp.c.text": {
+      "text": "The copy makes the writer thread fail and lose data",
+      "source": "5906e063f627"
+    },
+    "quiz.why-not-cp.c.feedback": {
+      "text": "No. Writes commit as usual; it is the copy that is bad, not the original database.",
+      "source": "61f91092f63c"
+    },
+    "quiz.why-not-cp.explanation": {
+      "text": "Tearing comes from the time the reading takes, not from reading itself.",
+      "source": "1014c4fa3c67"
+    },
+    "quiz.backup-api-writes.prompt": {
+      "text": "A different connection commits a write while the backup API is running. What happens?",
+      "source": "b7e4190fdfcd"
+    },
+    "quiz.backup-api-writes.a.text": {
+      "text": "The backup usually starts over and in the end gives one complete snapshot; if writes are too frequent it may never finish",
+      "source": "e33d67682157"
+    },
+    "quiz.backup-api-writes.a.feedback": {
+      "text": "Right. That is both its cost and its guarantee.",
+      "source": "d4c8d81225f5"
+    },
+    "quiz.backup-api-writes.b.text": {
+      "text": "The backup carries on and the copy mixes old and new pages",
+      "source": "af2784ab6fe9"
+    },
+    "quiz.backup-api-writes.b.feedback": {
+      "text": "No. That is what copying the file directly gives.",
+      "source": "6e013edcfcdb"
+    },
+    "quiz.backup-api-writes.c.text": {
+      "text": "The write is refused until the backup ends",
+      "source": "2d73867292dd"
+    },
+    "quiz.backup-api-writes.c.feedback": {
+      "text": "No. The backup does not hold the read lock between steps, so writes can go ahead.",
+      "source": "4df58dade095"
+    },
+    "quiz.backup-api-writes.explanation": {
+      "text": "The backup API trades redoing work for consistency.",
+      "source": "af0ad3767acd"
+    },
+    "quiz.manifest-proves.prompt": {
+      "text": "Before restoring, the file's sha256 matches the manifest. What does that show?",
+      "source": "0ba80f0d0822"
+    },
+    "quiz.manifest-proves.a.text": {
+      "text": "The file is the same as at backup time, but it does not prove the backup itself was right",
+      "source": "da51f63fa2ef"
+    },
+    "quiz.manifest-proves.a.feedback": {
+      "text": "Right. The manifest answers “has it been touched”.",
+      "source": "2ca44b8dac97"
+    },
+    "quiz.manifest-proves.b.text": {
+      "text": "The backup can certainly be restored",
+      "source": "1071c7483c54"
+    },
+    "quiz.manifest-proves.b.feedback": {
+      "text": "No. A copy made while writing has a matching manifest too.",
+      "source": "c4661bfece8e"
+    },
+    "quiz.manifest-proves.c.text": {
+      "text": "The content of the database has no errors",
+      "source": "484840a1f224"
+    },
+    "quiz.manifest-proves.c.feedback": {
+      "text": "No. The manifest does not judge whether the content makes sense.",
+      "source": "a1f332cc1b2e"
+    },
+    "quiz.manifest-proves.explanation": {
+      "text": "The manifest and the restore drill each cover one thing.",
+      "source": "8374bf13d501"
+    },
+    "quiz.why-digest.prompt": {
+      "text": "The restore drill's acceptance already has `integrity_check` and recall. Why compare the content digest as well?",
+      "source": "23fbbac43555"
+    },
+    "quiz.why-digest.a.text": {
+      "text": "When structure and recall are fine, a digit changed inside the content can only be found by the digest",
+      "source": "0f867a32f72e"
+    },
+    "quiz.why-digest.a.feedback": {
+      "text": "Right. The arm with one flipped byte in exercise 2 is exactly this.",
+      "source": "6ca5f60d4ddf"
+    },
+    "quiz.why-digest.b.text": {
+      "text": "Because the digest is faster than `integrity_check`",
+      "source": "c8b962f6cf69"
+    },
+    "quiz.why-digest.b.feedback": {
+      "text": "No. Speed is not the reason; coverage is.",
+      "source": "446beb4fb95b"
+    },
+    "quiz.why-digest.c.text": {
+      "text": "Because `integrity_check` often gives false alarms",
+      "source": "a52c2970f371"
+    },
+    "quiz.why-digest.c.feedback": {
+      "text": "No. It does not raise false alarms; it simply does not cover content.",
+      "source": "6cbe80fa49d9"
+    },
+    "quiz.why-digest.explanation": {
+      "text": "Each check covers only one kind of problem.",
+      "source": "2ff8a42cfe71"
+    },
+    "quiz.repeatable.prompt": {
+      "text": "Why should a data migration be written so that it can be run again?",
+      "source": "99afe4d2fcd1"
+    },
+    "quiz.repeatable.a.text": {
+      "text": "After a first attempt fails halfway, you can carry on once the cause is fixed without errors like the table already existing or the column already renamed",
+      "source": "58acb466eb97"
+    },
+    "quiz.repeatable.a.feedback": {
+      "text": "Right. Every step looks at where things stand first.",
+      "source": "6b7f9ab15ea1"
+    },
+    "quiz.repeatable.b.text": {
+      "text": "So that the migration can run once a day",
+      "source": "6c2310b2949e"
+    },
+    "quiz.repeatable.b.feedback": {
+      "text": "No. A migration is done once, at upgrade time.",
+      "source": "a5e728d08ad9"
+    },
+    "quiz.repeatable.c.text": {
+      "text": "So that no rollback is needed after a failure",
+      "source": "75af46732c83"
+    },
+    "quiz.repeatable.c.feedback": {
+      "text": "No. Repeating does not guarantee the first result was right; what must be rolled back still has to be.",
+      "source": "c3c21e01ed07"
+    },
+    "quiz.repeatable.explanation": {
+      "text": "Repeatability makes a fix possible; it does not replace a rollback.",
+      "source": "73604f0d678d"
+    },
+    "quiz.committed-wrong.prompt": {
+      "text": "The migration has committed and the check finds some memories missing. How do you get back to before the upgrade?",
+      "source": "1df35283420c"
+    },
+    "quiz.committed-wrong.a.text": {
+      "text": "Restore both files from the backup made before the upgrade, then check the service and the content digest",
+      "source": "52f87b3b2243"
+    },
+    "quiz.committed-wrong.a.feedback": {
+      "text": "Right. After a commit only the backup can take you back.",
+      "source": "123ba8529446"
+    },
+    "quiz.committed-wrong.b.text": {
+      "text": "Run ROLLBACK",
+      "source": "87e5fed5f7a7"
+    },
+    "quiz.committed-wrong.b.feedback": {
+      "text": "No. The transaction has committed and ROLLBACK has nothing to undo.",
+      "source": "f938cee77dc8"
+    },
+    "quiz.committed-wrong.c.text": {
+      "text": "Run the migration again",
+      "source": "b3acca06c0d9"
+    },
+    "quiz.committed-wrong.c.feedback": {
+      "text": "No. The migration code is wrong, and running it again only goes wrong again.",
+      "source": "2d5d00922603"
+    },
+    "quiz.committed-wrong.explanation": {
+      "text": "A committed result is undone from a backup.",
+      "source": "408c5de930c4"
+    },
+    "quiz.retention-rule.prompt": {
+      "text": "When pruning backups, which rule guarantees at least one restorable backup is kept?",
+      "source": "2b711fb41920"
+    },
+    "quiz.retention-rule.a.text": {
+      "text": "Keep the newest N, plus the newest one that passes the manifest check",
+      "source": "abf8a316dba6"
+    },
+    "quiz.retention-rule.a.feedback": {
+      "text": "Right. The extra one is the way out for “the newest few are all bad”.",
+      "source": "0369460a3592"
+    },
+    "quiz.retention-rule.b.text": {
+      "text": "Keep only the newest N",
+      "source": "1ba19fcc9248"
+    },
+    "quiz.retention-rule.b.feedback": {
+      "text": "No. When the newest ones are all damaged, none of what is left can be restored.",
+      "source": "19cd1fd31c24"
+    },
+    "quiz.retention-rule.c.text": {
+      "text": "Delete the oldest by file modification time",
+      "source": "353b1f82a353"
+    },
+    "quiz.retention-rule.c.feedback": {
+      "text": "No. This does not look at whether backups are good, like keeping the newest N, and modification times are changed by copying.",
+      "source": "c64f223f168d"
+    },
+    "quiz.retention-rule.explanation": {
+      "text": "The rule has to guarantee a way out after pruning.",
+      "source": "d44788ef66fd"
+    },
+    "check-hunt.prompt": {
+      "text": "Run “Copy the file while it is written” and find how many runs committed before the backup are missing from the copy.",
+      "source": "0d1da77f2439"
+    },
+    "check-hunt.explanation": {
+      "text": "The first lesson.backup_check is the check of `runs.sqlite3`: missing is 6, the 6 runs committed before the backup that exist only in the `-wal` file; in the same event integrity is ok, so a copy that passes the structure check can still be missing data. The second event is the check of `memory.sqlite3`, where both integrity and broken show problems.",
+      "source": "438242112d1e"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare with your own runs and the lesson source, and tick an item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "In the “Copy the file while it is written” run I found how many runs `runs.sqlite3` was missing and saw that its integrity_check is ok.",
+      "source": "ff164c163595"
+    },
+    "check-points.item-2.text": {
+      "text": "I can say why `runs.sqlite3` and `memory.sqlite3` go wrong in different ways when copied directly.",
+      "source": "b428c862e9b6"
+    },
+    "check-points.item-3.text": {
+      "text": "I ran the restore drill with one flipped byte and the manifest check turned off: memory could still be recalled and only the content digest item failed.",
+      "source": "74eb412eab42"
+    },
+    "check-points.item-4.text": {
+      "text": "I compared the “Transaction: the migration of runs.sqlite3 is interrupted” and “Backup plus transaction” arms and can say why a transaction cannot save two files.",
+      "source": "f072030da4a7"
+    },
+    "check-points.item-5.text": {
+      "text": "I switched the retention policy to “Keep the newest N, plus the newest one that verifies” and saw the backups kept and the number of runs missing.",
+      "source": "b13f1ee9c69c"
+    },
+    "section-recap.title": {
+      "text": "Recap: three things and what comes next",
+      "source": "13810f17ba36"
+    },
+    "section-recap.paragraphs.0": {
+      "text": "Three things cannot be skipped in backups: an online backup must be consistent, every backup carries a manifest that is checked before restoring, and a restore is accepted in a new directory. An upgrade adds two more: after the migration check the versions and the content digest, and have a backup before the upgrade, because a transaction cannot save you from a mistake that already committed or from a second file.",
+      "source": "aa774ce780a2"
+    },
+    "section-recap.paragraphs.1": {
+      "text": "What this lesson did not do: off-site backups, backup encryption, behavior on power loss, and writes between the upgrade and the rollback. Each of them changes the answer to “how much is lost and how far back can we go”, and a real delivery has to add them one by one. The coming {{lesson:capstone-study-assistant}} delivers the whole course as a study assistant that can be backed up and upgraded.",
+      "source": "73198a7f2e39"
+    },
+    "code_notes.create_backup.note": {
+      "text": "Copies first, then writes manifest.json from the files on disk; scope decides what goes in.",
+      "source": "b0dd50c24077"
+    },
+    "code_notes.content_digest.note": {
+      "text": "The content digest in the manifest: the rows of both files read into one shape, then a sha256.",
+      "source": "55bb98cb4fa0"
+    },
+    "code_notes.service_check.note": {
+      "text": "Starts the service of a given version on the data: versions, integrity, runs, recall and digest.",
+      "source": "b8da9b7a6e80"
+    },
+    "code_notes.restore_into.note": {
+      "text": "Used to roll back: moves the current files to _failed_upgrade, then restores from the backup, log included.",
+      "source": "caf2657431f8"
+    },
+    "code_notes.user_version.note": {
+      "text": "An integer in the file header; this lesson uses it as the schema version: 1 or 2.",
+      "source": "01bdc21c1741"
+    },
+    "code_notes.fault_injection.note": {
+      "text": "The value of origin in events: this failure was made on purpose by the lesson program.",
+      "source": "f88fa4de0d50"
+    },
+    "code_notes.migrate_memory.note": {
+      "text": "Rebuilds memories: new table, convert and copy, rename, and write user_version last.",
+      "source": "719bfca78289"
+    },
+    "code_notes.RunStore.note": {
+      "text": "The platform's run store; this lesson writes and reads runs with it.",
+      "source": "dcabaa03cfad"
+    },
+    "code_notes.MemoryStore.note": {
+      "text": "The memory store from the persistent-memory lesson; this lesson writes and recalls with it.",
+      "source": "be7bda7c141d"
+    },
+    "code_notes.scope.note": {
+      "text": "A manifest field: the backup scope, databases only or the config file too.",
+      "source": "e06abb176e79"
+    },
+    "code_notes.created_at.note": {
+      "text": "The backup time in the manifest; retention orders backups by it.",
+      "source": "6caf7686c186"
+    }
+  }
+}

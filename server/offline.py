@@ -51,18 +51,41 @@ def result_answer(results, locale="zh-CN"):
     return {"content": texts["marker"] + text}
 
 
-def completion_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+def _fixture_for(spec, key, exercise_id, inputs, locale):
+    """按课程声明的 testing.<key> 构造确定性适配器；只在离线测试模式使用。"""
     if not any(exercise["id"] == exercise_id for exercise in spec["exercises"]):
         raise ValueError("当前课程未声明此离线练习。")
-    factory = lesson_callable(spec, spec["testing"]["completion_factory"])
+    factory = lesson_callable(spec, spec["testing"][key])
     # 支持多种运行语言的课，fixture 接受 locale，按运行语言给出确定性响应；只有源语言的课不需要。
     if "locale" in inspect.signature(factory).parameters:
-        completion = factory(exercise_id, inputs=inputs or {}, locale=locale)
+        adapter = factory(exercise_id, inputs=inputs or {}, locale=locale)
     elif locale != spec["runtime"]["locales"][0]:
-        raise ValueError(f"{spec['id']} 的 completion_factory 不接受 locale，不能离线运行 {locale}。")
+        raise ValueError(f"{spec['id']} 的 {key} 不接受 locale，不能离线运行 {locale}。")
     else:
-        completion = factory(exercise_id, inputs=inputs or {})
-    if not callable(completion):
-        raise ValueError("课程 completion_factory 必须返回可调用的模型测试适配器。")
-    return completion
+        adapter = factory(exercise_id, inputs=inputs or {})
+    if not callable(adapter):
+        raise ValueError(f"课程 {key} 必须返回可调用的模型测试适配器。")
+    return adapter
 
+
+def completion_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+    return _fixture_for(spec, "completion_factory", exercise_id, inputs, locale)
+
+
+def embedding_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+    """Embedding 夹具：create_embedding(exercise_id, inputs, locale) 返回 embedding(body, api_key)。"""
+    return _fixture_for(spec, "embedding_factory", exercise_id, inputs, locale)
+
+
+def stream_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+    """流式夹具：create_stream(exercise_id, inputs, locale) 返回 stream(body, api_key)，后者返回分块字典的可迭代对象。"""
+    return _fixture_for(spec, "stream_factory", exercise_id, inputs, locale)
+
+
+def approval_for(spec, exercise_id, inputs=None, locale="zh-CN"):
+    """审批夹具：create_approval_policy(exercise_id, inputs, locale) 返回 policy(request)。
+
+    policy 返回 {"decision": "approve" | "reject" | "timeout", "note"?, "edited_payload"?}，事件记为
+    decided_by="offline_fixture"；返回 None 时交给 POST /api/runs/{id}/approvals，与真实运行相同。
+    """
+    return _fixture_for(spec, "approval_factory", exercise_id, inputs, locale)

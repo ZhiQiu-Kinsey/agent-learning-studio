@@ -1,0 +1,1715 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "backup-upgrade",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "memory",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "DELIVERY / BACKUP AND UPGRADE",
+          "headline": "备份不是复制一个文件，",
+          "highlight": "能恢复才算备份。",
+          "takeaway": "正在写入的 SQLite 文件要做一致性备份；每份备份带一份清单，恢复前先核对，恢复后用服务读数据的方式验收；升级前先备份，因为事务救不了已经提交的错。本课不调用模型。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-consistent",
+              "label": "01 / SNAPSHOT",
+              "title": "一致性备份",
+              "description": "数据库还在写入时，一致性备份得到的是某一个时刻的完整快照。直接复制文件可能拿到新旧混杂的副本；SQLite 的备份接口和 VACUUM INTO 都能避免。",
+              "token": "backup_api · vacuum_into"
+            },
+            {
+              "id": "02-manifest",
+              "label": "02 / MANIFEST",
+              "title": "备份清单",
+              "description": "备份清单（Backup Manifest）记下每个文件的名称、大小、sha256 和表结构版本。恢复前先核对它，文件被改动过就拒绝恢复；它证明文件没变，不证明备份本来就对。",
+              "token": "manifest.json · sha256"
+            },
+            {
+              "id": "03-drill",
+              "label": "03 / RESTORE",
+              "title": "恢复演练",
+              "description": "恢复演练（Restore Drill）把备份恢复到新目录，再用服务读数据的方式验收：运行记录读得出来，记忆召回得出来。备份命令成功，只说明文件写出来了。",
+              "token": "restore_files · service_check"
+            },
+            {
+              "id": "04-rollback",
+              "label": "04 / UPGRADE",
+              "title": "升级与回退",
+              "description": "新版本改了数据格式，要靠数据迁移（Data Migration）把旧数据改成新格式。升级回退（Upgrade Rollback）靠两样东西：每个文件一个事务，挡住没提交的半成品；升级前的备份，挡住已经提交的错。",
+              "token": "migrate_memory · restore_into"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "备份什么",
+          "paragraphs": [
+            "运行记录、记忆库和配置各自丢了的代价不同，备份的方式与频率也就不同。{{lesson:local-delivery}}把学习工具整理成能启动、能配置的本地应用，密钥只放在后端；这一课接着问：数据坏了、升级砸了，还能不能回来？本课不调用模型，练习都在临时目录里对两个真实的 SQLite 文件操作，不碰你本机的 `.runtime/`。",
+            "两个文件对应三类东西。`runs.sqlite3` 存运行记录：只增不改的脱敏事件，丢了可以重跑练习，损失的是时间和回放的历史。`memory.sqlite3` 存记忆：学习者亲手保存的计划和笔记（见{{lesson:persistent-memory}}和{{lesson:memory-lifecycle}}），丢了没处重做，是最贵的一份。第三类是配置：仓库里的模板能重新下载，`local_config.py` 里放着密钥，只留在原处，不进任何备份。",
+            "频率由丢得起多少决定。举个编的例子：记忆库一天改十几次，每次都是学习者的心血，那就每天至少备份一次，改得多的日子随改随备；运行库每个练习写几十条事件，一周备份一次也能接受。数字要按自己的情况定，没有通用答案。配置只在换机器或换密钥时才动，用不着定期备份。",
+            "备份范围写在清单的 `scope` 字段里，练习二会真的扫描备份目录，找里面有没有密钥。范围宁小勿大：多备一个文件，就多一份可能泄露的东西。运行事件在写进数据库之前已经脱敏，备份只是把它们原样再存一份，不会替你脱敏。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "在线备份",
+          "paragraphs": [
+            "正在写入的数据库文件不能直接复制，要做一致性备份。`cp` 这类工具按顺序读文件：读第 1 页时是一个时刻，读到第 50 页时数据已经被改过，拼出来的文件一半新、一半旧。设想一个编的例子：一次写入要同时改记忆表和版本表，复制工具读记忆表时这次写入还没发生，读版本表时已经写完，副本里两张表对不上。",
+            "练习一把这件事真的做出来。程序先写好 8 个运行和 8 条记忆，再让一个写入线程接着提交 6 个单位，每个单位是一个完成的运行加一条记忆。然后用“边写边复制文件”备份：每复制一页，写入线程就再提交一个单位，每个文件最多 6 个。交替的节奏是固定的，所以每次结果相同；中间的提交是真的提交，不是模拟。",
+            "结果落在两个文件上，原因不同。`memory.sqlite3` 用回滚日志，每次提交直接改文件里的页，复制读到了新旧混杂的页：`PRAGMA integrity_check` 报索引条数不对，记忆表和版本表也对不上。`runs.sqlite3` 用 WAL（预写日志）模式，新提交先写进旁边的 `-wal` 文件，主文件几乎不动。只复制主文件，得到的是上一次把日志并回主文件时的样子：结构完好，`integrity_check` 通过，却缺了备份开始前已经提交的 6 个运行。",
+            "SQLite 提供两种正确的办法。备份接口一次复制几页，其间有别的连接写入，它就重新开始，最后得到一个时刻的完整快照；`VACUUM INTO` 用一条语句、一个读事务，把整份数据写进新文件。两种方式在练习里都通过了检查。备份接口的代价看得见：有写入时，步数比页数多，多出来的就是白做的步骤。最省心的办法是停机再复制，但服务要停。"
+          ]
+        },
+        {
+          "id": "compare-methods",
+          "type": "compare",
+          "title": "四种复制方式对照",
+          "columns": [
+            "方式",
+            "复制时有人写入",
+            "副本是什么",
+            "代价"
+          ],
+          "rows": [
+            [
+              "停机后复制文件",
+              "没有（先停写）",
+              "停写那一刻的完整文件",
+              "服务要停；关闭连接时日志才并回主文件"
+            ],
+            [
+              "边写边复制文件",
+              "有",
+              "新旧混杂，或缺了日志里的提交",
+              "最快，但副本不能用"
+            ],
+            [
+              "SQLite 备份接口",
+              "有",
+              "备份结束时的一个完整快照",
+              "有写入时要重做；写得太勤可能做不完"
+            ],
+            [
+              "VACUUM INTO",
+              "有",
+              "执行那一刻的完整快照，已删除的内容不带进去",
+              "目标文件要不存在；多费 CPU，不能增量"
+            ]
+          ]
+        },
+        {
+          "id": "deep-dive-sqlite-docs",
+          "type": "deep-dive",
+          "title": "SQLite 官方文档怎么说",
+          "summary": "备份接口、VACUUM INTO 和停机复制，各自的前提和风险。",
+          "paragraphs": [
+            "官方文档把备份接口列为在线备份的原始办法：先建好源和目标，再一步步复制页面。步骤之间源库不上锁，别的连接可以写；一旦有写入，下一步通常会重新开始。文档提醒，写得太频繁，备份可能永远做不完。练习里写入只有 6 个单位，备份最终会完成；真实的服务要给备份留出安静的间隙，或者限制备份期间的写入。以上是对英文文档的转述。",
+            "`VACUUM INTO` 的好处是产出的文件最小，已删除的内容不会带进去；缺点是比备份接口多费 CPU，也不能增量执行。文档说它生成的是一致的快照，但中途断电或意外关机，输出文件可能不完整。所以做完要核对，不能默认它可用。练习里它对 `runs.sqlite3`（WAL 模式）的复制期间，写入线程照常提交了 6 个单位，副本是语句开始那一刻的快照，不含这些新提交，也没有半截的记录；对回滚日志模式的 `memory.sqlite3`，写入要等语句读完才能提交。报告里 memory 副本是 20 行：那 6 个单位在复制 runs 时已提交到 memory，早于它自己的语句开始，所以算在快照里。",
+            "另一页文档专门讲怎样损坏数据库，其中一条就是备份程序在事务进行时复制文件，副本可能新旧混杂。没有事务进行时复制是安全的；如果上一次写入失败，回滚日志或 WAL 文件必须和数据库文件一起复制。文档还说，数据库文件和 WAL 文件分开以后，之前已经提交的事务可能丢失，数据库也可能损坏。这正是练习一里 `runs.sqlite3` 的遭遇。",
+            "文档还提到，从 3.47.0 起有一个 `sqlite3_rsync` 程序，能经 SSH 把正在使用的数据库复制到远端，只传有变化的部分。它解决的是“备份放到另一台机器上”，本课没有演示。",
+            "停机复制成立，是因为写入线程关闭了连接：最后一条连接关闭时，SQLite 把日志并回主文件，目录里不再有 `-wal`。如果服务是被强行杀掉的，日志还在，那就要连日志一起复制，或者先用备份接口。"
+          ]
+        },
+        {
+          "id": "predict-online",
+          "type": "predict",
+          "prompt": "去实验台运行“边写边复制文件”之前先猜：这次运行会出现几条 lesson.backup_check 事件？",
+          "experiment": "online-backup",
+          "arm": "naive",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.backup_check"
+          }
+        },
+        {
+          "id": "mq-wal-main",
+          "type": "micro-quiz",
+          "question": {
+            "id": "wal-main-file",
+            "prompt": "`runs.sqlite3` 是 WAL 模式，备份开始前已经提交了 6 个运行，它们还在 `-wal` 文件里。只复制 `runs.sqlite3` 这一个文件，副本会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "结构完好，`integrity_check` 通过，但缺这 6 个运行",
+                "feedback": "对。主文件停在上一次并回日志的时候，结构没有错，只是旧。"
+              },
+              {
+                "id": "b",
+                "text": "`integrity_check` 报错，因为缺了日志",
+                "feedback": "不对。主文件自己是完整的，检查看的是结构，发现不了“少了几个已提交的运行”。"
+              },
+              {
+                "id": "c",
+                "text": "完整，因为提交已经完成",
+                "feedback": "不对。提交完成是写进了日志，不等于已经在主文件里。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "integrity_check 管结构，管不了“少了什么”。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "备份清单",
+          "paragraphs": [
+            "备份清单记下每个文件的名称、大小、sha256、表结构版本和备份时间，恢复前先拿它核对。备份目录里躺着三个文件，半年后你只知道它们叫什么：哪个是完整的？哪个是升级前的？有没有被改过？没有清单，这些问题只能靠猜。",
+            "`create_backup` 在复制完成之后才写清单，记的是已经落到磁盘上的文件，而不是打算复制的文件。每个文件记 `size`、`sha256`、`schema_version`，数据库文件再加一条备份当时的 `integrity_check`。清单还有两个汇总：`counts` 是运行、事件和记忆各有几行，`content_digest` 把两个文件里的行按固定顺序读出来，再求一次 sha256。字节摘要管文件有没有变，内容摘要管恢复出来的是不是原来那些行。",
+            "清单有边界。它只能证明文件和备份时一样，不能证明备份那一刻就是对的：边写边复制得到的副本，也会有一份写得整整齐齐的清单。清单管“有没有被动过”，恢复演练管“能不能用”，两件事互相代替不了。另一个细节：保留备份时按清单里的 `created_at` 排新旧，不看文件修改时间，因为复制或同步备份目录时，文件的修改时间可能被改掉。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "恢复要验证",
+          "paragraphs": [
+            "在新目录恢复之后跑一遍验收，才能确认数据真的能用。备份命令的退出码是 0，清单也写好了，半年后换一台机器才发现文件缺页、版本对不上，或者备份时就带着半成品，这样的事并不少见。微软的部署课里有相似的提醒：部署成功只说明平台收下了配置，不说明服务真的在回答，所以每次部署后要跑一次冒烟测试。恢复演练是同一个想法，用在数据上。",
+            "练习二把整个流程走一遍：备份、核对清单、恢复到新目录、验收。验收由 `service_check` 完成，它让服务用自己的方式读数据：运行记录要读得出来，每个运行的事件序号连续、内容是合法的 JSON；记忆要召回得出来，条数和库里一致；两个文件都通过 `integrity_check`；最后逻辑内容的摘要要和清单一致。读运行记录用的是平台真正的 `RunStore`，召回用的是{{lesson:persistent-memory}}里的 `MemoryStore`，不是为这一课另写的读取代码。",
+            "损坏有两种，检查的办法不同。截断的文件会让 `integrity_check` 和读取直接报错，谁检查都看得出。翻转一个字节隐蔽得多：程序把某条记忆里的 `plan-0003` 改成 `plan-0002`，文件结构没有问题，`integrity_check` 通过，记忆照样召回 14 条，只是其中一条的内容变了。只有清单里的 sha256 和内容摘要发现得了它。本课的损坏都由程序故意制造，事件里标着 `fault_injection`，不是备份工具的行为。",
+            "所以恢复前核对清单，恢复后再验收，两道关各管一类问题。清单挡住“文件已经不是备份时的那个”，验收挡住“文件没变，但本来就不能用”。清单发现损坏、拒绝恢复时，服务一行数据也没有读到；跳过这一步，损坏的数据就会被当成真的。"
+          ]
+        },
+        {
+          "id": "deep-dive-integrity",
+          "type": "deep-dive",
+          "title": "integrity_check 看得见什么、看不见什么",
+          "summary": "它检查结构，不知道数据应该是什么。",
+          "paragraphs": [
+            "`PRAGMA integrity_check` 检查的是数据库的结构：页和页之间的指针、每一页的格式、索引的条目和表里的行能不能一一对上。练习一里它真的抓到了撕裂的 `memory.sqlite3`：报的是索引的条目数不对。它不知道 `note_0003` 这条记忆应该写什么，所以内容里的一位数字被改掉，它看不出来。",
+            "手算一个例子。`runs.sqlite3` 的主文件停在上次并回日志的时候，里面有 8 个运行；日志里还有 6 个。检查通过说明这 8 个运行存得没错，它没有说“应该有 14 个”，因为“应该有几个”是业务知道的事，数据库不知道。所以本课每个检查都分两层：先看结构，再看业务规则，比如每个运行的事件序号连续、完成状态和 `done` 事件互相对应、备份开始前提交的都在。",
+            "业务规则也只能证明它写出来的那几条。本课的规则不检查记忆的文字是否合理，也不检查运行事件的内容是否正确。要发现这类问题，只能靠备份时记下的摘要：摘要不同，说明内容变过，但它说不出变在哪、变得对不对。",
+            "SQLite 还有一个更快的 `PRAGMA quick_check`，它省掉了“索引内容和表里的行是否一致”这一步。练习里抓住撕裂副本的，恰恰是这一步报出的“索引条数不对”，所以本课的检查都用完整的 `integrity_check`。检查越省，能发现的问题越少，这是用时间换覆盖。"
+          ]
+        },
+        {
+          "id": "misconception-backup-ok",
+          "type": "misconception",
+          "claim": "备份命令成功退出、清单也写好了，这份备份就能用。",
+          "correction": "不一定。备份命令成功只说明文件写出来了，清单记的是写出来的文件，包括写坏的那份：边写边复制得到的副本，一样有整齐的清单。能不能用，要在新目录恢复一次，用服务读数据的方式验收。"
+        },
+        {
+          "id": "mq-flipped-byte",
+          "type": "micro-quiz",
+          "question": {
+            "id": "flipped-byte",
+            "prompt": "备份文件里一个字节被改了，改在某条记忆的文字里。下面哪项检查最先发现？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`integrity_check`",
+                "feedback": "不对。文件结构没有问题，它照样通过。"
+              },
+              {
+                "id": "b",
+                "text": "记忆召回",
+                "feedback": "不对。召回照常返回这条记忆，只是内容变了。"
+              },
+              {
+                "id": "c",
+                "text": "清单里的 sha256 与文件对比",
+                "feedback": "对。整个文件的摘要变了，恢复之前就能拒绝。"
+              }
+            ],
+            "correct": "c",
+            "explanation": "字节摘要对任何一位变化都敏感，结构检查和读取不会。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "升级与数据迁移",
+          "paragraphs": [
+            "新版本改了数据格式时，数据迁移要能重复执行，也要能事后检查。第 2 版要改两处：`memory.sqlite3` 里的 `updated_at` 从浮点数时间戳改成 ISO-8601 文本；`runs.sqlite3` 里的 `provenance` 列改名为 `provenance_kind`，再加一列 `event_count`。版本号写在文件头的 `user_version` 里：第 1 版是 1，第 2 版是 2。",
+            "SQLite 不能原地改列的类型，所以 `migrate_memory` 用重建：建一张新表，把旧表的行转换后拷进去，删掉旧表，把新表改名，最后写 `user_version`。`migrate_runs` 先改名、加列，再给每个运行回填 `event_count`，最后同样写版本号。版本号永远是最后一步：它写上了，才表示前面都做完了。",
+            "迁移要能重复执行。第一次做到一半失败，第二次不该因为“表已存在”“列已改名”就报错，所以每一步先看现状：临时表先删再建，改列名之前先查旧名还在不在。重复执行只是让你修好原因之后能接着做，它不保证第一次做对了什么。",
+            "迁移之后还要有办法检查它做对没有。本课用三条：两个文件的版本都是 2；第 2 版的服务读得出来，`event_count` 要和事件表对得上，`updated_at` 要能解析成时间；迁移前后的内容摘要相同，也就是把两种格式读成同一种形状再求 sha256。第三条最关键，它能发现“迁移提交成功，但悄悄少了几行”。"
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "升级失败的三种样子",
+          "paragraphs": [
+            "事务能撤销没提交的修改，但管不了已经提交的结果，也管不了第二个文件。练习三把失败分成三种，保护措施分成三档：没有保护，每条语句各自提交；每个文件一个事务；升级前先备份，再加每个文件一个事务。失败都是程序制造的，事件里标着来源 `fault_injection`。",
+            "第一种失败，事务就够用。迁移 `memory.sqlite3` 拷到一半被中断，事务把整个文件回滚，逻辑内容与升级前相同，`runs.sqlite3` 一个字也没碰。没有事务时这次也只是留下一张拷了一半的 `memories_v2`，因为拷贝阶段只动新表、旧表原样不动。这是运气，不是设计。",
+            "第二种失败，事务救不了。`memory.sqlite3` 已经提交成第 2 版，`runs.sqlite3` 在回填时被中断。事务只回滚了 `runs.sqlite3`，两个文件一个是第 2 版、一个是第 1 版，服务要求版本一致，拒绝启动。没有事务更糟：`provenance` 已经改名，第 1 版的 `RunStore` 读不了运行记录，报的是 `no such column`。",
+            "第三种失败连报错都没有：迁移程序写错了，每批漏掉第一行，照常提交。没有异常，没有回滚，只有迁移后的检查发现记忆从 14 条变成 11 条。事务帮不上忙，因为它已经提交了。能回到升级前的，只有升级前的备份。"
+          ]
+        },
+        {
+          "id": "mq-two-files",
+          "type": "micro-quiz",
+          "question": {
+            "id": "two-files",
+            "prompt": "`memory.sqlite3` 已经提交成第 2 版，`runs.sqlite3` 迁移到一半出错并回滚。保护措施只有“每个文件一个事务”时，现在是什么状态？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`memory.sqlite3` 是第 2 版，`runs.sqlite3` 是第 1 版，服务拒绝启动",
+                "feedback": "对。事务只管一个文件，已经提交的那个文件它够不着。"
+              },
+              {
+                "id": "b",
+                "text": "两个文件都回到第 1 版",
+                "feedback": "不对。回滚的只是失败的那个文件。"
+              },
+              {
+                "id": "c",
+                "text": "两个文件都是第 2 版，只缺 `event_count`",
+                "feedback": "不对。`runs.sqlite3` 的整个事务都回滚了，版本号也没有写上。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "跨文件的升级要靠升级前的备份。"
+          }
+        },
+        {
+          "id": "section-7",
+          "type": "prose",
+          "title": "回退",
+          "paragraphs": [
+            "升级失败时回到上一版本，数据要保持一致，办法是升级前先做一份备份。备份在迁移开始之前做，做完扫描一遍密钥。失败之后，不管事务有没有回滚、迁移提交了什么，都把两个文件一起退回备份里的样子，恢复出来的文件要和清单核对。事务是第一道保险，管小事；备份是最后一道。",
+            "回退本身也有讲究。`restore_into` 先把当前文件挪到 `_failed_upgrade` 保留现场，再从备份恢复，连 `-wal` 日志也一起挪走。SQLite 官方文档说，数据库文件和它的日志文件要放在一起，覆盖了数据库文件却留着旧日志，就可能损坏。留下的现场还有用：事后可以查是哪一步坏的。",
+            "回退也不能以“命令执行完了”结束，要像升级一样检查：第 1 版的服务读得出运行记录、召回得出记忆，两个文件的版本都是 1，内容摘要与升级前相同。练习三的报告把“服务可用”和“数据没变”分成两项：没有保护的第二种失败里，数据一行没少，内容摘要相同，服务却起不来。",
+            "有两点本课没做到。升级和回退之间如果服务还在写入，这些写入会随回退一起消失，所以真实的升级要先停写，或者接受丢失。回退之后，旧版本的程序也要能和旧数据一起回来，本课只有数据这一半，程序版本由{{lesson:local-delivery}}的依赖锁定来管。"
+          ]
+        },
+        {
+          "id": "deep-dive-books",
+          "type": "deep-dive",
+          "title": "书里怎么说：待验证区、稳定版本和回滚",
+          "summary": "长期运行的系统怎样给知识和能力留退路。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第三章把知识库当成代码库：每次知识变更像一个 Pull Request，进 Git，有差异审查、版本历史和一键回滚，不让模型直接改线上的库。书里把系统分成三层：原始证据层只增不改，知识层可以修订，服务层是从已审核版本生成的索引。索引是可重建的派生物，已审核的知识才是来源。对应到本课：运行库是证据层，备份它们要和备份记忆一样认真，因为派生出来的东西能重建，原始记录不能。",
+            "第九章讲持续进化的安全边界：新能力先进入待验证区，通过检查才服务真实流量；业务 Agent 不能修改批准自己更新的验证器、发布门槛、审计日志和稳定版本备份。书里介绍的 Hermes 在整理技能之前保存快照，整理错了可以回滚。这和升级前备份是同一个思路：改动之前先留一个已知的好状态，并且这份备份不由被改动的东西自己管。",
+            "微软的记忆课里有一条相关的做法：知识库越攒越大，不常用的内容可以移到冷存储，控制成本。冷数据变化少，备份可以稀一些；热数据变化多，备份要勤。这正好回答了“备份什么、多久一次”：按数据变化的快慢和丢不丢得起来分，而不是一刀切。",
+            "第三章还有一条可以直接搬来的做法：定期整理的产物也不直接覆盖主库，全部通过之后要回放一组典型的检索和问答，确认新结构没有让原本能找到的知识变得找不到。恢复演练和升级后的检查是同一件事：动过数据之后，不是看动作做完了没有，而是拿典型的读法再读一遍。"
+          ]
+        },
+        {
+          "id": "misconception-transaction",
+          "type": "misconception",
+          "claim": "升级用了事务，失败了就一定能回到升级前的样子。",
+          "correction": "不一定。事务只能撤销还没提交的修改，而且一个事务只在一个数据库文件里。迁移已经提交、结果却是错的，或者两个文件里第一个已经提交，事务都救不了。这两种要靠升级前的备份。"
+        },
+        {
+          "id": "section-8",
+          "type": "prose",
+          "title": "保留最近 N 份",
+          "paragraphs": [
+            "保留最近 N 份备份，规则要保证清理之后至少还有一份能恢复。备份会越攒越多，总得清理，最简单的规则是只留最新的 N 份。这条规则有个漏洞：它默认最新的都是好的。如果最新的两份恰好损坏了，N 是 2，清理之后留下的就是两份坏备份，旧的好备份已经被删光。",
+            "练习四把它做出来：6 份备份，每份比上一份多一个运行，最新的几份被程序故意损坏。“只留最新 N 份”在 N 为 2、损坏 2 份时，留下的两份都过不了清单核对，清理之后无法恢复。“留最新 N 份，再加最新一份通过核对的”多留一份，从 `backup-004` 恢复成功，代价是比最新的数据少 2 个运行。",
+            "这个差距就是恢复点：备份之后写入的数据，恢复时拿不回来。备份越稀，丢得越多；留得越旧，丢得越多。N 取多少，要在占用空间和能回到多远之间权衡。练习里 N 最多是 5，只为演示；真实的数要按备份间隔、数据变化的速度和能容忍丢多少来定。",
+            "还有两点。清理要放在新备份做完并通过核对之后，不然备份失败的那一天会把旧备份一起删掉。备份目录最好放在另一块盘或另一台机器上，同一块盘坏了，备份和原件一起没。本课没有演示异地备份。"
+          ]
+        },
+        {
+          "id": "mq-retention",
+          "type": "micro-quiz",
+          "question": {
+            "id": "retention-rule",
+            "prompt": "N 是 2，最新的两份备份都已损坏。只留最新 2 份，清理之后会怎样？",
+            "options": [
+              {
+                "id": "a",
+                "text": "留下的两份都过不了清单核对，没有可恢复的备份",
+                "feedback": "对。旧的好备份已经被清理掉了。"
+              },
+              {
+                "id": "b",
+                "text": "旧备份还在，可以从中恢复",
+                "feedback": "不对。“只留最新 2 份”会把更旧的全部删掉。"
+              },
+              {
+                "id": "c",
+                "text": "清理程序会自动跳过损坏的备份",
+                "feedback": "不对。只按新旧排序的规则不看备份好不好，要另外加“保留通过核对的”一条。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "清理规则要保证至少留下一份能恢复的。"
+          }
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次升级失败与回退",
+          "description": "按步骤说明“升级前备份，加每个文件一个事务”的练习三，代码是简化的示意，不是运行记录。实际的值看 lesson.migration 和 lesson.rollback 事件。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "01",
+              "actor": "程序",
+              "title": "升级前备份",
+              "body": "备份并扫描密钥，都在迁移开始之前。",
+              "code": "manifest = create_backup(data, root / \"backup\")\nsecrets = find_secrets(root / \"backup\")",
+              "language": "python",
+              "evidence": "lesson.backup"
+            },
+            {
+              "id": "step-2",
+              "label": "02",
+              "actor": "SQLite",
+              "title": "迁移 memory.sqlite3",
+              "body": "一个事务里重建表，最后写版本号，提交。",
+              "code": "BEGIN IMMEDIATE\n... CREATE memories_v2, copy rows ...\nPRAGMA user_version = 2\nCOMMIT",
+              "language": "sql",
+              "evidence": "lesson.migration（committed）"
+            },
+            {
+              "id": "step-3",
+              "label": "03",
+              "actor": "程序",
+              "title": "迁移 runs.sqlite3 时被中断",
+              "body": "程序故意在回填到第 3 个运行时抛出异常，事务回滚，这个文件还是第 1 版。",
+              "code": "fault.check(\"runs\", filled)  # raises InjectedFault",
+              "language": "python",
+              "evidence": "lesson.fault、lesson.migration（rolled_back）"
+            },
+            {
+              "id": "step-4",
+              "label": "04",
+              "actor": "程序",
+              "title": "检查：版本对不上",
+              "body": "一个文件是第 2 版，一个是第 1 版，服务拒绝启动。",
+              "code": "facts = service_check(data, 1, locale, before)\nfacts[\"versions_ok\"]  # False",
+              "language": "python",
+              "evidence": "lesson.report（service_available）"
+            },
+            {
+              "id": "step-5",
+              "label": "05",
+              "actor": "程序",
+              "title": "从备份回退",
+              "body": "现有文件挪到 `_failed_upgrade`，两个文件一起从备份恢复，并和清单核对。",
+              "code": "restore_into(root / \"backup\", data)",
+              "language": "python",
+              "evidence": "lesson.rollback"
+            },
+            {
+              "id": "step-6",
+              "label": "06",
+              "actor": "程序",
+              "title": "回退之后再检查",
+              "body": "第 1 版的服务读得出来，内容摘要与升级前相同。",
+              "code": "final = service_check(data, 1, locale, before)\nfinal[\"ok\"]  # True",
+              "language": "python",
+              "evidence": "lesson.report（data_unchanged）"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "sqlite-backup",
+              "title": "在线备份接口（SQLite 官方文档）",
+              "url": "https://www.sqlite.org/backup.html"
+            },
+            {
+              "id": "sqlite-vacuum",
+              "title": "VACUUM 与 VACUUM INTO（SQLite 官方文档）",
+              "url": "https://www.sqlite.org/lang_vacuum.html"
+            },
+            {
+              "id": "sqlite-corrupt",
+              "title": "怎样损坏数据库：备份、日志文件错配（SQLite 官方文档）",
+              "url": "https://www.sqlite.org/howtocorrupt.html"
+            },
+            {
+              "id": "sqlite-wal",
+              "title": "预写日志（SQLite 官方文档）",
+              "url": "https://www.sqlite.org/wal.html"
+            },
+            {
+              "id": "ms-deploy",
+              "title": "部署可扩展的 Agent：生命周期、冒烟测试（Microsoft AI Agents for Beginners，部署一课）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/16-deploying-scalable-agents/README.md"
+            },
+            {
+              "id": "ms-memory",
+              "title": "记忆的管理与维护（Microsoft AI Agents for Beginners，Agent 记忆一课）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/13-agent-memory/README.md"
+            },
+            {
+              "id": "ai-agent-book-ch3",
+              "title": "知识应该如何更新：增量更新与定期整理（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter3.md"
+            },
+            {
+              "id": "ai-agent-book-ch9",
+              "title": "持续进化的闭环与安全边界（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter9.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "memory-lifecycle"
+        },
+        {
+          "id": "code-copy-methods",
+          "type": "annotated-source",
+          "path": "lessons/lesson_backup_upgrade/backup.py",
+          "start": 36,
+          "end": 87,
+          "notes": [
+            {
+              "id": "n01",
+              "line": 36,
+              "anchor": "def copy_chunked(",
+              "text": "这是 `cp` 的做法，只是慢到每页一停；between 是复制过程中别的程序在干的活。"
+            },
+            {
+              "id": "n02",
+              "line": 40,
+              "anchor": "while chunk := reader.read(PAGE):",
+              "text": "按顺序一页一页读：读到后面的页时，前面的页早就读完了，两个时刻的数据拼在一起。"
+            },
+            {
+              "id": "n03",
+              "line": 43,
+              "anchor": "between()",
+              "text": "每复制一页，练习就让写入线程提交一个单位。"
+            },
+            {
+              "id": "n04",
+              "line": 56,
+              "anchor": "def backup_api(",
+              "text": "SQLite 的备份接口：一次只复制几页。"
+            },
+            {
+              "id": "n05",
+              "line": 60,
+              "anchor": "def progress(status: int, remaining: int, total: int)",
+              "text": "每走完一步被调用一次；total 是源库的页数。"
+            },
+            {
+              "id": "n06",
+              "line": 62,
+              "anchor": "steps, pages = steps + 1, total",
+              "text": "记下步数和页数：步数比页数多，说明备份被写入打断、重来过。"
+            },
+            {
+              "id": "n07",
+              "line": 65,
+              "anchor": "reader, writer = sqlite3.connect(source, timeout=10), sqlite3.connect(target)",
+              "text": "读源库一条连接，写目标一条连接；写入线程用的是第三条。"
+            },
+            {
+              "id": "n08",
+              "line": 67,
+              "anchor": "reader.backup(writer, pages=1, progress=progress, sleep=0)",
+              "text": "每步 1 页。步骤之间不占着源库的读锁，别的连接可以写；写了，就重来。"
+            },
+            {
+              "id": "n09",
+              "line": 71,
+              "anchor": "single_file(target)",
+              "text": "备份里不带 `-wal`：一个文件就是一份完整的备份。"
+            },
+            {
+              "id": "n10",
+              "line": 76,
+              "anchor": "def vacuum_into(",
+              "text": "另一种办法：一条语句，一个读事务。"
+            },
+            {
+              "id": "n11",
+              "line": 82,
+              "anchor": "if reader.execute(\"PRAGMA journal_mode\").fetchone()[0] == \"wal\":",
+              "text": "WAL 模式下写入线程可以边读边提交，练习就在这时让它插进来；回滚日志模式下它得等读完，没什么可插的。"
+            },
+            {
+              "id": "n12",
+              "line": 84,
+              "anchor": "reader.execute(\"VACUUM INTO ?\", (str(target),))",
+              "text": "目标文件必须不存在；产出的是语句开始那一刻的快照，之后提交的不在里面，已删除的内容也不会带进去。"
+            },
+            {
+              "id": "n13",
+              "line": 87,
+              "anchor": "single_file(target)",
+              "text": "同样改成单文件。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 47,
+              "end": 53,
+              "label": "平台：把备份改成单文件模式（关掉 WAL 标志）"
+            },
+            {
+              "id": "fold-2",
+              "start": 69,
+              "end": 70,
+              "label": "平台：关闭两条连接"
+            },
+            {
+              "id": "fold-3",
+              "start": 86,
+              "end": 86,
+              "label": "平台：关闭连接"
+            }
+          ]
+        },
+        {
+          "id": "code-manifest",
+          "type": "annotated-source",
+          "path": "lessons/lesson_backup_upgrade/backup.py",
+          "start": 110,
+          "end": 157,
+          "notes": [
+            {
+              "id": "n01",
+              "line": 110,
+              "anchor": "def create_backup(",
+              "text": "先复制，再写清单：清单记的是复制之后落在磁盘上的文件。"
+            },
+            {
+              "id": "n02",
+              "line": 118,
+              "anchor": "details[role] = copy_database(",
+              "text": "一次一个数据库；between 是练习让写入线程插进来的地方。"
+            },
+            {
+              "id": "n03",
+              "line": 120,
+              "anchor": "if scope == \"whole_directory\":",
+              "text": "范围决定还有什么进备份：选了整个目录，配置文件才会进来。"
+            },
+            {
+              "id": "n04",
+              "line": 123,
+              "anchor": "files = [describe(role, backup_dir / name) for role, name in FILES.items()]",
+              "text": "describe 读回刚写出的文件：大小、sha256、表结构版本、integrity_check。"
+            },
+            {
+              "id": "n05",
+              "line": 127,
+              "anchor": "counts, digest = row_counts(backup_dir, immutable=True)",
+              "text": "内容摘要读的是备份文件本身，记的是备份里有什么。"
+            },
+            {
+              "id": "n06",
+              "line": 128,
+              "anchor": "except (sqlite3.Error, ValueError):",
+              "text": "副本读不出来时照样写清单：清单只记事实，不替副本说好话。"
+            },
+            {
+              "id": "n07",
+              "line": 145,
+              "anchor": "def verify_backup(",
+              "text": "恢复之前先核对。"
+            },
+            {
+              "id": "n08",
+              "line": 153,
+              "anchor": "actual = sha256_file(path) if path.is_file() else None",
+              "text": "重新算一遍 sha256；文件不在了就是 None。"
+            },
+            {
+              "id": "n09",
+              "line": 156,
+              "anchor": "\"ok\": actual == entry[\"sha256\"] and path.stat().st_size == entry[\"size\"]",
+              "text": "大小和 sha256 都对得上才算通过。"
+            },
+            {
+              "id": "n10",
+              "line": 157,
+              "anchor": "return {\"ok\": all(row[\"ok\"] for row in rows)",
+              "text": "一个文件对不上，整份备份就不能恢复。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 113,
+              "end": 115,
+              "label": "平台：建目录，准备 between 钩子"
+            },
+            {
+              "id": "fold-2",
+              "start": 130,
+              "end": 133,
+              "label": "平台：拼出清单并写成 manifest.json"
+            },
+            {
+              "id": "fold-3",
+              "start": 138,
+              "end": 142,
+              "label": "平台：读取 manifest.json"
+            }
+          ]
+        },
+        {
+          "id": "code-migration",
+          "type": "annotated-source",
+          "path": "lessons/lesson_backup_upgrade/migrate.py",
+          "start": 47,
+          "end": 80,
+          "notes": [
+            {
+              "id": "n01",
+              "line": 47,
+              "anchor": "def migrate_memory(",
+              "text": "重建 memories 表：`updated_at` 从浮点数改成 ISO-8601 文本。"
+            },
+            {
+              "id": "n02",
+              "line": 49,
+              "anchor": "db = sqlite3.connect(path, isolation_level=None)",
+              "text": "自动提交模式：事务由下面的 BEGIN 和 COMMIT 显式控制。"
+            },
+            {
+              "id": "n03",
+              "line": 54,
+              "anchor": "db.execute(\"BEGIN IMMEDIATE\")",
+              "text": "开始事务：此后的修改要么一起提交，要么一起回滚。没有它，每条语句各自提交。"
+            },
+            {
+              "id": "n04",
+              "line": 56,
+              "anchor": "db.execute(\"DROP TABLE IF EXISTS memories_v2\")",
+              "text": "先删上一次失败留下的临时表，迁移才能重复执行。"
+            },
+            {
+              "id": "n05",
+              "line": 57,
+              "anchor": "db.execute(\"\"\"CREATE TABLE memories_v2 (",
+              "text": "新表的 `updated_at` 是文本。"
+            },
+            {
+              "id": "n06",
+              "line": 62,
+              "anchor": "for row in batches(rows, fault.skipping(\"memory\")):",
+              "text": "逐行转换、拷进新表：这是最长的一步，也是注入故障的位置。"
+            },
+            {
+              "id": "n07",
+              "line": 63,
+              "anchor": "fault.check(\"memory\", copied)",
+              "text": "练习三在这里故意抛出异常；事件里标着来源 `fault_injection`。"
+            },
+            {
+              "id": "n08",
+              "line": 64,
+              "anchor": "values = dict(row, updated_at=iso(row[\"updated_at\"]))",
+              "text": "转换发生在这里：浮点时间戳变成 ISO-8601 文本。"
+            },
+            {
+              "id": "n09",
+              "line": 69,
+              "anchor": "db.execute(\"DROP TABLE memories\")",
+              "text": "旧表删掉，新表改名。"
+            },
+            {
+              "id": "n10",
+              "line": 71,
+              "anchor": "db.execute(f\"PRAGMA user_version = {SCHEMA_V2}\")",
+              "text": "版本号最后写：它写上了，才说明前面都做完了。"
+            },
+            {
+              "id": "n11",
+              "line": 73,
+              "anchor": "db.execute(\"COMMIT\")",
+              "text": "提交。从这一刻起，事务就管不了这次迁移了。"
+            },
+            {
+              "id": "n12",
+              "line": 75,
+              "anchor": "if db.in_transaction:",
+              "text": "任何异常都回滚：没提交的修改一条也不留。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 60,
+              "end": 60,
+              "label": "新表的其余列：与旧表相同，只有 `updated_at` 改了类型"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "复制要一致，清单要核对，升级要有备份",
+          "chosen": "在线备份用 SQLite 的备份接口或 VACUUM INTO；每份备份在复制之后写清单，恢复前核对 sha256，恢复到新目录后用服务读数据的方式验收；升级前先备份，迁移时每个文件包一个事务，迁移之后核对版本和内容摘要，失败就从备份把两个文件一起退回去；清理备份时至少留一份通过核对的。",
+          "alternatives": [
+            {
+              "id": "plain-copy",
+              "title": "服务不停，直接复制文件",
+              "why_not": "回滚日志模式的文件会撕裂，WAL 模式的文件会缺掉日志里的提交，而 `integrity_check` 还可能照样通过。"
+            },
+            {
+              "id": "trust-integrity",
+              "title": "只靠 integrity_check 判断备份能不能用",
+              "why_not": "它只看结构：少了已提交的运行、一条记忆里被改了一位数字，它都看不出来。"
+            },
+            {
+              "id": "transaction-only",
+              "title": "升级只靠事务保护",
+              "why_not": "事务只管一个文件、只管没提交的修改；第二个文件失败，或迁移提交了错误的结果，它都退不回去。"
+            },
+            {
+              "id": "keep-newest",
+              "title": "只留最新的 N 份备份",
+              "why_not": "它默认最新的都是好的；最新几份损坏时，清理之后没有一份能恢复。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "online-backup",
+          "title": "在线备份：复制文件与一致性备份",
+          "hypothesis": "对同一份正在被写入的数据，直接复制文件得到的副本会缺数据或前后不一致，备份接口和 VACUUM INTO 得到的副本通过检查；只看 integrity_check 判断不了副本能不能用。",
+          "predict": "predict-online",
+          "arms": [
+            {
+              "id": "naive",
+              "exercise": "online-backup",
+              "label": "边写边复制文件"
+            },
+            {
+              "id": "backup-api",
+              "exercise": "online-backup-api",
+              "label": "SQLite 备份接口"
+            },
+            {
+              "id": "vacuum-into",
+              "exercise": "online-vacuum-into",
+              "label": "VACUUM INTO"
+            },
+            {
+              "id": "cold-copy",
+              "exercise": "online-cold-copy",
+              "label": "停机后复制文件"
+            }
+          ],
+          "observe": [
+            {
+              "id": "journal-mode",
+              "text": "两个文件的日志模式：runs 是 WAL，memory 是回滚日志。",
+              "selector": {
+                "event": "lesson.backup",
+                "path": "data.journal_mode"
+              }
+            },
+            {
+              "id": "sidecar",
+              "text": "复制开始前旁边的日志文件：`runs.sqlite3` 有一个不为空的 `-wal`。",
+              "selector": {
+                "event": "lesson.backup",
+                "path": "data.sidecar_files"
+              }
+            },
+            {
+              "id": "writes",
+              "text": "复制期间提交的写入数：这些写入是真的。",
+              "selector": {
+                "event": "lesson.backup",
+                "path": "data.writes_during_copy"
+              }
+            },
+            {
+              "id": "steps",
+              "text": "备份接口的步数和页数：步数多出页数的部分，是被写入打断后白做的。",
+              "selector": {
+                "event": "lesson.backup",
+                "path": "data.details.runs.steps"
+              }
+            },
+            {
+              "id": "integrity-runs",
+              "text": "`runs.sqlite3` 副本的 integrity_check 一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=integrity_runs]"
+              }
+            },
+            {
+              "id": "rows-runs",
+              "text": "`runs.sqlite3` 副本的记录是否完整：缺了几个备份开始前已提交的运行。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=rows_runs]"
+              }
+            },
+            {
+              "id": "integrity-memory",
+              "text": "`memory.sqlite3` 副本的 integrity_check 一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=integrity_memory]"
+              }
+            },
+            {
+              "id": "rows-memory",
+              "text": "`memory.sqlite3` 副本里记忆表和版本表是否一致。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=rows_memory]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。同一份数据上，一个线程在写，另一个在备份。"
+            },
+            {
+              "text": "两个文件的日志模式不同，所以出问题的方式也不同。",
+              "observe": "journal-mode",
+              "stage": "runtime"
+            },
+            {
+              "text": "`runs.sqlite3` 旁边有一个不为空的日志文件，最近的提交都在里面。",
+              "observe": "sidecar"
+            },
+            {
+              "text": "复制期间写入线程真的又提交了几次。",
+              "observe": "writes"
+            },
+            {
+              "text": "只复制主文件的副本，结构检查一项通过了。",
+              "observe": "integrity-runs"
+            },
+            {
+              "text": "可是记录这一项没通过：备份开始前已经提交的运行缺了。",
+              "observe": "rows-runs"
+            },
+            {
+              "text": "`memory.sqlite3` 的副本在结构检查这一项就没通过。",
+              "observe": "integrity-memory"
+            },
+            {
+              "text": "记忆表和版本表对不上：同一次写入，两张表读到了不同的时刻。",
+              "observe": "rows-memory"
+            },
+            {
+              "text": "换成备份接口再运行，看它为被打断付出的步数。",
+              "observe": "steps"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "复制期间有真实的写入时，直接复制文件的副本缺数据（WAL）或前后不一致（回滚日志），而 `runs.sqlite3` 的 integrity_check 仍是 ok。",
+              "备份接口、VACUUM INTO 和停机复制在同样的写入下得到的副本，两项检查都通过。"
+            ],
+            "does_not_prove": [
+              "本课用固定的交替节奏制造了重叠；真实服务里会不会撕裂，取决于写入落在复制的哪个时刻。把写入节奏改成自由运行，直接复制的结果每次可能不同。",
+              "没有比较各种方式的耗时，也没有用大文件或网络盘测试，不能据此说哪一种更快。"
+            ]
+          }
+        },
+        {
+          "id": "restore-drill",
+          "title": "恢复演练：备份成功不等于能恢复",
+          "hypothesis": "备份命令成功之后，仍需要恢复到新目录并验收；清单核对能发现被改动的备份文件，而只靠结构检查和召回发现不了一个被改掉的字节。清理备份的规则要保证留下的备份里至少有一份能恢复。",
+          "arms": [
+            {
+              "id": "clean",
+              "exercise": "restore-drill",
+              "label": "完整备份，核对后恢复"
+            },
+            {
+              "id": "flip-verified",
+              "exercise": "restore-bit-flip-verified",
+              "label": "改一个字节，恢复前核对清单"
+            },
+            {
+              "id": "flip-skipped",
+              "exercise": "restore-bit-flip-skipped",
+              "label": "改一个字节，跳过核对"
+            },
+            {
+              "id": "whole-directory",
+              "exercise": "restore-whole-directory",
+              "label": "备份整个目录，含配置文件"
+            },
+            {
+              "id": "keep-newest",
+              "exercise": "retention-newest-only",
+              "label": "留最新 2 份，最新两份已损坏"
+            },
+            {
+              "id": "keep-verified",
+              "exercise": "retention",
+              "label": "留最新 2 份，再加最新一份通过核对的"
+            }
+          ],
+          "observe": [
+            {
+              "id": "secret-scan",
+              "text": "备份目录扫描出的含密钥文件：数据文件范围时是空的。",
+              "selector": {
+                "event": "lesson.secret_scan",
+                "path": "data.found"
+              }
+            },
+            {
+              "id": "fault-origin",
+              "text": "损坏的来源：`fault_injection`，是程序故意做的。",
+              "selector": {
+                "event": "lesson.fault",
+                "path": "data.origin"
+              }
+            },
+            {
+              "id": "verify-integrity",
+              "text": "被改动的记忆文件的 integrity_check：仍是 ok。",
+              "selector": {
+                "event": "lesson.verify",
+                "path": "data.integrity_of_memory_file"
+              }
+            },
+            {
+              "id": "verify-files",
+              "text": "清单核对的结果：每个文件的大小和 sha256 是否对得上。",
+              "selector": {
+                "event": "lesson.verify",
+                "path": "data.files"
+              }
+            },
+            {
+              "id": "restore-performed",
+              "text": "恢复有没有真的做：清单核对失败时是 false。",
+              "selector": {
+                "event": "lesson.restore",
+                "path": "data.performed"
+              }
+            },
+            {
+              "id": "recalled",
+              "text": "恢复后召回的记忆键。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.included"
+              }
+            },
+            {
+              "id": "check-damage",
+              "text": "报告里“损坏被发现了”一项：看详情里是恢复前还是恢复后发现的。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=damage_caught]"
+              }
+            },
+            {
+              "id": "check-memory",
+              "text": "报告里“恢复后记忆可召回”一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=memory_recallable]"
+              }
+            },
+            {
+              "id": "check-digest",
+              "text": "报告里内容摘要与清单一致的一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=digest_matches]"
+              }
+            },
+            {
+              "id": "check-secrets",
+              "text": "报告里“备份里没有密钥”一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no_secrets]"
+              }
+            },
+            {
+              "id": "retention-check",
+              "text": "清理之后还能不能恢复。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=restorable_after_prune]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。每个对照组都是先备份，再恢复到新目录，最后验收。"
+            },
+            {
+              "text": "干净的备份恢复之后，记忆能召回。",
+              "observe": "recalled",
+              "stage": "memory"
+            },
+            {
+              "text": "备份目录里没有找到密钥特征。",
+              "observe": "secret-scan"
+            },
+            {
+              "text": "接着看被损坏的备份。损坏是程序故意做的，来源写在事件里。",
+              "observe": "fault-origin"
+            },
+            {
+              "text": "被改了一个字节的文件，结构检查照样是 ok。",
+              "observe": "verify-integrity"
+            },
+            {
+              "text": "清单核对逐个文件比大小和 sha256，对不上的就是它。",
+              "observe": "verify-files",
+              "stage": "runtime"
+            },
+            {
+              "text": "核对失败时恢复根本没有做，损坏的数据没有到服务手里。",
+              "observe": "restore-performed"
+            },
+            {
+              "text": "跳过核对再运行：记忆照样召回得出来。",
+              "observe": "check-memory"
+            },
+            {
+              "text": "只有内容摘要这一项没通过，它是唯一发现这个字节的检查。",
+              "observe": "check-digest"
+            },
+            {
+              "text": "报告把“损坏是否被发现”单列一项。两种做法这一项都显示通过，差别在详情：一个是恢复前清单核对就拒绝了，一个是恢复之后验收才发现，数据已经交给服务读过一遍。",
+              "observe": "check-damage"
+            },
+            {
+              "text": "备份整个目录时，密钥扫描这一项没通过。",
+              "observe": "check-secrets"
+            },
+            {
+              "text": "最后两组是清理：最新两份损坏，只留最新两份，清理之后无法恢复；再多留一份通过核对的，就能恢复。",
+              "observe": "retention-check"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "恢复前的清单核对会拒绝被改动的备份；跳过它，结构检查和召回都发现不了被改的字节，只有内容摘要发现。",
+              "扫描备份目录能发现随备份带出去的配置文件；只留最新 N 份在最新几份损坏时，可能一份能恢复的都不剩，多留一份通过核对的就能恢复。"
+            ],
+            "does_not_prove": [
+              "损坏由程序故意制造，只做了翻转一个字节和截断两种；真实的磁盘故障形态更多，也没有测试介质本身出错的情况。",
+              "密钥扫描只认本课放进去的标记和以 `sk-` 开头的字符串，不能证明备份里没有别的敏感内容。"
+            ]
+          }
+        },
+        {
+          "id": "upgrade-rollback",
+          "title": "升级失败与回退",
+          "hypothesis": "迁移到一半失败时，事务只能撤销失败文件里没提交的修改；跨文件的失败和已提交的错误结果，只有升级前的备份能退回去，回退之后还要检查服务和数据。",
+          "arms": [
+            {
+              "id": "none-second",
+              "exercise": "upgrade-no-safeguard",
+              "label": "无保护：runs.sqlite3 迁移中断"
+            },
+            {
+              "id": "tx-first",
+              "exercise": "upgrade-transaction-first-file",
+              "label": "事务：memory.sqlite3 迁移中断"
+            },
+            {
+              "id": "tx-second",
+              "exercise": "upgrade-transaction-second-file",
+              "label": "事务：runs.sqlite3 迁移中断"
+            },
+            {
+              "id": "tx-bad-result",
+              "exercise": "upgrade-transaction-bad-result",
+              "label": "事务：迁移程序写错了却提交了"
+            },
+            {
+              "id": "backup-second",
+              "exercise": "upgrade-rollback",
+              "label": "备份加事务：runs.sqlite3 迁移中断"
+            }
+          ],
+          "observe": [
+            {
+              "id": "fault-origin",
+              "text": "故障的来源：`fault_injection`，程序故意做的。",
+              "selector": {
+                "event": "lesson.fault",
+                "path": "data.origin"
+              }
+            },
+            {
+              "id": "step-error",
+              "text": "失败那一步的错误文字。",
+              "selector": {
+                "event": "lesson.migration",
+                "path": "data.error"
+              }
+            },
+            {
+              "id": "step-version",
+              "text": "失败后这个文件头里的版本号：还是 1。",
+              "selector": {
+                "event": "lesson.migration",
+                "path": "data.version_in_file"
+              }
+            },
+            {
+              "id": "rollback-method",
+              "text": "回退用的是什么：事务，还是从备份恢复。",
+              "selector": {
+                "event": "lesson.rollback",
+                "path": "data.method"
+              }
+            },
+            {
+              "id": "check-upgrade",
+              "text": "报告里“升级完成并通过检查”一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=upgrade_completed]"
+              }
+            },
+            {
+              "id": "check-service",
+              "text": "报告里“服务能正常启动”一项，详情里写着哪里坏了。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=service_available]"
+              }
+            },
+            {
+              "id": "check-data",
+              "text": "报告里“数据与升级前一致”一项。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=data_unchanged]"
+              }
+            },
+            {
+              "id": "final-versions",
+              "text": "两个文件最终的版本号（runs 和 memory）。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=final_versions]"
+              }
+            },
+            {
+              "id": "recalled",
+              "text": "最终状态下召回的记忆键：只有服务可用时才会出现。",
+              "selector": {
+                "event": "lesson.memory",
+                "path": "data.included"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这组实验不调用模型。先看没有任何保护时，runs.sqlite3 迁移到一半失败。"
+            },
+            {
+              "text": "失败是程序故意做的，来源写得清楚。",
+              "observe": "fault-origin",
+              "stage": "runtime"
+            },
+            {
+              "text": "失败那一步报了什么错。",
+              "observe": "step-error"
+            },
+            {
+              "text": "文件头里的版本号还是 1，列却已经改了名：版本号是最后一步，所以它没有写上。",
+              "observe": "step-version"
+            },
+            {
+              "text": "给每个文件加事务，memory.sqlite3 失败时整个回滚，回到升级前。",
+              "observe": "rollback-method"
+            },
+            {
+              "text": "报告第一项区分升级有没有完成。",
+              "observe": "check-upgrade"
+            },
+            {
+              "text": "第二个文件失败时，事务只回滚了它自己，服务检查没有通过，详情写着版本对不上。",
+              "observe": "check-service"
+            },
+            {
+              "text": "两个文件最终的版本号并排放着：一个 1、一个 2。",
+              "observe": "final-versions"
+            },
+            {
+              "text": "数据一行没少，内容摘要和升级前相同，可服务就是起不来。这两项要分开看。",
+              "observe": "check-data"
+            },
+            {
+              "text": "换成备份加事务，两个文件一起从备份恢复。"
+            },
+            {
+              "text": "恢复之后服务可用，记忆能召回。",
+              "observe": "recalled",
+              "stage": "memory"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "事务能完整回滚失败的那个文件，但回滚不了已经提交的另一个文件，也回滚不了已经提交的错误结果；从升级前的备份恢复，两种情形都能回到升级前的数据。",
+              "回退之后，服务能启动和数据没变是两项独立的检查，一项通过不能代替另一项。"
+            ],
+            "does_not_prove": [
+              "故障由程序按固定位置制造（拷到第 3 行），真实的失败可能出现在任何一步，也可能是机器断电；本课没有测试断电。",
+              "升级与回退之间服务没有写入；真实的服务如果在这段时间写入，回退会丢掉这些写入。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "scenario",
+          "label": "练习",
+          "help": "四类练习：在线备份、恢复演练、升级与回退、保留最近 N 份；每类有几个预设练习，对应实验里的对照组。下面的参数各用于其中几类。",
+          "options": [
+            {
+              "value": "online_backup",
+              "label": "在线备份"
+            },
+            {
+              "value": "restore_drill",
+              "label": "恢复演练"
+            },
+            {
+              "value": "upgrade_rollback",
+              "label": "升级与回退"
+            },
+            {
+              "value": "retention",
+              "label": "保留最近 N 份"
+            }
+          ]
+        },
+        {
+          "name": "method",
+          "label": "备份方式",
+          "help": "只用于在线备份。",
+          "options": [
+            {
+              "value": "cold_copy",
+              "label": "停机后复制文件"
+            },
+            {
+              "value": "naive_copy",
+              "label": "边写边复制文件"
+            },
+            {
+              "value": "backup_api",
+              "label": "SQLite 备份接口"
+            },
+            {
+              "value": "vacuum_into",
+              "label": "VACUUM INTO"
+            }
+          ]
+        },
+        {
+          "name": "schedule",
+          "label": "写入节奏",
+          "help": "只用于在线备份。交替是每次相同的；自由运行时写入线程自己跑，每次结果可能不同。",
+          "options": [
+            {
+              "value": "lockstep",
+              "label": "写入与复制交替"
+            },
+            {
+              "value": "free",
+              "label": "写入线程自由运行"
+            }
+          ]
+        },
+        {
+          "name": "damage",
+          "label": "人为损坏",
+          "help": "只用于恢复演练：损坏的是记忆库的备份文件。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "bit_flip",
+              "label": "翻转一个字节"
+            },
+            {
+              "value": "truncated",
+              "label": "文件被截断"
+            }
+          ]
+        },
+        {
+          "name": "scope",
+          "label": "备份范围",
+          "help": "只用于恢复演练：只备份两个数据库，或者连配置文件一起备份。",
+          "options": [
+            {
+              "value": "data_only",
+              "label": "只含两个数据库文件"
+            },
+            {
+              "value": "whole_directory",
+              "label": "整个目录（含配置文件）"
+            }
+          ]
+        },
+        {
+          "name": "verify_manifest",
+          "label": "恢复前核对清单",
+          "help": "只用于恢复演练。关掉它，损坏的备份会被直接恢复。"
+        },
+        {
+          "name": "failure",
+          "label": "制造的失败",
+          "help": "只用于升级与回退。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无"
+            },
+            {
+              "value": "fail_first_file",
+              "label": "迁移 memory.sqlite3 到一半中断"
+            },
+            {
+              "value": "fail_second_file",
+              "label": "memory.sqlite3 成功，runs.sqlite3 到一半中断"
+            },
+            {
+              "value": "bad_result",
+              "label": "迁移程序写错了，却照常提交"
+            }
+          ]
+        },
+        {
+          "name": "safeguard",
+          "label": "保护措施",
+          "help": "只用于升级与回退。",
+          "options": [
+            {
+              "value": "none",
+              "label": "无（每条语句各自提交）"
+            },
+            {
+              "value": "transaction",
+              "label": "每个文件一个事务"
+            },
+            {
+              "value": "backup",
+              "label": "升级前备份，加每个文件一个事务"
+            }
+          ]
+        },
+        {
+          "name": "keep",
+          "label": "保留份数 N",
+          "help": "只用于保留最近 N 份：1 到 5。"
+        },
+        {
+          "name": "corrupt_newest",
+          "label": "损坏最新的几份",
+          "help": "只用于保留最近 N 份：0 到 3。"
+        },
+        {
+          "name": "policy",
+          "label": "保留策略",
+          "help": "只用于保留最近 N 份。",
+          "options": [
+            {
+              "value": "newest_n",
+              "label": "只留最新 N 份"
+            },
+            {
+              "value": "newest_n_keep_verified",
+              "label": "留最新 N 份，再加最新一份通过核对的"
+            }
+          ]
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "why-not-cp",
+              "prompt": "为什么不能在服务写入时直接用 `cp` 复制 `memory.sqlite3`？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "复制按顺序读文件，读的过程中页被改动，副本里的页来自不同时刻",
+                  "feedback": "对。这就是撕裂的副本。"
+                },
+                {
+                  "id": "b",
+                  "text": "`cp` 不能读被打开的文件",
+                  "feedback": "不对。`cp` 能读，问题是读到的是新旧混杂的内容。"
+                },
+                {
+                  "id": "c",
+                  "text": "复制会让写入线程报错并丢失数据",
+                  "feedback": "不对。写入照常提交，坏的是副本，不是原库。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "撕裂来自读文件花的那段时间，不是读文件本身。"
+            },
+            {
+              "id": "backup-api-writes",
+              "prompt": "备份接口备份时，有别的连接提交了写入。会怎样？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "备份通常重新开始，最后得到一个时刻的完整快照；写得太勤时可能一直做不完",
+                  "feedback": "对。这是它的代价，也是它的保证。"
+                },
+                {
+                  "id": "b",
+                  "text": "备份继续往下复制，副本里新旧页混在一起",
+                  "feedback": "不对。那是直接复制文件的结果。"
+                },
+                {
+                  "id": "c",
+                  "text": "写入被拒绝，直到备份结束",
+                  "feedback": "不对。备份步骤之间不占着读锁，写入可以进行。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "备份接口用重来换一致。"
+            },
+            {
+              "id": "manifest-proves",
+              "prompt": "恢复前，文件的 sha256 与清单一致。这说明什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "文件和备份时一样，但不证明备份本身是对的",
+                  "feedback": "对。清单管“有没有被动过”。"
+                },
+                {
+                  "id": "b",
+                  "text": "备份一定能恢复",
+                  "feedback": "不对。边写边复制得到的副本也有一份一致的清单。"
+                },
+                {
+                  "id": "c",
+                  "text": "数据库里的内容没有错误",
+                  "feedback": "不对。清单不看内容是否合理。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "清单和恢复演练各管一件事。"
+            },
+            {
+              "id": "why-digest",
+              "prompt": "恢复演练的验收里，已经有 `integrity_check` 和召回，为什么还要比对内容摘要？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "结构和召回都正常时，内容里被改的一位数字只有摘要能发现",
+                  "feedback": "对。练习二里翻转一个字节的那一组就是这样。"
+                },
+                {
+                  "id": "b",
+                  "text": "因为摘要比 `integrity_check` 快",
+                  "feedback": "不对。速度不是理由，覆盖的范围才是。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为 `integrity_check` 经常误报",
+                  "feedback": "不对。它没有误报，只是管不到内容。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "每一种检查只覆盖一类问题。"
+            },
+            {
+              "id": "repeatable",
+              "prompt": "数据迁移为什么要写成可以重复执行？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "第一次做到一半失败后，修好原因可以接着做，不会因为表已存在、列已改名而报错",
+                  "feedback": "对。每一步先看现状。"
+                },
+                {
+                  "id": "b",
+                  "text": "这样迁移可以天天运行一次",
+                  "feedback": "不对。迁移是升级时做一次的事。"
+                },
+                {
+                  "id": "c",
+                  "text": "这样失败就不需要回退了",
+                  "feedback": "不对。重复执行不保证第一次的结果是对的，该回退的还要回退。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "可重复让修复可行，不替代回退。"
+            },
+            {
+              "id": "committed-wrong",
+              "prompt": "迁移已经提交，检查发现记忆少了几条。怎样回到升级前？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "从升级前做的备份恢复两个文件，再检查服务和内容摘要",
+                  "feedback": "对。提交之后只有备份能退回去。"
+                },
+                {
+                  "id": "b",
+                  "text": "执行 ROLLBACK",
+                  "feedback": "不对。事务已经提交，ROLLBACK 没有东西可回滚。"
+                },
+                {
+                  "id": "c",
+                  "text": "再运行一次迁移",
+                  "feedback": "不对。迁移程序是错的，再跑一遍只会再错一次。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "已提交的结果要靠备份撤销。"
+            },
+            {
+              "id": "retention-rule",
+              "prompt": "清理备份时，下面哪条规则能保证留下至少一份能恢复？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "留最新 N 份，再加最新一份通过清单核对的",
+                  "feedback": "对。多留的那一份是给“最新几份都坏了”留的退路。"
+                },
+                {
+                  "id": "b",
+                  "text": "只留最新 N 份",
+                  "feedback": "不对。最新几份都损坏时，留下的一份都不能恢复。"
+                },
+                {
+                  "id": "c",
+                  "text": "按文件修改时间删掉最旧的",
+                  "feedback": "不对。这和只留最新 N 份一样不看好坏，修改时间还会被复制改掉。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "规则要保证清理之后还有退路。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“边写边复制文件”，找出备份开始前已经提交、却没有出现在副本里的运行有几个。",
+          "target": {
+            "event": "lesson.backup_check",
+            "path": "data.missing"
+          },
+          "explanation": "第一条 lesson.backup_check 是 `runs.sqlite3` 的检查：missing 是 6，也就是备份开始前提交、却只存在于 `-wal` 文件里的 6 个运行；同一条事件里 integrity 是 ok，所以结构检查通过的副本也可能缺数据。第二条是 `memory.sqlite3` 的检查，它的 integrity 和 broken 都有问题。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在“边写边复制文件”的运行里找到了 `runs.sqlite3` 缺的运行数，也看到它的 integrity_check 是 ok。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能说出 `runs.sqlite3` 和 `memory.sqlite3` 在被直接复制时出问题的方式为什么不同。"
+            },
+            {
+              "id": "item-3",
+              "text": "我把恢复演练改成翻转一个字节、关掉清单核对再运行：记忆照样召回得出来，只有内容摘要一项没通过。"
+            },
+            {
+              "id": "item-4",
+              "text": "我对比了“事务：runs.sqlite3 迁移中断”和“备份加事务”两组，说得出事务为什么救不了两个文件。"
+            },
+            {
+              "id": "item-5",
+              "text": "我把保留策略换成“留最新 N 份，再加最新一份通过核对的”再运行，看到了留下的备份和少掉的运行数。"
+            }
+          ]
+        },
+        {
+          "id": "section-recap",
+          "type": "prose",
+          "title": "回顾：三件事和下一步",
+          "paragraphs": [
+            "备份有三件事不能省：在线备份要一致，每份备份带清单并在恢复前核对，恢复要在新目录里验收。升级又加两件：迁移之后要检查版本和内容摘要，升级前要有一份备份，因为事务救不了已经提交的错和第二个文件。",
+            "本课没有做的事：异地备份、备份加密、断电时的行为、升级和回退之间的写入。它们都会改变“丢多少、能回到哪”的答案，真实交付时要逐项补上。接下来的{{lesson:capstone-study-assistant}}要把整套课程交付成一个能备份、能升级的学习助教。"
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "create_backup",
+      "note": "先复制，再按落盘后的文件写 manifest.json；范围由 scope 决定。"
+    },
+    {
+      "name": "content_digest",
+      "note": "清单里的内容摘要：两个文件的行读成同一种形状后求 sha256。"
+    },
+    {
+      "name": "service_check",
+      "note": "按指定版本启动服务读数据：版本、完整性、运行记录、记忆召回、摘要。"
+    },
+    {
+      "name": "restore_into",
+      "note": "回退用：把当前文件挪去 _failed_upgrade，再从备份恢复，连日志一起挪。"
+    },
+    {
+      "name": "user_version",
+      "note": "写在文件头的整数，本课用它记表结构版本：1 或 2。"
+    },
+    {
+      "name": "fault_injection",
+      "note": "事件里 origin 的取值：这个失败是课程程序故意制造的。"
+    },
+    {
+      "name": "migrate_memory",
+      "note": "重建 memories：新表、转换拷贝、换名，最后写 user_version。"
+    },
+    {
+      "name": "RunStore",
+      "note": "平台的运行存储；本课用它写入和读取运行记录。"
+    },
+    {
+      "name": "MemoryStore",
+      "note": "持久记忆那一课的记忆库；本课用它写入和召回。"
+    },
+    {
+      "name": "scope",
+      "note": "清单字段：备份范围，只含数据库，或连配置文件一起。"
+    },
+    {
+      "name": "created_at",
+      "note": "清单里的备份时间；保留备份时按它排新旧。"
+    }
+  ]
+}

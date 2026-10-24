@@ -1,0 +1,1744 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "hooks-approval",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "trust"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "HOOKS / APPROVAL",
+          "headline": "写入之前先过钩子，再等人点头。",
+          "highlight": "批准的是哪组参数，执行的就是哪组。",
+          "takeaway": "本课让 Agent 用四个真实工具改一个小工单台：只读调用直接放行，写入先过钩子，再暂停等你批准或拒绝。你会看到暂停、续跑、拒绝、超时、改参数和参数被替换时，运行器各自怎么做，以及哪些证据能核对这些说法。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-hook",
+              "label": "01 / HOOK",
+              "title": "钩子阶段（Hook Phase）",
+              "description": "钩子是挂在工具前后的小函数。执行前的钩子看一眼调用，裁决放行、拒绝、改写参数或要求审批；执行后的钩子处理结果：脱敏、校验、记录。工具本身不用改。",
+              "token": "normalize_arguments · risk_level · redact_customer_data"
+            },
+            {
+              "id": "02-gate",
+              "label": "02 / GATE",
+              "title": "审批闸门（Approval Gate）",
+              "description": "要求审批的调用先暂停运行，等人批准或拒绝。批准之前工具不执行；拒绝和超时都不执行，原因作为结构化结果交回模型。",
+              "token": "request_approval · paused"
+            },
+            {
+              "id": "03-risk",
+              "label": "03 / RISK",
+              "title": "风险等级（Risk Level）",
+              "description": "按“做错了能不能收回、影响有多大”给一次调用标一级：中、高、极高。级别越高，卡片上的提醒越重，越不该自动放行。",
+              "token": "risk=\"medium\" · \"high\" · \"critical\""
+            },
+            {
+              "id": "04-digest",
+              "label": "04 / DIGEST",
+              "title": "参数摘要（Argument Digest）",
+              "description": "审批时把参数写成固定格式，算一个 `sha256`；执行前对实际参数再算一次。两个摘要相同，才说明执行的就是批准的那一组。",
+              "token": "payload_digest · matches()"
+            }
+          ]
+        },
+        {
+          "id": "callout-desk",
+          "type": "callout",
+          "title": "工单台是一个临时目录",
+          "paragraphs": [
+            "本课的四个工具真的读写文件：工单是 JSON 文件，“发通知”是往发件箱文件里追加一行。它们只在本次运行的临时目录里工作，不联网，不碰你的其他文件，运行结束后整个目录删除。",
+            "这不是隔离执行：工具是本地进程里的普通 Python 函数。钩子和审批管的是“哪些调用允许执行”，不是“执行时能做什么”。"
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "为什么需要钩子",
+          "paragraphs": [
+            "钩子在工具执行前后插入检查，不用改每一个工具的代码。先看没有它会怎样：工单台有四个工具，两个只读，两个会写。要让所有写入都限制收件人域名、都留下记录，最直接的写法是在每个工具函数开头各抄一遍检查。四个工具、五条规则，就是二十处检查；漏改一处，那个工具就成了后门，换一条规则又得翻遍所有工具。",
+            "钩子把检查从工具里搬出来。运行器在调用工具之前跑一串执行前的函数，工具返回之后再跑一串执行后的函数，工具只管把事做完。{{lesson:tool-proposals}}讲过，模型只提议调用，执行权在程序手里；钩子就是程序在这个交接点上的代码。{{lesson:task-contract}}里的停止钩子挂在“准备结束”这一点，本课的钩子挂在“准备调用工具”和“工具刚返回”这两点。",
+            "钩子也不是“让模型守规矩”。系统提示词里写“删除前先问我”只是建议，模型这次可能照做，下次可能忘。钩子是程序：模型提议什么调用，钩子都会在执行前跑一遍，规则对不对只取决于代码，和模型这次想没想起来无关。代价是钩子只看得见它拿到的东西：调用的名字、参数，以及工具返回的结果。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "钩子的阶段与裁决",
+          "paragraphs": [
+            "钩子阶段（Hook Phase）有两个：执行前和执行后，执行前的钩子给调用下裁决，执行后的钩子处理结果。执行前的钩子拿到工具名和参数，返回四种裁决之一：`allow` 放行，`deny` 拒绝并给一个原因代码，`rewrite` 返回一份完整的替换参数，`ask` 要求审批并标上风险等级（Risk Level）。执行后的钩子拿到工具返回的数据，可以改写它、补充信息，但不能撤销已经发生的写入。",
+            "看四个真实的例子。`normalize_arguments` 看到收件人 ` Alice@Corp.Example ` 就返回 `rewrite`，把它改成 `alice@corp.example`。`recipient_domain` 看到 `eve@evil.example` 就返回 `deny`，原因是收件人不在公司域名下。`risk_level` 看到 `read_record` 返回 `allow`，看到 `send_notice` 返回 `ask`。`redact_customer_data` 是执行后的钩子，把工单里客户的手机号和邮箱遮住再交给模型。",
+            "几个钩子排成一条链，按顺序跑。`deny` 立刻停下，后面的钩子不再看这次调用；`rewrite` 把新参数交给后面的钩子，也交给最后的执行；`ask` 先记下来继续往后跑，链走完还没有人拒绝，结论才是要审批，多个 `ask` 取最高的风险等级。所以顺序是设计的一部分：先统一写法，再用规则拒绝，最后才判断要不要问人。",
+            "链的结论和每一步的裁决都写进 `lesson.hook_pre` 事件：`steps` 里每个钩子一行，`changes` 记下谁把什么改成了什么，`denied_by` 记下谁拒绝。执行后的钩子写进 `lesson.hook_post`。看事件就能知道一次调用被谁拦了、改了什么，不需要读代码。"
+          ]
+        },
+        {
+          "id": "dive-order",
+          "type": "deep-dive",
+          "title": "手算：顺序换一下会怎样",
+          "summary": "同一个调用，两种顺序，结果相反；执行后的钩子也有顺序。",
+          "paragraphs": [
+            "取一个合法的调用：收件人写成 `Alice@Corp.Example`。顺序 A 是本课的写法：`normalize_arguments` 先把它改成 `alice@corp.example`，`recipient_domain` 看到的是小写写法，匹配 `corp.example`，放行；`risk_level` 再判断要审批。顺序 B 把 `recipient_domain` 排在前面：它的规则只认小写，看到 `Alice@Corp.Example` 就拒绝了。一个合法的收件人被误拒，模型读到的原因是“不在公司域名下”，它会以为自己写错了域名。",
+            "测试 `test_order_matters_normalize_before_the_rules` 把两种顺序都跑了一遍。规则本身没错，错在没有先统一写法：规则越多，写法不统一造成的漏拦和误拦就越多。",
+            "改写还要稳定：对已经规范化的参数再规范化一次，结果不能再变。`normalize_arguments` 对干净的参数返回 `allow` 而不是 `rewrite`，所以审批时改过的参数重新过链，只要写法已经规范，就不会因为“又被改写了一次”被拒绝；要是改写每次都动一点，复核就永远通不过。",
+            "执行后的钩子同理。`audit_trail` 算的摘要要对应“返回给模型的内容”，所以它排在 `redact_customer_data` 之后。反过来排，台账里记的是遮住之前那份内容的摘要，和模型实际读到的对不上，这个摘要也就失去了“模型读到的恰好是这一份”的证明力。"
+          ]
+        },
+        {
+          "id": "predict-approvals",
+          "type": "predict",
+          "prompt": "运行“只读放行，写入审批”之前先猜：这次运行里工具大约会被调用 3 到 4 次（读取或列出、改状态、发通知），会出现几个 `approval_requested` 事件？",
+          "experiment": "write-approval",
+          "arm": "approve",
+          "rule": {
+            "kind": "count_events",
+            "event": "approval_requested"
+          }
+        },
+        {
+          "id": "mq-normalize",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-normalize",
+            "prompt": "模型提议的收件人是 ` Alice@Corp.Example `（带空白和大写）。执行前的钩子链会怎样处理？",
+            "options": [
+              {
+                "id": "a",
+                "text": "`normalize_arguments` 先改写成 `alice@corp.example`，后面的规则和审批卡看到的都是改写后的写法",
+                "feedback": "对。改写发生在规则之前，规则只需要认一种写法。"
+              },
+              {
+                "id": "b",
+                "text": "`recipient_domain` 因为大写而拒绝",
+                "feedback": "不对。`normalize_arguments` 排在它前面，它看到的已经是小写。"
+              },
+              {
+                "id": "c",
+                "text": "原样放行，等执行时再处理",
+                "feedback": "不对。执行时参数就是批准的那一组，不会再有人改它。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "钩子的顺序决定规则看到什么：先统一写法，再下裁决。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "审批请求",
+          "paragraphs": [
+            "高风险调用先生成审批请求（Approval Request），写清工具、说明、完整参数和风险。这道关就是审批闸门（Approval Gate）：执行前钩子的结论是 `ask` 时，运行器不执行工具，而是调用 `request_approval`，它发出 `approval_requested` 事件，运行状态变成 `paused`，页面上出现一张审批卡。卡上有五样东西：`kind`（例如 `tool.send_notice`）、一句说明 `summary`、完整参数 `payload`、风险等级 `risk` 和等待上限 `timeout_s`。",
+            "说明句和完整参数各有各的用处。说明句是给人快速读的：“向 alice@corp.example 发送通知“TKT-102 已处理完”，正文 21 字”。完整参数是 `payload`，包括正文，批准以它为准。两者由同一段代码从同一组参数生成，本课还会逐张核对：说明句里有没有写全工单编号、字段、新值，或者收件人、标题、正文字数。说明句写得再好也只是转述，不是证据。",
+            "人的决定有三种结果：批准、拒绝、超时。超时是 `timeout_s` 内没人决定，按拒绝处理，但事件里记的是 `decided_by: timeout`，工具结果里的 `error_type` 是 `approval_timeout`，和人点拒绝留下的 `approval_rejected` 分得开。批准还有一个选项：卡片允许修改参数，改过的参数也记进事件，后面一节讲它为什么要重新过规则。"
+          ]
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "风险等级",
+          "paragraphs": [
+            "风险等级按“做错了能不能收回、影响有多大”给每次调用标一级，决定问不问人、卡片上怎么提醒。平台认的等级有四个：`low`、`medium`、`high`、`critical`。本课只读的调用直接放行，用不到等级；`update_record` 改状态或备注是 `medium`，写的是可以再改回来的文件；关闭工单、改负责人以及任何 `send_notice` 是 `high`，通知发出去就收不回；发给群发地址 `all@corp.example` 的通知是 `critical`，一封信同时到所有人。",
+            "等级不是装饰。等级高的调用，卡片上的提醒更重，你该看得更仔细；同一条链里有几个钩子都要求审批时，取最高的那个。风险也可以随参数变：同样是 `update_record`，改 `note` 是 `medium`，把 `status` 改成 `closed` 就升到 `high`。《深入理解 AI Agent》第一章的思考题问过，删除普通文件和删除系统文件风险不同，等级怎么随参数变？本课的答案是让钩子读参数，而不是给工具贴一个固定标签。",
+            "没分类的工具怎么办，是个默认值问题。`risk_level` 对不认识的工具返回 `deny`，原因是 `tool_not_classified`：没人给它定过风险的工具，默认不放行。微软课程的示例笔记本取了另一个默认值，把不认识的动作按中等风险批量复核。两种都说得通，取决于误放行和误拦哪个更贵；本课的写工具能改文件、发通知，所以选了更严的。"
+          ]
+        },
+        {
+          "id": "dive-real",
+          "type": "deep-dive",
+          "title": "别的项目怎么做：三道闸门和四个事件",
+          "summary": "Learn Claude Code 的权限与钩子、《深入理解 AI Agent》的安全层次、微软课程的闸门笔记本。",
+          "paragraphs": [
+            "Learn Claude Code 的权限一章把调用依次交给三道闸门：永远禁止的拒绝列表、取决于上下文的规则匹配、最后是用户审批；三道都没命中就直接执行。钩子一章再把这段逻辑从循环里挪出来：注册表按事件名挂回调，事件有四个，分别是用户输入提交后、工具执行前、工具执行后、循环将要退出时，工具执行前的回调返回非空值就表示阻止这次调用。它的教学代码只用关键字匹配，作者在文档里写明这不能视为完整的安全边界。",
+            "本课和它有三点不同：裁决从“有返回值就阻止”扩成四种，能改写参数，也能带着风险等级要求审批；审批是平台能力，运行真的暂停，事件里有完整参数和摘要；每一步的结果都进事件，事后可以核对。共同点是检查写在循环之外。",
+            "《深入理解 AI Agent》第四章把执行工具的安全写成层次：输入验证先快速失败，不去“智能”修正；权限控制里黑名单只是最基础的一层；对不可逆的关键操作再加事前审批，审批失败后不要简单重试，而要把拒绝理由作为工具调用结果放回轨迹。第一章把这件事叫执行层护栏，强调复核必须由上下文之外的机制完成，否则它会和被误导的 Agent 一起出错。本课的审批人是你，不是另一个模型，拒绝理由交回模型的做法一样。",
+            "微软课程第六章的笔记本把人在回路拆成三块：闸门放在动作之前而不是事后确认，因为事后确认时费用已经花掉、副作用已经发生；按风险分级，低风险自动执行、中风险批量复核、只有高风险才阻塞等人；每个决定写一行审计记录。本课的风险等级，以及 `approval_requested` 与 `approval_resolved` 这一对事件，对应后两块。"
+          ]
+        },
+        {
+          "id": "mq-reject",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-reject",
+            "prompt": "你在审批卡上点了拒绝，并写了备注“只通知负责人”。模型的下一次请求里会读到什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "一条 `tool` 消息：`executed` 为假，`error_type` 是 `approval_rejected`，备注原样放在 `note` 里",
+                "feedback": "对。拒绝不是异常，而是一份结构化结果，模型能读到你的理由。"
+              },
+              {
+                "id": "b",
+                "text": "什么都没有：运行因为被拒绝而出错结束",
+                "feedback": "不对。拒绝不让运行出错，运行照常继续，模型还有机会换一种做法。"
+              },
+              {
+                "id": "c",
+                "text": "工具照常执行，备注只写进日志",
+                "feedback": "不对。批准之前工具不执行，拒绝之后更不会执行。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "拒绝、超时和被钩子拦下，都是交给模型的结构化结果，不是异常。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "暂停与续跑",
+          "paragraphs": [
+            "运行停在审批点，批准后从原处继续，拒绝则如实结束。停下来的方式很朴素：`request_approval` 是一次普通的函数调用，它发出 `approval_requested`，把运行状态改成 `paused`，然后等。你在页面点批准，平台把决定交回，函数返回一个 `ApprovalDecision`，状态回到 `running`，程序从调用它的下一行继续。没有保存什么，也没有重启：同一个进程里的同一个函数调用等了一会儿。",
+            "所以“续跑”在本课的意思是等待结束。进程重启之后还能不能接着往下走，需要把执行位置存下来，那是{{lesson:human-in-the-loop}}的内容。等待期间还有两种出口：超时按拒绝处理；你按停止按钮，事件里记 `cancelled`，运行以 `cancelled` 结束，{{lesson:streaming-cancel}}讲的停止语义照常适用。批准之后、真正执行之前，运行器还要再检查一次有没有被停止，这是副作用发生之前最后一个能拦下它的地方。",
+            "拒绝不是错误。把拒绝当异常抛出，整个运行会以出错结束，你的一句“不行”就变成了“程序坏了”，模型也没有机会换一种做法。本课把拒绝、超时和被钩子拦下都做成结构化结果交回模型：`ok` 为假，`executed` 为假，`error_type` 说明是哪一种，拒绝时你的备注原样放在 `note` 里。模型下一次请求读到它，可以换个办法，比如把群发改成只通知负责人；换不了，就要如实告诉用户这件事没做成。",
+            "如实结束体现在两处。一是运行器自己写的回答：先列出没有执行的调用和原因，再附模型的最后一句话，并写明以前面的记录为准；二是台账里 `refused-not-executed` 这项检查：每次被拒绝、被拦下或超时的调用，工单台文件的摘要都和调用开始时相同。"
+          ]
+        },
+        {
+          "id": "compare-refusals",
+          "type": "compare",
+          "title": "没有执行的几种结果：谁拦下，模型读到什么",
+          "columns": [
+            "`error_type`",
+            "谁拦下的",
+            "有没有审批请求",
+            "模型读到什么",
+            "在哪里看"
+          ],
+          "rows": [
+            [
+              "`invalid_arguments`",
+              "参数模型",
+              "没有",
+              "有问题的字段名",
+              "`tool_result`"
+            ],
+            [
+              "`hook_denied`",
+              "执行前的钩子",
+              "没有；修改后复核拦下的，卡片已经批准过了",
+              "钩子名、原因代码、阶段 `pre` 或 `recheck`",
+              "`lesson.hook_pre` 的 `denied_by`"
+            ],
+            [
+              "`approval_rejected`",
+              "你",
+              "有",
+              "你的备注 `note`",
+              "`approval_resolved` 的 `outcome`"
+            ],
+            [
+              "`approval_timeout`",
+              "没有人决定",
+              "有",
+              "没有备注",
+              "`approval_resolved` 的 `decided_by`"
+            ],
+            [
+              "`approval_mismatch`",
+              "执行前的摘要核对",
+              "有",
+              "一句说明",
+              "`lesson.guard` 的 `match`"
+            ],
+            [
+              "`edit_not_normalized`",
+              "修改后的复核",
+              "有",
+              "被规范化改动的字段",
+              "`lesson.hook_recheck`"
+            ]
+          ]
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "参数摘要要防替换",
+          "paragraphs": [
+            "批准的是摘要对应的那组参数，执行前再核对一次。先看会出什么事：你在卡上批准了“发给 alice@corp.example”，批准之后到执行之前，程序里有几处代码碰得到这组参数：别的钩子、重试逻辑、一个写错的函数。其中任何一处把收件人换成另一个地址，执行的就不是你批准的那一封。人的批准只在“批准的内容”和“执行的内容”是同一份时才有意义。",
+            "怎么证明是同一份？给参数算一个参数摘要（Argument Digest）：参数写成规范化的 JSON 再算 `sha256`，同样的参数得到同样的摘要，改动一个字符就得到另一个。平台在 `approval_requested` 里记下 `payload_digest`；你提交决定时，页面必须带上同一个摘要，证明你批准的是页面上看到的那组参数，后端对不上就拒收。",
+            "课程这一侧还有第二道。拿到决定后，用 `decision.payload` 去执行，而不是继续用自己手里原来的变量；执行前再调用 `decision.matches`，它把要执行的参数重新算一遍摘要，和批准时的比。本课把两个摘要并排写进 `lesson.guard` 事件：`approved_digest` 是批准的，`attempted_digest` 是即将执行的，`match` 说明它们是否相等。不相等就不执行，工具结果是 `approval_mismatch`。",
+            "规范化应该在批准之前完成。`normalize_arguments` 在审批前就把 ` Alice@Corp.Example ` 改成 `alice@corp.example`，卡片上显示的、摘要对应的，都是规范化之后的写法，所以同一个意思只有一个摘要。反过来，要是规范化发生在批准之后，参数的字节变了，摘要就对不上，会被摘要核对拦下。后面“改过的参数要重新过规则”一节里的 `edit_not_normalized` 就是这个道理。"
+          ]
+        },
+        {
+          "id": "dive-digest",
+          "type": "deep-dive",
+          "title": "手算：参数摘要怎么来，什么会让它变",
+          "summary": "键的顺序不影响摘要，值的类型和大小写会。",
+          "paragraphs": [
+            "摘要的算法很短：把参数写成规范化的 JSON（键按字母排序、没有多余空白、非 ASCII 字符原样保留），再对这段文字算 `sha256`。`{\"a\": 1, \"b\": \"x\"}` 规范化成 `{\"a\":1,\"b\":\"x\"}`，摘要以 `sha256:ecf9e98ec0641e23` 开头；键换个顺序写成 `{\"b\": \"x\", \"a\": 1}`，规范化的结果相同，摘要也相同。",
+            "值的任何差别都会改变摘要：把 `1` 写成 `\"1\"`（数字变成字符串），摘要变成 `sha256:6d2349f371a5eb9c`；收件人 `alice@corp.example` 的摘要以 `8498e1a0d3b24044` 开头，只把首字母改成大写的 `Alice@corp.example`，就变成 `af48b03b32eb3f3d`。所以写法要在算摘要之前统一：不然同一个意思的两种写法会得到两个摘要，批准了一个，执行时拿到另一个，就会被误拦。",
+            "摘要证明的是“这两组参数逐字节相同”，不是“这组参数安全”，也不防人看走眼：卡片上的参数是你亲自点头的，摘要只保证后面没有人把它换掉。",
+            "页面提交决定时带两样东西：`approval_id` 说明批准的是哪一次请求，参数摘要说明批准的是页面上的哪一组参数。后端只接受当前仍在执行的运行、当前待决的那条请求、摘要一致的提交，而且同一条请求只接受一次；已经决定、超时或停止之后再点，会得到 `no_pending_approval`，不会改动已经记下的决定。",
+            "练习“批准之后参数被替换”里的替换不是真实的攻击，而是运行器按输入 `late_rewrite` 故意制造的故障，事件里标成 `origin: fault_injection`。它的用处是证明：真有一步改了参数，摘要核对会拦下。没有这个故障时，摘要核对在每次运行里都是通过的。"
+          ]
+        },
+        {
+          "id": "mq-digest",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-digest",
+            "prompt": "批准之后、执行之前，有一步把收件人换成了另一个地址。运行器靠什么发现？",
+            "options": [
+              {
+                "id": "a",
+                "text": "执行前对要执行的参数重新算摘要，和批准时的摘要比，不相等就不执行",
+                "feedback": "对。这就是 `decision.matches` 做的事，结果写在 `lesson.guard` 里。"
+              },
+              {
+                "id": "b",
+                "text": "靠审批卡上的说明句：说明句写着收件人，所以不会错",
+                "feedback": "不对。说明句只是给人看的转述，换掉参数时它不会跟着变，运行器也不读它。"
+              },
+              {
+                "id": "c",
+                "text": "发不出去：工具函数会自己报错",
+                "feedback": "不对。换成的是另一个合法地址，工具照样执行，只有摘要核对能拦下。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "批准的是一组参数；执行前用摘要确认手里的就是那一组。"
+          }
+        },
+        {
+          "id": "section-7",
+          "type": "prose",
+          "title": "改过的参数要重新过规则",
+          "paragraphs": [
+            "审批卡允许改参数时，改过的参数是新输入，要重新过一遍钩子的拒绝规则。卡片可修改（`editable`）时，你可以批准“修改后的参数”。风险在这里：你可能手滑，也可能想着“反正我点了批准”，把收件人改成公司外的地址。要是执行层认为“人批准了就行”，`recipient_domain` 这条规则就被绕过了：规则只在批准之前跑过，而被批准的是另一组参数。",
+            "本课的做法是把编辑后的内容当作新的调用：先查形状，只能有 `tool` 和 `arguments` 两个键，不能把工具换成别的；再按参数模型校验类型；然后把执行前的钩子再跑一遍。命中拒绝规则的，即使你已经点了批准也不执行，结果是 `hook_denied`，`phase` 写 `recheck`；`lesson.hook_recheck` 事件记下改了哪些字段、被哪个钩子拦下。",
+            "如果钩子还要把你改过的参数再改写一次，比如你把收件人写成了大写，运行器也不执行，返回 `edit_not_normalized`。你批准的是你敲进去的那一份，规范化之后就是另一份了；运行器悄悄替你改，等于执行了一份没人批准的参数。要么你照规范写法改，要么从头再来。",
+            "钩子和人各管一块。钩子拦的是不依赖人判断的底线：收件人必须在公司域名内，谁来批准都一样。人拦的是钩子判断不了的语义：这封通知该不该发、写得对不对。两层叠加，批准才不是“点一下就能绕过规则”。"
+          ]
+        },
+        {
+          "id": "mq-edit",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-edit",
+            "prompt": "审批卡允许修改参数。你把收件人改成公司域名之外的地址，然后点了批准。会发生什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "钩子对改过的参数重新检查，`recipient_domain` 拒绝，结果是 `hook_denied`，`phase` 为 `recheck`，通知不会发出",
+                "feedback": "对。人的批准不能绕过不依赖人判断的规则。"
+              },
+              {
+                "id": "b",
+                "text": "通知发出：你是人，你的批准优先",
+                "feedback": "不对。规则在批准前后都要成立，批准只管语义，不管越界。"
+              },
+              {
+                "id": "c",
+                "text": "运行出错结束，因为参数被改过",
+                "feedback": "不对。被拦下是结构化结果，运行照常继续，模型会读到原因。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "编辑后的参数是新输入：形状、类型、拒绝规则都要重新过一遍。"
+          }
+        },
+        {
+          "id": "section-8",
+          "type": "prose",
+          "title": "钩子和审批管不到什么",
+          "paragraphs": [
+            "钩子只看得见调用的名字、参数和工具的返回值，审批只能判断卡片上写的东西。工具内部到底做了什么，它们看不到；通知正文里夹着什么恶意文字，除非有规则去查，它们也看不到。本课的工具是你机器上的普通 Python 函数，没有隔离，钩子和审批不能替代隔离。{{lesson:bash-coding-agent}}讲的就是没有隔离时，每条命令都要人看过才执行。",
+            "《深入理解 AI Agent》第五章把风险概括成三要素：能读私有数据、会碰不可信内容、能对外通信。三样齐备时，一条被诱导出来的调用就能把数据送出去；书里的结论是，重点不是认出所有攻击，而是让 Agent 即使被误导，也没有机会把危险动作真正执行出去。钩子和审批站的就是这个位置，但它们只是其中一层。",
+            "审批本身也会失效：每次都问，人就会习惯性地点批准。风险等级的作用是只在值得的时候问：读调用从不打断你，写入才停下，群发提醒得最重。要是一个运行里弹出二十张卡，每张都值得你认真看吗？先该想的是，有没有规则能替你拦掉一部分。",
+            "后面的课接着讲没讲完的部分：{{lesson:reliable-tools}}讲写入执行两次会怎样、失败后能不能安全重试；{{lesson:human-in-the-loop}}讲进程重启后怎样从保存的位置继续；{{lesson:prompt-injection}}讲资料里夹带的指令怎样诱导模型提出不该提的调用，那时钩子和审批就是最后一道关。"
+          ]
+        },
+        {
+          "id": "misconception-approved",
+          "type": "misconception",
+          "claim": "我在审批卡上点了批准，执行的就一定是卡上写的那一条。",
+          "correction": "批准的是卡片上的参数，不是后面发生的一切。批准之后到执行之前，如果有代码改了参数，或者你改过的参数越过了规则，执行层不核对就会执行一份没人批准的调用。所以本课在执行前用批准时的参数摘要再核对一次，对不上就不执行；改过的参数还要重新过一遍钩子的规则。"
+        },
+        {
+          "id": "misconception-rules",
+          "type": "misconception",
+          "claim": "钩子写好了，模型就不可能越界；规则没写到的情况，钩子也会替我拦下。",
+          "correction": "钩子只执行写进去的规则。`recipient_domain` 只管收件人的域名，不管通知的内容；模型提议的调用千奇百怪，没有规则覆盖的部分就是放行，或者交给人。能做的是把默认值选严：本课对没分类的工具默认拒绝，对写入默认要审批。钩子减少事故，不保证没有事故。"
+        },
+        {
+          "id": "misconception-timeout",
+          "type": "misconception",
+          "claim": "审批超时就当作同意，免得卡住运行。",
+          "correction": "超时说明没有人看过，不能当成同意。本课按拒绝处理：工具不执行，模型读到 `approval_timeout`。要不要换更长的等待上限，或者超时后先通知别的人，是另一个设计问题，但“默认放行”不在选项里。"
+        },
+        {
+          "id": "compare-verdicts",
+          "type": "compare",
+          "title": "四种钩子裁决",
+          "columns": [
+            "裁决",
+            "谁给出",
+            "对这次调用的效果",
+            "本课的例子",
+            "在哪里看"
+          ],
+          "rows": [
+            [
+              "`allow`",
+              "任何执行前的钩子",
+              "链继续往下走；没有钩子反对就执行",
+              "`risk_level` 对 `read_record`",
+              "`lesson.hook_pre` 的 `steps`"
+            ],
+            [
+              "`deny`",
+              "规则类钩子",
+              "链立刻停下，不请求审批、不执行，原因代码交给模型",
+              "收件人在公司域名之外",
+              "`lesson.hook_pre` 的 `denied_by`"
+            ],
+            [
+              "`rewrite`",
+              "规范化类钩子",
+              "用新参数继续；新参数就是审批和执行的参数",
+              "把 ` Alice@Corp.Example ` 改成 `alice@corp.example`",
+              "`lesson.hook_pre` 的 `changes`"
+            ],
+            [
+              "`ask`",
+              "风险类钩子",
+              "链走完无人拒绝才要审批，风险取最高的",
+              "`send_notice` 是 `high`",
+              "`approval_requested` 的 `risk`"
+            ]
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一次写入走过的六道关",
+          "description": "按步骤说明运行器怎样处理模型提出的 `send_notice`，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "提议",
+              "actor": "模型",
+              "title": "模型提出一次调用",
+              "body": "模型在 `tool_calls` 里写出 `send_notice` 和参数，收件人带着多余的空白和大写。运行器记下这次调用提议，工具还没有执行。",
+              "code": "{\"name\": \"send_notice\", \"arguments\": \"{\\\"recipient\\\": \\\" Alice@Corp.Example \\\", ...}\"}",
+              "language": "json",
+              "evidence": "`tool_call`"
+            },
+            {
+              "id": "step-2",
+              "label": "钩子",
+              "actor": "运行器",
+              "title": "执行前的钩子按顺序跑",
+              "body": "`normalize_arguments` 改写收件人，`recipient_domain` 放行，`risk_level` 判定 `high` 并要求审批。",
+              "code": "pre = run_pre_hooks(PRE_HOOKS, name, arguments)  # verdict: ask, risk: high",
+              "language": "python",
+              "evidence": "`lesson.hook_pre`"
+            },
+            {
+              "id": "step-3",
+              "label": "审批",
+              "actor": "你",
+              "title": "运行停下，等你决定",
+              "body": "状态变成 `paused`。卡片上是规范化后的参数和一句说明。批准之前，发件箱文件没有变化。",
+              "code": "decision = context.request_approval(kind, summary, payload, risk=risk, timeout_s=timeout_s)",
+              "language": "python",
+              "evidence": "`approval_requested` 与 `approval_resolved`"
+            },
+            {
+              "id": "step-4",
+              "label": "核对",
+              "actor": "运行器",
+              "title": "摘要核对",
+              "body": "拿要执行的参数重新算摘要，和批准的比较。相同才往下走，不同就返回 `approval_mismatch`。",
+              "code": "decision.matches({\"tool\": name, \"arguments\": arguments})",
+              "language": "python",
+              "evidence": "`lesson.guard`"
+            },
+            {
+              "id": "step-5",
+              "label": "执行",
+              "actor": "工具",
+              "title": "批准之后才执行",
+              "body": "工具往发件箱追加一行。执行后的钩子遮住敏感字段、从文件读回写入、给结果算摘要。",
+              "code": "data = getattr(self.desk, name)(**arguments)",
+              "language": "python",
+              "evidence": "`lesson.hook_post` 与 `tool_result`"
+            },
+            {
+              "id": "step-6",
+              "label": "记录",
+              "actor": "运行器",
+              "title": "结果交回模型，也进台账",
+              "body": "同一份结果作为 `tool` 消息交给模型，并记入台账。运行结束前，运行器从文件里读出真实的变化，和台账对照。",
+              "code": "messages.append({\"role\": \"tool\", \"tool_call_id\": call[\"id\"], \"content\": ...})",
+              "language": "python",
+              "evidence": "下一次 `request` 的消息，调用台账与实际变化两份报告"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "lcc-permission",
+              "title": "执行前的权限判断：拒绝列表、规则匹配、询问用户（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s03_permission/README.zh.md"
+            },
+            {
+              "id": "lcc-hooks",
+              "title": "钩子：把扩展逻辑挂在循环外（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s04_hooks/README.zh.md"
+            },
+            {
+              "id": "book-ch4",
+              "title": "执行工具的安全层次、事前审批与拒绝理由（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter4.md"
+            },
+            {
+              "id": "book-ch1",
+              "title": "护栏的三层与工具风险评级（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            },
+            {
+              "id": "book-ch5",
+              "title": "Coding Agent 的安全：威胁模型与隔离兜底（深入理解 AI Agent）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter5.md"
+            },
+            {
+              "id": "ms-trust",
+              "title": "可信 Agent：威胁与人在回路（AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/06-building-trustworthy-agents/README.md"
+            },
+            {
+              "id": "ms-hitl",
+              "title": "动作前的闸门、风险分级与审计记录（AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/06-building-trustworthy-agents/code_samples/06-human-in-the-loop.ipynb"
+            },
+            {
+              "id": "hf-control",
+              "title": "控制与自由：需要人在回路的流程（Hugging Face Agents Course）",
+              "url": "https://github.com/huggingface/agents-course/blob/b3946b1d09d29c65736e219d48a8a736a2c52154/units/en/unit2/langgraph/when_to_use_langgraph.mdx"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "tool-proposals"
+        },
+        {
+          "id": "code-hooks",
+          "type": "annotated-source",
+          "path": "lessons/lesson_hooks_approval/hooks.py",
+          "start": 95,
+          "end": 135,
+          "notes": [
+            {
+              "id": "n95",
+              "line": 95,
+              "anchor": "PRE_HOOKS = (",
+              "text": "钩子的排列顺序就是执行顺序：先统一写法，再下拒绝，最后才判断要不要问人。"
+            },
+            {
+              "id": "n96",
+              "line": 96,
+              "anchor": "Hook(\"normalize_arguments\"",
+              "text": "改写排第一：后面的规则只需要认一种写法。"
+            },
+            {
+              "id": "n98",
+              "line": 98,
+              "anchor": "Hook(\"recipient_domain\"",
+              "text": "中间三个是规则类钩子：任何一个返回 `deny`，链就停在这里。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "anchor": "Hook(\"risk_level\"",
+              "text": "最后一个钩子才判断要不要审批，并标上风险等级。"
+            },
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "def run_pre_hooks(",
+              "text": "`run_pre_hooks` 把一串钩子跑成一个结论：放行、拒绝或要审批，带着最终的参数。"
+            },
+            {
+              "id": "n117",
+              "line": 117,
+              "anchor": "outcome = PreOutcome(",
+              "text": "从调用原来的参数开始，之后每次改写都会替换它。"
+            },
+            {
+              "id": "n118",
+              "line": 118,
+              "anchor": "for hook in hooks:",
+              "text": "按顺序一个个跑，不并行：后面的钩子要看前面改写之后的参数。"
+            },
+            {
+              "id": "n119",
+              "line": 119,
+              "anchor": "result = hook.run(",
+              "text": "钩子拿到的永远是当前参数，不是模型最初写的那一份。"
+            },
+            {
+              "id": "n120",
+              "line": 120,
+              "anchor": "step = {\"id\": hook.name",
+              "text": "每个钩子的裁决都记成一行，进 `lesson.hook_pre` 的 `steps`。"
+            },
+            {
+              "id": "n123",
+              "line": 123,
+              "anchor": "if result.verdict == \"rewrite\":",
+              "text": "改写：记下改了什么，再用新参数继续往后走。"
+            },
+            {
+              "id": "n128",
+              "line": 128,
+              "anchor": "if result.verdict == \"deny\":",
+              "text": "拒绝：记下是谁、为什么，立刻返回，后面的钩子不再看这次调用。"
+            },
+            {
+              "id": "n131",
+              "line": 131,
+              "anchor": "if result.verdict == \"ask\":",
+              "text": "要审批只是先记着，链还要走完，别的钩子仍可以拒绝。"
+            },
+            {
+              "id": "n133",
+              "line": 133,
+              "anchor": "if outcome.risk is None or",
+              "text": "几个钩子都要求审批时，取风险最高的那个。"
+            },
+            {
+              "id": "n135",
+              "line": 135,
+              "anchor": "return outcome",
+              "text": "链走完没有人拒绝：结论是放行，或者要审批。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 104,
+              "end": 112,
+              "label": "数据结构：一次链运行的结果"
+            }
+          ]
+        },
+        {
+          "id": "code-gate",
+          "type": "annotated-source",
+          "path": "lessons/lesson_hooks_approval/gate.py",
+          "start": 73,
+          "end": 129,
+          "notes": [
+            {
+              "id": "n73",
+              "line": 73,
+              "anchor": "def run(self, name",
+              "text": "`run` 是一次调用的全部流程：形状、钩子、审批、核对、执行。模型只读得到最后的结果。"
+            },
+            {
+              "id": "n75",
+              "line": 75,
+              "anchor": "self.context.check_cancelled()",
+              "text": "开始之前先看有没有被停止。"
+            },
+            {
+              "id": "n76",
+              "line": 76,
+              "anchor": "entry = {",
+              "text": "台账里的一行：记下调用开始时整个工单台的内容摘要，后面拿它对比。"
+            },
+            {
+              "id": "n80",
+              "line": 80,
+              "anchor": "arguments = self._parse(",
+              "text": "先查形状：缺参数、多参数，在任何规则之前就是错误。"
+            },
+            {
+              "id": "n81",
+              "line": 81,
+              "anchor": "pre = self._pre_hooks(",
+              "text": "跑执行前的钩子；被拒绝时在这里抛出 `Refusal`，后面的步骤都不会发生。"
+            },
+            {
+              "id": "n83",
+              "line": 83,
+              "anchor": "if pre.verdict == \"ask\":",
+              "text": "只有要审批的调用才暂停；只读调用走 `else`，直接往下执行。"
+            },
+            {
+              "id": "n84",
+              "line": 84,
+              "anchor": "decision, arguments = self._ask(",
+              "text": "审批之后，要执行的参数取自决定，不是自己手里的变量。"
+            },
+            {
+              "id": "n85",
+              "line": 85,
+              "anchor": "self._guard(",
+              "text": "执行前最后一道：摘要核对。"
+            },
+            {
+              "id": "n88",
+              "line": 88,
+              "anchor": "return self._execute(",
+              "text": "执行，再跑执行后的钩子。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "anchor": "except Refusal as refusal:",
+              "text": "拒绝、拦下、超时都走这里，变成结构化结果，而不是异常。"
+            },
+            {
+              "id": "n114",
+              "line": 114,
+              "anchor": "def _ask(",
+              "text": "`_ask` 负责审批：写说明句、请求决定、把决定记进台账。"
+            },
+            {
+              "id": "n115",
+              "line": 115,
+              "anchor": "summary = self.t.approve_summary",
+              "text": "说明句来自运行时文本，由规范化之后的参数生成。"
+            },
+            {
+              "id": "n118",
+              "line": 118,
+              "anchor": "decision = self.context.request_approval(",
+              "text": "运行在这里暂停，人决定或超时之后函数才返回。"
+            },
+            {
+              "id": "n119",
+              "line": 119,
+              "anchor": "f\"tool.{name}\", summary, {\"tool\": name",
+              "text": "`payload` 就是规范化后的工具名和参数：卡上显示的、算摘要的、最后执行的，都是它。"
+            },
+            {
+              "id": "n120",
+              "line": 120,
+              "anchor": "timeout_s=self.timeout_s, editable",
+              "text": "等待上限和能不能改参数都来自输入，默认不能改。"
+            },
+            {
+              "id": "n124",
+              "line": 124,
+              "anchor": "if not decision.approved:",
+              "text": "拒绝和超时不抛异常，而是变成 `Refusal`，工具不会执行。"
+            },
+            {
+              "id": "n126",
+              "line": 126,
+              "anchor": "raise Refusal(\"approval_rejected\"",
+              "text": "拒绝带着你的备注；没有备注时写“没有备注”，让模型总有一个理由可读。"
+            },
+            {
+              "id": "n127",
+              "line": 127,
+              "anchor": "raise Refusal(\"approval_timeout\"",
+              "text": "超时没有备注，原因代码单独成一类。"
+            },
+            {
+              "id": "n129",
+              "line": 129,
+              "anchor": "return decision, (self._recheck(",
+              "text": "用决定里的参数去执行；改过的先走复核。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 92,
+              "end": 111,
+              "label": "平台：形状检查与执行前钩子的事件记录（链的细节见上一块）"
+            },
+            {
+              "id": "fold-2",
+              "start": 116,
+              "end": 116,
+              "label": "平台证据：记下说明句是否写全，以及请求审批时工单台的摘要"
+            },
+            {
+              "id": "fold-3",
+              "start": 121,
+              "end": 123,
+              "label": "平台证据：记下决定、批准的摘要，以及拿到决定时工单台的摘要"
+            }
+          ]
+        },
+        {
+          "id": "code-check",
+          "type": "annotated-source",
+          "path": "lessons/lesson_hooks_approval/gate.py",
+          "start": 132,
+          "end": 172,
+          "notes": [
+            {
+              "id": "n132",
+              "line": 132,
+              "anchor": "def _recheck(",
+              "text": "改过的参数是新输入，要重新过一遍规则。"
+            },
+            {
+              "id": "n133",
+              "line": 133,
+              "anchor": "payload = decision.payload",
+              "text": "`decision.payload` 是你批准的那一份，不是原来的那一份。"
+            },
+            {
+              "id": "n134",
+              "line": 134,
+              "anchor": "if set(payload) != {\"tool\", \"arguments\"}",
+              "text": "先查形状：只能有 `tool` 和 `arguments`，不能把工具换掉。"
+            },
+            {
+              "id": "n136",
+              "line": 136,
+              "anchor": "arguments = self._parse(name, payload",
+              "text": "再按参数模型校验类型：改出来的参数和模型写的参数一视同仁。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "anchor": "recheck = run_pre_hooks(",
+              "text": "同一批执行前的钩子，同一条链，再跑一遍。"
+            },
+            {
+              "id": "n145",
+              "line": 145,
+              "anchor": "if recheck.verdict == \"deny\":",
+              "text": "命中拒绝规则：即使人已经批准，也不执行。"
+            },
+            {
+              "id": "n147",
+              "line": 149,
+              "anchor": "if recheck.arguments != arguments:",
+              "text": "钩子还想改写：批准的是敲进去的原样，改写之后就是另一份了，同样不执行。"
+            },
+            {
+              "id": "n150",
+              "line": 152,
+              "anchor": "entry[\"arguments\"] = arguments",
+              "text": "通过复核，用编辑后的参数继续。"
+            },
+            {
+              "id": "n154",
+              "line": 156,
+              "anchor": "def _guard(",
+              "text": "`_guard` 是执行前最后一道：批准的摘要必须等于即将执行的摘要。"
+            },
+            {
+              "id": "n155",
+              "line": 157,
+              "anchor": "attempted = {\"tool\": name, \"arguments\": arguments}",
+              "text": "即将执行的是什么：工具名和参数，写法与批准的 `payload` 相同。"
+            },
+            {
+              "id": "n156",
+              "line": 158,
+              "anchor": "event = {\"tool\": name, \"call_id\": entry[\"call_id\"], \"approved_digest\"",
+              "text": "事件里先写下批准的摘要。"
+            },
+            {
+              "id": "n164",
+              "line": 166,
+              "anchor": "matches = decision.matches(attempted)",
+              "text": "`decision.matches` 把要执行的内容重新算一遍摘要，和批准的比。"
+            },
+            {
+              "id": "n165",
+              "line": 167,
+              "anchor": "event.update(attempted_digest",
+              "text": "两个摘要并排写进 `lesson.guard`，学习者自己就能比。"
+            },
+            {
+              "id": "n168",
+              "line": 170,
+              "anchor": "if not matches:",
+              "text": "不相等就不执行，返回 `approval_mismatch`。"
+            },
+            {
+              "id": "n170",
+              "line": 172,
+              "anchor": "entry[\"arguments\"] = attempted[\"arguments\"]",
+              "text": "相等，才把这组参数交给执行。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-1",
+              "start": 138,
+              "end": 144,
+              "label": "平台：记录改了哪些字段，写 `lesson.hook_recheck` 事件"
+            },
+            {
+              "id": "fold-2",
+              "start": 159,
+              "end": 165,
+              "label": "教学注入：批准之后改写收件人（演示用故障，由输入 `late_rewrite` 打开）"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "拒绝、超时和拦截都返回结构化结果，不抛异常",
+          "chosen": "每一种“没有执行”都变成 `ok` 为假、`executed` 为假的结构化结果，写明 `error_type` 和原因，交回模型；运行照常继续，最后由运行器的回答和台账如实说明哪些调用没有执行。",
+          "alternatives": [
+            {
+              "id": "raise-error",
+              "title": "拒绝时抛异常，让运行出错结束",
+              "why_not": "你的一句“不行”会变成“程序坏了”，模型没有机会换一种做法，回放里也分不清是被拒绝还是出了故障。"
+            },
+            {
+              "id": "timeout-approves",
+              "title": "超时就当作批准",
+              "why_not": "超时说明没有人看过。把没人看过的调用放行，审批就成了摆设。"
+            },
+            {
+              "id": "own-variable",
+              "title": "批准后继续用自己手里的参数变量执行",
+              "why_not": "手里的变量可能在批准期间被别的代码改过。用决定里的参数执行，并在执行前核对摘要，才能保证执行的是批准的那一组。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "write-approval",
+          "title": "写入工具前的审批",
+          "hypothesis": "只读调用不会出现审批卡，每次写入都停在审批卡上等人决定；批准之前工具没有执行，批准之后执行的参数摘要与批准的一致；被拒绝和超时的调用没有执行，原因交给模型。",
+          "predict": "predict-approvals",
+          "arms": [
+            {
+              "id": "approve",
+              "exercise": "approve-write",
+              "label": "只读放行，写入审批"
+            },
+            {
+              "id": "reject",
+              "exercise": "reject-timeout",
+              "label": "拒绝与超时"
+            }
+          ],
+          "observe": [
+            {
+              "id": "read-passes",
+              "text": "第一次执行前钩子事件：`risk_level` 对只读调用的裁决是放行，这次调用后面没有审批请求。",
+              "selector": {
+                "event": "lesson.hook_pre",
+                "path": "data.steps[id=risk_level]"
+              }
+            },
+            {
+              "id": "rewrite-on-read",
+              "text": "`normalize_arguments` 把小写的工单编号改成大写：`changes` 只在发生了改写的事件里出现。",
+              "selector": {
+                "event": "lesson.hook_pre",
+                "path": "data.changes"
+              }
+            },
+            {
+              "id": "first-risk",
+              "text": "第一次要求审批的事件：风险等级只出现在要审批的调用上。",
+              "selector": {
+                "event": "lesson.hook_pre",
+                "path": "data.risk"
+              }
+            },
+            {
+              "id": "first-card",
+              "text": "第一张审批卡的说明句。",
+              "selector": {
+                "event": "approval_requested",
+                "path": "data.summary"
+              }
+            },
+            {
+              "id": "card-digest",
+              "text": "这张卡的参数摘要：它对应 `payload`，不对应说明句。",
+              "selector": {
+                "event": "approval_requested",
+                "path": "data.payload_digest"
+              }
+            },
+            {
+              "id": "decided-by",
+              "text": "决定是谁做的：离线运行里是测试夹具，真实运行里是你。",
+              "selector": {
+                "event": "approval_resolved",
+                "path": "data.decided_by"
+              }
+            },
+            {
+              "id": "guard-match",
+              "text": "执行前的摘要核对：批准的摘要和即将执行的摘要是否相等。",
+              "selector": {
+                "event": "lesson.guard",
+                "path": "data.match"
+              }
+            },
+            {
+              "id": "no-early",
+              "text": "台账报告里的检查：审批等待期间，整个工单台的内容摘要没有变。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=no-early-effect]"
+              }
+            },
+            {
+              "id": "args-match",
+              "text": "台账报告里的检查：执行的参数摘要等于批准的参数摘要。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=args-match-approval]"
+              }
+            },
+            {
+              "id": "rejected-note",
+              "text": "被你拒绝的调用的结果：`executed` 为假，备注原样在 `note` 里。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.note"
+              }
+            },
+            {
+              "id": "timeouts",
+              "text": "台账报告里审批超时的次数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=timeouts]"
+              }
+            },
+            {
+              "id": "refused-check",
+              "text": "台账报告里的检查：被拒绝、被拦下或超时的调用没有改动工单台。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=refused-not-executed]"
+              }
+            },
+            {
+              "id": "notices",
+              "text": "实际变化报告里发件箱的通知数，从文件里读出来，和模型说了什么无关。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=notices-written]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "先看只读调用怎样被放行。两组用同一套钩子，差别在于你（或测试夹具）对写入的决定。"
+            },
+            {
+              "text": "第一个调用是只读调用（这次运行里是读取工单），`risk_level` 对它返回放行；它之后没有审批请求。",
+              "observe": "read-passes",
+              "stage": "runtime"
+            },
+            {
+              "text": "读取工单时模型写的是小写编号，`normalize_arguments` 改成了大写，这条改写记在 `changes` 里，调用本身没有被打扰。",
+              "observe": "rewrite-on-read",
+              "stage": "runtime"
+            },
+            {
+              "text": "第一次写入：链的结论是要审批，风险等级写在这里。",
+              "observe": "first-risk",
+              "stage": "runtime"
+            },
+            {
+              "text": "运行在这里暂停。卡片上有一句说明，给人快速读。",
+              "observe": "first-card",
+              "stage": "runtime"
+            },
+            {
+              "text": "真正被批准的是完整参数，这个摘要对应的是 `payload`。",
+              "observe": "card-digest"
+            },
+            {
+              "text": "决定的来源写在 `decided_by` 里；回看时先确认这一条。",
+              "observe": "decided-by",
+              "stage": "runtime"
+            },
+            {
+              "text": "批准之后，执行之前，运行器把两个摘要放在一起比较。",
+              "observe": "guard-match",
+              "stage": "runtime"
+            },
+            {
+              "text": "台账里的第一项检查：审批等待的两个时刻，工单台的内容摘要相同，工具没有提前执行。",
+              "observe": "no-early"
+            },
+            {
+              "text": "第二项：每次经审批执行的调用，批准的摘要和执行的摘要相同。",
+              "observe": "args-match"
+            },
+            {
+              "text": "换到“拒绝与超时”。你拒绝的那次写入没有执行，你的备注原样交给了模型；没写备注，模型读到的是“没有备注”。先到审批卡的是哪一次写入，取决于模型提出什么。",
+              "observe": "rejected-note",
+              "stage": "tool"
+            },
+            {
+              "text": "如果模型还提出了第二次写入，你让它等到超时，就计入这一项：它没有备注，原因代码也不同。模型被拒绝后也可能不再提出写入，这一项就是 0。",
+              "observe": "timeouts"
+            },
+            {
+              "text": "被拒绝和超时的调用，工单台的内容摘要与调用开始时相同。",
+              "observe": "refused-check"
+            },
+            {
+              "text": "最后看文件里的真实变化：通知数是从发件箱读出来的，不是模型自己说的。",
+              "observe": "notices",
+              "stage": "tool"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里哪些调用要审批、风险是几级、你或夹具的决定是什么，以及批准之前工具有没有执行（对照等待前后工单台的内容摘要）。",
+              "被拒绝、超时的调用没有改动工单台，模型读到的是结构化的原因；经审批执行的调用，执行的参数摘要与批准的摘要相同。"
+            ],
+            "does_not_prove": [
+              "离线测试模式里的决定是夹具脚本写的，不代表任何真实的人，也不代表真实模型会提出同样的调用。",
+              "审批只证明有人看过卡片上的内容，不证明这些参数是对的；说明句写得全，也不证明你读了它。",
+              "工单台是临时目录里的普通文件，没有隔离；这个实验证明的是调用被谁拦下，证明不了工具“安全”。"
+            ]
+          }
+        },
+        {
+          "id": "edit-recheck",
+          "title": "改过的参数重新过规则",
+          "hypothesis": "审批卡允许修改参数时，改过的参数仍要过钩子的拒绝规则：把收件人改到公司域名之外，即使点了批准，通知也不会发出，工单台没有变化。",
+          "arms": [
+            {
+              "id": "edit",
+              "exercise": "edit-recheck",
+              "label": "改参数后重新过规则"
+            },
+            {
+              "id": "baseline",
+              "exercise": "approve-write",
+              "label": "对照：只读放行，写入审批"
+            }
+          ],
+          "observe": [
+            {
+              "id": "editable-card",
+              "text": "审批卡的 `editable`：这一组是真，对照组是假。",
+              "selector": {
+                "event": "approval_requested",
+                "path": "data.editable"
+              }
+            },
+            {
+              "id": "edited-payload",
+              "text": "你实际批准的参数：只有被修改过的审批才有 `payload` 字段，里面是改过之后的收件人。",
+              "selector": {
+                "event": "approval_resolved",
+                "path": "data.payload"
+              }
+            },
+            {
+              "id": "recheck-denied",
+              "text": "复核事件：同一批钩子对改过的参数再跑一遍，`denied_by` 写着是谁拒绝的。",
+              "selector": {
+                "event": "lesson.hook_recheck",
+                "path": "data.denied_by"
+              }
+            },
+            {
+              "id": "edited-fields",
+              "text": "改了哪些字段，改之前和改之后各是什么。",
+              "selector": {
+                "event": "lesson.hook_recheck",
+                "path": "data.edited_fields"
+              }
+            },
+            {
+              "id": "recheck-result",
+              "text": "模型读到的结果：`phase` 是 `recheck`，说明拦下发生在批准之后。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.phase"
+              }
+            },
+            {
+              "id": "refused-check",
+              "text": "台账检查：被拦下的调用没有改动工单台。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=refused-not-executed]"
+              }
+            },
+            {
+              "id": "notices",
+              "text": "实际变化报告里的发件箱通知数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=notices-written]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这一组的审批卡可以改参数。模型要先提出这封通知，卡片才会出现；它也可能先读工单，看到状态还是 open，转而问你要不要先改状态，那这一组没有卡片，重新运行一次。看一眼对照组，它的卡片不能改。"
+            },
+            {
+              "text": "先确认这张卡是可修改的。",
+              "observe": "editable-card",
+              "stage": "runtime"
+            },
+            {
+              "text": "决定记录里多了 `payload`：这是批准的实际参数，收件人已经被改到公司之外。",
+              "observe": "edited-payload",
+              "stage": "runtime"
+            },
+            {
+              "text": "运行器没有直接执行，而是把改过的参数再交给钩子，`recipient_domain` 拒绝了。",
+              "observe": "recheck-denied",
+              "stage": "runtime"
+            },
+            {
+              "text": "事件里写明了改的是 `recipient`，以及改之前、改之后的值。",
+              "observe": "edited-fields"
+            },
+            {
+              "text": "模型读到的结果带着 `phase: recheck`：你批准了，但规则还是拦下了。",
+              "observe": "recheck-result",
+              "stage": "tool"
+            },
+            {
+              "text": "台账的检查确认这次拦下没有改动工单台。",
+              "observe": "refused-check"
+            },
+            {
+              "text": "发件箱里一封通知也没有，这是从文件里读出来的。",
+              "observe": "notices",
+              "stage": "tool"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "改过的参数会重新过钩子的拒绝规则，批准之后命中规则的调用没有执行，原因和改动的字段都在事件里。"
+            ],
+            "does_not_prove": [
+              "夹具替你把收件人改成了公司之外的地址，这是脚本；真实运行里你改什么，由你决定，规则只拦它写了的那些情况。",
+              "复核只覆盖钩子里写了的规则；改到一个公司域名内、但不该收到这封通知的人，规则看不出来，那要靠你自己读卡片。"
+            ]
+          }
+        },
+        {
+          "id": "swap-guard",
+          "title": "批准之后参数被替换",
+          "hypothesis": "批准之后若有一步把参数换掉，执行前的摘要核对会发现两个摘要不同，通知不会发出，工单台没有变化；没有这个故障时，核对在每次运行里都通过。",
+          "arms": [
+            {
+              "id": "swap",
+              "exercise": "swap-guard",
+              "label": "批准之后参数被替换"
+            },
+            {
+              "id": "baseline",
+              "exercise": "approve-write",
+              "label": "对照：只读放行，写入审批"
+            }
+          ],
+          "observe": [
+            {
+              "id": "approved",
+              "text": "你批准了：决定的结果是 `approved`。",
+              "selector": {
+                "event": "approval_resolved",
+                "path": "data.outcome"
+              }
+            },
+            {
+              "id": "injected",
+              "text": "摘要核对事件里的 `injected`：写明这是教学故障，来源 `fault_injection`，以及被改的字段。",
+              "selector": {
+                "event": "lesson.guard",
+                "path": "data.injected"
+              }
+            },
+            {
+              "id": "digests",
+              "text": "批准的摘要和即将执行的摘要并排写在这个事件里。",
+              "selector": {
+                "event": "lesson.guard",
+                "path": "data.attempted_digest"
+              }
+            },
+            {
+              "id": "match",
+              "text": "两个摘要是否相等。",
+              "selector": {
+                "event": "lesson.guard",
+                "path": "data.match"
+              }
+            },
+            {
+              "id": "mismatch-result",
+              "text": "模型读到的结果：`approval_mismatch`，`executed` 为假。",
+              "selector": {
+                "event": "tool_result",
+                "path": "data.result.result.error_type"
+              }
+            },
+            {
+              "id": "guard-blocked",
+              "text": "台账里被摘要核对拦下的次数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=guard-blocked]"
+              }
+            },
+            {
+              "id": "notices",
+              "text": "发件箱里的通知数，从文件里读出来。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=notices-written]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "这一组里你批准一封发给 alice 的通知，随后一个演示故障把收件人换成另一个地址。模型也可能先读工单，看到状态还没改，转而问你；那这一组没有卡片，重新运行一次。"
+            },
+            {
+              "text": "先确认你的决定是批准。",
+              "observe": "approved",
+              "stage": "runtime"
+            },
+            {
+              "text": "摘要核对事件里写明了注入：这是运行器按输入制造的故障，不是模型也不是你做的。",
+              "observe": "injected",
+              "stage": "runtime"
+            },
+            {
+              "text": "批准的摘要和即将执行的摘要在这里并排。",
+              "observe": "digests"
+            },
+            {
+              "text": "`match` 为假：参数被换过，不再是批准的那一组。",
+              "observe": "match",
+              "stage": "runtime"
+            },
+            {
+              "text": "工具没有执行，模型读到 `approval_mismatch`。",
+              "observe": "mismatch-result",
+              "stage": "tool"
+            },
+            {
+              "text": "台账记下被摘要核对拦下 1 次。",
+              "observe": "guard-blocked"
+            },
+            {
+              "text": "发件箱里没有通知，批准之后的替换没有造成任何写入。",
+              "observe": "notices",
+              "stage": "tool"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "参数在批准之后被改动时，执行前的摘要核对能发现并阻止执行，两个摘要和故障的来源都留在事件里。"
+            ],
+            "does_not_prove": [
+              "故障是运行器按输入故意制造的，不是对真实攻击的测试，也不说明真实系统里会出现哪种替换。",
+              "摘要核对只发现批准之后的替换。批准之前就写错的参数、你看走眼的卡片，摘要一样会判为相同。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "task",
+          "label": "任务",
+          "help": "决定发给模型的任务文字；练习已经预设好。",
+          "options": [
+            {
+              "value": "approve_write",
+              "label": "查看、修改 TKT-102，再通知负责人"
+            },
+            {
+              "value": "reject_timeout",
+              "label": "修改 TKT-103 并通知相关的人"
+            },
+            {
+              "value": "edit_recheck",
+              "label": "通知 TKT-104 的负责人"
+            },
+            {
+              "value": "swap_guard",
+              "label": "通知 alice@corp.example"
+            }
+          ]
+        },
+        {
+          "name": "approval_timeout_s",
+          "label": "审批等待上限（秒）",
+          "help": "3 到 300 秒。你在这段时间里没有决定，这次审批按超时处理，也就是拒绝。“拒绝与超时”练习用 20 秒。"
+        },
+        {
+          "name": "allow_edit",
+          "label": "审批卡可修改参数",
+          "help": "打开后，审批卡上多一个“修改参数”。改过的参数会重新过钩子的拒绝规则。只有“改参数后重新过规则”练习默认打开。"
+        },
+        {
+          "name": "late_rewrite",
+          "label": "批准后改写参数（教学注入）",
+          "help": "打开后，运行器在你批准之后故意把通知的收件人换成另一个地址，用来演示摘要核对。只有“批准之后参数被替换”练习默认打开；在其他练习里打开它，也会被拦下。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "钩子为什么比“把检查写进每个工具函数”更好？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "规则只写一处，工具不用改，也不会因为漏改某个工具而留下后门",
+                  "feedback": "对。检查和工具分开，换规则只动钩子。"
+                },
+                {
+                  "id": "b",
+                  "text": "钩子比函数里的检查运行得更快",
+                  "feedback": "不对。这里和速度无关。"
+                },
+                {
+                  "id": "c",
+                  "text": "钩子能让模型更听话",
+                  "feedback": "不对。钩子是程序，管的是调用能不能执行，不改变模型怎么想。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "钩子把检查集中在工具之外，规则一处维护。"
+            },
+            {
+              "id": "q2",
+              "prompt": "`risk_level` 返回 `ask` 之后，运行器下一步做什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "调用 `request_approval`：运行暂停，等人决定",
+                  "feedback": "对。链走完没有人拒绝，才会请求审批。"
+                },
+                {
+                  "id": "b",
+                  "text": "先执行工具，事后再请人确认",
+                  "feedback": "不对。事后确认时副作用已经发生，闸门就失去了意义。"
+                },
+                {
+                  "id": "c",
+                  "text": "把调用交回模型，让模型自己判断",
+                  "feedback": "不对。判断要不要执行是程序的事，不能交给被检查的对象。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "先审批、后执行：审批之前工具不执行。"
+            },
+            {
+              "id": "q3",
+              "prompt": "审批超时和你点拒绝，有什么不同？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "都不执行；但 `error_type` 分别是 `approval_timeout` 和 `approval_rejected`，超时没有备注，`decided_by` 是 `timeout`",
+                  "feedback": "对。两者都按拒绝处理，但原因分得开。"
+                },
+                {
+                  "id": "b",
+                  "text": "超时会执行，因为没人反对",
+                  "feedback": "不对。没人决定不是同意。"
+                },
+                {
+                  "id": "c",
+                  "text": "没有不同，事件里看不出来",
+                  "feedback": "不对。事件里的 `outcome` 与 `decided_by` 都不同。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "超时按拒绝处理，但要留下“没有人决定”这个事实。"
+            },
+            {
+              "id": "q4",
+              "prompt": "为什么规范化的钩子要排在拒绝规则前面？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "规则才只需要认一种写法，也不会把合法但写法不同的调用误拒",
+                  "feedback": "对。顺序决定规则看到的是什么。"
+                },
+                {
+                  "id": "b",
+                  "text": "规范化比规则运行得快",
+                  "feedback": "不对。顺序和速度无关。"
+                },
+                {
+                  "id": "c",
+                  "text": "规则不能读到原始参数",
+                  "feedback": "不对。规则读得到，只是写法不一时它们会漏拦或误拦。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "先统一写法，再下裁决。"
+            },
+            {
+              "id": "q5",
+              "prompt": "某次调用的 `lesson.guard` 里 `match` 为假。台账里哪一项检查能说明工单台没有受影响？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "`refused-not-executed`：被拦下的调用，工单台的内容摘要与调用开始时相同",
+                  "feedback": "对。它拿文件摘要做证据，不靠任何人的说法。"
+                },
+                {
+                  "id": "b",
+                  "text": "`customer-data-redacted`",
+                  "feedback": "不对。它查的是返回给模型的内容里有没有客户的原始联系方式。"
+                },
+                {
+                  "id": "c",
+                  "text": "`summary-covers-args`",
+                  "feedback": "不对。它查的是说明句有没有写全关键参数，和有没有执行无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "“没有执行”要用文件的前后对比来证明。"
+            },
+            {
+              "id": "q6",
+              "prompt": "审批卡上的说明句写着“向 alice@corp.example 发送通知”，`payload` 里的收件人却是另一个地址。以哪个为准？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "`payload`：批准以完整参数为准，说明句只是转述",
+                  "feedback": "对。摘要也是对 `payload` 算的，不是对说明句算的。"
+                },
+                {
+                  "id": "b",
+                  "text": "说明句：它是人读的，所以更可信",
+                  "feedback": "不对。说明句由程序拼出来，可能漏写或写错，所以本课逐张核对它有没有写全。"
+                },
+                {
+                  "id": "c",
+                  "text": "两个都行，取先看到的",
+                  "feedback": "不对。批准必须有唯一的依据。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "以 `payload` 和它的参数摘要为准。"
+            },
+            {
+              "id": "q7",
+              "prompt": "为什么说钩子和审批不能替代隔离？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "它们只看调用的名字和参数，工具内部做了什么看不到；本课的工具就在本机进程里运行",
+                  "feedback": "对。门口的检查不改变屋里的权限。"
+                },
+                {
+                  "id": "b",
+                  "text": "钩子会让运行变慢，所以不能用",
+                  "feedback": "不对。问题不在速度。"
+                },
+                {
+                  "id": "c",
+                  "text": "审批只对只读工具有效",
+                  "feedback": "不对。审批主要用在写入工具上。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "钩子和审批决定“哪些调用允许执行”，隔离决定“执行时能做什么”。"
+            },
+            {
+              "id": "q8",
+              "prompt": "你把审批卡上的收件人写成大写 `Bob@Corp.Example` 并批准。运行器为什么返回 `edit_not_normalized`？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "你批准的是敲进去的那一份；钩子规范化之后是另一份，执行它就是执行没人批准的参数",
+                  "feedback": "对。所以它不执行，也不悄悄替你改。"
+                },
+                {
+                  "id": "b",
+                  "text": "大写的邮箱地址不合法",
+                  "feedback": "不对。规范化之前大小写本来就不影响地址合法，问题在摘要对应的是原样。"
+                },
+                {
+                  "id": "c",
+                  "text": "因为你没有写备注",
+                  "feedback": "不对。备注是可选的，和执行无关。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "批准的是哪一份，执行的就必须是哪一份。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“批准之后参数被替换”，找出摘要核对没有通过、并记着教学故障来源的那条事件。",
+          "target": {
+            "event": "lesson.guard",
+            "path": "data.injected"
+          },
+          "explanation": "这条事件里 `approved_digest` 与 `attempted_digest` 不同，`match` 为假，`injected` 写着 `origin: fault_injection` 和被改的字段。紧接着的工具结果是 `approval_mismatch`，台账里 `guard-blocked` 为 1。如果你的运行里没有这条事件，检查是不是用了别的练习，或者在输入里关掉了 `late_rewrite`。"
+        },
+        {
+          "id": "check-recap",
+          "type": "prose",
+          "title": "回顾",
+          "paragraphs": [
+            "本课的一条主线：模型提议，程序执行，中间有一道闸门。钩子把检查从工具里搬到工具外面，执行前的钩子对调用下裁决，执行后的钩子处理结果；要审批的调用暂停运行，等人批准、拒绝或超时；批准的是一组参数，执行前用参数摘要再核对一次。",
+            "三个容易记错的地方：拒绝和超时是交给模型的结构化结果，不是异常；改过的参数是新输入，要重新过规则；说明句只是转述，批准以 `payload` 和它的摘要为准。证据都在事件里：`lesson.hook_pre`、`approval_requested`、`approval_resolved`、`lesson.guard`、`lesson.hook_post`。",
+            "接下来：{{lesson:human-in-the-loop}}把暂停推到进程重启之后，靠保存的执行位置恢复；{{lesson:bash-coding-agent}}把审批用在每一条命令上；{{lesson:reliable-tools}}讲写入执行两次的后果。"
+          ]
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在“只读放行，写入审批”的运行里找到第一张审批卡，指出它的 `summary`、`payload` 和 `payload_digest`。"
+            },
+            {
+              "id": "item-2",
+              "text": "我能按顺序说出一次写入的事件：`tool_call`、`lesson.hook_pre`、`approval_requested`、`approval_resolved`、`lesson.guard`、`lesson.hook_post`、`tool_result`。"
+            },
+            {
+              "id": "item-3",
+              "text": "我在“拒绝与超时”的运行里分别找到 `approval_rejected` 和 `approval_timeout` 的结果，并说出两者的区别。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在“改参数后重新过规则”里看到了 `lesson.hook_recheck`，能说清为什么批准了也没有发出。"
+            },
+            {
+              "id": "item-5",
+              "text": "我对照 `lesson.guard` 里的 `approved_digest` 和 `attempted_digest`，能说出摘要核对在防什么，以及它防不了什么。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "hook_denied",
+      "note": "工具结果的 error_type：执行前的钩子拒绝，或修改后复核时被拒绝。"
+    },
+    {
+      "name": "approval_mismatch",
+      "note": "工具结果的 error_type：批准的摘要与即将执行的不一致，已拦下。"
+    },
+    {
+      "name": "edit_not_normalized",
+      "note": "工具结果的 error_type：改过的参数经钩子规范化会变，不执行。"
+    },
+    {
+      "name": "approval_rejected",
+      "note": "工具结果的 error_type：人拒绝；备注原样在 note 里。"
+    },
+    {
+      "name": "approval_timeout",
+      "note": "工具结果的 error_type：等待上限内没人决定，按拒绝处理。"
+    },
+    {
+      "name": "lesson.hook_pre",
+      "note": "事件：执行前钩子链的每一步、改写、拒绝者和风险等级。"
+    },
+    {
+      "name": "lesson.hook_recheck",
+      "note": "事件：审批时改过的参数重新过钩子的结果。"
+    },
+    {
+      "name": "lesson.hook_post",
+      "note": "事件：执行后钩子的处理：遮蔽、读回校验、结果摘要。"
+    },
+    {
+      "name": "lesson.guard",
+      "note": "事件：批准的摘要、即将执行的摘要，以及两者是否相同。"
+    },
+    {
+      "name": "risk_level",
+      "note": "执行前的钩子：只读放行，写入要审批并标风险等级。"
+    },
+    {
+      "name": "normalize_arguments",
+      "note": "执行前的钩子：统一大小写和空白，改写后的参数才进入规则。"
+    },
+    {
+      "name": "recipient_domain",
+      "note": "执行前的钩子：收件人不在公司域名下就拒绝。"
+    },
+    {
+      "name": "redact_customer_data",
+      "note": "执行后的钩子：遮住客户手机号和邮箱再交给模型。"
+    },
+    {
+      "name": "audit_trail",
+      "note": "执行后的钩子：给返回模型的内容算摘要，写进台账。"
+    },
+    {
+      "name": "tool_not_classified",
+      "note": "拒绝原因代码：没有风险分类的工具默认不放行。"
+    },
+    {
+      "name": "late_rewrite",
+      "note": "输入：为真时，运行器在批准之后故意改写收件人（教学故障）。"
+    },
+    {
+      "name": "refused-not-executed",
+      "note": "台账检查：被拒绝、拦下或超时的调用没有改动工单台。"
+    },
+    {
+      "name": "request_approval",
+      "note": "平台方法：暂停运行，等人批准、拒绝或超时。"
+    },
+    {
+      "name": "ApprovalDecision",
+      "note": "平台返回的审批结果：是否批准、实际批准的参数和摘要。"
+    },
+    {
+      "name": "payload_digest",
+      "note": "参数摘要的字段名：批准时记一次，页面提交决定时必须带上。"
+    },
+    {
+      "name": "editable",
+      "note": "审批请求的字段：卡片是否允许修改参数。"
+    }
+  ]
+}

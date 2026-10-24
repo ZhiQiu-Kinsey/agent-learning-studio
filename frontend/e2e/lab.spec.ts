@@ -255,11 +255,14 @@ test("wide screens keep the experiment beside the observatory while it scrolls",
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await expect(panel).toBeInViewport();
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth + 1,
-    ),
-  ).toBe(true);
+  // 改窗口宽度后布局要过一帧才切换，轮询到稳定状态再判断有没有横向溢出。
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    )
+    .toBe(true);
 });
 
 test("coming back with the same question shows the last run without calling the model", async ({

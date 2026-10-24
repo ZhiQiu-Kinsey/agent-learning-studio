@@ -3,6 +3,7 @@
 密钥只存在于后端内存；运行存储（.runtime/runs.sqlite3）只保存脱敏后的事件。
 """
 import asyncio
+import copy
 import functools
 import json
 import re
@@ -21,21 +22,21 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from course.runner import RunCancelled
-from course.api_client import send_bailian
-from course.execution import RunContext, execute_lesson, validate_inputs
-from course.providers import SDKCompletion
+from course.api_client import BAILIAN_EMBEDDING_BATCH_LIMIT, send_bailian, send_bailian_embeddings, stream_bailian
+from course.execution import EmbeddingNotConfigured, RunContext, execute_lesson, validate_inputs
+from course.providers import SDKCompletion, SDKEmbedding
 from server.catalog import (ROOT, LESSONS, CATALOG_INDEX, LessonValidationError, catalog_lesson, curriculum_outline,
-                            lesson_code_view, lesson_detail, lesson_presets, lesson_runtime, lesson_spec,
-                            public_lesson, run_locale)
+                            exercise_requires_embedding, lesson_code_view, lesson_detail, lesson_presets,
+                            lesson_runtime, lesson_spec, public_lesson, run_locale)
 from server.content import load_onboarding
 from server.content_overlay import LOCALE
 from server.curriculum import roadmap
 from server.envelope import SCHEMA_VERSION, EnvelopeBuilder, sdk_identity
 from server.glossary import public_glossary
 from server.lesson_refs import resolve_refs
-from server.offline import completion_for
-from server.providers import ProviderRegistry, provider_label
-from server.recordings import RecordingInvalid, RecordingStale, list_recordings, read_recording
+from server.offline import approval_for, completion_for, embedding_for, stream_for
+from server.providers import ProviderRegistry, embedding_setting, provider_label
+from server.recordings import RecordingInvalid, RecordingStale, list_recordings, read_recording, source_hash
 from server.run_store import RunStore, utc_now
 
 app = FastAPI(title="AgentStart Learning Lab", docs_url=None, redoc_url=None)
@@ -51,6 +52,8 @@ _store_lock = threading.Lock()
 RUN_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 # 确定性测试适配器不是 SDK；如实写出它的名字，版本留空。
 TEST_ADAPTER = {"name": "deterministic-test-adapter", "version": None}
+# 离线 Embedding 夹具在请求体里的模型名；分批上限与百炼一致，确定性运行的请求次数与默认真实路径相同。
+OFFLINE_EMBEDDING_MODEL = "offline-embedding"
 # 没有模型服务商的运行写进 run_start 的名称；按运行语言写，英文运行的事件里不出现中文。
 LOCAL_PROVIDER_LABELS = {
     "zh-CN": {"testing": "确定性测试", "local": "本地 Python"},
@@ -295,6 +298,30 @@ class RunPlan:
     completion: Callable | None = field(repr=False)
     completion_error: Exception | None
     secrets: list = field(repr=False)
+    # Embedding 连接：没有配置时为 None，课程调用 context.embed 会得到带 code 的错误。
+    embedding: Callable | None = field(default=None, repr=False)
+    embedding_model: str | None = None
+    embedding_batch_limit: int = BAILIAN_EMBEDDING_BATCH_LIMIT
+    # 本练习是否声明要用 Embedding（写进 run_start）；缺配置时提示去改哪个设置。
+    uses_embedding: bool = False
+    embedding_setting: str | None = None
+    # 流式连接（context.complete_stream）：离线用课程的 stream_factory，真实模式按服务商构造。
+    stream_completion: Callable | None = field(default=None, repr=False)
+    # 离线测试的确定性审批决定（testing.approval_factory）；真实运行永远是 None，只能由人决定。
+    approval_policy: Callable | None = field(default=None, repr=False)
+    unsupported_params: frozenset = frozenset()
+    # 从检查点恢复时：{run_id, checkpoint_id, name, seq, state, state_digest, thread_id}。
+    resume: dict | None = None
+    # 课程源码哈希（与录制同一规则），写进检查点，恢复时据此拒绝源码已变化的检查点。
+    source_hash: str | None = None
+
+
+def lesson_source_hash(spec: dict) -> str | None:
+    """课程源码哈希（规则同录制）；读不到源码时为 None，这时检查点不能恢复，而不是假装一致。"""
+    try:
+        return source_hash(spec)
+    except (OSError, KeyError, TypeError):
+        return None
 
 
 def prepare_run(body: RunInput) -> RunPlan:
@@ -326,14 +353,24 @@ def prepare_run(body: RunInput) -> RunPlan:
         raise ApiError(503, "runtime_unavailable", "课程运行组件暂时不可用，请检查课程配置。") from None
     # 练习可以单独声明不调用模型（catalog 只允许 custom 运行器这样做），其余沿用课程的声明。
     requires_model = exercise.get("requires_model", spec["runtime"].get("requires_model", True))
-    if body.mode == "offline" and requires_model and not spec.get("testing", {}).get("completion_factory"):
+    testing = spec.get("testing", {})
+    if body.mode == "offline" and requires_model and not (testing.get("completion_factory")
+                                                          or testing.get("embedding_factory")
+                                                          or testing.get("stream_factory")):
         raise ApiError(400, "no_offline_fixture", "本课未提供确定性模型测试场景。")
+    uses_embedding = exercise_requires_embedding(spec, exercise)
     profile = provider_registry.resolve(bailian_key=session_key) if body.mode == "live" and requires_model else None
     key = profile.api_key if profile else ""
     model = profile.model if profile else "offline-script" if requires_model else "local-python"
     representation = profile.representation if profile else "sdk_standardized" if requires_model else "local"
     if profile and (not profile.config_ready or profile.requires_key and not key):
         raise ApiError(400, "live_not_configured", "真实模式需要已配置的模型、服务地址和所选服务商 API Key；本地 Ollama 无需 Key。")
+    # 本练习要用 Embedding 而服务商没有 Embedding 模型：开始前就拒绝，不悄悄换模型或跳过检索。
+    if profile and uses_embedding and not profile.embedding_model:
+        raise ApiError(400, "embedding_model_missing",
+                       f"所选服务商还没有可用的 Embedding 模型配置。请在模型设置里填写 Embedding 模型，"
+                       f"或设置 {embedding_setting(profile.id)}。",
+                       {"setting": embedding_setting(profile.id)})
     # 信封如实标注表示层级：百炼原生 HTTP 是 http_body；LiteLLM 是 sdk_standardized 并附 SDK 版本；
     # 离线测试适配器返回标准化形状的字典，标注为测试适配器而不是 SDK；本地课程没有模型数据。
     if profile:
@@ -342,11 +379,41 @@ def prepare_run(body: RunInput) -> RunPlan:
         sdk = dict(TEST_ADAPTER) if requires_model else None
     completion, completion_error = None, None
     try:
-        completion = (completion_for(spec, body.exercise_id, inputs, locale) if body.mode == "offline" and requires_model
-                      else functools.partial(send_bailian, locale=locale) if profile and profile.id == "bailian"
-                      else SDKCompletion(profile, locale) if profile else None)
+        if body.mode == "offline" and requires_model:
+            # 只做 Embedding 的课没有 completion_factory，离线时 completion 为 None。
+            completion = (completion_for(spec, body.exercise_id, inputs, locale)
+                          if testing.get("completion_factory") else None)
+        elif profile:
+            completion = (functools.partial(send_bailian, locale=locale) if profile.id == "bailian"
+                          else SDKCompletion(profile, locale))
     except Exception as error:  # 与原行为一致：作为运行中的 error 事件报告。
         completion_error = error
+    # Embedding 连接：离线用课程夹具；真实模式按当前服务商构造（没有模型时为 None）。
+    embedding, embedding_model = None, None
+    embedding_batch_limit = profile.embedding_batch_limit if profile else BAILIAN_EMBEDDING_BATCH_LIMIT
+    if body.mode == "offline" and requires_model and testing.get("embedding_factory"):
+        embedding_model = OFFLINE_EMBEDDING_MODEL
+        try:
+            embedding = embedding_for(spec, body.exercise_id, inputs, locale)
+        except Exception as error:
+            completion_error = completion_error or error
+    elif profile and profile.embedding_model:
+        embedding_model = profile.embedding_model
+        embedding = (functools.partial(send_bailian_embeddings, locale=locale) if profile.id == "bailian"
+                     else SDKEmbedding(profile, locale))
+    # 流式连接与离线审批决定：夹具只在离线测试模式使用；真实模式的审批只能由人在网页提交。
+    stream_completion, approval_policy = None, None
+    try:
+        if body.mode == "offline" and requires_model and testing.get("stream_factory"):
+            stream_completion = stream_for(spec, body.exercise_id, inputs, locale)
+        elif profile:
+            stream_completion = (functools.partial(stream_bailian, locale=locale) if profile.id == "bailian"
+                                 else SDKCompletion(profile, locale).stream)
+        if body.mode == "offline" and testing.get("approval_factory"):
+            approval_policy = approval_for(spec, body.exercise_id, inputs, locale)
+    except Exception as error:
+        completion_error = completion_error or error
+    lesson_hash = lesson_source_hash(spec)
     provider_id = profile.id if profile else "testing" if requires_model else "local"
     return RunPlan(
         body=body, spec=spec, module=module, inputs=inputs, locale=locale, key=key, model=model,
@@ -355,8 +422,21 @@ def prepare_run(body: RunInput) -> RunPlan:
         representation=representation,
         envelope_representation=representation if representation in ("http_body", "sdk_standardized") else None,
         sdk=sdk, completion=completion, completion_error=completion_error,
+        unsupported_params=profile.unsupported_params if profile else frozenset(),
         secrets=provider_registry.secrets(session_key),
+        embedding=embedding, embedding_model=embedding_model, embedding_batch_limit=embedding_batch_limit,
+        uses_embedding=uses_embedding, embedding_setting=embedding_setting(profile.id) if profile else None,
+        stream_completion=stream_completion, approval_policy=approval_policy, source_hash=lesson_hash,
     )
+
+
+@dataclass
+class PendingApproval:
+    """一条等待人决定的审批：只接受这一次运行、这一个 approval_id、这一份参数摘要，且只接受一次。"""
+    request: dict
+    decided: threading.Event = field(default_factory=threading.Event)
+    decision: dict | None = None
+    closed: bool = False
 
 
 class ActiveRun:
@@ -367,9 +447,60 @@ class ActiveRun:
         self._secrets = secrets
         self._lock = threading.Lock()
         self.cancelled = threading.Event()
+        # 谁要求停止：user_stop（停止按钮）、page_closed（页面关闭）、api（其他调用方）。
+        self.cancel_reason: str | None = None
         self.published = 0
-        # 审批骨架：目前没有课程请求审批，因此始终为空。
-        self.pending_approvals: dict[str, dict] = {}
+        # 运行结束前断开的事件连接数；断开连接不会停止运行。
+        self.client_disconnects = 0
+        self.pending_approvals: dict[str, PendingApproval] = {}
+        self._approval_lock = threading.Lock()
+
+    def request_cancel(self, reason: str):
+        with self._lock:
+            if self.cancel_reason is None:
+                self.cancel_reason = reason
+        self.cancelled.set()
+
+    def wait_for_approval(self, request: dict, timeout_s: float) -> dict:
+        """RunContext.approval_gate：运行停在这里（状态 paused），直到有人决定、超时或运行被停止。"""
+        pending = PendingApproval(request=request)
+        approval_id = request["approval_id"]
+        with self._approval_lock:
+            self.pending_approvals[approval_id] = pending
+        self.store.set_live_status(self.run_id, "paused")
+        deadline = time.monotonic() + timeout_s
+        try:
+            while True:
+                if pending.decided.wait(0.1):
+                    break
+                with self._approval_lock:
+                    if pending.decision is not None:
+                        break
+                    if self.cancelled.is_set():
+                        pending.decision = {"decision": "cancelled"}
+                    elif time.monotonic() >= deadline:
+                        pending.decision = {"decision": "timeout"}
+                    if pending.decision is not None:
+                        break
+        finally:
+            with self._approval_lock:
+                pending.closed = True
+                self.pending_approvals.pop(approval_id, None)
+            self.store.set_live_status(self.run_id, "running")
+        return pending.decision
+
+    def submit_approval(self, approval_id: str, decision: dict, payload_digest: str):
+        """接口线程提交决定；与等待线程用同一把锁，迟到（已超时、已取消、已决定）的提交一律拒绝。"""
+        with self._approval_lock:
+            pending = self.pending_approvals.get(approval_id)
+            if pending is None or pending.closed or pending.decision is not None:
+                raise ApiError(409, "no_pending_approval", "该运行没有等待处理的这条审批，可能已经决定、超时或停止。")
+            if payload_digest != pending.request["payload_digest"]:
+                raise ApiError(409, "approval_digest_mismatch", "提交的参数摘要与待审批的请求不一致，请刷新后核对再决定。")
+            if decision.get("edited_payload") is not None and not pending.request.get("editable"):
+                raise ApiError(422, "approval_edit_not_allowed", "这条审批不允许修改参数，只能批准或拒绝。")
+            pending.decision = decision
+            pending.decided.set()
 
     def _build(self, kind, data, round_number):
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -385,8 +516,13 @@ class ActiveRun:
 
     def finish(self, status, duration_ms):
         """done 与运行状态同一事务提交；读者在运行退出活动表后才会读到 done。"""
+        data = {"status": status, "duration_ms": duration_ms}
+        if status == "cancelled":
+            data["cancel_reason"] = self.cancel_reason or "api"
+        if self.client_disconnects:
+            data["client_disconnects"] = self.client_disconnects
         with self._lock:
-            event, text = self._build("done", {"status": status, "duration_ms": duration_ms}, None)
+            event, text = self._build("done", data, None)
             self.store.finish(self.run_id, event["seq"], "done", text, status, utc_now())
 
 
@@ -406,10 +542,15 @@ def start_run(plan: RunPlan) -> str:
     store = get_run_store()
     builder = EnvelopeBuilder(run_id, provenance="real_run", representation=plan.envelope_representation,
                               sdk=plan.sdk)
+    resume = plan.resume
+    # 同一条恢复链共用一个 thread_id：第一次运行用自己的 run_id，恢复出来的运行沿用来源运行的。
+    thread_id = resume["thread_id"] if resume else run_id
     store.create_run(run_id=run_id, lesson_id=spec["id"], exercise_id=body.exercise_id, mode=body.mode,
                      model=scrub(plan.model, plan.secrets), provider_id=plan.provider_id,
                      representation=plan.envelope_representation, provenance="real_run",
-                     schema_version=SCHEMA_VERSION, created_at=utc_now(), locale=plan.locale)
+                     schema_version=SCHEMA_VERSION, created_at=utc_now(), locale=plan.locale,
+                     thread_id=thread_id, resumed_from_run=resume["run_id"] if resume else None,
+                     resumed_from_checkpoint=resume["checkpoint_id"] if resume else None)
     active = ActiveRun(run_id, store, builder, plan.secrets)
     with _active_lock:
         active_runs[run_id] = active
@@ -426,6 +567,13 @@ def start_run(plan: RunPlan) -> str:
                      "trace_representation": plan.representation, "locale": plan.locale}
             if body.locale and body.locale != plan.locale:
                 start["requested_locale"] = body.locale
+            if plan.uses_embedding:
+                start["embedding_model"] = plan.embedding_model
+            if resume:
+                # 恢复不重放来源运行的任何请求：这里只记下从哪个检查点、带着什么状态开始。
+                start["resumed_from"] = {key: resume[key] for key in
+                                         ("run_id", "checkpoint_id", "name", "seq", "state", "state_digest")}
+                start["thread_id"] = thread_id
             active.emit("run_start", start)
             if plan.completion_error is not None:
                 raise plan.completion_error
@@ -434,11 +582,25 @@ def start_run(plan: RunPlan) -> str:
                 mode=body.mode, model=plan.model, representation=plan.representation, inputs=plan.inputs,
                 api_key=plan.key, completion=plan.completion, emit_event=active.emit,
                 cancelled=active.cancelled.is_set, max_model_calls=spec["runtime"].get("max_rounds", 3),
-                locale=plan.locale,
+                unsupported_params=plan.unsupported_params,
+                locale=plan.locale, embedding=plan.embedding, embedding_model=plan.embedding_model,
+                embedding_batch_limit=plan.embedding_batch_limit,
+                stream_completion=plan.stream_completion, cancel_reason=lambda: active.cancel_reason,
+                approval_gate=active.wait_for_approval, approval_policy=plan.approval_policy,
+                resume_state=copy.deepcopy(resume["state"]) if resume else None,
+                resumed_from={key: resume[key] for key in ("run_id", "checkpoint_id", "name")} if resume else None,
+                thread_id=thread_id, source_hash=plan.source_hash,
+                checkpoint_offset=resume["checkpoint_offset"] if resume else 0,
             )
             execute_lesson(spec, plan.module, context)
         except RunCancelled:
             final_status = "cancelled"
+        except EmbeddingNotConfigured as error:
+            # 带稳定错误码，前端翻译并引导去模型设置；setting 说明该改哪个配置。
+            final_status = "error"
+            active.emit("error", {"message": str(error), "error_type": type(error).__name__,
+                                  "code": "embedding_model_missing",
+                                  "params": {"setting": plan.embedding_setting or ""}})
         except Exception as error:
             final_status = "error"
             active.emit("error", {"message": str(error), "error_type": type(error).__name__})
@@ -512,7 +674,20 @@ async def run_events(run_id: str, request: Request, from_seq: int | None = Query
     store = get_run_store()
 
     async def stream():
-        next_seq = from_seq
+        reached_end = False
+        try:
+            async for chunk in events_from(from_seq):
+                if chunk is None:
+                    reached_end = True
+                    return
+                yield chunk
+        finally:
+            # 读者在运行结束前离开（断网、关闭连接）：只计数写进 done，运行照常继续。
+            active = active_run(run_id)
+            if not reached_end and active is not None:
+                active.client_disconnects += 1
+
+    async def events_from(next_seq):
         heartbeat = time.monotonic()
         while True:
             if await request.is_disconnected():
@@ -524,11 +699,13 @@ async def run_events(run_id: str, request: Request, from_seq: int | None = Query
                 yield f"id: {seq}\ndata: {text}\n\n"
                 next_seq = seq + 1
                 if kind == "done":
+                    yield None
                     return
             if rows:
                 heartbeat = time.monotonic()
                 continue
             if active is None:
+                yield None
                 return  # 已结束且读完；异常中断的运行没有 done，也在此结束。
             if time.monotonic() - heartbeat > 10:
                 yield ": waiting\n\n"
@@ -538,32 +715,91 @@ async def run_events(run_id: str, request: Request, from_seq: int | None = Query
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
 
 
+class CancelInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # user_stop：学习者点了停止；page_closed：页面关闭（pagehide 的 keepalive 请求）。没有请求体时记为 api。
+    reason: Literal["user_stop", "page_closed"] | None = None
+
+
 @app.post("/api/runs/{run_id}/cancel", status_code=202)
-def cancel_run(run_id: str):
-    """停止指定运行的后续步骤；已经发出的模型请求仍受网络超时约束。"""
+def cancel_run(run_id: str, body: CancelInput | None = None):
+    """停止指定运行的后续步骤；已经发出的模型请求仍受网络超时约束，流式请求在下一个分块前停止接收。"""
     stored_run(run_id)
     active = active_run(run_id)
     if active is None:
         raise ApiError(409, "run_not_active", "该运行已经结束，无需停止。")
-    active.cancelled.set()
-    return {"run_id": run_id, "status": "cancelling"}
+    active.request_cancel(body.reason if body and body.reason else "api")
+    return {"run_id": run_id, "status": "cancelling", "reason": active.cancel_reason}
 
 
 class ApprovalInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    approval_id: str = Field(min_length=1, max_length=64)
+    approval_id: str = Field(min_length=1, max_length=64, pattern=r"^approval-[0-9]{1,6}$")
     decision: Literal["approve", "reject"]
+    # 必须与 approval_requested 里的摘要一致：证明决定针对的就是页面上看到的那组参数。
+    payload_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     note: str | None = Field(None, max_length=2000)
+    # 只有 editable 的请求可以带修改后的参数，而且只能和 approve 一起提交。
+    edited_payload: dict[str, Any] | None = None
 
 
 @app.post("/api/runs/{run_id}/approvals")
 def submit_approval(run_id: str, body: ApprovalInput):
-    """审批接口骨架：当前没有课程发出 approval.requested，因此总是没有待审批项。"""
+    """提交人的决定：只接受当前运行、当前待决的那条审批，参数摘要必须一致；决定由运行线程写成事件。"""
     stored_run(run_id)
     active = active_run(run_id)
-    if active is None or body.approval_id not in active.pending_approvals:
-        raise ApiError(409, "no_pending_approval", "该运行没有等待处理的审批。")
-    raise ApiError(501, "approval_not_supported", "当前版本尚未支持处理审批。")
+    if active is None:
+        raise ApiError(409, "approval_run_finished", "该运行已经结束，不能再提交审批；回放里的审批记录只读。")
+    if body.edited_payload is not None and body.decision != "approve":
+        raise ApiError(422, "approval_edit_not_allowed", "这条审批不允许修改参数，只能批准或拒绝。")
+    decision = {"decision": body.decision, "note": body.note}
+    if body.edited_payload is not None:
+        decision["edited_payload"] = body.edited_payload
+    active.submit_approval(body.approval_id, decision, body.payload_digest)
+    return {"run_id": run_id, "approval_id": body.approval_id, "decision": body.decision, "status": "accepted"}
+
+
+class ResumeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_id: str = Field(pattern=r"^cp-[0-9]{1,4}$")
+
+
+@app.post("/api/runs/{run_id}/resume", status_code=202)
+def resume_run(run_id: str, body: ResumeInput):
+    """从某次运行的某个检查点启动一次新运行：同一课程、练习、问题、输入、模式与运行语言。
+
+    不重放来源运行的任何模型请求或工具调用；新运行从 context.resume_state 继续，之后的请求都是真实新请求。
+    """
+    source = stored_run(run_id)
+    if active_run(run_id) is not None:
+        raise ApiError(409, "run_still_active", "这次运行还没有结束，结束（或停止）后才能从它的检查点恢复。")
+    store = get_run_store()
+    event = store.checkpoint(run_id, body.checkpoint_id)
+    start = store.first_event(run_id, "run_start")
+    if event is None or start is None:
+        raise ApiError(404, "checkpoint_not_found", "这次运行没有这个检查点。")
+    spec = require_lesson(source["lesson_id"])
+    checkpoint = event["data"]
+    current_hash = lesson_source_hash(spec)
+    if not checkpoint.get("source_hash") or checkpoint["source_hash"] != current_hash:
+        raise ApiError(409, "checkpoint_stale", "课程源码在保存这个检查点之后变了，不能从它恢复；请重新运行。")
+    data = start["data"]
+    resume_input = RunInput(lesson_id=spec["id"], mode=source["mode"], question=data.get("question", ""),
+                            exercise_id=source["exercise_id"], inputs=data.get("inputs") or {},
+                            locale=source["locale"])
+    plan = prepare_run(resume_input)
+    plan.resume = {"run_id": run_id, "checkpoint_id": checkpoint["checkpoint_id"], "name": checkpoint["name"],
+                   "seq": event["seq"], "state": checkpoint["state"], "state_digest": checkpoint["state_digest"],
+                   "thread_id": source.get("thread_id") or run_id,
+                   "checkpoint_offset": store.last_checkpoint_number(run_id)}
+    if not run_lock.acquire(blocking=False):
+        raise ApiError(409, "run_busy", "上一次运行尚未结束，请等待网络请求返回（网络超时 60 秒）。")
+    try:
+        new_id = start_run(plan)
+    except BaseException:
+        run_lock.release()
+        raise
+    return {"run_id": new_id, "resumed_from": {"run_id": run_id, "checkpoint_id": checkpoint["checkpoint_id"]}}
 
 
 # 前端先构建；只公开 dist，不暴露项目、配置或 Python 文件目录。

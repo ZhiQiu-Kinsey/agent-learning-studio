@@ -65,6 +65,8 @@ def build_scaffold(root, lesson_id, slug=None, kind="native"):
     manifest = {
         "schema_version": 1,
         "id": canonical,
+        # migrate_content.py 与内容 v2 测试按清单读取 subtitle，脚手架先给占位，作者改写。
+        "subtitle": "待编写：一句话副标题",
         "content": "content.json",
         "sources": [
             {"path": f"{prefix}/{'main.py' if kind == 'native' else 'runtime.py'}", "language": "python"},

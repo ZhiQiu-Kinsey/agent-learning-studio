@@ -79,6 +79,31 @@ class RunLiveTests(unittest.TestCase):
         self.assertEqual((posted[0]["locale"], posted[0]["question"]), ("en", "Explain."))
         self.assertIn('"locale": "en"', out)
 
+    def test_approvals_are_answered_in_the_terminal_and_summarized(self):
+        # --ask-approvals：终端输入经接口提交，和网页一样只针对这条审批与这份参数摘要。
+        posted = []
+        event = {"type": "approval_requested", "data": {
+            "approval_id": "approval-1", "kind": "file.write", "summary": "write a.txt",
+            "payload": {"path": "a.txt"}, "payload_digest": "sha256:" + "a" * 64}}
+        answers = iter(["y", "path checked"])
+        with patch.object(run_live, "call", side_effect=lambda base, path, payload=None: posted.append(
+                (path, payload))), redirect_stdout(io.StringIO()):
+            run_live.ask_approval("http://x", "r1", event, read=lambda prompt: next(answers))
+        self.assertEqual(posted, [("/api/runs/r1/approvals", {
+            "approval_id": "approval-1", "decision": "approve", "payload_digest": "sha256:" + "a" * 64,
+            "note": "path checked"})])
+        summary = run_live.summarize([
+            {"type": "response", "data": {"body": {}, "stream": {"status": "cancelled", "chunk_count": 3,
+                                                                 "first_chunk_ms": 210, "cancel_reason": "user_stop"}}},
+            {"type": "approval_resolved", "data": {"approval_id": "approval-1", "outcome": "approved",
+                                                   "decided_by": "learner"}},
+            {"type": "checkpoint", "data": {"checkpoint_id": "cp-1", "name": "before-save"}},
+        ])
+        self.assertEqual(summary["streams"], [{"status": "cancelled", "chunks": 3, "first_chunk_ms": 210,
+                                               "cancel_reason": "user_stop"}])
+        self.assertEqual(summary["approvals"], [("approval-1", "approved", "learner")])
+        self.assertEqual(summary["checkpoints"], [("cp-1", "before-save")])
+
 
 if __name__ == "__main__":
     unittest.main()

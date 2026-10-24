@@ -1,0 +1,1474 @@
+{
+  "$schema": "../../curriculum/schema/content.v2.schema.json",
+  "schema_version": 2,
+  "lesson": "goal-loops",
+  "source_language": "zh-CN",
+  "capabilities": [
+    "model",
+    "tools",
+    "planning"
+  ],
+  "scenes": {
+    "understand": {
+      "blocks": [
+        {
+          "id": "hero",
+          "type": "hero",
+          "eyebrow": "LOOP / GOAL",
+          "headline": "循环什么时候停，",
+          "highlight": "不由执行者自己说了算。",
+          "takeaway": "本课给会反复尝试的循环加上目标评估（Goal Evaluation）：每轮结束，由程序按事先写好的完成条件判断继续、完成还是放弃。放弃条件管目标做不成或没有进展，轮数、模型调用数和用时的上限管预算；预算耗尽和放弃分开报告，也都不冒充完成。"
+        },
+        {
+          "id": "concepts",
+          "type": "concepts",
+          "items": [
+            {
+              "id": "01-criteria",
+              "label": "01 / CRITERIA",
+              "title": "目标要能检验",
+              "description": "把“填好通知卡”写成三项检查：每项有字段、值的形状和来源资料，程序能逐项判断，不靠“做好为止”。",
+              "token": "CRITERIA"
+            },
+            {
+              "id": "02-evaluate",
+              "label": "02 / EVALUATE",
+              "title": "目标评估独立于执行者",
+              "description": "每轮结束，验收器只读通知卡和本次运行读过的资料，给出完成、继续或无法完成；执行者的 status 只记录。",
+              "token": "verdict · status"
+            },
+            {
+              "id": "03-stop",
+              "label": "03 / STOP",
+              "title": "三种结局分开写",
+              "description": "完成、放弃、预算耗尽各有原因。资料里根本没有要填的值，是不可达目标（Unreachable Goal），属于放弃，不属于预算耗尽。",
+              "token": "complete · abandoned · budget_exhausted"
+            },
+            {
+              "id": "04-record",
+              "label": "04 / RECORD",
+              "title": "逐轮留下依据",
+              "description": "每轮一条评估记录：读了什么、判了什么、为什么继续或停止。回放只读这些记录，补不出当时没写的理由。",
+              "token": "lesson.goal_evaluation"
+            }
+          ]
+        },
+        {
+          "id": "section-1",
+          "type": "prose",
+          "title": "目标要能检验",
+          "paragraphs": [
+            "把目标写成程序能判断的条件，而不是“做好为止”。{{lesson:task-contract}}里，一张任务卡配一次运行，验收器能说清这一次过没过；{{lesson:reflection-revision}}和{{lesson:orchestrator-evaluator}}的循环也有停止原因，可它们修订的是同一份草稿，目标本身做不做得成，从来没被问过。",
+            "{{lesson:long-running-tasks}}让任务能在后台、按时间一直跑下去，循环越长，越不能凭执行者的感觉决定什么时候停。本课换一种循环：目标放在最前面，每轮结束都问三件事，达成了吗，还有希望吗，还让不让继续。",
+            "任务是填一张读书会通知卡，字段三个：`date`、`room`、`start_time`。资料有四份，用 `read_note` 读：日程表给日期，教室预约回执给教室，主讲人回信给开始时间，第四份是上次活动的纪要。纪要里也有日期、教室和开始时间，却是上一次的，专门用来混淆。如果目标只写“把通知卡填好”，执行者一句“填好了”就能收工，哪怕教室填的是上次的 A101。",
+            "完成条件要把每个字段写成三样东西：字段名、值的形状（用正则表达式描述）、来源资料。`date` 形如 2026-11-14，来自日程表；`room` 形如 B204，来自预约回执；`start_time` 形如 14:30，来自主讲人回信。这组条件放在 `CRITERIA` 里，运行前就固定。值必须原样出现在来源资料里，而且这份资料在本次运行中真的读过。",
+            "手算一张卡。执行者只读了日程表，却交出 `date` 为 2026-11-14、`room` 为 B204、`start_time` 为 14:30。`date` 通过；`room` 的形状对，可预约回执没读过，通不过；`start_time` 同理。结果是 1/3。这张卡的三个值碰巧全对，但它们是猜的，完成条件不认猜的。",
+            "可检验也有边界。这套条件只查值的形状和来源，不查来源资料本身对不对：预约回执写错了教室，卡片照样通过。它能证明的只是“卡片和本次读过的资料一致”。条件由程序持有，执行者在任务里能读到条件的描述，但改不了它。"
+          ]
+        },
+        {
+          "id": "section-2",
+          "type": "prose",
+          "title": "独立的目标评估",
+          "paragraphs": [
+            "执行者说完成不算，由目标评估（Goal Evaluation）按条件判断继续、完成或放弃。循环里有两个角色：执行者是带 `read_note` 工具的模型，负责读资料、填卡；目标评估是程序，负责判断，执行它的是验收器 `evaluate_goal`。每一轮，执行者读几份资料，交出通知卡，附一个 `status`：`done`、`continue` 或 `impossible`，意思是它认为做完了、还要继续、还是做不到。随后程序给出自己的结论。",
+            "目标评估只有三个结论。`complete`：每一项检查都通过。`unreachable`：至少一项的所有允许来源都读过了，仍找不到符合形状的值，没有哪一轮能把这一项填上。其余情况是 `continue`：还有检查没通过，但没有证据说明做不到。判 `unreachable` 要有证据：只读了两份资料就说“找不到”，不算，因为还有没读的来源。",
+            "评估只看两样东西：通知卡，和本次运行里 `read_note` 真正返回过的资料文本。执行者在回复里说自己读了什么、检查过什么，评估一概不看。这条规则堵住两个洞：没读资料就凭猜测填值，以及编一个形状对的值，比如电话 138-0000-0000，所有资料里都没有。每条检查的 `detail` 写明原因，例如“A101 不在已读的来源资料里”。",
+            "评估用程序，不再请一个模型。条件能写成程序，程序每次给同样的结论，不花模型调用，也不会被执行者一句“我检查过了”说服。{{lesson:reflection-revision}}比过自评和测试：同一个模型把同样的输入再读一遍，没有新信息。{{lesson:evaluation-sets}}把这个思路做成验证器，`evaluate_goal` 是它的小版本，只管这一张卡。条件写不成程序时，才退一步请评审模型，那时它的误判要另外校准。",
+            "执行者拿到的任务里写着完成条件的描述，这不是泄题。条件就是目标本身，执行者得知道要什么，才谈得上去读对的资料。要防的是另一件事：执行者替验收器写结论，或者改条件。所以条件和 `evaluate_goal` 都在程序里，执行者只通过 `read_note` 和交卡，与它们发生关系。"
+          ]
+        },
+        {
+          "id": "predict-rounds",
+          "type": "predict",
+          "prompt": "运行“可达目标”这一组之前先猜：目标评估会记录几轮？每一轮都会有一条 lesson.goal_evaluation。",
+          "experiment": "verdicts",
+          "arm": "reachable",
+          "rule": {
+            "kind": "count_events",
+            "event": "lesson.goal_evaluation"
+          }
+        },
+        {
+          "id": "mq-evidence",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-evidence",
+            "prompt": "执行者第 1 轮只读了日程表，交出的卡里 room 写了 B204，B204 确实是正确答案。这一项检查的结果是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "不通过：预约回执在本次运行里没读过，B204 没有出处",
+                "feedback": "对。条件要求值原样出现在来源资料里，且这份资料本次读过。"
+              },
+              {
+                "id": "b",
+                "text": "通过：值和标准答案一致",
+                "feedback": "不对。评估不拿标准答案比对，只查值有没有出现在读过的来源里。"
+              },
+              {
+                "id": "c",
+                "text": "无法完成：来源没读完就该放弃",
+                "feedback": "不对。还有来源没读时只能判继续，不能判无法完成。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "目标评估要的是证据，不是碰巧猜对。读过来源、值出现在来源里，这一项才通过。"
+          }
+        },
+        {
+          "id": "section-3",
+          "type": "prose",
+          "title": "执行者的“已完成”只是一条声明",
+          "paragraphs": [
+            "执行者交出的 `status` 是一条声明，不是结论。{{lesson:task-contract}}把执行者结束时的“已完成”叫完成声明，要求它带证据、由验收器核对。本课每轮的声明记成 `lesson.completion_claim`，评估结论记成 `lesson.goal_evaluation`，两条并排，是否对应写在 `claim_agrees` 里。两者不一致，以评估为准。",
+            "为什么记下声明，而不是干脆忽略？因为两者的差距本身是信息。报告里有两个数：报 `done` 的轮数，和声明与结论不一致的轮数，合起来能看出执行者有多爱提前交差。第四个练习让执行者的提示词催它尽快交差，第一轮就报 `done`；评估照常检查，卡里的 `room` 要是上次纪要里的 A101，就通不过。",
+            "声明不一致时，程序做两件事：不停循环；把评估的原因作为下一条用户消息放回同一段对话，并写明“你的 status 是 done，评估结论是还没满足，以评估为准”。执行者看到的是具体的失败项，不是笼统的“再试一次”。读到原因后能不能改对，要看你自己的运行，本课不预设答案。",
+            "执行者的回复也可能读不出来：没有 JSON、`card` 不是对象，或者一轮用满 `ROUND_STEPS` 次调用还在读资料，没来得及交卡。程序不替它修补，沿用上一张卡，把声明记为 `invalid`，原因写进 `parse_error`。沿用上一张卡意味着这一轮通过项不会增加，没有进展会照常累积，所以总交不出卡的执行者最终会被重复失败或没有进展这两条规则拦住。",
+            "声明与结论一致，也不等于任务真对：它只说明卡片和资料一致。反过来，执行者说 `impossible`、评估说 `continue`，是执行者放弃得太早，评估指出还有来源没读。三种声明和三种结论的对应写在 `AGREES` 里，只有一一对应才算一致。"
+          ]
+        },
+        {
+          "id": "deep-dive-judge",
+          "type": "deep-dive",
+          "title": "为什么评估要独立，为什么这里用程序而不是模型",
+          "summary": "模型不再调用工具，只说明这一轮想停；目标有没有达成，要另一个角色核对。",
+          "paragraphs": [
+            "Learn Claude Code 里的目标循环示例把它做成一个会话级的 Stop 钩子：主模型不再调用工具时，程序不直接返回，先交给一个独立的判断器，它读完对话，返回 `ok`、`reason` 和 `impossible`。这三个字段和本课的完成、继续、无法完成一一对应。没通过，理由就作为一条用户消息放回同一段对话，主循环接着跑。那里的判断器是另一次模型调用，没有工具，只能读对话里已经出现的内容，所以主模型的提示词要求它把验证命令和结果明确写进对话。",
+            "本课的目标是三个字段，条件能写成程序，所以判断器换成了程序：每次给同样的结论，也不会被一句“我检查过了”说服。条件写不成程序、必须靠模型读文本判断时，才值得用这个示例的做法，同时要接受判断也会波动，要像{{lesson:evaluation-sets}}那样另外校准。",
+            "《深入理解 AI Agent》第九章把验证分三层：底层的结果验证器读环境的真实状态，回答事情是否办成；中间的过程验证器检查是否以允许的方式办成；上层才是量规打分。越靠下越该由代码判定。书里还有两条对本课有用：验证器应当被允许在证据不足时拒绝给结论，对应本课的“来源没读完不判无法完成”；业务 Agent 不能修改批准它自己的验证器和门槛，对应本课的执行者读得到条件、改不了条件。Microsoft 的元认知一课讲 Agent 评估自己的表现、发现并纠正错误，本课把它的前提补上：自我评估可以当参考，裁决要另有依据。"
+          ]
+        },
+        {
+          "id": "misconception-claim-done",
+          "type": "misconception",
+          "claim": "执行者报告 done，就说明目标完成了。",
+          "correction": "done 只是执行者的声明，说明它自己这么认为。目标完成由目标评估逐项检查后判定，检查没过，循环照常继续，声明与结论不一致的轮数还会写进报告。"
+        },
+        {
+          "id": "section-4",
+          "type": "prose",
+          "title": "预算与放弃条件",
+          "paragraphs": [
+            "轮数、时间和费用都有上限，到了就停下并如实报告预算耗尽；目标做不成时，也要主动放弃。本课的预算有三条：`max_rounds` 限制最多几轮，`max_model_calls` 限制整次运行最多调用几次模型，`max_seconds` 限制用时。费用没有单独设上限，用模型调用数代替：Token 用量要等服务商在响应里报告，有的调用没有报告，拿它做硬上限不可靠。",
+            "预算只在一轮开始前检查，不在中途打断。一轮最多要 `ROUND_STEPS` 次模型调用：读资料、再读一次、交卡。剩余调用数不够一整轮，就不开新一轮，这样不会在读资料读到一半时被拦腰截断，留下一张没交的卡。`max_seconds` 同理，它也只在一轮开始前检查，不是硬截止：一轮里的某次模型调用特别慢，这一轮仍会跑完。要让时间上限更硬，得在每次模型请求上另设超时，本课没有做。",
+            "预算管“花多少”，放弃条件管“值不值得再花”，由 `Progress` 记住前几轮的情况。本课有三条放弃条件。第一，不可达：某项检查的来源都读过，仍没有符合形状的值。第二，同样的失败连续出现：失败的检查项、状态和值都一样，达到 `repeat_limit` 轮就放弃。第三，没有进展：通过的检查项连续 `max_stall` 轮没超过历史最好成绩。三条的数字都在运行前写进任务卡的 failure 字段。",
+            "手算第三条。三项检查，第 1 轮 `date` 通过，best 记 1。第 2 轮 `date` 仍是唯一通过的，`room` 换了个错值，没超过 1，`stall` 变成 1。第 3 轮再换一个错值，`stall` 变成 2，等于 `max_stall`，放弃。三轮的失败内容各不相同，`repeats` 一直是 1，重复失败那条没有触发。进展指通过的项比以前任何一轮都多，换一个错答案不算。",
+            "一轮结束后，`decide` 按固定顺序判断：先看目标结论，`complete` 就停，`unreachable` 就放弃；再看重复失败和没有进展；最后才看三条预算。顺序有理由：目标已经达成，就不该因为这一轮刚好用完预算而记成预算耗尽；目标明显做不成，也不必等预算花完才说。预算放在最后兜底。"
+          ]
+        },
+        {
+          "id": "mq-order",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-order",
+            "prompt": "`max_rounds` 是 3，第 3 轮结束时评估判 complete，同时这也是最后一轮。结局是什么？",
+            "options": [
+              {
+                "id": "a",
+                "text": "完成：先看目标结论，再看预算",
+                "feedback": "对。decide 先判 complete，预算检查在后面，不会改写它。"
+              },
+              {
+                "id": "b",
+                "text": "预算耗尽：第 3 轮已经用完了轮数",
+                "feedback": "不对。目标已经达成，不能因为刚好用完预算就记成预算耗尽。"
+              },
+              {
+                "id": "c",
+                "text": "放弃：最后一轮没有进展",
+                "feedback": "不对。放弃要有放弃条件触发，而这一轮每一项都通过了。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "目标结论排在预算前面，所以最后一轮完成仍然是完成。"
+          }
+        },
+        {
+          "id": "section-5",
+          "type": "prose",
+          "title": "三种结局，分开说",
+          "paragraphs": [
+            "循环只有三种结局：完成、放弃和预算耗尽，每一种都要写明原因。完成是每项检查都通过。放弃是目标在现有条件下做不成，或继续下去看不到收益，原因是三条放弃条件之一，要写出是哪个字段、哪条规则。预算耗尽是预算用完时目标还没完成，但没有证据说明做不成。区别在有没有证据：放弃有，预算耗尽没有。",
+            "分开的理由是后续动作不同。预算耗尽，该问预算是不是定小了，或者带着当前进度续跑；放弃，该问目标写对了没有、资料缺不缺，补资料或改目标。混成一个“失败”，两个问题就都问不出来。预算耗尽的循环换个大预算可能完成，不可达的循环换多大的预算都一样。",
+            "更糟的是把它们说成完成。联系电话那个练习里，四项检查通过了三项，只缺电话。最终回答要是写“基本完成”，下游就会拿一张没有电话的通知卡去用。所以最终回答不是模型写的，而是程序按结局拼的：完成写“结局：完成”和通知卡；放弃和预算耗尽都写“目标没有完成”，再写原因、停下时通过了几项、用了几轮和当前的卡。",
+            "{{lesson:fail-safely}}里有“流程结束不等于任务完成”的区分，这里变成三种终态。放弃不是包装成功的另一种说法，而是一个诚实的终态；预算耗尽也不是说“做不到”，它只说“没做完”。报告把结局、停止原因和通过项分成三个指标，就是为了不把任何一个当成另一个。"
+          ]
+        },
+        {
+          "id": "compare-outcomes",
+          "type": "compare",
+          "title": "三种结局对照",
+          "columns": [
+            "结局",
+            "触发条件",
+            "有没有做不成的证据",
+            "下一步该问"
+          ],
+          "rows": [
+            [
+              "完成",
+              "每项检查都通过",
+              "不涉及",
+              "卡片和资料一致；来源本身对不对要另外核"
+            ],
+            [
+              "放弃",
+              "不可达、同样的失败重复、连续没有进展",
+              "有：来源都读过；或者连续多轮没有新进展",
+              "目标写对了吗，资料缺不缺"
+            ],
+            [
+              "预算耗尽",
+              "轮数、模型调用数或用时用完",
+              "没有",
+              "预算是不是定小了，要不要带着进度续跑"
+            ]
+          ]
+        },
+        {
+          "id": "deep-dive-budget",
+          "type": "deep-dive",
+          "title": "预算怎么定：两个手算",
+          "summary": "预算要跟着一轮的花销算，也要说清是在什么预算下比较。",
+          "paragraphs": [
+            "第一个手算用本课的默认值。`ROUND_STEPS` 是 3，一轮通常用 2 次调用（读一次、交一次）。`max_model_calls` 为 12 时，五轮后用了 10 次，剩 2 次，少于 3，就不开第六轮；`max_rounds` 默认 5，也在这里拦住。把 `max_rounds` 调成 8 而 `max_model_calls` 不动，实际还是五轮停，结局的原因变成模型调用数不足。两条预算谁先到谁拦，所以报告的停止原因要写明是哪一条。",
+            "第二个手算来自《深入理解 AI Agent》第七章。设单次成功率 `p` 为 0.6，同一任务给 5 次机会：至少成功一次的概率约 99%，5 次全成功只有约 7.8%。给目标循环加轮数，像是多给几次机会：完成的概率上升，花的调用也线性上升。轮与轮并不独立，后一轮带着前一轮的反馈，这个公式只当直觉用。书里还提醒，固定预算下的单点成绩说明不了长任务的能力，应该看成绩随预算变化的曲线，并说清在多少预算下比较。所以本课的练习用同一个目标改轮数上限，就是在看两个预算点。",
+            "Learn Claude Code 的示例对预算的取法不同：目标本身没有默认的最大轮数，完成与否由判断器每轮重新判断；上限来自主循环的全局最大轮数，再加上 Stop 钩子连续拦下的次数。它的说明还特意提醒，要限制自动执行的轮数，就用主循环的全局限制，不要给目标偷偷加一个固定预算。本课把轮数、调用数、用时和三条放弃条件做成同一组输入，好处是练习里能逐条调整，代价是参数多，真实系统里要把它们分到不同的层。",
+            "预算耗尽的报告还要带上进度。“2/3 通过，用了 2 轮，停在轮数上限”比一句“失败”有用得多：它让人判断是续跑还是改预算。本课不估算费用：total_tokens 只累加服务商报告的值，缺的写明几次未报告。"
+          ]
+        },
+        {
+          "id": "misconception-bigger-budget",
+          "type": "misconception",
+          "claim": "预算给得足够大，什么目标最终都能完成，放弃条件是多余的。",
+          "correction": "资料里没有的值，读多少轮都读不出来。不可达的目标把预算用完才停，只是多花了调用，还让“做不成”被说成“没做完”。放弃条件的作用是在证据足够时提前停下，并把原因说清楚。"
+        },
+        {
+          "id": "section-6",
+          "type": "prose",
+          "title": "逐轮记录",
+          "paragraphs": [
+            "每一轮的评估依据都留下来，回放时能看到为什么继续或停止。回放只读已记录的事件，不重新请求模型，也不重新执行工具，所以“为什么停”必须在运行时写进事件，事后补不出来。每轮一条 `lesson.goal_evaluation`：`evidence` 记读过的资料和这一轮的卡，`claim` 是执行者的声明，`verdict` 是评估结论，`checks` 是逐项检查，`progress`、`budget` 记已用和上限，`decision` 与 `reason_code` 记下一步和原因。",
+            "一条记录靠字段就能回答三个问题。依据是什么：`notes_read`，加上每项检查的 `sources_read` 和 `detail`。结论是什么：`verdict` 和 `passed`、`total`。为什么这样决定：`reason_code` 是八个固定代码之一，`goal_met`、`unreachable`、`repeated_failure`、`no_progress`、`max_rounds`、`max_model_calls`、`max_seconds`、`keep_going`，`reason` 是同一件事的人话。代码给程序和测试用，人话给读报告的人。",
+            "运行结束时的 `lesson.report` 把几轮汇成一张表：每轮新读的资料、执行者的 `status`、通过项、评估结论、下一步和原因。指标里单列结局、停止原因、轮数、模型调用数、累计 `total_tokens`，以及报 `done` 的轮数和声明不一致的轮数。`total_tokens` 只累加服务商报告的值，缺的写明几次未报告，不用 0 或估算顶替。",
+            "记录也有边界。它记得下了什么结论，记不下执行者当时怎么想：`status` 旁边的 `note` 是执行者自己写的一句话，是它的说法，不是依据。依据永远是 `evidence` 和 `checks`。读回放时，先看 `decision` 和 `reason_code`，再回头看这一轮的 `evidence`，核对结论站得住。",
+            "举个编的例子，读一条记录。第 2 轮的记录里，`notes_read` 是日程表和预约回执，`passed` 是 2，`total` 是 3，`checks` 里 `start_time` 一项没通过，`detail` 写着来源 speaker 还没读；`decision` 是 continue，`reason_code` 是 `keep_going`。这几个字段连起来是一句完整的话：读了两份资料，过了两项，缺开始时间，因为主讲人回信还没读，所以继续。"
+          ]
+        },
+        {
+          "id": "mq-record",
+          "type": "micro-quiz",
+          "question": {
+            "id": "q-record",
+            "prompt": "回放一次运行时，想知道第 2 轮为什么继续而不是停止。应该看哪里？",
+            "options": [
+              {
+                "id": "a",
+                "text": "第 2 轮 lesson.goal_evaluation 的 decision、reason_code 和 checks",
+                "feedback": "对。这些是运行时写进事件的依据，回放只读它们。"
+              },
+              {
+                "id": "b",
+                "text": "重新请求一次模型，让它解释",
+                "feedback": "不对。回放只读已记录的事件，不会重新请求模型。"
+              },
+              {
+                "id": "c",
+                "text": "执行者那一轮写的 note",
+                "feedback": "不对。note 是执行者的说法，不是评估的依据。"
+              }
+            ],
+            "correct": "a",
+            "explanation": "决定和原因在运行时就写进了评估记录，回放从记录里读，不重算、不重问。"
+          }
+        },
+        {
+          "id": "deep-dive-giveup",
+          "type": "deep-dive",
+          "title": "什么时候该放弃：熔断、没有进展和负面结果",
+          "summary": "自动循环必须有出口，放弃时要留下原因，失败的尝试也是有用的记录。",
+          "paragraphs": [
+            "《深入理解 AI Agent》第一章讲运行层的纠正机制时提到熔断器：错误连续发生时自动“断电”停止重试，像保险丝，防止系统在同一个坑里反复摔。Claude Code 的运行层里就有这样的机制。本课的“同样的失败连续出现”就是最小的熔断：失败内容一样，再来一轮只是重复。",
+            "Learn Claude Code 的示例也留了出口：主循环有全局最大轮数，Stop 钩子连续拦下结束的次数也有上限，默认 8。到达上限时，程序把控制权交还用户，目标不会被伪装成完成，也不会被自动清除，用户可以补充信息后继续。判断器调用失败时同样处理：停止自动续轮，保留目标，把错误交出来，而不是在无法判断时宣称成功。",
+            "第九章的自动科研案例说明放弃为什么难：四次从想法到论文的端到端尝试，三次失败在实现或评估阶段。书里归纳了三类问题，方案变难后悄悄退回熟悉的普通做法，信号只是噪声却宣布发现，不知道何时该放弃假设。对策之一是保留负面结果，失败的实验、被拒的提案和停止原因都写进日志，否则后面的人只看到幸存的方案，会反复走已经走不通的路。本课每一轮都写评估记录，放弃时原因也在其中，理由相同。"
+          ]
+        },
+        {
+          "id": "walkthrough",
+          "type": "walkthrough",
+          "title": "一轮的走法",
+          "description": "按步骤说明目标循环的一轮，代码是简化的示意。本次运行的证据在实验台的事件里。",
+          "steps": [
+            {
+              "id": "step-1",
+              "label": "读资料",
+              "actor": "执行者",
+              "title": "只读自己需要的资料",
+              "body": "执行者提出 read_note 调用，运行器执行并把资料文本记为工具结果，同时记进评估要用的证据。",
+              "code": "result = self.context.execute_proposal(call, self.tools)",
+              "language": "python",
+              "evidence": "tool_result"
+            },
+            {
+              "id": "step-2",
+              "label": "交卡",
+              "actor": "执行者",
+              "title": "交出通知卡和自己的声明",
+              "body": "回复里的 JSON 被读成卡片和 status；读不出来就沿用上一张卡，把声明记为 invalid。",
+              "code": "submission = read_submission(t, values.goal, worker.work_round(evidence, read_order), card)",
+              "language": "python",
+              "evidence": "lesson.completion_claim"
+            },
+            {
+              "id": "step-3",
+              "label": "评估",
+              "actor": "验收器",
+              "title": "只按卡片和已读资料逐项检查",
+              "body": "不看 status。每一项记通过、失败或无法完成，并写明原因。",
+              "code": "evaluation = evaluate_goal(t, values.goal, card, evidence)",
+              "language": "python",
+              "evidence": "lesson.goal_evaluation 的 checks"
+            },
+            {
+              "id": "step-4",
+              "label": "决定",
+              "actor": "运行器",
+              "title": "先目标，再放弃条件，最后预算",
+              "body": "decide 返回下一步和原因代码，一起写进这一轮的评估记录。",
+              "code": "decision, reason_code = decide(evaluation, progress, budget, values)",
+              "language": "python",
+              "evidence": "lesson.goal_evaluation 的 decision 与 reason_code"
+            },
+            {
+              "id": "step-5",
+              "label": "继续或收尾",
+              "actor": "运行器",
+              "title": "继续就把原因放回对话",
+              "body": "要继续，评估的失败原因作为下一条用户消息交给执行者；停止，就按结局拼报告和最终回答。",
+              "code": "worker.messages.append({\"role\": \"user\", \"content\": feedback(t, budget.rounds, evaluation, submission)})",
+              "language": "python",
+              "evidence": "下一次 request 的最后一条消息"
+            }
+          ]
+        },
+        {
+          "id": "references",
+          "type": "references",
+          "items": [
+            {
+              "id": "lcc-goal-loop",
+              "title": "目标循环：模型提出停止，独立判断器决定是否继续（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s17_goal_loop/README.zh.md"
+            },
+            {
+              "id": "lcc-goal-code",
+              "title": "目标控制器与 Stop 钩子的实现（Learn Claude Code）",
+              "url": "https://github.com/shareAI-lab/learn-claude-code/blob/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3/s17_goal_loop/code.py"
+            },
+            {
+              "id": "book-ch9",
+              "title": "三层验证与“完成不等于进步”（深入理解 AI Agent 第九章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter9.md"
+            },
+            {
+              "id": "book-ch1",
+              "title": "Harness 工程：停止条件、验证与熔断（深入理解 AI Agent 第一章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter1.md"
+            },
+            {
+              "id": "book-ch7",
+              "title": "评估指标与预算—能力曲线（深入理解 AI Agent 第七章）",
+              "url": "https://github.com/bojieli/ai-agent-book/blob/b789c97a8f3de5b405a6f6dfa8289208d679d0b8/book/chapter7.md"
+            },
+            {
+              "id": "ms-metacognition",
+              "title": "AI Agent 的元认知（Microsoft AI Agents for Beginners）",
+              "url": "https://github.com/microsoft/ai-agents-for-beginners/blob/25b7985f3b2dc37a84f4a7387ccd3c9f0e5b1595/09-metacognition/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    "code": {
+      "blocks": [
+        {
+          "id": "code-whats-new",
+          "type": "whats-new",
+          "compare_with": "orchestrator-evaluator"
+        },
+        {
+          "id": "code-criteria",
+          "type": "annotated-source",
+          "path": "lessons/lesson_goal_loops/runtime.py",
+          "start": 52,
+          "end": 93,
+          "notes": [
+            {
+              "id": "n52",
+              "line": 52,
+              "anchor": "CRITERIA = {c.field: c for c in (",
+              "text": "完成条件写在循环外、运行前固定：执行者读得到描述，改不了它。"
+            },
+            {
+              "id": "n53",
+              "line": 53,
+              "anchor": "Criterion(\"date\"",
+              "text": "日期：形如 2026-11-14，只认日程表里的。前后的断言防止它混进更长的数字里。"
+            },
+            {
+              "id": "n54",
+              "line": 54,
+              "anchor": "Criterion(\"room\"",
+              "text": "教室：一个大写字母加三位数字，只认预约回执。上次纪要里的 A101 形状一样，来源不对。"
+            },
+            {
+              "id": "n55",
+              "line": 55,
+              "anchor": "Criterion(\"start_time\"",
+              "text": "开始时间：HH:MM，只认主讲人回信；纪要里的 14:00 同样是形状对、来源错。"
+            },
+            {
+              "id": "n56",
+              "line": 56,
+              "anchor": "Criterion(\"contact_phone\"",
+              "text": "联系电话：任何一份资料都可以是来源，所以“不可达”要四份都读完才成立。"
+            },
+            {
+              "id": "n58",
+              "line": 58,
+              "anchor": "GOALS = {\"notice\"",
+              "text": "两个目标共用同一组条件，后者多一项电话。"
+            },
+            {
+              "id": "n60",
+              "line": 60,
+              "anchor": "CLAIMS = ",
+              "text": "执行者的声明只有三种，其他写法一律记为 invalid。"
+            },
+            {
+              "id": "n62",
+              "line": 62,
+              "anchor": "AGREES = ",
+              "text": "每种声明对应一种评估结论，只有对上了才算一致。"
+            },
+            {
+              "id": "n65",
+              "line": 65,
+              "anchor": "def evaluate_goal",
+              "text": "验收器：入参里没有执行者的 status，看不到的东西就不可能影响结论。"
+            },
+            {
+              "id": "n71",
+              "line": 71,
+              "anchor": "read = [note for note",
+              "text": "来源资料里，本次运行读过的和没读过的分开。"
+            },
+            {
+              "id": "n74",
+              "line": 74,
+              "anchor": "found = {match for note in read",
+              "text": "候选值：只从读过的来源里按形状找出来。"
+            },
+            {
+              "id": "n76",
+              "line": 76,
+              "anchor": "if value and value in found",
+              "text": "通过：卡里的值确实出现在读过的来源里。"
+            },
+            {
+              "id": "n78",
+              "line": 78,
+              "anchor": "elif not unread and not found",
+              "text": "无法完成：来源全读过，一个候选值也没有，再来多少轮也填不上。"
+            },
+            {
+              "id": "n81",
+              "line": 81,
+              "anchor": "elif not value",
+              "text": "没填：把还没读的来源写进原因，执行者知道该去读什么。"
+            },
+            {
+              "id": "n83",
+              "line": 83,
+              "anchor": "else:",
+              "text": "填了但对不上来源：形状对也不算，原因里写明这个值不在已读资料里。"
+            },
+            {
+              "id": "n86",
+              "line": 86,
+              "anchor": "passed = sum",
+              "text": "通过项数同时是“进展”的度量，后面的放弃条件拿它比较。"
+            },
+            {
+              "id": "n87",
+              "line": 87,
+              "anchor": "if passed == len(checks)",
+              "text": "全部通过才是 complete，差一项都不是。"
+            },
+            {
+              "id": "n89",
+              "line": 89,
+              "anchor": "elif any(check[\"status\"] == \"unreachable\"",
+              "text": "只要有一项无法完成，整体就是 unreachable，哪怕其他项都通过了。"
+            },
+            {
+              "id": "n92",
+              "line": 92,
+              "anchor": "verdict = \"continue\"",
+              "text": "其余情况是继续：没通过，但没有证据说明做不到。"
+            }
+          ]
+        },
+        {
+          "id": "code-decide",
+          "type": "annotated-source",
+          "path": "lessons/lesson_goal_loops/runtime.py",
+          "start": 96,
+          "end": 144,
+          "notes": [
+            {
+              "id": "n97",
+              "line": 97,
+              "anchor": "class Progress",
+              "text": "放弃条件的记忆：只记三样东西，历史最好成绩、没有进展的轮数、上一次失败。"
+            },
+            {
+              "id": "n99",
+              "line": 99,
+              "anchor": "best: int = 0",
+              "text": "best：历史上通过项数的最大值。"
+            },
+            {
+              "id": "n100",
+              "line": 100,
+              "anchor": "stall: int = 0",
+              "text": "stall：连续多少轮没有超过 best。"
+            },
+            {
+              "id": "n101",
+              "line": 101,
+              "anchor": "repeats: int = 0",
+              "text": "repeats：同样的失败连续出现了几轮。"
+            },
+            {
+              "id": "n104",
+              "line": 104,
+              "anchor": "def update",
+              "text": "每轮评估后调用一次，更新三个数。"
+            },
+            {
+              "id": "n106",
+              "line": 106,
+              "anchor": "if evaluation[\"passed\"] > self.best",
+              "text": "进展：通过项比以前任何一轮都多。"
+            },
+            {
+              "id": "n109",
+              "line": 109,
+              "anchor": "self.stall += 1",
+              "text": "没有超过就加一；通过项回落也算没进展。"
+            },
+            {
+              "id": "n111",
+              "line": 111,
+              "anchor": "failure = tuple",
+              "text": "失败的指纹：哪些项、什么状态、什么值。值不同就不算同样的失败。"
+            },
+            {
+              "id": "n112",
+              "line": 112,
+              "anchor": "self.repeats = ",
+              "text": "指纹和上一轮相同就累加，否则回到 1。"
+            },
+            {
+              "id": "n127",
+              "line": 127,
+              "anchor": "def decide",
+              "text": "每轮结束时唯一的决定点，返回下一步和一个固定的原因代码。"
+            },
+            {
+              "id": "n129",
+              "line": 129,
+              "anchor": "if evaluation[\"verdict\"] == \"complete\"",
+              "text": "第一道：目标达成就停，后面的规则都不再看。"
+            },
+            {
+              "id": "n131",
+              "line": 131,
+              "anchor": "if evaluation[\"verdict\"] == \"unreachable\"",
+              "text": "第二道：来源都读过仍没有值，放弃，不等预算用完。"
+            },
+            {
+              "id": "n133",
+              "line": 133,
+              "anchor": "if progress.repeats >= values.repeat_limit",
+              "text": "同样的失败重复到上限，放弃。"
+            },
+            {
+              "id": "n135",
+              "line": 135,
+              "anchor": "if progress.stall >= values.max_stall",
+              "text": "连续没有进展到上限，放弃。"
+            },
+            {
+              "id": "n137",
+              "line": 137,
+              "anchor": "# Budgets are checked before",
+              "text": "预算在一轮开始之前检查，不在中途打断一轮。"
+            },
+            {
+              "id": "n138",
+              "line": 138,
+              "anchor": "if budget.rounds >= values.max_rounds",
+              "text": "轮数用完，结局是预算耗尽，不是放弃。"
+            },
+            {
+              "id": "n140",
+              "line": 140,
+              "anchor": "if values.max_model_calls - budget.calls < ROUND_STEPS",
+              "text": "剩余调用数不够一整轮就不开新一轮。"
+            },
+            {
+              "id": "n142",
+              "line": 142,
+              "anchor": "if budget.seconds() >= values.max_seconds",
+              "text": "用时到了上限，同样记为预算耗尽。"
+            },
+            {
+              "id": "n144",
+              "line": 144,
+              "anchor": "return \"continue\", \"keep_going\"",
+              "text": "前面的规则都没触发，才继续。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-budget",
+              "start": 116,
+              "end": 124,
+              "label": "Budget：记已用的轮数、模型调用数和起始时间"
+            }
+          ]
+        },
+        {
+          "id": "code-loop",
+          "type": "annotated-source",
+          "path": "lessons/lesson_goal_loops/runtime.py",
+          "start": 245,
+          "end": 278,
+          "notes": [
+            {
+              "id": "n245",
+              "line": 245,
+              "anchor": "def run(context: RunContext)",
+              "text": "目标循环的主体：做一轮、评估、记依据、再决定继续还是停。"
+            },
+            {
+              "id": "n250",
+              "line": 250,
+              "anchor": "context.emit(\"lesson.task_card\"",
+              "text": "运行前先发任务卡：目标、证据要求、放弃条件和预算都在上面。"
+            },
+            {
+              "id": "n254",
+              "line": 254,
+              "anchor": "while decision == \"continue\"",
+              "text": "循环只由 decide 的结果驱动，执行者的 status 不在循环条件里。"
+            },
+            {
+              "id": "n255",
+              "line": 255,
+              "anchor": "context.check_cancelled()",
+              "text": "每一轮开始前检查取消，学习者可以随时停。"
+            },
+            {
+              "id": "n259",
+              "line": 259,
+              "anchor": "submission = read_submission",
+              "text": "第 1 步：执行者读资料、交卡，读不出来的回复记为 invalid。"
+            },
+            {
+              "id": "n261",
+              "line": 261,
+              "anchor": "context.emit(\"lesson.completion_claim\"",
+              "text": "声明单独记一条事件：它只是被记录，之后与结论对照。"
+            },
+            {
+              "id": "n263",
+              "line": 263,
+              "anchor": "evaluation = evaluate_goal",
+              "text": "第 2 步：评估只拿卡片和已读资料，不拿 submission 的 status。"
+            },
+            {
+              "id": "n264",
+              "line": 264,
+              "anchor": "progress.update(evaluation)",
+              "text": "把这一轮的通过项和失败交给放弃条件的记忆。"
+            },
+            {
+              "id": "n266",
+              "line": 266,
+              "anchor": "decision, reason_code = decide",
+              "text": "第 3 步：先目标，再放弃条件，最后预算。"
+            },
+            {
+              "id": "n268",
+              "line": 268,
+              "anchor": "claims.append",
+              "text": "声明是否与结论对应，攒着写进报告的两个计数。"
+            },
+            {
+              "id": "n270",
+              "line": 270,
+              "anchor": "context.emit(\"lesson.goal_evaluation\"",
+              "text": "第 4 步：依据、结论、进展、预算、决定和原因，一轮一条，回放读的就是它。"
+            },
+            {
+              "id": "n276",
+              "line": 276,
+              "anchor": "if decision == \"continue\"",
+              "text": "第 5 步：只有继续才把原因交还执行者。"
+            },
+            {
+              "id": "n277",
+              "line": 277,
+              "anchor": "worker.messages.append",
+              "text": "原因作为下一条用户消息放回同一段对话，执行者看到具体的失败项。"
+            }
+          ],
+          "folds": [
+            {
+              "id": "fold-history",
+              "start": 272,
+              "end": 274,
+              "label": "平台：拼汇总表的一行"
+            }
+          ]
+        },
+        {
+          "id": "code-decision",
+          "type": "decision",
+          "title": "评估用程序，放弃条件和预算写进参数",
+          "chosen": "每轮由程序按完成条件检查通知卡，只认本次运行读过的资料；执行者的 status 只记录；三条放弃条件和三条预算都是输入参数，写进任务卡；结局分完成、放弃、预算耗尽，最终回答由程序按结局拼。",
+          "alternatives": [
+            {
+              "id": "self-judge",
+              "title": "让执行者自己判断是否完成",
+              "why_not": "它和写卡的是同一个模型，看不到自己看不到的错；声明只能记录，不能裁决。"
+            },
+            {
+              "id": "model-judge",
+              "title": "再请一个模型做目标评估",
+              "why_not": "条件能写成程序时，多花一次调用，结论还会波动。目标是开放文本、写不成程序时才值得，而且要先和人工结论对照。"
+            },
+            {
+              "id": "rounds-only",
+              "title": "只设轮数上限，不设放弃条件",
+              "why_not": "不可达的目标也要把轮数用完，报告里还分不出“做不成”和“钱不够”。"
+            },
+            {
+              "id": "token-budget",
+              "title": "用 Token 用量当预算上限",
+              "why_not": "用量要等服务商报告，没报告的调用没法计入；本课用模型调用数，Token 只报告不限制。"
+            }
+          ]
+        }
+      ]
+    },
+    "lab": {
+      "experiments": [
+        {
+          "id": "verdicts",
+          "title": "继续、完成与放弃",
+          "hypothesis": "目标评估每轮读通知卡和本次运行读过的资料：可达的目标，在检查全部通过的那一轮判完成；要填的值在所有来源里都不存在时，判无法完成并放弃，原因写明是哪个字段、读过哪几份来源。",
+          "predict": "predict-rounds",
+          "arms": [
+            {
+              "id": "reachable",
+              "exercise": "reachable",
+              "label": "可达目标"
+            },
+            {
+              "id": "missing-info",
+              "exercise": "missing-info",
+              "label": "不可达目标"
+            }
+          ],
+          "observe": [
+            {
+              "id": "task-card-failure",
+              "text": "任务卡的 failure 字段：放弃条件在运行前就写好了。",
+              "selector": {
+                "event": "lesson.task_card",
+                "path": "data.failure"
+              }
+            },
+            {
+              "id": "notes-read",
+              "text": "第一条评估记录里的 notes_read：评估只认本次运行读过的资料。",
+              "selector": {
+                "event": "lesson.goal_evaluation",
+                "path": "data.evidence.notes_read"
+              }
+            },
+            {
+              "id": "first-checks",
+              "text": "逐项检查：每一项的状态、卡里的值、读过的来源和 detail。",
+              "selector": {
+                "event": "lesson.goal_evaluation",
+                "path": "data.checks"
+              }
+            },
+            {
+              "id": "phone-check",
+              "text": "报告里联系电话这一项：来源都读过，没有符合形状的值。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks[id=field_contact_phone]"
+              }
+            },
+            {
+              "id": "outcome",
+              "text": "报告里的结局：完成、放弃还是预算耗尽。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=outcome]"
+              }
+            },
+            {
+              "id": "stop-reason",
+              "text": "停止原因：放弃时写明是哪条规则、哪个字段。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=stop_reason]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组的目标只差一个联系电话字段：第一组的资料够用，第二组的四份资料里都没有电话。"
+            },
+            {
+              "text": "任务卡先写好了什么时候放弃，运行开始后不再改。",
+              "observe": "task-card-failure",
+              "stage": "runtime"
+            },
+            {
+              "text": "评估记录里的 notes_read 是执行者本次真读过的资料，评估只在这里面找值。",
+              "observe": "notes-read",
+              "stage": "tool"
+            },
+            {
+              "text": "每一项检查各有状态和原因，通过、失败和无法完成是三种不同的状态。",
+              "observe": "first-checks",
+              "stage": "runtime"
+            },
+            {
+              "text": "不可达的那一项在报告里没通过，原因是所有来源都读过了；可达的那一组没有这一项。",
+              "observe": "phone-check",
+              "stage": "runtime"
+            },
+            {
+              "text": "结局由评估和规则决定。两组的结局应该不同。",
+              "observe": "outcome",
+              "stage": "runtime"
+            },
+            {
+              "text": "停止原因告诉你为什么停：完成写条件全部满足，放弃写哪个字段、哪条规则。",
+              "observe": "stop-reason",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "这次运行里每一轮读了哪些资料、哪些检查通过、结论是什么，以及循环为什么在那一轮停下，都能从评估记录和报告里核对。",
+              "不可达那一组的放弃，是因为四份来源都读过且没有符合形状的值，而不是因为预算用完。"
+            ],
+            "does_not_prove": [
+              "通过只说明卡片和读过的资料一致，不说明资料本身正确。",
+              "一次运行不能说明真实模型总会在第几轮读全资料；轮数取决于它自己的读取方式。",
+              "离线测试模式下，每一步读什么、填什么由固定脚本给出。"
+            ]
+          }
+        },
+        {
+          "id": "budget",
+          "title": "预算耗尽不等于放弃",
+          "hypothesis": "轮数上限太小时，有进展的循环也会在目标完成前停下，结局是预算耗尽而不是放弃；放弃由目标不可达、同样的失败重复或连续没有进展触发，和预算无关。",
+          "arms": [
+            {
+              "id": "enough",
+              "exercise": "reachable",
+              "label": "预算够用（5 轮）"
+            },
+            {
+              "id": "tight",
+              "exercise": "tight-budget",
+              "label": "预算太小（2 轮）"
+            }
+          ],
+          "observe": [
+            {
+              "id": "task-card-stop",
+              "text": "任务卡的 stop 字段：轮数、模型调用数和用时的上限。",
+              "selector": {
+                "event": "lesson.task_card",
+                "path": "data.stop"
+              }
+            },
+            {
+              "id": "budget-record",
+              "text": "评估记录里的 budget：已用和上限并排。",
+              "selector": {
+                "event": "lesson.goal_evaluation",
+                "path": "data.budget"
+              }
+            },
+            {
+              "id": "progress-record",
+              "text": "评估记录里的 progress：best、stall 和 repeats。",
+              "selector": {
+                "event": "lesson.goal_evaluation",
+                "path": "data.progress"
+              }
+            },
+            {
+              "id": "rounds-metric",
+              "text": "报告里的轮数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=rounds]"
+              }
+            },
+            {
+              "id": "table",
+              "text": "报告里的逐轮表：每轮读了什么、通过几项、下一步。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.table"
+              }
+            },
+            {
+              "id": "budget-outcome",
+              "text": "结局和停止原因。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=stop_reason]"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组是同一张通知卡、同一个执行者脚本，只差轮数上限。"
+            },
+            {
+              "text": "预算在任务卡里先写明，最多几轮、几次调用、多少秒。",
+              "observe": "task-card-stop",
+              "stage": "runtime"
+            },
+            {
+              "text": "每条评估记录都带着已用和上限，停在哪一条预算一看便知。",
+              "observe": "budget-record",
+              "stage": "runtime"
+            },
+            {
+              "text": "progress 里的 stall 记连续没有新进展的轮数；它没到 max_stall，循环就不会因为没有进展而放弃。",
+              "observe": "progress-record",
+              "stage": "runtime"
+            },
+            {
+              "text": "报告里的轮数：预算小的那一组如果没完成，轮数就等于它的上限；执行者一轮就读完资料并填对，轮数是 1，2 轮的上限用不到。",
+              "observe": "rounds-metric",
+              "stage": "runtime"
+            },
+            {
+              "text": "逐轮表里最后一行的下一步，是预算耗尽还是完成。",
+              "observe": "table",
+              "stage": "runtime"
+            },
+            {
+              "text": "停止原因：预算耗尽时写的是轮数用完，而不是某条放弃条件；目标完成时写完成条件全部满足。",
+              "observe": "budget-outcome",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "小预算那一组在目标没完成时按预算停下，结局记为预算耗尽，停下时已通过的检查项数和用掉的轮数都在报告里。",
+              "两组之间只有轮数上限不同。结局不同，差别就由预算造成；结局相同，说明这个上限对这次运行的读取方式够用（真实模型可能一轮就读完资料并填对）。"
+            ],
+            "does_not_prove": [
+              "预算耗尽不能说明目标做不成；换个大预算也许就完成了，这里没有证据。",
+              "真实模型每轮读几份资料不一定和脚本相同，同样的 2 轮上限未必得到同样的进度。",
+              "两个预算点不足以画出预算与成功率的曲线。"
+            ]
+          }
+        },
+        {
+          "id": "claims",
+          "title": "执行者自报完成",
+          "hypothesis": "执行者在第一轮就报 done 时，评估照常逐项检查；检查没过，循环继续并把原因交还执行者，声明与结论不一致的轮数写进报告；同样的失败重复到上限，循环放弃。",
+          "arms": [
+            {
+              "id": "careful",
+              "exercise": "reachable",
+              "label": "认真的执行者"
+            },
+            {
+              "id": "hasty",
+              "exercise": "false-done",
+              "label": "赶着交差的执行者"
+            }
+          ],
+          "observe": [
+            {
+              "id": "claim-status",
+              "text": "执行者每轮交出的 status 和卡片，记在 lesson.completion_claim 里。",
+              "selector": {
+                "event": "lesson.completion_claim",
+                "path": "data.status"
+              }
+            },
+            {
+              "id": "claim-agrees",
+              "text": "评估记录里的 claim_agrees：声明和结论是否对应。",
+              "selector": {
+                "event": "lesson.goal_evaluation",
+                "path": "data.claim_agrees"
+              }
+            },
+            {
+              "id": "claim-reason",
+              "text": "评估记录里的 reason_code：这一轮为什么继续或停止。",
+              "selector": {
+                "event": "lesson.goal_evaluation",
+                "path": "data.reason_code"
+              }
+            },
+            {
+              "id": "claims-done",
+              "text": "报告里执行者报 done 的轮数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=claims_done]"
+              }
+            },
+            {
+              "id": "claims-disagree",
+              "text": "报告里声明与结论不一致的轮数。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.metrics[id=claims_disagree]"
+              }
+            },
+            {
+              "id": "final-checks",
+              "text": "最后一轮的逐项检查：哪些项没过，原因是什么。",
+              "selector": {
+                "event": "lesson.report",
+                "path": "data.checks"
+              }
+            }
+          ],
+          "guide": [
+            {
+              "text": "两组的目标相同。第二组的执行者被要求尽快交差；它是否真的没读完资料就报 done，看你自己的运行。"
+            },
+            {
+              "text": "先看声明：每轮的 status 和卡片都被如实记下，没有被评估改写。",
+              "observe": "claim-status",
+              "stage": "model"
+            },
+            {
+              "text": "再看评估怎么对待它：声明和结论对不上时 claim_agrees 为 false，一致时为 true。",
+              "observe": "claim-agrees",
+              "stage": "runtime"
+            },
+            {
+              "text": "reason_code 写明这一轮继续还是停止，原因不在声明里，在检查里。",
+              "observe": "claim-reason",
+              "stage": "runtime"
+            },
+            {
+              "text": "报告把报 done 的轮数单独数出来。",
+              "observe": "claims-done",
+              "stage": "runtime"
+            },
+            {
+              "text": "不一致的轮数是另一个数；两个数的差距就是执行者提前交差的程度。两个数相同、不一致为 0，说明这次执行者没有抢先交差。",
+              "observe": "claims-disagree",
+              "stage": "runtime"
+            },
+            {
+              "text": "最后看没通过的检查项：如果有，卡里的值为什么对不上来源；全部通过时没有这一步。",
+              "observe": "final-checks",
+              "stage": "runtime"
+            }
+          ],
+          "conclusion": {
+            "proves": [
+              "执行者每轮的 status 与评估结论是否一致、不一致几轮，都有事件可查；评估的结论没有被 status 改变。",
+              "循环因为什么规则停下，以及当时没通过的检查项，都在评估记录和报告里。"
+            ],
+            "does_not_prove": [
+              "这一组的提示词是被要求赶工的，它不代表真实模型平时的表现。",
+              "读到评估原因后真实模型能不能改对，要看你自己的运行；离线脚本里它会原样重复同一张卡。",
+              "一致只说明卡片和资料一致，不说明任务本身做对了。"
+            ]
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "name": "goal",
+          "label": "目标",
+          "help": "通知卡的字段：只填日期、教室和开始时间，或者再加联系电话（四份资料里都没有）。",
+          "options": [
+            {
+              "value": "notice",
+              "label": "读书会通知卡"
+            },
+            {
+              "value": "notice_with_phone",
+              "label": "带联系电话的通知卡"
+            }
+          ]
+        },
+        {
+          "name": "worker_style",
+          "label": "执行者的提示词",
+          "help": "认真：先读再填。赶工：催它第一轮就交卡并写 done。两种都不会替它读资料。",
+          "options": [
+            {
+              "value": "careful",
+              "label": "认真"
+            },
+            {
+              "value": "hasty",
+              "label": "赶工"
+            }
+          ]
+        },
+        {
+          "name": "max_rounds",
+          "label": "轮数上限",
+          "help": "1 到 8 轮。用完仍没完成，结局是预算耗尽。"
+        },
+        {
+          "name": "max_model_calls",
+          "label": "模型调用数上限",
+          "help": "3 到 20 次。剩余次数不够一整轮（最多 3 次）就不开新一轮。"
+        },
+        {
+          "name": "max_seconds",
+          "label": "用时上限（秒）",
+          "help": "10 到 600 秒，只在一轮开始前检查。"
+        },
+        {
+          "name": "max_stall",
+          "label": "没有进展的轮数上限",
+          "help": "通过项连续这么多轮没超过历史最好成绩，就放弃。1 到 4。"
+        },
+        {
+          "name": "repeat_limit",
+          "label": "重复失败的轮数上限",
+          "help": "同样的失败连续出现这么多轮，就放弃。2 到 4。"
+        }
+      ]
+    },
+    "check": {
+      "blocks": [
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "questions": [
+            {
+              "id": "q1",
+              "prompt": "执行者第 1 轮报 done，目标评估判 continue。接下来循环应该怎么办？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "继续下一轮，并把评估的失败原因交还执行者",
+                  "feedback": "对。结论以评估为准，原因放回对话，执行者才知道改什么。"
+                },
+                {
+                  "id": "b",
+                  "text": "按执行者的 status 判完成，评估只作参考",
+                  "feedback": "不对。status 只是声明，评估才是裁决。"
+                },
+                {
+                  "id": "c",
+                  "text": "立刻放弃，因为执行者的声明不可信",
+                  "feedback": "不对。声明与结论不一致不是放弃条件；放弃要由三条规则触发。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "声明和结论不一致时，循环不停，也不采信声明。"
+            },
+            {
+              "id": "q2",
+              "prompt": "什么情况下目标评估才能判 unreachable？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "某一项的所有来源资料都读过，仍没有符合形状的值",
+                  "feedback": "对。判无法完成需要证据：每个允许的来源都读过。"
+                },
+                {
+                  "id": "b",
+                  "text": "执行者的 status 是 impossible",
+                  "feedback": "不对。impossible 是执行者的声明，可能放弃得太早。"
+                },
+                {
+                  "id": "c",
+                  "text": "连续两轮通过项没有增加",
+                  "feedback": "不对。那是没有进展，属于另一条放弃条件。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "来源没读完时只能判继续，不能判无法完成。"
+            },
+            {
+              "id": "q3",
+              "prompt": "预算耗尽和放弃最本质的区别是什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "放弃有“做不成或没进展”的证据，预算耗尽没有",
+                  "feedback": "对。预算耗尽只说明没做完，换个大预算可能完成。"
+                },
+                {
+                  "id": "b",
+                  "text": "预算耗尽更严重",
+                  "feedback": "不对。两者不分轻重，区别在有没有做不成的证据。"
+                },
+                {
+                  "id": "c",
+                  "text": "放弃由模型决定，预算耗尽由程序决定",
+                  "feedback": "不对。两者都由程序按规则决定。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "分开记录是为了让下一步的问题不同：预算耗尽问预算，放弃问目标和资料。"
+            },
+            {
+              "id": "q4",
+              "prompt": "`max_stall` 是 2。第 1 轮通过 1 项，第 2 轮通过 1 项，第 3 轮通过 2 项。循环会因为没有进展而放弃吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不会：第 2 轮 stall 为 1，第 3 轮出现新通过项后归零",
+                  "feedback": "对。进展是通过项超过历史最好成绩，第 3 轮超过了。"
+                },
+                {
+                  "id": "b",
+                  "text": "会，在第 2 轮放弃",
+                  "feedback": "不对。第 2 轮 stall 只有 1，还没到 max_stall。"
+                },
+                {
+                  "id": "c",
+                  "text": "会，在第 3 轮放弃",
+                  "feedback": "不对。第 3 轮通过项增加，stall 归零。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "stall 记的是连续没有新进展的轮数，出现新进展就归零。"
+            },
+            {
+              "id": "q5",
+              "prompt": "同样 3 项检查，第 1 轮 room 填了 C301，第 2 轮 room 填了 C302，其余相同。`repeat_limit` 是 2。算重复失败吗？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "不算：失败的值不同，repeats 回到 1",
+                  "feedback": "对。同样的失败要求检查项、状态和值都一样。"
+                },
+                {
+                  "id": "b",
+                  "text": "算：失败的检查项相同",
+                  "feedback": "不对。值不一样，不是同样的失败。"
+                },
+                {
+                  "id": "c",
+                  "text": "算：两轮都没通过",
+                  "feedback": "不对。没通过不等于同样的失败。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "换一个错值也不是进展，所以这样的循环会被没有进展那一条拦住。"
+            },
+            {
+              "id": "q6",
+              "prompt": "回放时发现运行停在“用完 2 轮，还有检查项没通过”。结局应该读作什么？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "预算耗尽：没完成，也没有证据说明做不成",
+                  "feedback": "对。原因是轮数上限，不是放弃条件。"
+                },
+                {
+                  "id": "b",
+                  "text": "放弃：目标做不成",
+                  "feedback": "不对。放弃需要放弃条件触发，这里没有。"
+                },
+                {
+                  "id": "c",
+                  "text": "完成：已经尽力",
+                  "feedback": "不对。尽力不是完成条件，3 项里还有没通过的。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "预算耗尽是“没做完”，不是“做不到”，更不是“做完了”。"
+            },
+            {
+              "id": "q7",
+              "prompt": "一次运行里有两次模型响应没有 usage，其余的 total_tokens 加起来是 600。报告该怎么写？",
+              "options": [
+                {
+                  "id": "a",
+                  "text": "写 600，并注明 2 次未报告",
+                  "feedback": "对。只累加服务商报告的值，缺的写明几次未报告。"
+                },
+                {
+                  "id": "b",
+                  "text": "写 600，缺的按平均值估算",
+                  "feedback": "不对。估算不是服务商的计量。"
+                },
+                {
+                  "id": "c",
+                  "text": "缺的记为 0，总数还是 600，不用注明",
+                  "feedback": "不对。0 会让人以为没有用量；没报告就写未报告。"
+                }
+              ],
+              "correct": "a",
+              "explanation": "未报告不是 0，也不能估算。"
+            }
+          ]
+        },
+        {
+          "id": "check-hunt",
+          "type": "trace-hunt",
+          "prompt": "运行“不可达目标”，找出循环放弃时写下的停止原因。",
+          "target": {
+            "event": "lesson.report",
+            "path": "data.metrics[id=stop_reason]"
+          },
+          "explanation": "这是报告里的停止原因指标，由最后一轮 decide 的结果生成，和最后一条 lesson.goal_evaluation 的 reason 是同一句话。放弃时它写明是哪个字段、哪条规则；预算耗尽时写的是哪条预算。"
+        },
+        {
+          "id": "check-points",
+          "type": "checkpoint",
+          "title": "动手核对",
+          "prompt": "对照你自己的运行和本课源码，确认做到了再勾选。",
+          "items": [
+            {
+              "id": "item-1",
+              "text": "我在可达目标那一组里，对着每一条评估记录说出了：读了哪些资料、哪几项通过、为什么继续或停止。"
+            },
+            {
+              "id": "item-2",
+              "text": "我在不可达目标那一组里找到了放弃的原因，并确认结局是放弃，不是完成，也不是预算耗尽。"
+            },
+            {
+              "id": "item-3",
+              "text": "我比较了 5 轮和 2 轮两组的停止原因，能说出预算耗尽和放弃的区别。"
+            },
+            {
+              "id": "item-4",
+              "text": "我在赶工那一组里数出了报 done 的轮数和声明不一致的轮数，并核对了评估的结论没有被 status 改变。"
+            },
+            {
+              "id": "item-5",
+              "text": "小扩展：给 CRITERIA 里的 start_time 再加一个只认 24 小时制的限制，重启后端再跑一次，看哪些旧运行的检查会变。"
+            }
+          ]
+        },
+        {
+          "id": "recap",
+          "type": "steps",
+          "title": "回顾：目标循环的五件事",
+          "paragraphs": [
+            "{{lesson:reflection-revision}}和{{lesson:orchestrator-evaluator}}给修订循环设了迭代上限，本课把同一个想法放到目标上：不只问还要不要改，还问目标做不做得成。{{lesson:delegation-budget}}把预算分给几个子任务，这里是一个循环自己的预算和放弃规则；后面的课会继续用到这套停止与报告的办法。"
+          ],
+          "items": [
+            {
+              "id": "recap-1",
+              "text": "目标要写成程序能检验的条件：字段、值的形状和来源，值要原样出现在本次读过的来源里。"
+            },
+            {
+              "id": "recap-2",
+              "text": "目标评估独立于执行者：只读卡片和已读资料，status 只记录；来源没读完不判无法完成。"
+            },
+            {
+              "id": "recap-3",
+              "text": "每轮按固定顺序决定：先目标结论，再放弃条件，最后预算；放弃条件和预算都在运行前写明。"
+            },
+            {
+              "id": "recap-4",
+              "text": "三种结局分开报告：完成、放弃、预算耗尽，每种都有原因，也都不冒充别的。"
+            },
+            {
+              "id": "recap-5",
+              "text": "每一轮留下评估记录：依据、结论、进展、预算、决定和原因，回放只读它们。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "code_notes": [
+    {
+      "name": "CRITERIA",
+      "note": "完成条件：每个字段值的形状（正则表达式）和它的来源资料。"
+    },
+    {
+      "name": "evaluate_goal",
+      "note": "验收器：只读通知卡和本次运行读过的资料，逐项检查并给出结论。"
+    },
+    {
+      "name": "decide",
+      "note": "每轮结束后的决定：先看目标结论，再看放弃条件，最后看预算。"
+    },
+    {
+      "name": "Progress",
+      "note": "放弃条件的记忆：历史最好成绩、没有进展的轮数、重复失败的轮数。"
+    },
+    {
+      "name": "stall",
+      "note": "连续几轮通过项没有超过历史最好成绩。"
+    },
+    {
+      "name": "repeats",
+      "note": "同样的失败（检查项、状态和值都一样）连续出现的轮数。"
+    },
+    {
+      "name": "ROUND_STEPS",
+      "note": "一轮最多用的模型调用数；剩余调用数不够就不开新一轮。"
+    },
+    {
+      "name": "AGREES",
+      "note": "每种声明对应的评估结论；对上了才算声明与结论一致。"
+    },
+    {
+      "name": "claim_agrees",
+      "note": "执行者的 status 与评估结论是否对应。"
+    },
+    {
+      "name": "lesson.goal_evaluation",
+      "note": "每轮一条评估记录：依据、结论、进展、预算、下一步和原因。"
+    },
+    {
+      "name": "lesson.completion_claim",
+      "note": "执行者每轮交出的通知卡和 status，只记录，不采信。"
+    },
+    {
+      "name": "reason_code",
+      "note": "下一步的原因代码，共八种，如 goal_met、no_progress、max_rounds。"
+    },
+    {
+      "name": "status",
+      "note": "执行者对自己进度的声明：done、continue 或 impossible。"
+    }
+  ]
+}

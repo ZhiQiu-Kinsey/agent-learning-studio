@@ -3,6 +3,8 @@ import os
 import threading
 from urllib.parse import unquote, urlsplit, urlunsplit
 
+from course.api_client import (BAILIAN_EMBEDDING_BATCH_LIMIT, bailian_embedding_model,
+                               bailian_embeddings_url)
 from course.providers import ModelProfile
 
 
@@ -17,6 +19,23 @@ PROVIDERS = {
     "ollama": ("Ollama（本地）", "OLLAMA_API_KEY", "OLLAMA_MODEL", "OLLAMA_BASE_URL"),
     "custom": ("OpenAI compatible", "CUSTOM_API_KEY", "CUSTOM_MODEL", "CUSTOM_API_BASE"),
 }
+# Embedding 模型：百炼读 local_config（默认 text-embedding-v4），OpenAI 默认 text-embedding-3-small，
+# 其他服务商只认环境变量 <PROVIDER>_EMBEDDING_MODEL 或网页设置；没有就是未配置，平台不替学生挑模型。
+EMBEDDING_MODEL_ENV = {provider_id: (provider_id.upper() + "_EMBEDDING_MODEL") for provider_id in PROVIDERS
+                       if provider_id != "bailian"}
+DEFAULT_EMBEDDING_MODELS = {"openai": "text-embedding-3-small"}
+# 每次 Embedding 请求最多几条输入。百炼兼容接口是 10（官方文档）；OpenAI 是 2048；
+# 其他服务商的上限各不相同，平台统一取保守的 10。课程代码按这个值自己分批。
+EMBEDDING_BATCH_LIMITS = {"bailian": BAILIAN_EMBEDDING_BATCH_LIMIT, "openai": 2048}
+DEFAULT_EMBEDDING_BATCH_LIMIT = 10
+
+
+def embedding_setting(provider_id):
+    """缺 Embedding 配置时提示学生去改的设置名：百炼是 local_config，其他服务商是环境变量。"""
+    return "local_config.EMBEDDING_MODEL / EMBEDDING_API_URL" if provider_id == "bailian" \
+        else EMBEDDING_MODEL_ENV[provider_id]
+
+
 # 写进英文运行事件（run_start.provider_label）的名称；没列出的服务商名称本来就是英文。
 ENGLISH_LABELS = {"bailian": "Bailian (raw HTTP)", "ollama": "Ollama (local)"}
 
@@ -93,17 +112,35 @@ class ProviderRegistry:
             valid_model = isinstance(model, str) and bool(model.strip())
             return ModelProfile(provider_id, label, model.strip() if valid_model else "",
                                 key, base, valid_base and valid_model, requires_key,
-                                provider_id != "bailian")
+                                provider_id != "bailian",
+                                embedding_model=self._embedding_model(provider_id, override),
+                                embedding_batch_limit=EMBEDDING_BATCH_LIMITS.get(
+                                    provider_id, DEFAULT_EMBEDDING_BATCH_LIMIT))
+
+    @staticmethod
+    def _embedding_model(provider_id, override):
+        """当前服务商的 Embedding 模型；空字符串表示未配置（百炼还要求能确定 embeddings 地址）。"""
+        if provider_id == "bailian":
+            try:
+                model = override.get("embedding_model") or bailian_embedding_model()
+                url = bailian_embeddings_url()
+            except (ImportError, AttributeError, SyntaxError):
+                return ""
+            return model if url and model else ""
+        model = override.get("embedding_model") or os.environ.get(EMBEDDING_MODEL_ENV[provider_id], "").strip() \
+            or DEFAULT_EMBEDDING_MODELS.get(provider_id, "")
+        return model.strip()
 
     def update(self, body):
         """先完整校验，再原子更新；错误不包含用户输入、密钥或URL。"""
-        if not isinstance(body, dict) or not body or set(body) - {"provider_id", "model", "api_base", "api_key"}:
+        if not isinstance(body, dict) or not body or set(body) - {"provider_id", "model", "api_base", "api_key",
+                                                        "embedding_model"}:
             raise ValueError("请输入有效的模型设置。")
         provider_id = body.get("provider_id", self.active)
         if not isinstance(provider_id, str) or provider_id not in PROVIDERS:
             raise ValueError("请选择有效的服务商。")
         updates = {}
-        for name, limit in (("api_key", 1024), ("model", 256), ("api_base", 2048)):
+        for name, limit in (("api_key", 1024), ("model", 256), ("api_base", 2048), ("embedding_model", 256)):
             if name not in body:
                 continue
             value = body[name]
@@ -157,4 +194,5 @@ def public_profile(profile):
             "api_key_configured": bool(profile.api_key), "config_ready": profile.config_ready,
             "requires_api_key": profile.requires_key,
             "base_url_configured": bool(profile.api_base),
-            "supports_custom_base_url": profile.supports_custom_base_url}
+            "supports_custom_base_url": profile.supports_custom_base_url,
+            "embedding_model": profile.embedding_model}

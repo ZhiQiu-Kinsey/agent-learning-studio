@@ -3,6 +3,7 @@ import copy
 import json
 import re
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -149,6 +150,9 @@ class LessonIdApiTests(unittest.TestCase):
         self.assertEqual(events[-1]["data"]["status"], "completed")
 
     def test_unknown_and_planned_ids_return_404_with_codes(self):
+        # 目录里已没有 planned 课：临时把 document-loading 从可执行课程里拿掉，它就只剩目录登记（未开放）。
+        hidden = [item for item in LESSONS if item["id"] != "document-loading"]
+        self.enterContext(patch("server.catalog.LESSONS", hidden))
         cases = {"no-such-lesson": "lesson_not_found", "999": "lesson_not_found", "01": "lesson_not_found",
                  "document-loading": "lesson_not_available", "11": "lesson_not_found"}
         for requested, code in cases.items():

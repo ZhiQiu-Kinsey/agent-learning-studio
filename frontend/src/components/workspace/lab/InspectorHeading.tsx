@@ -3,6 +3,7 @@ import { Waypoints } from "lucide-react";
 import type { StudioState } from "../../../hooks/useStudio";
 import type { Trace } from "../../../types";
 import StatusMark from "../../react-bits/StatusMark";
+import { pendingApproval } from "./approvals";
 
 /** Title of the run observatory and the real status of the current run. */
 export function InspectorHeading({
@@ -50,7 +51,11 @@ export function InspectorHeading({
           />
         </span>
         {s.running
-          ? t("status.running")
+          ? s.stopping
+            ? t("status.stopping")
+            : pendingApproval(s.events)
+              ? t("status.awaitingApproval")
+              : t("status.running")
           : completed
             ? t("status.completed")
             : s.events.length

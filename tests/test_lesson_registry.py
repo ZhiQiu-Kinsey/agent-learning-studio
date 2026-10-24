@@ -190,6 +190,47 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(LessonValidationError, "超出允许目录"):
             self.load()
 
+    def test_embedding_factory_is_validated_like_completion_factory(self):
+        directory, baseline = self.course(custom=True)
+        (directory / "fixtures.py").write_text(
+            "def create_embedding(exercise_id, inputs=None, locale='zh-CN'):\n"
+            "    return lambda body, api_key: {'data': []}\n", encoding="utf-8")
+        # 只用 Embedding 的模型课可以只声明 embedding_factory。
+        manifest = copy.deepcopy(baseline)
+        manifest["runtime"]["requires_model"] = True
+        manifest["testing"] = {"embedding_factory": "fixtures:create_embedding"}
+        manifest["exercises"].append({"id": "local", "title": "本地", "question": "本地实验",
+                                      "requires_model": False})
+        self.write_json(directory / "lesson.json", manifest)
+        spec = self.load()[0]
+        self.assertEqual(spec["testing"], {"embedding_factory": "fixtures:create_embedding"})
+        from server.catalog import exercise_requires_embedding
+        shared, local = spec["exercises"]
+        self.assertTrue(exercise_requires_embedding(spec, shared))
+        self.assertFalse(exercise_requires_embedding(spec, local))
+        for reference in ("os:system", "fixtures:bad-name", "../fixtures:create_embedding"):
+            with self.subTest(reference=reference):
+                broken = copy.deepcopy(manifest)
+                broken["testing"]["embedding_factory"] = reference
+                self.write_json(directory / "lesson.json", broken)
+                with self.assertRaises(LessonValidationError):
+                    self.load()
+        for exercise_fields, testing in (({"requires_embedding": True}, {"completion_factory": "fixtures:create_completion"}),
+                                         ({"requires_embedding": True, "requires_model": False}, manifest["testing"]),
+                                         ({"requires_embedding": "yes"}, manifest["testing"])):
+            with self.subTest(exercise=exercise_fields):
+                broken = copy.deepcopy(manifest)
+                broken["testing"] = testing
+                broken["exercises"][0].update(exercise_fields)
+                self.write_json(directory / "lesson.json", broken)
+                with self.assertRaises(LessonValidationError):
+                    self.load()
+        broken = copy.deepcopy(manifest)
+        broken["testing"] = {}
+        self.write_json(directory / "lesson.json", broken)
+        with self.assertRaisesRegex(LessonValidationError, "embedding_factory"):
+            self.load()
+
     def test_entrypoints_and_factories_are_restricted_to_course_modules(self):
         directory, baseline = self.course()
         for reference in ("os:system", "../fixtures:create_completion", "fixtures:create_completion:extra", "fixtures:bad-name"):

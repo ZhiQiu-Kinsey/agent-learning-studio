@@ -6,7 +6,7 @@ Version: 2.0.0. Environment: Python, multi-provider model access, a local web le
 
 > Lesson numbers follow catalog order and are for display only; the API and links use the lesson ID (slug). Sections of available lessons come from their lesson text; sections of planned lessons are plans.
 
-The course is organized as **category → module → lesson → topics → experiments → acceptance**. Available now: Lesson 1, Lesson 2, Lesson 3, Lesson 4, Lesson 5, Lesson 6, Lesson 7, Lesson 8, Lesson 9, Lesson 10, Lesson 11, Lesson 12, Lesson 13, Lesson 14, Lesson 15, Lesson 16, Lesson 17, Lesson 18, Lesson 19, Lesson 20, Lesson 21, Lesson 22, Lesson 23, Lesson 24. The other lessons are registered as plans and will be added one by one.
+The course is organized as **category → module → lesson → topics → experiments → acceptance**. Available now: Lesson 1, Lesson 2, Lesson 3, Lesson 4, Lesson 5, Lesson 6, Lesson 7, Lesson 8, Lesson 9, Lesson 10, Lesson 11, Lesson 12, Lesson 13, Lesson 14, Lesson 15, Lesson 16, Lesson 17, Lesson 18, Lesson 19, Lesson 20, Lesson 21, Lesson 22, Lesson 23, Lesson 24, Lesson 25, Lesson 26, Lesson 27, Lesson 28, Lesson 29, Lesson 30, Lesson 31, Lesson 32, Lesson 33, Lesson 34, Lesson 35, Lesson 36, Lesson 37, Lesson 38, Lesson 39, Lesson 40, Lesson 41, Lesson 42, Lesson 43, Lesson 44, Lesson 45, Lesson 46, Lesson 47, Lesson 48, Lesson 49, Lesson 50, Lesson 51, Lesson 52, Lesson 53. The other lessons are registered as plans and will be added one by one.
 
 ## Learning principles
 
@@ -1558,22 +1558,22 @@ Loading and chunking, then comparing keyword, vector, and hybrid retrieval.
 
 **Lesson ID:** `document-loading`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 9 Structured output and business validation, Lesson 11 Context components and the message protocol
 
 Turn a fixed set of local documents into chunks that carry their source, compare chunking strategies, and mark the trust boundary of external text at load time.
 
-**Terms in this lesson:** Chunking
+**Terms in this lesson:** Chunking, Chunk Overlap, Chunk ID, Trust Boundary
 
 **Sections**
 
-1. **Why load and chunk first**: A model can't read a whole document set at once, so retrieval works on small chunks, and each chunk must point back to the original.
-2. **Loading and cleanup**: Read local Markdown, text, and similar files as plain text, recording source path, title, and version.
-3. **Chunk size and overlap**: Cut the same document with different sizes and overlaps, then compare the chunk count and sentences split across chunks.
-4. **Chunk IDs and locating the original**: Each chunk has a stable ID and a line range, so later citations can be checked.
-5. **External text is untrusted**: An "instruction" inside a document is just data; mark its trust level from the loading step.
-6. **Failure cases**: Record empty documents, duplicate content, and parse failures separately instead of skipping them silently.
+1. **Why load and chunk first**: A model cannot read a whole handbook at once, so retrieval works in small chunk…
+2. **Loading and cleaning**: Loading reads local files as plain text and records where each came from, its t…
+3. **Chunk size and overlap**: Cut the same material with a different size and overlap, and both the number of…
+4. **Chunk IDs and locating the original**: Every chunk carries a stable ID and a line range, so later citations can be che…
+5. **External text is untrusted**: An "instruction" in the material is only data, and its trust level is marked fr…
+6. **Failure cases**: Empty documents, duplicate content and parse failures are each recorded, never …
 
 **Objectives**
 
@@ -1585,7 +1585,7 @@ Turn a fixed set of local documents into chunks that carry their source, compare
 
 - Document loading and format cleanup
 - Source path, title, and version
-- Chunk size, overlap, and context
+- Chunk size, chunk overlap, and context
 - Chunk IDs and locating the original text
 - External text is untrusted
 - Empty documents, duplicate content, and parse failures
@@ -1615,19 +1615,21 @@ Deliverable: A list of the fixed corpus, two chunk catalogs, and a log of loadin
 
 **Lesson ID:** `keyword-retrieval`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** no model calls
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** no model calls
 
 **Prerequisites:** Lesson 25 Document loading and chunking
 
 Retrieve over local documents with keywords and BM25, see the hits, ranking, and misses, and set up a comparable baseline for later vector retrieval.
 
+**Terms in this lesson:** Keyword retrieval, Inverse document frequency, BM25, Query set, Retrieval miss
+
 **Sections**
 
-1. **What retrieval has to answer**: Given a query, find the few chunks most likely to contain the answer, and explain why they rank first.
-2. **Term frequency and inverse document frequency**: Common words get low weight and rare words get high weight. This is where BM25 starts.
-3. **How to read a BM25 score**: Break a hit's score into its parts and see what length normalization does.
-4. **Query set and hit table**: Mark the chunks each query should hit, then count top-k hits.
-5. **Where misses come from**: Queries that use different wording or synonyms get missed. That is the problem vector retrieval is meant to solve.
+1. **What retrieval has to answer**: Given a query, find the few chunks most likely to hold the answer, and say why …
+2. **Term frequency and inverse document frequency**: Common terms weigh little and rare terms weigh a lot: that is where BM25 starts…
+3. **How to read a BM25 score**: Take one hit's score apart term by term and see what length normalization does.…
+4. **Query set and hit table**: Mark, for a set of queries, the sections each should find, then count how many …
+5. **Where misses come from**: Queries that reword the question or use a synonym miss, and that is the problem…
 
 **Objectives**
 
@@ -1667,19 +1669,21 @@ Deliverable: The query set, a hit table, and examples of misses.
 
 **Lesson ID:** `embedding-retrieval`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 26 Keyword retrieval and BM25
 
 Turn document chunks into embeddings, retrieve by cosine similarity, and compare hits and misses with the keyword baseline on the same query set.
 
+**Terms in this lesson:** Vector retrieval, Embedding, Cosine similarity, Vector index
+
 **Sections**
 
-1. **An embedding is a list of numbers**: Map text to a vector. Texts with similar meaning get similar vectors.
-2. **Cosine similarity**: Compare similarity by the angle between vectors, and read what the score range means.
-3. **Build and save the index**: Record the embedding model, dimension, and document version so the index can be reused.
-4. **Compare with keyword retrieval**: Compare hits on the same query set to see which queries each method handles well and which it misses.
-5. **Cost and limits**: Generating embeddings calls a model, and vector retrieval is not necessarily better for queries with numbers or proper nouns.
+1. **An embedding is a list of numbers**: An embedding turns a piece of text into a fixed-length list of numbers, and tex…
+2. **Cosine similarity**: Cosine similarity compares two vectors by the angle between them: it looks at d…
+3. **Building and saving the index**: A vector index is saved together with the embedding model, the dimensions and t…
+4. **Compared with keyword retrieval**: Only by comparing hits on the same query set can you see what each retriever is…
+5. **Cost and limits**: Embeddings cost model calls billed by input, and for queries about numbers or p…
 
 **Objectives**
 
@@ -1719,21 +1723,22 @@ Deliverable: A table comparing the hits of the two retrieval methods.
 
 **Lesson ID:** `hybrid-retrieval`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 27 Embeddings and vector retrieval
 
 Merge and rerank keyword and vector results, compare the three retrieval methods on one query set, and handle index updates and deletions.
 
-**Terms in this lesson:** Vector retrieval, Hybrid retrieval
+**Terms in this lesson:** Hybrid retrieval, Reciprocal Rank Fusion, Reranking, Metadata Filtering
 
 **Sections**
 
-1. **Why mix**: Keyword and vector retrieval each miss some things, and merging the two result lists is usually steadier.
-2. **Merging results (RRF)**: Merge by rank rather than score, because the two score scales differ.
-3. **Reranking**: Use a more expensive model to reorder a small set of candidates, and compare hits before and after reranking.
-4. **Metadata filtering and top-k**: Filter by source or time, then take the top k, and record what was filtered out.
-5. **Index updates and deletions**: When a document changes or is deleted, its old chunks must stop being retrieved.
+1. **Why combine**: Keyword and vector retrieval each miss things, and merging their results is usu…
+2. **Merging results (RRF)**: Merge by rank rather than by score, so the two different score scales never mee…
+3. **Reranking**: A costlier model reorders a few candidates, and the hits before and after are c…
+4. **Metadata filtering and top_k**: Filter by source or time, then take the top k, and record what was filtered out…
+5. **Index updates and deletions**: When a document is edited or deleted, its old chunks must stop being retrievabl…
+6. **What one run proves**: A hit only says that a labeled section is in the top k, not that the answer wil…
 
 **Objectives**
 
@@ -1779,22 +1784,22 @@ Validate citations, then study bounded Agentic RAG.
 
 **Lesson ID:** `rag-citations`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 9 Structured output and business validation, Lesson 28 Hybrid retrieval and reranking
 
 Give the model the chunks that were actually retrieved, generate traceable answers, and handle insufficient or conflicting sources.
 
-**Terms in this lesson:** Retrieval-augmented generation, Citation
+**Terms in this lesson:** Retrieval-augmented generation, Citation, Groundedness
 
 **Sections**
 
-1. **Hand the retrieval results to the model**: Put retrieved chunks in the request, labeled separately from the question, so the model can tell documents from instructions.
-2. **Citation format**: The answer writes chunk IDs, and the program checks that each cited ID exists.
-3. **Does the citation really support the conclusion**: Existing is not supporting: check, citation by citation, whether the cited chunk contains what the answer claims.
-4. **When sources are insufficient**: If retrieval finds no basis, say you don't know, rather than letting the model fill in the gap.
-5. **Conflicts and freshness**: When two chunks disagree, the answer lists the disagreement and each chunk's source.
-6. **Retrieval quality and generation quality are separate**: When an answer is wrong, first check whether retrieval found the evidence, then whether the model used it correctly.
+1. **Giving the retrieved chunks to the model**: Retrieved chunks go into the request, labelled separately from the question, so…
+2. **Citation format**: Each claim in the answer must carry a chunk ID so a program can check whether t…
+3. **Does the citation really support the claim?**: Existing is not supporting: even when the cited chunk was provided, each claim …
+4. **When the material is not enough**: When retrieval finds no evidence, the answer must say plainly that the material…
+5. **Conflicting sources and recency**: When two chunks disagree, the answer lists the disagreement and each source ins…
+6. **Judging retrieval and generation separately**: When an answer is wrong, first check whether retrieval found the evidence, then…
 
 **Objectives**
 
@@ -1806,7 +1811,7 @@ Give the model the chunks that were actually retrieved, generate traceable answe
 
 - Retrieval context and the generation prompt
 - Chunk IDs, sources, and citation format
-- Citation existence and support
+- Citation existence, support, and groundedness
 - No answer and uncertainty
 - Conflicting sources and freshness
 - Separating retrieval quality from generation quality
@@ -1837,21 +1842,22 @@ Deliverable: A Q&A record, a citation check table, and a classification of retri
 
 **Lesson ID:** `agentic-rag`
 
-**Level:** Advanced · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Advanced · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 12 Application state and the run lifecycle, Lesson 29 RAG answers and citations
 
 Let the model decide within a budget whether to rewrite the query, retrieve again, or stop, and use the same question set to judge whether the extra retrieval improves results.
 
-**Terms in this lesson:** Agentic RAG
+**Terms in this lesson:** Agentic RAG, Static RAG, Multi-hop question, Query rewriting, Attempt log
 
 **Sections**
 
-1. **What static RAG lacks**: When one retrieval finds nothing, a static flow has no chance to rewrite the query or search again.
-2. **Retrieval as a tool**: Let the model decide when to retrieve and what to look for, so retrieval calls and results go into the trace.
-3. **Query rewriting and sub-questions**: Split a complex question into sub-queries and see which piece of evidence each retrieval adds.
-4. **Bounded iteration**: Limit the number and duration of retrievals, and stop honestly when the limit is reached.
-5. **Comparison with static RAG**: On the same question set, compare accuracy, model calls, and cost to judge whether the extra retrieval is worth it.
+1. **What static RAG lacks**: When one search misses, a static flow has no chance to rewrite the query or sea…
+2. **Retrieval as a tool**: Let the model decide when to search and what to search for, with every search c…
+3. **Query rewriting and sub-questions**: Split a complex question into sub-queries and see which piece of evidence each …
+4. **Bounded iteration**: Limit searches and time, and stop honestly at a limit. Once the model decides w…
+5. **Compared with static RAG**: Compare correctness, model calls and cost on the same question set to judge whe…
+6. **When the handbook has no answer**: When the handbook has no answer, the right ending is to say the material is not…
 
 **Objectives**
 
@@ -1862,7 +1868,7 @@ Let the model decide within a budget whether to rewrite the query, retrieve agai
 **Topics**
 
 - Retrieval tool and query routing
-- Query rewriting and sub-questions
+- Multi-hop questions, query rewriting, and sub-questions
 - Observation feedback and evidence coverage
 - Repeated queries and attempt records
 - Budgets for calls, rounds, and time
@@ -1902,19 +1908,21 @@ Map native models, tools, and result contracts onto it, and reuse mature compone
 
 **Lesson ID:** `langchain-vs-native`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 7 Error handling and safety boundaries, Lesson 11 Context components and the message protocol
 
 Compare the native loop with LangChain on the same task and tools, and explain which messages, calls, and result handling the framework takes over.
 
+**Terms in this lesson:** Agent Framework, Framework Input, Invalid Tool Call
+
 **Sections**
 
-1. **The same task, two implementations**: Take a task the native loop already did and do it again with LangChain.
-2. **What the framework does for you**: Compare message formats, tool registration, and the loop, and mark every step the framework wraps.
-3. **The request is still the same request**: Capture the request the framework actually sends and compare it field by field with the native request.
-4. **Callbacks and a unified trace**: Use callbacks to feed the framework's internal steps into the platform's event record.
-5. **Dependency versions**: Pin versions and record capability differences, so the comparison can be rerun after a framework upgrade.
+1. **The same task, two implementations**: This lesson takes a task the native loop already did and does it again with Lan…
+2. **What the framework does for you**: Compare the message format, tool registration and the loop, and the framework t…
+3. **The request is still the same request**: Capture the request the framework actually sends, compare it field by field wit…
+4. **Callbacks and a unified trace**: Use callbacks to feed the framework's internal steps into the platform's event …
+5. **Dependency versions**: Pin versions and record capability differences, so the comparison can be rerun …
 
 **Objectives**
 
@@ -1924,9 +1932,9 @@ Compare the native loop with LangChain on the same task and tools, and explain w
 
 **Topics**
 
-- Model interface and provider adapters
-- Framework messages vs. native messages
-- Tool registration and the agent loop
+- Agent framework model interfaces and provider adapters
+- Framework input, framework messages, and native messages
+- Tool registration, invalid tool calls, and the agent loop
 - Deterministic chains vs. autonomous calls
 - Callbacks and a unified trace
 - Checking dependency versions and capabilities
@@ -1956,18 +1964,23 @@ Deliverable: Paired traces of the two implementations and a table mapping framew
 
 **Lesson ID:** `langchain-tools`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 9 Structured output and business validation, Lesson 31 LangChain vs. the native implementation
 
 Plug existing business contracts into the framework's model, tool, and validation components, and compare the unified interface with the provider's raw response.
 
+**Terms in this lesson:** Tool Decorator, Capability Matrix
+
 **Sections**
 
-1. **Tool decorators and parameter schemas**: Generate a tool definition from type annotations and compare it with a hand-written JSON Schema.
-2. **Structured results and parsers**: Let the framework parse the model output, and see how it reports errors when parsing fails.
-3. **A unified interface and provider differences**: Behind one interface, different providers support different capabilities, so check them one by one.
-4. **Error conversion and bounded repair**: On a parse failure, retry at most once and record the raw output.
+1. **What the framework takes over, what the program keeps**: This lesson hands the business contract written in earlier lessons to LangChain…
+2. **Tool decorators and parameter schemas**: A tool decorator builds the tool definition from the function's type hints, whi…
+3. **Structured results and parsers**: with_structured_output lets the framework parse the model's output for you, but…
+4. **Unified interface, different providers**: The unified interface turns every provider's response into the same kind of AIM…
+5. **Unsupported capabilities need an explicit fallback**: When a provider does not support a capability, the fallback belongs in the code…
+6. **Error conversion and bounded repair**: A failed parse gets at most one repair, and the raw output stays in the respons…
+7. **Component reuse and dependency management**: The right way to reuse a business contract is to import it, not copy it; the fr…
 
 **Objectives**
 
@@ -2014,19 +2027,23 @@ Build a state graph you can explain, and decide the boundaries for dependencies,
 
 **Lesson ID:** `langgraph-state`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 12 Application state and the run lifecycle, Lesson 32 LangChain tools and structured adapters
 
 Describe the task flow with State, Node, and Edge, and orchestrate tool calls and validation as a graph with terminal states.
 
+**Terms in this lesson:** StateGraph, Conditional edge, Reducer, Recursion limit
+
 **Sections**
 
-1. **Why draw it as a graph**: Branches, loops, and terminal states are easier to check as a graph than as nested ifs.
-2. **State, Node, Edge**: State is shared data, nodes read and write it, and edges decide the next step.
-3. **Conditional routing and tool nodes**: Pick the next edge from the state, and make a tool call a node.
-4. **Loop budget and terminal states**: A loop in the graph needs a limit too, and every path must reach END.
-5. **Node events and state diffs**: Record the state difference before and after each node, so a replay shows how the graph ran.
+1. **Why draw it as a graph**: Branches, loops and terminal states written as a graph are easier to check than…
+2. **State, Node, Edge**: The state is shared data, nodes read and write it, and edges decide the next st…
+3. **Reducers: how an update joins the state**: How the fields a node returns are merged into the old state is decided by each …
+4. **Conditional routing and the tool node**: A conditional edge picks the next edge from the state, and tool calls become a …
+5. **Loop budgets and terminal states**: Loops in a graph need a limit too, and every path must reach END. Going from ve…
+6. **Node events and state diffs**: Record the state diff of each node, and a replay shows how the graph moved. str…
+7. **Back to acceptance: where each path stops**: Check this lesson's three acceptance requirements again; each one lands on spec…
 
 **Objectives**
 
@@ -2039,8 +2056,8 @@ Describe the task flow with State, Node, and Edge, and orchestrate tool calls an
 - State, Node, Edge, and StateGraph
 - Typed state and updates
 - Message merging and reducers
-- Conditional routing and tool nodes
-- Loop budget and START/END
+- Conditional-edge routing and tool nodes
+- Recursion limit and START/END
 - Node events and state diffs
 
 **Experiments**
@@ -2069,18 +2086,22 @@ Deliverable: A state graph, node contracts, and three reproducible execution pat
 
 **Lesson ID:** `streaming-cancel`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 6 Dependent calls across rounds, Lesson 12 Application state and the run lifecycle, Lesson 33 LangGraph state and branching
 
 Receive model output chunk by chunk, tell apart a user pressing stop, a client disconnecting, and the backend actually finishing, and record what had already arrived when cancellation happened.
 
+**Terms in this lesson:** Streaming, Time to First Token, Cancel Request, Client Disconnect, Partial Result
+
 **Sections**
 
-1. **What streaming is**: The model returns chunks as it generates, and time to first token affects the experience more than total time.
-2. **Assembly and the final answer**: Join the chunks into the full answer, and check that its format matches the non-streaming result.
-3. **Cancel requests**: After the user presses stop, no new chunks are accepted, and the part already received is recorded.
-4. **Client disconnects and the backend run**: Closing the browser doesn't mean the backend stopped, so the terminal state must follow the backend's record.
+1. **What streaming is**: Streaming returns the model's output in chunks while it is still being generate…
+2. **Assembling the final answer**: Once the chunks are assembled, the answer has to look like a non-streamed respo…
+3. **How the time to first token is measured**: The time to first token starts before the request is sent and stops when the fi…
+4. **Cancel requests**: A cancel request lets the user stop a long output at any time, keeps what has a…
+5. **Client disconnect and the backend run**: A client disconnect only means the browser that reads events has left; the back…
+6. **Recording a partial result and the next round**: What a cancel or an early stop leaves behind is a partial result, and it has to…
 
 **Objectives**
 
@@ -2120,19 +2141,21 @@ Deliverable: Three run records: complete, cancelled, and disconnected.
 
 **Lesson ID:** `async-concurrency`
 
-**Level:** Advanced · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Advanced · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 34 Streaming and cancellation
 
 Check data dependencies first, then run independent tasks in parallel, set a concurrency limit and timeouts, and record partial results.
 
+**Terms in this lesson:** Concurrency Limit
+
 **Sections**
 
-1. **First decide whether it can run in parallel**: Only tasks that don't depend on each other can run at the same time. Dependencies set the execution order.
-2. **async/await and tasks**: Send requests in parallel with Python tasks, and compare wall-clock time with serial execution.
-3. **Concurrency limit**: Cap the number of simultaneous requests to protect the provider's quota and local resources.
-4. **Timeouts and partial results**: One task timing out doesn't bring down the whole run. Report which tasks finished and which timed out.
-5. **Cancellation and terminal state**: Cancellation must reach every subtask, and the final terminal state must be consistent.
+1. **Can it run in parallel?**: Only tasks that do not depend on each other can run at the same time; dependenc…
+2. **async/await and tasks**: Python tasks send requests in parallel, and you compare the wall-clock time wit…
+3. **The concurrency limit**: The number of requests in flight needs a limit, to protect the provider's quota…
+4. **Timeouts and partial results**: One task timing out should not drag the whole run down, and the report says whi…
+5. **Cancelling and the terminal state**: Cancelling must reach every subtask, and the final terminal state must be consi…
 
 **Objectives**
 
@@ -2176,24 +2199,30 @@ Add a gate before execution, pause and resume later, and recover from a checkpoi
 
 **Lesson ID:** `hooks-approval`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 35 Parallelism, timeouts, and concurrency limits
 
 Add hooks and human approval before tool execution, so the run enters a paused state and resumes after approval or rejection.
 
+**Terms in this lesson:** Hook Phase, Approval Gate, Approval Request, Risk Level, Argument Digest
+
 **Sections**
 
-1. **Why hooks**: Insert checks before and after a tool runs without changing every tool's code.
-2. **Approval request**: A high-risk call first produces an approval card that states the tool, an argument summary, and the risk.
-3. **Pause and resume**: The run stops at the approval point and continues from there after approval, or ends honestly after rejection.
-4. **The argument summary must resist substitution**: What gets approved is the set of arguments the summary stands for, so check it once more before execution.
+1. **Why we need hooks**: A hook inserts a check before or after a tool runs, so no tool has to carry its…
+2. **Hook phases and verdicts**: There are two hook phases, before and after the tool: a hook before the tool ru…
+3. **The approval request**: A high-risk call first becomes an approval request that states the tool, a summ…
+4. **Risk levels**: A risk level grades every call by whether a mistake can be taken back and how f…
+5. **Pause and resume**: The run stops at the approval point, continues from the same place after approv…
+6. **The argument digest guards against swaps**: What was approved is the set of arguments the digest stands for, and it is chec…
+7. **Edited arguments must pass the rules again**: When the card allows editing, the edited arguments are new input and must pass …
+8. **What hooks and approval cannot reach**: Hooks see only the name and arguments of a call and the value a tool returns, a…
 
 **Objectives**
 
 - Tell a hook's stage from its verdict
 - Implement approval that can pause and resume
-- Make the approval summary match the actual arguments
+- Make the executed arguments the same as the approved ones
 
 **Topics**
 
@@ -2209,7 +2238,7 @@ Approval before a high-risk tool:
 
 1. Add an approval gate to an example tool that writes a file.
 2. The run enters paused, the learner approves or rejects in the UI, and the run resumes or ends accordingly.
-3. Check that the approval summary matches the arguments actually executed.
+3. Check the argument digest before executing, to confirm the arguments executed are the ones approved.
 
 Deliverable: The approval card record and the pause and resume timeline.
 
@@ -2217,7 +2246,7 @@ Deliverable: The approval card record and the pause and resume timeline.
 
 - The tool has not run before approval.
 - After a rejection the run ends honestly and gives the reason.
-- The approval summary matches the actual arguments item by item.
+- The approval's summary sentence states every key argument, and the digest of the executed arguments equals the approved digest.
 
 **References**
 
@@ -2228,21 +2257,22 @@ Deliverable: The approval card record and the pause and resume timeline.
 
 **Lesson ID:** `human-in-the-loop`
 
-**Level:** Advanced · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Advanced · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 33 LangGraph state and branching, Lesson 35 Parallelism, timeouts, and concurrency limits
 
 Pause before actions with side effects, use checkpoints to save the execution position, and verify recovery after a restart or a human edit.
 
-**Terms in this lesson:** Human-in-the-loop, Checkpoint, Idempotency
+**Terms in this lesson:** Human-in-the-loop, Checkpoint, Idempotency, Thread ID, Operation ID
 
 **Sections**
 
-1. **When a person is needed**: When an action has side effects, can't be undone, or lacks evidence, hand the decision to a person.
-2. **Checkpoints**: Save the execution position and state, so a pause can be resumed exactly.
-3. **Editing state by hand**: A person can change arguments or the plan, and the edit itself must be recorded.
-4. **Recovery after a restart**: After a process restart, continue from the checkpoint without repeating completed side effects.
-5. **Recovery permissions and error paths**: Who may resume and what happens when resuming fails both need explicit rules.
+1. **When a person is needed**: When a step has a side effect, cannot be undone or lacks evidence, hand the dec…
+2. **Checkpoints**: Save the execution position and state, so that after a pause you can restore it…
+3. **Editing the state by hand**: A person can change the parameters or the plan, and the change itself must be r…
+4. **Resuming after a restart**: After a process restart, continue from the checkpoint without repeating side ef…
+5. **Who may resume and what happens when it fails**: Say clearly who can resume and what happens when a resume fails. Permission fir…
+6. **Summary**: This lesson splits one task with a side effect into three positions: draft, app…
 
 **Objectives**
 
@@ -2293,20 +2323,22 @@ Sandboxed command execution and file edits that can be verified.
 
 **Lesson ID:** `bash-coding-agent`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 36 Hooks and approval gates
 
 In a fixture repository with a failing test, let the agent fix the code with a single bash tool, and have the platform rerun the tests for acceptance.
 
+**Terms in this lesson:** Sandbox, Temporary Workspace, Command Policy, Process Tree, Head-and-Tail Truncation
+
 **Sections**
 
-1. **Task and acceptance**: The fixture repository has one failing test. The agent fixes it, and the platform reruns the tests for acceptance.
-2. **One bash tool is enough**: Give the agent a single tool that runs commands, and watch how it reads files, edits code, and runs tests.
-3. **Temporary workspace and environment cleanup**: Run in an isolated directory that doesn't inherit the machine's secrets or environment variables.
-4. **Timeouts and killing the process tree**: When a command hangs, time it out and end every child process it started.
-5. **Command policy and output truncation**: Dangerous commands are denied by default. Long output keeps only the head and tail, with the truncation marked.
-6. **"I fixed it" doesn't count**: The result of the platform's rerun is what counts. Record the commands, exit codes, and diffs.
+1. **The task and the acceptance**: The fixture repository has one failing test; the agent fixes it and the platfor…
+2. **One bash tool is enough**: Give an agent just one tool that runs commands and it can read files, change co…
+3. **Temporary workspace and a cleaned environment**: Commands run in a throwaway temporary workspace and do not inherit this machine…
+4. **Timeouts and killing the process tree**: When a command hangs, the platform ends its whole process tree, that is, every …
+5. **Command policy and output truncation**: Before a command runs it passes the command policy, so a command that clearly s…
+6. **The agent saying it is fixed does not count**: Whether the task is done is decided by the result of the platform re-running th…
 
 **Objectives**
 
@@ -2328,13 +2360,13 @@ Fixing the failing test in a fixture repository:
 
 1. Create an independent temporary workspace for each run and copy in the fixture repository with the failing test.
 2. The agent has only one bash tool. Record each command's cwd, policy verdict, exit code, head and tail of output, and duration.
-3. When the run ends, the platform reruns pytest to decide whether the bug is fixed.
+3. When the run ends, the platform reruns the tests (standard-library unittest) to decide whether the bug is fixed.
 
 Deliverable: Command records, file diffs, and the platform's acceptance result.
 
 **Acceptance**
 
-- Child processes can't get any secrets.
+- The child process does not inherit secret-like environment variables from the machine.
 - A timeout terminates the whole process tree.
 - The acceptance result comes from tests the platform reruns.
 
@@ -2346,18 +2378,23 @@ Deliverable: Command records, file diffs, and the platform's acceptance result.
 
 **Lesson ID:** `file-edit-evidence`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 38 A single-bash-tool coding agent and its sandbox
 
 Replace bash file editing with dedicated read, write, and edit tools, compare edit strategies, and prove changes with before-and-after hashes and diffs.
 
+**Terms in this lesson:** Stale Write, Change Evidence
+
 **Sections**
 
-1. **Why not edit files with bash**: Dedicated read and write tools can validate paths and record content before and after, which makes errors easier to locate.
-2. **Whole-file writes and local replacements**: Compare the success rate and risk of the two edit methods on large files.
-3. **Before-and-after hashes and diffs**: Use hashes to prove a file really changed and a diff to show what changed.
-4. **Conflict and staleness detection**: If the file was changed after it was read, the edit must be rejected instead of overwriting it.
+1. **Why not edit files with Bash**: Dedicated read and write tools can check the path before a file changes, record…
+2. **Paths, read before write and protected files**: A path from the model is just a string; it cannot be passed straight to the fil…
+3. **Whole-file writes and local replacement**: Whole-file writes and local replacement differ in how often they succeed on lar…
+4. **Line replacement and line drift**: A line replace uses `edit_lines`: the model gives a first line, a last line and…
+5. **Hashes before and after, and the diff**: A hash can prove that the file really changed, and a diff can show what changed…
+6. **Conflicts and stale-write detection**: If a file was changed by someone else after the model read it, the edit should …
+7. **Summary**: Looking back, the lesson has three threads. Dedicated tools put rules about pat…
 
 **Objectives**
 
@@ -2405,33 +2442,33 @@ Build a fixed question set and held-out cases, and tell apart finished, correct,
 
 **Lesson ID:** `evaluation-sets`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 8 Task goals and acceptance
 
 Build independent validators, a fixed question set, and held-out cases on tasks that already work, compare versions, and keep every failure record.
 
-**Terms in this lesson:** Evaluation
+**Terms in this lesson:** Evaluation, Development Set, Holdout Set, Paired Analysis, Regression
 
 **Sections**
 
-1. **One successful run doesn't mean it works**: Only a fixed question set and a held-out set let you compare which of two versions is better.
-2. **Validators and scoring rules**: Judge with a program whenever a program can, and write the rules in the scoring sheet.
-3. **Results, traces, and evidence**: Look beyond the final answer: also check what was called and what the answer rests on.
-4. **Judge model and human calibration**: Before scoring with a judge model, check how well it agrees with human annotation.
-5. **Structured comparison of tool calls**: Parse and compare call names and arguments, in four kinds: simple, multiple, parallel, and calls that shouldn't happen.
-6. **Variance and regression**: Run the same version several times to see the variance, and make a new version pass the old failure cases.
+1. **One successful run does not make it usable**: Only a fixed case set plus a holdout set can tell which of two versions is bett…
+2. **Validators and scoring rules**: Whatever a program can decide is decided by a program first, and the rules are …
+3. **Results, traces and evidence**: Look beyond the final answer: check what was called and what the answer rests o…
+4. **Judge models and human calibration**: Before scoring with a judge model, check its agreement with human annotations. …
+5. **Structured comparison of tool calls**: Parse the tool name and arguments before comparing, and sort calls into four ki…
+6. **Variance and regression**: Run the same version several times to see its variance, and make a new version …
 
 **Objectives**
 
 - Design a task set that covers normal and edge cases
 - Verify correctness, evidence, and violations separately
-- Find improvements and regressions by comparing versions
+- Find improvements and regressions with paired analysis
 
 **Topics**
 
 - Task-specific rubric
-- Fixed set, held-out set, and case versions
+- Development set, holdout set, and case versions
 - Run completed vs. task succeeded
 - Checking results, traces, and evidence
 - LLM-as-a-judge and human calibration
@@ -2443,7 +2480,7 @@ Independent regression evaluation of the first three lessons:
 
 1. Pick tool tasks that already run, and write cases covering normal, dependent, failing, no-tool-needed, and missing-evidence situations.
 2. Have a validator outside the agent check the actual calls, argument sources, errors, and answers, and mark unevaluable items.
-3. Change only one prompt or piece of code, run the fixed set and the held-out cases, and keep both the improvements and the regressions.
+3. Change one prompt or piece of code, run the development and holdout sets, and keep both improvements and regressions.
 
 Deliverable: A versioned question set, independent validators, and a complete version comparison report.
 
@@ -2467,20 +2504,20 @@ Connect run events, latency, failure attribution, and the usage the provider act
 
 **Lesson ID:** `observability-cost`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 12 Application state and the run lifecycle, Lesson 40 Independent evaluation sets and validators
 
 Correlate the requests, tools, state, latency, and usage of one real run, and use the raw data to find repeated calls and slow steps.
 
-**Terms in this lesson:** Observability, Span
+**Terms in this lesson:** Observability, Span, Correlation ID, End-to-end latency
 
 **Sections**
 
-1. **The whole picture of one run**: String requests, tools, state, and timing into one trace, layered by span.
-2. **Finding slow steps and repeated calls**: Locate the slowest step and the repeated requests from real data.
-3. **Usage and cost**: Separate provider-reported usage, local estimates, and usage that was not reported, and compute cost by price version.
-4. **Caching and optimization regressions**: After an optimization, rerun the same question set to confirm it saved money without getting worse.
+1. **The whole of one run**: Only when requests, tools, state and time are tied into one trace and layered b…
+2. **Find slow steps and repeated calls**: Two simple rules are enough to find the slowest step and the repeated requests …
+3. **Usage and cost**: Keep the usage the provider reported, local estimates and not reported apart, a…
+4. **Caching and optimization regression**: After an optimization, rerun the same question set to confirm it saved money wi…
 
 **Objectives**
 
@@ -2493,7 +2530,7 @@ Correlate the requests, tools, state, latency, and usage of one real run, and us
 - Trace, span, and correlation IDs
 - Model, tool, and state events
 - Raw HTTP vs. adapter-layer data
-- End-to-end and per-step latency
+- End-to-end latency and per-step latency
 - Measured, estimated, and not-reported usage
 - Price versions, caching, and optimization regressions
 
@@ -2527,19 +2564,22 @@ Control the effects of retries, idempotency, permissions, and untrusted text.
 
 **Lesson ID:** `reliable-tools`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** no model calls
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** no model calls
 
 **Prerequisites:** Lesson 7 Error handling and safety boundaries, Lesson 9 Structured output and business validation, Lesson 40 Independent evaluation sets and validators
 
 Handle read and write tools separately, and verify timeouts, bounded retries, idempotency, and failure receipts on real local tools.
 
+**Terms in this lesson:** Transient Failure, Backoff, Idempotency Key, Compensation
+
 **Sections**
 
-1. **Treat reads and writes differently**: A read can be retried. Before retrying a write, confirm it won't run twice.
-2. **Timeouts and error classification**: Separate transient errors worth retrying from argument errors that should not be retried.
-3. **Bounded retries and backoff**: Both the number of retries and the interval have limits, and every attempt is recorded.
-4. **Idempotency keys**: Give the same operation the same key, and a repeated submission runs only once.
-5. **Partial completion and compensation**: When a multi-step write fails midway, say which steps took effect and how to compensate.
+1. **Reads and writes need different treatment**: A read can be retried freely; before retrying a write, make sure it will not ru…
+2. **Timeouts and error classification**: Classify an error before retrying: transient failures may be retried; invalid a…
+3. **Bounded retries and backoff**: Both the number of retries and the waits need limits, and every attempt must le…
+4. **Idempotency keys**: The same operation with the same idempotency key runs only once in the store, h…
+5. **Partial completion and compensation**: When a multi-step write fails halfway, say clearly which steps have already tak…
+6. **Summary**: Looking back, this lesson has three threads: separating reads from writes decid…
 
 **Objectives**
 
@@ -2582,21 +2622,23 @@ Deliverable: An error classification, a retry trace, and a table checking the ac
 
 **Lesson ID:** `prompt-injection`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 50 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 25 Document loading and chunking, Lesson 29 RAG answers and citations, Lesson 42 Reliable tools, retries, and idempotency
 
 Bring untrusted documents into a real retrieval chain, observe how injection affects the model, and let the execution side control tools, paths, and side effects.
 
-**Terms in this lesson:** Prompt injection
+**Terms in this lesson:** Prompt injection, Indirect prompt injection, Fail closed, False refusal
 
 **Sections**
 
-1. **Instructions inside documents**: Retrieved web pages and files may hide text like "ignore the previous rules".
-2. **Direct and indirect injection**: A user saying it directly and a document smuggling it in are different attack paths, with defenses in different places.
-3. **Test with a real model**: Put the injected documents into the retrieval chain and record whether the model went along.
-4. **Permissions on the execution side**: The program decides tools, paths, and side effects. What prompts can't stop, permissions stop.
-5. **Failing closed and regression**: Stop the injection without hurting normal tasks.
+1. **Instructions in the material**: Web pages and files that retrieval returns may hide text such as “ignore the pr…
+2. **Direct and indirect injection**: A user saying it directly and material carrying it along are different attack p…
+3. **Testing with a real model**: Putting poisoned material into the retrieval chain and recording whether the mo…
+4. **Permissions on the executing side**: Tools, paths and side effects are decided by the program, and what a prompt can…
+5. **Paths, arguments and confirming side effects**: A path check has to look at where the path finally lands, not at how it is writ…
+6. **Injection travels through tool results**: Tool results are material too. A line in a search result such as “the full pick…
+7. **Failing closed and regression**: Blocking the injection must not hurt normal work. If permissions are cut extrem…
 
 **Objectives**
 
@@ -2646,21 +2688,22 @@ Reuse existing business tools to do service discovery and calls.
 
 **Lesson ID:** `mcp-basics`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 7 Error handling and safety boundaries, Lesson 9 Structured output and business validation, Lesson 43 Prompt injection and tool permissions
 
 Use the official SDK to expose an existing course retrieval tool as a service, complete real discovery, calls, and error return, and tell the protocol apart from agent scheduling.
 
-**Terms in this lesson:** Model Context Protocol
+**Terms in this lesson:** Model Context Protocol, MCP Server, MCP Client, Tool Discovery
 
 **Sections**
 
-1. **What problem MCP solves**: Make a tool an independent service that any client supporting the protocol can discover and call.
-2. **Client, server, and transport**: Local processes talk over standard input and output, so you can see the raw messages of one call.
-3. **Tool discovery and input schema**: The client lists the tools first, then calls them according to the schema.
-4. **Protocol errors vs. business failures**: A failed connection and a tool returning an error are different things, recorded separately.
-5. **Permission boundary**: What the service can do is decided by the server. The client can only make requests.
+1. **What problem MCP solves**: MCP turns a tool into a separate service that any client speaking the protocol …
+2. **Client, server and transport**: A local server communicates over standard input and output: the client writes e…
+3. **Tool discovery and the input Schema**: The client lists the tools first, then calls by the Schema. In the `tools/list`…
+4. **Handing the discovered tools to the model**: MCP only discovers and transports; which tool to pick and when to stop is still…
+5. **Protocol errors and business failures**: A connection failure and a tool returning an error are two different things and…
+6. **Permission boundaries**: What a service can do is decided by the server; the client can only ask. When r…
 
 **Objectives**
 
@@ -2671,7 +2714,7 @@ Use the official SDK to expose an existing course retrieval tool as a service, c
 **Topics**
 
 - MCP vs. plain function calling
-- Client, server, and transport
+- Client, MCP server, and transport
 - Tool discovery and input schema
 - Real calls and returning results
 - Protocol errors vs. business failures
@@ -2706,18 +2749,23 @@ Manage connections to several services, and compare how MCP and A2A divide the w
 
 **Lesson ID:** `mcp-lifecycle`
 
-**Level:** Advanced · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Advanced · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 35 Parallelism, timeouts, and concurrency limits, Lesson 44 MCP basics and tool integration
 
 Manage the connections, naming, exit, and reconnection of several tool servers, and verify state and permissions in real disconnects.
 
+**Terms in this lesson:** Connection Lifecycle, Capability Negotiation, Service Prefix, Availability Probe
+
 **Sections**
 
-1. **The lifecycle of a connection**: Start, initialize, call, close: every step can fail.
-2. **Multiple servers and naming**: When two servers both have a tool called search, use a namespace to tell them apart.
-3. **Disconnect and reconnect**: After a server process crashes, restart it and discover its tools again.
-4. **A changed tool list must be reconfirmed**: When a server updates its tool definitions, the client must notice the change instead of keeping the old ones.
+1. **The connection lifecycle**: Start, initialize, call, close: every step can fail. Lesson 44 connected one se…
+2. **Several services and naming**: When two services both have a tool called `search`, a service prefix tells them…
+3. **Disconnects and reconnects**: After a service process crashes it is restarted and its tools are discovered ag…
+4. **A changed tool list must be confirmed again**: When a service updates its tool definitions, the client must notice the change …
+5. **Exit and reaping processes**: Closing has to make every server process really disappear. On leaving `async wi…
+6. **Registration, permissions and availability probes**: Discovered tools, registered tools and callable tools are three sets, each smal…
+7. **The model calls through RunContext**: The model sees only the tools that are usable now, and calls still pass the sam…
 
 **Objectives**
 
@@ -2727,8 +2775,8 @@ Manage the connections, naming, exit, and reconnection of several tool servers, 
 
 **Topics**
 
-- Server registration and namespaces
-- Connection, process, and session lifecycle
+- Service registration and service prefixes
+- Connection, process, and session lifecycle, and capability negotiation
 - Differences between stdio and remote transport
 - Timeout, disconnect, and reconnect strategy
 - Server-level permissions and identity
@@ -2760,18 +2808,23 @@ Deliverable: A multi-server registry, a disconnect and recovery trace, and exit 
 
 **Lesson ID:** `a2a-delegation`
 
-**Level:** Elective · **Status:** Planned · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
+**Level:** Elective · **Status:** Available · **Difficulty:** Intermediate · **Time:** about 45 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 45 MCP connection lifecycle and multiple servers
 
 Let agents in two independent processes delegate tasks through the A2A protocol, and observe capability discovery, task state, and returned results.
 
+**Terms in this lesson:** A2A artifact, Agent2Agent protocol, Agent Card, Task lifecycle
+
 **Sections**
 
-1. **How agents collaborate**: One agent hands a task to an agent in another process, rather than just calling a tool.
-2. **Capability discovery**: Learn what the other side can do through its Agent Card.
-3. **Task state and returned results**: A delegated task has its own state, and a returned result must match the task.
-4. **Difference from MCP**: MCP connects tools and A2A connects agents. The two can be used together.
+1. **How agents collaborate**: One agent hands a task to an agent in another process, instead of only calling …
+2. **Capability discovery**: The Agent Card tells the delegating side what the other agent can do. All the d…
+3. **Task states and returning results**: A delegated task has its own state, and a result has to match its task when it …
+4. **Timeouts, cancellation and remote failure**: Waiting needs a limit, a timeout needs an explicit cancel, and a remote failure…
+5. **After completion the delegating side accepts the result**: When the remote agent reports COMPLETED, it only says it believes it is done; w…
+6. **How A2A differs from MCP**: MCP connects tools and A2A connects agents, and the two can be used together. I…
+7. **The process boundary, the model and credentials**: The remote agent is another process and cannot reach the runner's RunContext, s…
 
 **Objectives**
 
@@ -2782,8 +2835,8 @@ Let agents in two independent processes delegate tasks through the A2A protocol,
 **Topics**
 
 - Agent Card and capability discovery
-- Task state
-- Cross-process messages
+- Task lifecycle and states
+- Cross-process messages and A2A artifacts
 - Failures and timeouts
 - Comparison with MCP
 
@@ -2819,20 +2872,22 @@ Design delegation, context isolation, result merging, and the overall budget.
 
 **Lesson ID:** `multi-agent-patterns`
 
-**Level:** Advanced · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
+**Level:** Advanced · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 12 Application state and the run lifecycle, Lesson 33 LangGraph state and branching, Lesson 40 Independent evaluation sets and validators
 
 Compare a single agent, a fixed workflow, role switching, and independent multi-agent setups on the same task, and judge the benefit of splitting from evidence.
 
-**Terms in this lesson:** Multi-agent
+**Terms in this lesson:** Multi-agent, Subagent, Role switching, Context isolation, Handoff package
 
 **Sections**
 
-1. **First ask whether to split**: Multiple agents add calls and coordination cost, so you need evidence that splitting pays off.
-2. **Ways to organize**: What kinds of task the manager, peer, and hierarchical patterns each suit.
-3. **Context isolation**: A subagent sees only the context it needs, which cuts distraction but can also lose information.
-4. **Comparison on one question set**: Compare quality and cost of a single agent, a fixed workflow, and multiple agents on the same question set.
+1. **First ask whether to split**: Multi-agent systems add call and coordination costs, so you need evidence that …
+2. **Ways to organize agents**: Manager, peer and hierarchical organizations each suit different tasks. In the …
+3. **Role switching: a new prompt, not a new context**: Role switching means one agent puts on a different system prompt while the mess…
+4. **Context isolation**: A subagent sees only the context it needs, which cuts out distractions and also…
+5. **The handoff package and three failures**: Independent agents pass information only through handoff packages, and whatever…
+6. **Comparing on the same question set**: A single agent, a fixed workflow and multiple agents are compared on quality an…
 
 **Objectives**
 
@@ -2846,7 +2901,7 @@ Compare a single agent, a fixed workflow, role switching, and independent multi-
 - Role switching and context isolation
 - Manager, peer, and hierarchical patterns
 - Planning and execution roles
-- Collaboration overhead and failure types
+- Handoff packages, coordination overhead, and failure types
 - A shared question set and baseline comparison
 
 **Experiments**
@@ -2875,18 +2930,22 @@ Deliverable: A task graph for the four patterns and a paired quality and cost re
 
 **Lesson ID:** `delegation-budget`
 
-**Level:** Advanced · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
+**Level:** Advanced · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 35 Parallelism, timeouts, and concurrency limits, Lesson 41 Observability, usage, and cost, Lesson 47 Multi-agent patterns and trade-offs
 
 Specify inputs, outputs, evidence, and stop conditions for subtasks, isolate their context, and verify merged results and the shared budget.
 
+**Terms in this lesson:** Delegation Contract, Merge Check, Shared Budget, Cancellation Propagation
+
 **Sections**
 
-1. **Subtask contract**: A task handed off states its inputs, outputs, evidence, and stop conditions.
-2. **Merging results and conflicts**: When merging subtask results, list conflicts instead of picking one arbitrarily.
-3. **Shared budget**: Split the global budget among subtasks, so that any one of them overspending can be stopped.
-4. **Cancellation propagation**: When the main task is cancelled, the subtasks stop together.
+1. **Subtask contracts**: Work that goes out needs its input, output, evidence and stop conditions writte…
+2. **Evidence and sources**: Every conclusion a subtask hands back must carry a source the coordinator can c…
+3. **Merging results and conflicts**: When results from several subtasks are merged, conflicts are listed, not settle…
+4. **Shared budget**: A global budget is split among subtasks, and any one of them overspending must …
+5. **Cancellation propagation**: When the main task is cancelled, its subtasks stop with it. Three things can st…
+6. **Partial results and the final verdict**: That every subtask handed something back does not mean the task is complete; th…
 
 **Objectives**
 
@@ -2899,7 +2958,7 @@ Specify inputs, outputs, evidence, and stop conditions for subtasks, isolate the
 - Subtask contract and role capabilities
 - Shared and isolated context
 - Evidence packets and source metadata
-- Merging results and resolving conflicts
+- Merge checks and conflict resolution
 - Global, subtask, and time budgets
 - Cancellation propagation and collaborative termination
 
@@ -2931,31 +2990,35 @@ The boundaries of background execution, scheduled triggers, and goal loops.
 
 **Lesson ID:** `long-running-tasks`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 48 Delegation, context merging, and budgets
 
 Run slow tasks in the background, inject their results in later rounds, and repeat execution with scheduled triggers.
 
+**Terms in this lesson:** Background Job, Result Injection, Scheduled Trigger, Overlap Policy, Orphan Job
+
 **Sections**
 
-1. **Which tasks belong in the background**: A slow task shouldn't block the conversation. Its result comes back later.
-2. **When to inject the result**: A background result is injected into the next request, with its source and time marked.
-3. **Scheduled triggers**: Repeat execution on a schedule, and give each run its own record.
-4. **Cancellation and terminal state of background tasks**: A background task must be stoppable too, and its terminal state must be findable.
+1. **What belongs in the background**: A slow task should not block the conversation; its result can come back later. …
+2. **The job handle and the executor**: Starting a background job returns only a job id, and the real work runs on a th…
+3. **When a result is injected**: A background result is injected into the next request, with its source and time…
+4. **The goal check at the end of every round, and the budget**: At the end of every round the harness itself judges the goal: done, impossible …
+5. **Scheduled triggers**: A scheduled trigger starts a run again and again by time, and every run has its…
+6. **Cancelling a job, and its terminal state**: A background job must also be stoppable, and its terminal state must be findabl…
 
 **Objectives**
 
 - Manage a background task's start, end, and exit code
 - Inject background results at the right round
-- Constrain long loops with goal evaluation
+- Bound long loops with a goal check
 
 **Topics**
 
 - Background tasks
 - When to inject results
-- Scheduled triggers
-- Cancellation and terminal state of background tasks
+- Scheduled triggers and overlap policy
+- Cancelling background jobs, terminal states, and orphan jobs
 - Labeling the source of injected results
 
 **Experiments**
@@ -2963,15 +3026,15 @@ Run slow tasks in the background, inject their results in later rounds, and repe
 A background task and a goal loop:
 
 1. Start a slow background fixture task, and record its start and end, exit code, and the round it was injected.
-2. Use goal evaluation each round to judge ok, impossible, or keep going.
+2. Use a goal check each round to decide ok, impossible, or continue.
 3. Set a budget limit and observe what happens when it is reached.
 
-Deliverable: A background lane timeline and the goal evaluation record.
+Deliverable: A background-lane timeline and a goal-check record.
 
 **Acceptance**
 
 - The model did not see the background result before the round it was injected.
-- The reasons for goal evaluation are recorded.
+- The reasons of every goal check are recorded.
 - When the budget is reached, the run stops explicitly.
 
 **References**
@@ -2982,18 +3045,22 @@ Deliverable: A background lane timeline and the goal evaluation record.
 
 **Lesson ID:** `goal-loops`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 49 Background and scheduled tasks
 
 Use an independent goal evaluation to decide whether to continue, finish, or give up, set a budget and give-up conditions for the loop, and record the evidence behind each round's evaluation.
 
+**Terms in this lesson:** Goal evaluation, Unreachable goal
+
 **Sections**
 
-1. **A goal has to be checkable**: Write the goal as a condition the program can judge, not "until it's good".
-2. **Independent goal evaluation**: The executor saying it's done doesn't count. The evaluator decides by the conditions whether to continue, finish, or give up.
-3. **Budget and give-up conditions**: Rounds, time, and cost all have limits, and when they are reached the loop gives up honestly.
-4. **Round-by-round records**: Keep the basis of every round's evaluation, so a replay shows why it continued or stopped.
+1. **A goal has to be checkable**: Write the goal as a condition a program can judge, not as "keep going until it …
+2. **Independent goal evaluation**: A worker saying it is done does not count; goal evaluation (Goal Evaluation) ju…
+3. **The worker's "done" is only a claim**: The `status` the worker hands in is a claim, not a verdict. Lesson 8 calls the …
+4. **Budgets and abandon conditions**: Rounds, time and cost all have limits; when one is reached the loop stops and h…
+5. **Three outcomes, kept apart**: A loop has three outcomes, complete, abandoned and budget exhausted, and each m…
+6. **A record for every round**: Keep each round's evidence, so replay can show why the loop continued or stoppe…
 
 **Objectives**
 
@@ -3006,7 +3073,7 @@ Use an independent goal evaluation to decide whether to continue, finish, or giv
 - Goal evaluation
 - Continue, finish, and give up
 - Budget and timeout
-- Give-up conditions
+- Unreachable goals and abandon conditions
 - Evaluation records
 
 **Experiments**
@@ -3037,46 +3104,51 @@ Produce a complete application that can start, resume, and be evaluated.
 
 **Lesson ID:** `local-delivery`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** no model calls
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** no model calls
 
 **Prerequisites:** Lesson 37 Human-in-the-loop, checkpoints, and recovery, Lesson 41 Observability, usage, and cost, Lesson 42 Reliable tools, retries, and idempotency, Lesson 44 MCP basics and tool integration
 
 Turn the learning tool into a local app that can be started, configured, and observed, and verify that the real service works.
 
+**Terms in this lesson:** Configuration Layering, Liveness Probe, Readiness Probe, Orphan Process
+
 **Sections**
 
-1. **From running to deliverable**: The minimum for delivery is that another machine can start it by following the instructions.
-2. **Pinned dependencies and configuration**: Pin dependency versions, keep configuration apart from secrets, and keep secrets only on the backend.
-3. **Start, stop, and probes**: Provide a startup script and a health check to confirm the service really works.
-4. **Logs and sensitive data**: Error logs must help locate a problem, but must not contain secrets or personal data.
+1. **From it runs to it can be delivered**: It must start on another machine by following the instructions: that is the min…
+2. **Locking dependencies and configuration**: Lock dependency versions, keep configuration and credentials apart, and keep cr…
+3. **Starting, stopping and probing**: Provide a start script and a health check, and confirm the service really works…
+4. **Logs and sensitive data**: An error log must help locate the problem without writing out keys or personal …
+5. **Restart, backup and rollback**: Delivery must also answer: after the process is killed, is the data still there…
+6. **Writing the checks as a checklist**: A delivery check must be written as a checklist in which every line can be conf…
 
 **Objectives**
 
 - Separate configuration, credentials, and runtime data
-- Build availability checks for the real model and tools
+- Tell "configured" apart from "verified" and build service availability probes
 - Verify restart recovery, log diagnosis, and upgrade rollback
 
 **Topics**
 
 - Runtime environment and pinned dependencies
 - Provider configuration and credential management
-- Start, stop, and service probes
-- Error logs and handling sensitive data
+- Starting, stopping, and reaping orphan processes
+- Liveness probes and readiness probes
+- Error logs and sensitive data
 
 **Experiments**
 
 Starting from an empty environment and recovering from interruption:
 
-1. Install and start in a separate local environment following the delivery instructions, pick a verified model configuration, and make sure no credentials end up in source code or the trace.
-2. Check service availability with a real model request and MCP discovery and calls, then shut down and restart at a paused task.
+1. Start the local service from a temporary directory following the delivery instructions; layered configuration takes effect and credentials come only from environment variables, never entering source, logs, or events.
+2. Check availability with liveness and readiness probes, simulate a stuck start, a busy port, and killing only the main process, then shut down and restart after a write.
 3. Check the recovered content, the actual side effects, the diagnostic logs, and the data backup, and try one configuration upgrade that can be rolled back.
 
-Deliverable: Local startup instructions, a real availability report, and recovery and rollback records.
+Deliverable: Local start instructions, a service availability report, and recovery and rollback records.
 
 **Acceptance**
 
-- Following the instructions, the app starts from a clean environment, and the model and the tools each pass a real probe.
-- After a restart, state and documents are restored as agreed, completed writes aren't repeated, and unknown providers are not marked as verified.
+- Following the instructions, the app starts from a clean environment, liveness and readiness are each probed for real, and a failed start has a clear cause.
+- After a restart, state and data come back as agreed, completed writes are not repeated, and a service that was never actually probed is not marked available.
 - Configuration errors can be located from the UI or the logs, credentials don't leak, and backup and rollback have actual check records.
 
 **References**
@@ -3089,18 +3161,24 @@ Deliverable: Local startup instructions, a real availability report, and recover
 
 **Lesson ID:** `backup-upgrade`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** no model calls
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 60 min · **Model:** no model calls
 
 **Prerequisites:** Lesson 51 Local delivery: startup, configuration, and credentials
 
-Back up run records and memory data, verify they work after recovery, and roll back to the previous version when an upgrade fails.
+Back up run records and memory data, verify they work after a restore, and roll back to the previous version when an upgrade fails. This lesson does not call a model.
+
+**Terms in this lesson:** Backup Manifest, Restore Drill, Data Migration, Upgrade Rollback
 
 **Sections**
 
-1. **What to back up**: How and how often to back up run records, the memory store, and configuration templates.
-2. **Recovery must be verified**: After restoring into a new directory, run the acceptance checks to confirm the data really works.
-3. **Upgrade and data migration**: When a new version changes the data format, the migration must be repeatable and checkable.
-4. **Rollback**: When an upgrade fails, go back to the previous version and keep the data consistent.
+1. **What to back up**: Runtime records, the memory store and the configuration cost different amounts …
+2. **Online backup**: A database file that is being written cannot simply be copied; it needs a consi…
+3. **The backup manifest**: A backup manifest records each file's name, size, sha256, schema version and th…
+4. **Restores must be verified**: After restoring into a new directory, run an acceptance check; only then do you…
+5. **Upgrades and data migration**: When a new version changes the data format, a data migration has to be repeatab…
+6. **Three ways an upgrade fails**: A transaction can undo changes that are not yet committed, but it cannot touch …
+7. **Rolling back**: When an upgrade fails and you go back to the previous version, the data has to …
+8. **Keep the last N**: Keeping the last N backups needs a rule that guarantees at least one restorable…
 
 **Objectives**
 
@@ -3136,24 +3214,26 @@ Deliverable: A backup inventory, recovery acceptance, and a rollback record.
 
 - [深入理解 AI Agent：设计原理与工程实践](https://github.com/bojieli/ai-agent-book): `book/chapter2.md`.
 
-#### Lesson 53 · Capstone: a local coding or study assistant
+#### Lesson 53 · Capstone: a local study assistant
 
 **Lesson ID:** `capstone-study-assistant`
 
-**Level:** Core · **Status:** Planned · **Difficulty:** Challenge · **Time:** about 180 min · **Model:** calls a real model
+**Level:** Core · **Status:** Available · **Difficulty:** Challenge · **Time:** about 180 min · **Model:** calls a real model
 
 **Prerequisites:** Lesson 15 Persistent memory: save, reopen, and recall, Lesson 29 RAG answers and citations, Lesson 32 LangChain tools and structured adapters, Lesson 37 Human-in-the-loop, checkpoints, and recovery, Lesson 40 Independent evaluation sets and validators, Lesson 41 Observability, usage, and cost, Lesson 43 Prompt injection and tool permissions, Lesson 44 MCP basics and tool integration, Lesson 51 Local delivery: startup, configuration, and credentials
 
 Integrate the course materials, task contract, learning progress, tools, and state graph into a study assistant that works from a real model and evidence.
 
+**Terms in this lesson:** Acceptance Report
+
 **Sections**
 
-1. **Pick a topic and a task contract**: Choose one route, coding assistant or study assistant, and write the task card and acceptance criteria first.
-2. **Combine what you've learned**: Use tools, memory, retrieval, planning, and approval as needed, and explain each trade-off.
-3. **Evaluation and replay**: Score with a fixed question set and a hidden one, and submit a replay of a real run as evidence.
-4. **Delivery notes**: The README states installation, configuration, running, evaluation results, known limitations, and next steps.
-5. **Self-check before submitting**: Go through the checklist: no secrets in the repo, tests pass, the replay is readable, limitations are written down.
-6. **Scoring rubric**: Score by feature completeness, evidence sufficiency, reliability, code readability, and quality of the instructions.
+1. **Choosing the project and the task contract**: Between a coding assistant and a study assistant, this lesson picks the study a…
+2. **Putting the earlier capabilities together**: Every module comes from an earlier lesson. This lesson does not rewrite them; i…
+3. **Evaluation and replay**: Score with a fixed suite split into a development set and a holdout set, and us…
+4. **Delivery notes**: The README states installation, configuration, running, evaluation results, kno…
+5. **Self-check before submitting**: Go through the list item by item: no key in the repository, tests pass, the rep…
+6. **Scoring rubric**: Score five items: completeness of function, sufficiency of evidence, reliabilit…
 
 **Objectives**
 
@@ -3290,4 +3370,4 @@ Reference snapshot: `b789c97a8f3de5b405a6f6dfa8289208d679d0b8`.
 
 ## Next
 
-Check the catalog and the plan first, then implement lessons in learning order. The next lesson is Lesson 25, Document loading and chunking. Library versions and framework APIs of planned lessons are checked again when each lesson is built.
+Check the catalog and the plan first, then implement lessons in learning order. Every registered lesson is implemented. Library versions and framework APIs of planned lessons are checked again when each lesson is built.

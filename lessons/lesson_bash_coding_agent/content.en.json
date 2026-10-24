@@ -1,0 +1,1454 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "CODING AGENT / BASH",
+      "source": "053e1e7561a7"
+    },
+    "hero.headline": {
+      "text": "One bash tool is enough for an agent to change code,",
+      "source": "9a932b2da100"
+    },
+    "hero.highlight": {
+      "text": "but whether it worked is for the platform to judge by re-running the tests.",
+      "source": "4fe4a0473a70"
+    },
+    "hero.takeaway": {
+      "text": "This lesson gives an agent one bash tool and asks it to fix the failing test in a fixture repository. The commands run on your machine, with no isolation, so every command waits for your approval first. The agent saying it is fixed does not count: the platform re-runs the tests and then checks whether the test files were changed.",
+      "source": "b6c0f783c290"
+    },
+    "concepts.01-workspace.label": {
+      "text": "01 / WORKSPACE",
+      "source": "17f73533b271"
+    },
+    "concepts.01-workspace.title": {
+      "text": "Temporary workspace",
+      "source": "f4eda40910f7"
+    },
+    "concepts.01-workspace.description": {
+      "text": "Temporary Workspace: each run copies the fixture repository into a throwaway directory and commands run only in the copy. The file hashes and the diff from before and after are the evidence of what changed.",
+      "source": "080420aace62"
+    },
+    "concepts.02-policy.label": {
+      "text": "02 / POLICY",
+      "source": "9f2330959f0e"
+    },
+    "concepts.02-policy.title": {
+      "text": "Command policy",
+      "source": "db31e3c3a1be"
+    },
+    "concepts.02-policy.description": {
+      "text": "Command Policy: rules matched against the text of each command, refusing the ways of writing it that leave the project directory, read secrets or reach the network. It reduces accidents; it is not a security boundary.",
+      "source": "377a92cea767"
+    },
+    "concepts.03-runner.label": {
+      "text": "03 / RUNNER",
+      "source": "46238ce05a8a"
+    },
+    "concepts.03-runner.title": {
+      "text": "Restricted runner",
+      "source": "228800fd8de2"
+    },
+    "concepts.03-runner.description": {
+      "text": "The restricted runner: how commands run when there is no container. It gives the child process an environment allowlist, a timeout and output truncation, but it is not a sandbox: the child process is the same user as you.",
+      "source": "4afbfc85d06e"
+    },
+    "concepts.04-protected.label": {
+      "text": "04 / ACCEPT",
+      "source": "131cc18f18b3"
+    },
+    "concepts.04-protected.title": {
+      "text": "Protected files and platform acceptance",
+      "source": "11874346526f"
+    },
+    "concepts.04-protected.description": {
+      "text": "Protected files: files the agent must not change, here the tests. The platform re-runs the tests and checks the before-and-after hashes of those files; the agent's own account does not count.",
+      "source": "07ef9c63eb6b"
+    },
+    "callout-unisolated.title": {
+      "text": "Not isolated · commands run on your machine",
+      "source": "133342dca6f2"
+    },
+    "callout-unisolated.paragraphs.0": {
+      "text": "The commands in this lesson are written by a model on the spot and run on your machine. When no usable container exists, the lesson uses the restricted runner, which is only a set of guard rails: the child process is the same user as you, can reach the network, can read and write whatever you can, and can see information about other processes on this machine.",
+      "source": "78d08b00a9b0"
+    },
+    "callout-unisolated.paragraphs.1": {
+      "text": "That is why every command stops and waits for your approval before it runs; the approval card shows the exact text about to run. Reject any command you cannot read; the model receives the note you write. Before you approve, the command has not started; after you approve, it has your permissions.",
+      "source": "83587579b3ef"
+    },
+    "callout-unisolated.paragraphs.2": {
+      "text": "If `docker` or `podman` is installed and the `python:3.12-slim` image is already local, the lesson switches to a container instead: commands run in a throwaway container with no network, and nothing is approved one by one. The first lab report says which of the two this run used, and why.",
+      "source": "cad551ec1a43"
+    },
+    "section-1.title": {
+      "text": "The task and the acceptance",
+      "source": "6dcfbcf8f522"
+    },
+    "section-1.paragraphs.0": {
+      "text": "The fixture repository has one failing test; the agent fixes it and the platform re-runs the tests to accept the work. The fixture `gradebook` is a very small Python project in which one of seven tests fails: `letter_grade` grades a score of 90 as B, while both the README and the docstring say that 90 and above is an A. The agent has to make `python -m unittest discover -s tests` pass completely.",
+      "source": "788e0869fbf0"
+    },
+    "section-1.paragraphs.1": {
+      "text": "This kind of task suits an agent because the acceptance already exists: a passing test is right, a failing one is wrong, and nobody has to read code to decide. {{lesson:task-contract}} taught that acceptance criteria are written down in advance and checked against actual evidence; this lesson makes that as concrete as it gets, the exit code of one command. But an exit code only answers \"did the test turn green?\"; it cannot answer \"how did it turn green?\".",
+      "source": "4616686d6117"
+    },
+    "section-1.paragraphs.2": {
+      "text": "There is a temptation hidden here. The failing test is `test_letter_boundaries`, which expects 90 to be an A. The cheapest \"fix\" is to change the 90 in the test to some other number: the test turns green at once and not one line of code has changed. So the acceptance looks at two things separately: whether the re-run tests pass, and whether files that must not change were changed. The latter are the protected files; in this lesson, everything under `tests/`.",
+      "source": "d2c017b51a58"
+    },
+    "section-1.paragraphs.3": {
+      "text": "The platform does the acceptance itself and does not look at the agent's last reply. That reply is only a claim: the agent may really have fixed it, may have said so without running the tests, or may have changed the tests. The final answer of this lesson is written by the runner: the platform's verdict first, then the agent's own words, and the order is not to be reversed.",
+      "source": "80d8defa3597"
+    },
+    "section-2.title": {
+      "text": "One bash tool is enough",
+      "source": "8505cf497a0d"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Give an agent just one tool that runs commands and it can read files, change code and run tests. The tool is called `bash` and has one argument, `command`: `cat` reads files, `grep` searches, `sed` or a one-line `python -c` edits code, and `python -m unittest` runs the tests. The command line is already the interface people write code with, the model's training data is full of these commands, and there is no need to build a dedicated tool for each job.",
+      "source": "6080e98bd5d2"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Mini-SWE-Agent pushes this idea to the limit: it has no tool other than bash. Its default configuration simply gives the model a `bash` tool, and there is also a text-only configuration that parses the command out of the reply; its README claims a score above 74% on SWE-bench Verified (take the project's own word for it). The price is just as clear: a dedicated file-reading tool can be confined to one directory, whereas `bash` can do everything a shell can. So it needs guard rails: where it runs, what it can touch, and who looked at it before it ran. The next three sections of this lesson are about those guard rails. It also asks the agent to \"submit\" with one special command; this lesson has no such command, and a model that stops proposing commands is saying it thinks it is done.",
+      "source": "fb2affeed727"
+    },
+    "section-2.paragraphs.2": {
+      "text": "Every command is an independent child process; there is no long-lived shell. A `cd` or an environment variable from the previous command is gone in the next one, so the model has to put them in the same command. The system prompt tells the model so, and also names the shell type: on Windows without Git Bash the shell is PowerShell, which has no `sed` or `grep`, so the model has to read and write files with `python` instead.",
+      "source": "b1177e954f3e"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The loop itself is the same as the native group in {{lesson:text-actions}}: each request carries the full message history and the tool definition, the model proposes a command, the runner runs it, and the result goes back as a `tool` message; when it stops proposing commands, `content` is its last reply, a claim and not a result. For this fixture, a smooth run is about four commands: run the tests to see which one fails, `cat` out `gradebook/grades.py`, change the boundary with a one-line `python -c` or `sed`, and run the tests once more. With the platform's acceptance that makes five approvals for you to click. The number and order of commands in a real model's run are whatever that run shows.",
+      "source": "cfc31f9a8a04"
+    },
+    "predict-approvals.prompt": {
+      "text": "Before you run \"Edit the test to make it pass\", guess: how many commands will the agent propose? How many times will you click approve on an approval card (once per agent command, plus once for the platform's acceptance)? How many approval_requested events will this run contain?",
+      "source": "5ffb9602195d"
+    },
+    "mq-claim.q-claim.prompt": {
+      "text": "The agent's last reply is \"Fixed, all tests pass.\" How should the platform treat that sentence?",
+      "source": "8c1ef031dac5"
+    },
+    "mq-claim.q-claim.a.text": {
+      "text": "Record it, but the acceptance looks only at the platform's re-run of the tests and its check of the protected files",
+      "source": "9feae8955389"
+    },
+    "mq-claim.q-claim.a.feedback": {
+      "text": "Right. The reply is the agent's claim; the evidence comes from the platform's own re-run and hash comparison.",
+      "source": "df36a80554b5"
+    },
+    "mq-claim.q-claim.b.text": {
+      "text": "Believe it: it did run the tests just now",
+      "source": "a4a85c3f630c"
+    },
+    "mq-claim.q-claim.b.feedback": {
+      "text": "No. It ran its own commands and read their output itself; that is not a result the platform obtained independently.",
+      "source": "47cb03db41d2"
+    },
+    "mq-claim.q-claim.c.text": {
+      "text": "Ask the model to confirm once more",
+      "source": "dd4665bf234c"
+    },
+    "mq-claim.q-claim.c.feedback": {
+      "text": "No. Asking again gives another claim, not evidence.",
+      "source": "73cdb444cc20"
+    },
+    "mq-claim.q-claim.explanation": {
+      "text": "Acceptance rests on evidence the platform produced itself; the model's words can only be set beside that evidence.",
+      "source": "ccedcb5bd29c"
+    },
+    "section-3.title": {
+      "text": "Temporary workspace and a cleaned environment",
+      "source": "842e6ad9528b"
+    },
+    "section-3.paragraphs.0": {
+      "text": "Commands run in a throwaway temporary workspace and do not inherit this machine's environment variables; that is a guard rail, not isolation. At the start of every run the platform copies `fixture_repo` into a new temporary directory and creates an empty `home` and `tmp` next to it. The cwd of every command is fixed inside the copy, and `HOME` and `TMP` point at those two empty directories, so a tool that writes a cache does not touch your real user directory and does not end up in the diff. When the run ends, the whole directory is deleted.",
+      "source": "8a70f455a4d6"
+    },
+    "section-3.paragraphs.1": {
+      "text": "Copying does two things first: it refuses a fixture that contains a symbolic link, because a link pointing outside would be a back door for every command, and it records a sha256 for every file as the baseline. After that the two states can be compared at any moment: which files were changed, added or removed, and what they became. The diff does not come from the agent's report; it comes from the two sets of hashes. That is what \"record command evidence instead of trusting the agent's account\" looks like for files. A worked example: the baseline hash of `gradebook/grades.py` is X and after the run it is Y, while every file under `tests/` has the same hash, so the change list has exactly one entry: `gradebook/grades.py` was modified. If the agent changes a file and then changes it back, the hash is X again and the change list is empty: hashes show only the final state, and what happened in between is in the command ledger.",
+      "source": "a3746063e4bf"
+    },
+    "section-3.paragraphs.2": {
+      "text": "The environment is an allowlist: the child process starts from an empty dictionary, receives only the few variables needed to start, such as `PATH` and `LANG`, plus `HOME` and `TMP` pointing at the temporary directories. Your `DASHSCOPE_API_KEY` and variables like it are not passed in at all. A denylist, which inherits everything and then removes names that look like secrets, would leak, because variable names come in endless shapes. When the allowlist misses something, a command fails for lack of one variable; when a denylist misses something, a key leaks. The proxy variables are also set to a local port nobody listens on, so programs that respect proxy settings, such as `pip` and `curl`, fail at once; a raw `socket` is not affected.",
+      "source": "8b4339cb88bd"
+    },
+    "section-3.paragraphs.3": {
+      "text": "How do we know the secrets really were not passed on? At the start of every run the platform first runs a probe script, `env_probe.py`, which prints only the names of the variables the child process can see and never their values. The platform then compares that list with the variable names of this process: a name that looks like a secret and exists on both sides crossed over. The `no-secrets` check in the first report is that result. It compares names only and covers environment variables only; whether a command can read a secret from a file on disk, it cannot tell you.",
+      "source": "e1ce4c29e664"
+    },
+    "section-4.title": {
+      "text": "Timeouts and killing the process tree",
+      "source": "56fa8ae4694e"
+    },
+    "section-4.paragraphs.0": {
+      "text": "When a command hangs, the platform ends its whole process tree, that is, every descendant process it started; killing only the shell is not enough. The fixture has a pre-release check, `scripts/slow_check.py`: it prints 600 progress lines, starts a helper process that sleeps for 600 seconds, and then waits for a reply that never comes. In real projects a network call that never answers, an endless loop, or a program waiting for input all behave like this. Each command waits at most `command_timeout_s` seconds, so the whole run does not hang with it. A worked example: with a limit of 4 seconds, the 600 lines are printed within the first few dozen milliseconds and then nothing happens; at second 4 the platform ends it, and `duration_ms` is about 4000. The helper sleeps for 600 seconds, so without ending it the command would take ten minutes.",
+      "source": "820bbbffc2e4"
+    },
+    "section-4.paragraphs.1": {
+      "text": "If only the shell is killed, the child processes it started keep running and keep the output pipe open, and whoever reads the output waits forever. So on POSIX every command starts in a new session, the shell leads the process group, and at the end the whole group gets `SIGKILL`; on Windows a job object does the same. The cleanup happens after every command, not only on timeout: a child process a command leaves behind in the background must not outlive the command itself.",
+      "source": "d0270226cf8b"
+    },
+    "section-4.paragraphs.2": {
+      "text": "The result of a timeout is structured, not an exception: `error_type` is `timeout`, `timed_out` is true, `detail.timeout_s` holds the limit, and the output produced so far is kept. The model reads \"the command had not finished after 4 seconds and was killed\" and can try something else, such as reading only the start of the output, or telling you the check did not finish. How do we know the whole process tree really ended? If an output pipe is still open after the command ends, some process escaped the cleanup; when `escaped_processes_suspected` is false, none was found.",
+      "source": "7e3433282d98"
+    },
+    "section-4.paragraphs.3": {
+      "text": "The limits need to be stated plainly: this method cannot catch a process that deliberately gets away. A process that calls `setsid` or `fork` twice in a row leaves the process group; the command policy refuses `setsid` and `nohup`, but a policy can be bypassed. So timeouts and process cleanup guard against the model's mistakes, such as endless loops and servers nobody stopped, not against deliberate attacks.",
+      "source": "b804ba4ea288"
+    },
+    "deep-dive-session.title": {
+      "text": "One process per command, or one long-lived shell",
+      "source": "524e6538a148"
+    },
+    "deep-dive-session.summary": {
+      "text": "Both choices make sense: separate processes are simple and stable, a long-lived shell saves repeating `cd`.",
+      "source": "06285926bc9f"
+    },
+    "deep-dive-session.paragraphs.0": {
+      "text": "Mini-SWE-Agent runs every command as its own `subprocess.run`, with no long-lived shell. Its documentation gives three reasons: in a long-lived shell it is hard to tell when a command has finished, and the workarounds are all heuristics; one bad command can kill the whole shell; and interrupting a command can mess up the extraction of all later output. The price is that the agent cannot remember the current directory or the environment variables; its answer is to have the model write `cd` in front of each command, and the documentation adds that some models already do this unprompted.",
+      "source": "206c686b706f"
+    },
+    "deep-dive-session.paragraphs.1": {
+      "text": "The Coding Agent chapter of *Understanding AI Agents in Depth* (深入理解 AI Agent) argues for the opposite default: keep a persistent terminal session that holds the working directory, the environment variables and the activated virtual environment, closer to how a human developer works, while keeping the ability to start isolated terminals. The two choices do not contradict each other: a persistent session buys convenience, and the price is session state to manage, with timeouts, cancellation and cleanup all harder. This lesson picks separate processes to keep the boundary of \"one command\" clear: one process matches one policy decision, one approval, one timeout and one record.",
+      "source": "f9761aa5de52"
+    },
+    "deep-dive-session.paragraphs.2": {
+      "text": "How do you do several steps in separate processes? Put the `cd` or the environment variable in the same command. In a POSIX shell that is `cd tests && python -m unittest`, or `PYTHONPATH=. python -m unittest`; in PowerShell the variable is written `$env:PYTHONPATH = '.'; python -m unittest`. The syntax changes with the shell, which is why the system prompt names the shell type.",
+      "source": "9480b1ed3f73"
+    },
+    "mq-timeout.q-timeout.prompt": {
+      "text": "After a timeout the platform killed only the shell process and did nothing about the child processes it had started. What is the most likely problem?",
+      "source": "8bd33131d85a"
+    },
+    "mq-timeout.q-timeout.a.text": {
+      "text": "The child processes keep running and hold the output pipe open, so whoever reads the output waits forever",
+      "source": "0788ce975d6d"
+    },
+    "mq-timeout.q-timeout.a.feedback": {
+      "text": "Right. Ending the whole process group, plus checking afterwards whether the pipes are closed, is how you confirm nothing was left behind.",
+      "source": "2d1a4d3b64de"
+    },
+    "mq-timeout.q-timeout.b.text": {
+      "text": "No problem at all; the children exit together with the shell",
+      "source": "b9ceb67fe1de"
+    },
+    "mq-timeout.q-timeout.b.feedback": {
+      "text": "No. A child process is an independent process; the shell exiting does not make it exit.",
+      "source": "47cb87c56abf"
+    },
+    "mq-timeout.q-timeout.c.text": {
+      "text": "The command's exit code becomes 0",
+      "source": "1376e2d8f65a"
+    },
+    "mq-timeout.q-timeout.c.feedback": {
+      "text": "No. A killed command has no normal exit code, and `timed_out` is true in the result.",
+      "source": "62be07a8ae1d"
+    },
+    "mq-timeout.q-timeout.explanation": {
+      "text": "Ending a command has to cover the whole process tree, and there has to be a way to check that no process was missed.",
+      "source": "3da9f33c7d20"
+    },
+    "section-5.title": {
+      "text": "Command policy and output truncation",
+      "source": "af28f2152f00"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Before a command runs it passes the command policy, so a command that clearly steps out of bounds never reaches approval. The policy reads the text of the command, matches rules in a fixed order, and returns either allow or deny together with the rule id and the piece that matched. What gets refused includes `..`, `~` and absolute paths, file names such as `local_config` or `.ssh`, `curl` and `pip install`, a background `&`, and `sudo`. The fixture plants one on purpose: the task tells the agent to read `../grading-policy.md`, a path outside the project, which the rule `parent_traversal` refuses.",
+      "source": "8ff447898900"
+    },
+    "section-5.paragraphs.1": {
+      "text": "A refused command does not run, and the model receives a structured result: `ok` is false, `error_type` is `policy_denied`, plus a sentence in the run's language that names the rule and what matched. The sentence does not just say it was refused, it says how to change it: seeing \"the path contains `..` and points outside the project\", the model knows to read the docstring in the project instead. A failure has to become input the model can read, never a crash, and that is what {{lesson:fail-safely}} has been teaching since early on.",
+      "source": "696eaac5c098"
+    },
+    "section-5.paragraphs.2": {
+      "text": "After the policy lets a command through, the restricted runner still waits for a person to approve it. The approval card shows the exact text about to run, the backend and \"not isolated\"; you can approve, or reject and write a note. A rejection is just as structured: `error_type` is `approval_rejected` and your note goes to the model unchanged; if nobody decides in time it is `approval_timeout`. The tool did not run before approval, and the events let you verify that: `tool_call`, `approval_requested`, `approval_resolved` and `tool_result` appear in that order.",
+      "source": "49b95520c2ad"
+    },
+    "section-5.paragraphs.3": {
+      "text": "When the output is too long it gets head-and-tail truncation: only the start and the end are kept, with a note of how many bytes were left out in between. Standard output and standard error each keep the first 4000 bytes and the last 4000 bytes, the middle becomes `[... N bytes omitted ...]`, and the total byte count is recorded. Only the ends are kept because the cause of an error is usually at the start and the summary of a test run is usually at the end. The 600 progress lines of `slow_check.py` are cut this way: about 26 bytes a line, about 15600 bytes in all, minus the 8000 bytes kept, leaves around 7600 bytes omitted. A truncated command gets one extra key in its result, `omitted_bytes`, which holds that number and exists only then. When the total passes 16 MiB the command is killed outright and not read any further.",
+      "source": "f8675c0ba81c"
+    },
+    "deep-dive-policy-limits.title": {
+      "text": "Why a command policy is only a guard rail",
+      "source": "8bfced6da666"
+    },
+    "deep-dive-policy-limits.summary": {
+      "text": "Keywords and regular expressions stop careless mistakes but not deliberate phrasing.",
+      "source": "3c3bb641e8d4"
+    },
+    "deep-dive-policy-limits.paragraphs.0": {
+      "text": "A test in this lesson exists just to prove it: `python -c \"import os; print(sorted(os.listdir(os.pardir)))\"` does not contain `..`, only `os.pardir`, so the policy cannot see it, the command is allowed, and it really lists `repo`, `home` and `tmp` in the directory above the project. The same trick works with `c''url`, with `$(printf ...)`, and by writing a script to a file first and running it afterwards.",
+      "source": "789d48d426f2"
+    },
+    "deep-dive-policy-limits.paragraphs.1": {
+      "text": "*Understanding AI Agents in Depth* (深入理解 AI Agent) argues for semantic parsing: understand how each command consumes its arguments, and you can see the `rm` hidden inside `find / -name '*.log' -exec rm {} \\;`, or that `curl -o /etc/crontab ...` is really overwriting a system scheduled task. The permission lesson of Learn Claude Code uses three gates (a deny list, rule matching and asking the user) and says outright that string matching is not a complete security boundary. The policy in this lesson takes the same position: it makes common accidents rarer and makes the reason for a refusal visible. The only real boundaries are two: a container, and a person having read each command before it runs.",
+      "source": "e513c330a486"
+    },
+    "deep-dive-policy-limits.paragraphs.2": {
+      "text": "The policy is still worth keeping. It makes the model's behaviour the same under both backends, it makes the \"policy decision\" a step that can be recorded and discussed, and it catches most careless mistakes for you, such as the model casually running `pip install pytest`, or going to read `~/.ssh`. You only have to spend your attention on the commands that really need it.",
+      "source": "8c47ff15bf88"
+    },
+    "deep-dive-policy-limits.paragraphs.3": {
+      "text": "The order of the rules is part of the design: the policy matches in a fixed order and reports only the first rule that hits. `curl http://x` hits two things, the command word `curl` and the URL, yet the result carries one rule id. The rules also lean strict: even an `&` inside quotes is refused, because the policy cannot tell whether it is a background run. The price of strictness is that the model rewrites a command once; the price of leniency is a dangerous command slipping through, so strict was chosen, and a refused model gets the rule id and can rephrase on its own.",
+      "source": "15948c2d27f8"
+    },
+    "mq-policy.q-policy.prompt": {
+      "text": "Both a policy refusal and a refusal you give on the approval card leave a command unexecuted. What is the difference?",
+      "source": "cd57eac9901a"
+    },
+    "mq-policy.q-policy.a.text": {
+      "text": "A policy refusal happens before approval, so no approval card appears; a person's refusal happens after approval, and the note goes to the model",
+      "source": "f1ea4f1c0b82"
+    },
+    "mq-policy.q-policy.a.feedback": {
+      "text": "Right. The rule id of the former is in `policy`; the note of the latter is in `detail.note`.",
+      "source": "b7fda9fbc718"
+    },
+    "mq-policy.q-policy.b.text": {
+      "text": "No difference; both are `policy_denied`",
+      "source": "1381c683538a"
+    },
+    "mq-policy.q-policy.b.feedback": {
+      "text": "No. Their `error_type` differs: `policy_denied` and `approval_rejected`.",
+      "source": "8b17d2330fce"
+    },
+    "mq-policy.q-policy.c.text": {
+      "text": "A command refused by the policy still runs, with a warning logged",
+      "source": "39726a17275d"
+    },
+    "mq-policy.q-policy.c.feedback": {
+      "text": "No. A refused command never runs.",
+      "source": "885958a5f944"
+    },
+    "mq-policy.q-policy.explanation": {
+      "text": "The two refusals come from different gates, and both `error_type` and the fields that come with it differ.",
+      "source": "fb336cf14c86"
+    },
+    "section-6.title": {
+      "text": "The agent saying it is fixed does not count",
+      "source": "1ef6a7a575f9"
+    },
+    "section-6.paragraphs.0": {
+      "text": "Whether the task is done is decided by the result of the platform re-running the tests; the agent's last reply is only a claim. When the loop ends, the platform uses the same runner to re-run `python -m unittest discover -s tests`, then compares the before-and-after hashes of the protected files with `protected_changes`. The work is accepted only when both hold: all tests pass, and no file under `tests/` was changed, added or removed.",
+      "source": "e7476ffac082"
+    },
+    "section-6.paragraphs.1": {
+      "text": "The re-run needs approval too. Re-running the tests executes code the agent wrote into the project, and what you approve is a command, not file contents: an agent can quite well write some code into `gradebook/__init__.py` in an earlier command and have it run only when the platform re-runs the tests. So under the restricted runner the acceptance gets its own approval card with kind acceptance. If you reject it, the verdict is \"acceptance did not complete\", not \"failed\": a check that never ran cannot give a verdict.",
+      "source": "0aacdd6113d8"
+    },
+    "section-6.paragraphs.2": {
+      "text": "Verdicts have to be stated in layers, because a command has at least three kinds of \"success\". A non-null `exit_code` says the command ran; `ok` being true says the command succeeded; only `tests-pass` and `accepted` in the acceptance result say the task was done right. If the agent edits the tests, its own run of the tests gives exit code 0 and the platform's re-run gives 0 too, so `tests-pass` is true, but `tests-untouched` is false and `accepted` is false: the tests turned green and the task was not accepted. List the cases: source fixed and tests pass, accepted; test edited and tests pass, not accepted; nothing fixed and tests still failing, not accepted; you rejected the acceptance approval, acceptance did not complete.",
+      "source": "4896df15ad7a"
+    },
+    "section-6.paragraphs.3": {
+      "text": "The evidence has to be kept as well. The acceptance result has the diff, so which file changed and what it became can be read directly; the command ledger lists the policy decision, the approval, the exit code and the duration of every command; and only last comes the agent's own words. In the hooks lesson of Learn Claude Code, a Stop hook can return a message when the loop is about to exit and make the loop continue; hang the acceptance there and it becomes \"no stopping until acceptance passes\". {{lesson:goal-loops}} retries once more with the reason when acceptance fails; this lesson accepts once and never retries. The next lesson, {{lesson:file-edit-evidence}}, replaces bash with dedicated file read, write and edit tools, compares editing strategies, and proves the change with the same before-and-after hashes.",
+      "source": "bfcece0787a0"
+    },
+    "deep-dive-containment.title": {
+      "text": "Container, restricted runner and sandbox: what each one stops",
+      "source": "a82ccdd12005"
+    },
+    "deep-dive-containment.summary": {
+      "text": "A container is the only real isolation boundary in this lesson; the restricted runner makes up for it with a person's approval.",
+      "source": "724e924bbe94"
+    },
+    "deep-dive-containment.paragraphs.0": {
+      "text": "The platform's container backend runs `docker run --rm` once per command: `--network none` cuts the network, only the workspace copy is mounted, the root file system is read-only, all extra privileges are dropped, memory, process count and CPU are limited, and not one host environment variable is passed in. *Understanding AI Agents in Depth* (深入理解 AI Agent) sums up the risk as the \"lethal trifecta\": access to private data, exposure to untrusted content, and the ability to communicate outward. Cutting the network by default removes the third: even if a malicious instruction read the data, it could not send it out.",
+      "source": "e80952db582a"
+    },
+    "deep-dive-containment.paragraphs.1": {
+      "text": "The restricted runner removes none of the three. It is the same user, so your files can be read; it is the same network, so data can be sent out; fixture files and command output are untrusted content. All it can do is reduce accidents, which is why a fourth layer is needed: a person's approval. The platform documentation lists what it cannot stop: a process of the same user can read the environment of other processes in `/proc` on Linux, can read and write any file you can, and a process that calls `setsid` can leave the process group. The word sandbox should be kept for something with a real boundary; an ordinary local process is not one.",
+      "source": "becb13db3e4c"
+    },
+    "deep-dive-containment.paragraphs.2": {
+      "text": "Mini-SWE-Agent makes this layer a replaceable environment class: `local` simply uses `subprocess.run`, with no isolation; `docker` uses `docker exec`; there are also `bubblewrap`, `singularity` and others. Its `local` environment passes the whole environment to the child process unchanged, while the restricted runner here uses an allowlist. Swapping the backend without touching the loop is the point of this design: the agent loop only knows \"give one command, get one result\".",
+      "source": "a002cdade034"
+    },
+    "deep-dive-containment.paragraphs.3": {
+      "text": "Putting several threats side by side makes it clearer. Deleting files outside the project: a container mounts only the copy, so it cannot; the restricted runner cannot stop it and relies on approval. Reading `local_config.py`: the container does not have that file; with the restricted runner the file is on disk, the policy refuses the file name, and one line of `python` gets around it. An endless loop: both rely on the timeout. Sending data out: the container has no network; the restricted runner only sets an invalid proxy, and a raw `socket` still gets out.",
+      "source": "df68046f6376"
+    },
+    "mq-three.q-three.prompt": {
+      "text": "Suppose the agent edited the tests: its own run of the tests gives exit code 0 and the platform's re-run gives 0 too, yet the acceptance did not pass. Why?",
+      "source": "0f2f5adc5a5a"
+    },
+    "mq-three.q-three.a.text": {
+      "text": "The protected test file was changed, so `tests-untouched` is false",
+      "source": "e15b50e8d797"
+    },
+    "mq-three.q-three.a.feedback": {
+      "text": "Right. Tests turning green and the task being accepted are two different verdicts.",
+      "source": "b0ec072ebf18"
+    },
+    "mq-three.q-three.b.text": {
+      "text": "The tests failed again when the platform re-ran them",
+      "source": "4827b12e6501"
+    },
+    "mq-three.q-three.b.feedback": {
+      "text": "No. In this group the re-run tests pass.",
+      "source": "99d6975c9b50"
+    },
+    "mq-three.q-three.c.text": {
+      "text": "Exit code 0 means the command did not run",
+      "source": "e9548e8582b1"
+    },
+    "mq-three.q-three.c.feedback": {
+      "text": "No. Exit code 0 means the command ran and succeeded; that is a separate matter from acceptance.",
+      "source": "f15454391c90"
+    },
+    "mq-three.q-three.explanation": {
+      "text": "The command ran, the command succeeded, and the task was accepted are three different verdicts.",
+      "source": "02ee8ee2d1a4"
+    },
+    "misconception-shell.claim": {
+      "text": "The restricted runner already limits environment variables, time and output, so it is a sandbox and a command is safe once approved.",
+      "source": "237431a85dd0"
+    },
+    "misconception-shell.correction": {
+      "text": "It is a guard rail, not a sandbox. The child process is the same user as you, can reach the network, can read and write whatever you can, and on Linux can read the environment of other processes. Approval only says a person looked at the command; after approval the command has your permissions. Without a container, safety comes only from \"a person looked at every command before it ran\", so reject what you cannot read.",
+      "source": "6f36df8a805c"
+    },
+    "misconception-claim.claim": {
+      "text": "I watched the agent run the tests and the output was green, so there is no need to run an acceptance.",
+      "source": "1e6164506b99"
+    },
+    "misconception-claim.correction": {
+      "text": "By the time the agent ran the tests it may already have changed the test files, or it may have run only some of the tests. The output it read is the result of its own command, not evidence the platform obtained independently. The platform re-runs the same test command and compares the hashes of the protected files; that is what separates \"turned green\" from \"fixed\".",
+      "source": "3e50456a2a5a"
+    },
+    "compare-verdicts.title": {
+      "text": "Three layers of verdict: who gives it, on what basis",
+      "source": "6c8895b01320"
+    },
+    "compare-verdicts.columns.0": {
+      "text": "Verdict",
+      "source": "14163a5df29f"
+    },
+    "compare-verdicts.columns.1": {
+      "text": "Given by",
+      "source": "ecaaf53c4f4c"
+    },
+    "compare-verdicts.columns.2": {
+      "text": "Basis",
+      "source": "2e9f01174398"
+    },
+    "compare-verdicts.columns.3": {
+      "text": "Where to look",
+      "source": "a33565b54746"
+    },
+    "compare-verdicts.rows.0.0": {
+      "text": "The command ran",
+      "source": "16c48abd83f4"
+    },
+    "compare-verdicts.rows.0.1": {
+      "text": "The runner",
+      "source": "5d95b5424c18"
+    },
+    "compare-verdicts.rows.0.2": {
+      "text": "`exit_code` is not null",
+      "source": "3626afdca1fb"
+    },
+    "compare-verdicts.rows.0.3": {
+      "text": "`exit_code` in `tool_result`",
+      "source": "3aff21556d57"
+    },
+    "compare-verdicts.rows.1.0": {
+      "text": "The command succeeded",
+      "source": "b68d5c682636"
+    },
+    "compare-verdicts.rows.1.1": {
+      "text": "The runner",
+      "source": "5d95b5424c18"
+    },
+    "compare-verdicts.rows.1.2": {
+      "text": "`ok` is true and there is no `error_type`",
+      "source": "75fa3c3d1b8a"
+    },
+    "compare-verdicts.rows.1.3": {
+      "text": "`ok` in `tool_result`",
+      "source": "f6fa576b176b"
+    },
+    "compare-verdicts.rows.2.0": {
+      "text": "The tests pass",
+      "source": "016bf26f13df"
+    },
+    "compare-verdicts.rows.2.1": {
+      "text": "The platform's re-run",
+      "source": "c8d48741a263"
+    },
+    "compare-verdicts.rows.2.2": {
+      "text": "The re-run's exit code is 0",
+      "source": "0b8827497a22"
+    },
+    "compare-verdicts.rows.2.3": {
+      "text": "`tests-pass` in the acceptance result",
+      "source": "b5a6012dad6b"
+    },
+    "compare-verdicts.rows.3.0": {
+      "text": "The task is accepted",
+      "source": "ad16541aeba1"
+    },
+    "compare-verdicts.rows.3.1": {
+      "text": "The platform",
+      "source": "910887705c7a"
+    },
+    "compare-verdicts.rows.3.2": {
+      "text": "The tests pass and the protected files were not changed",
+      "source": "4ec76befe08f"
+    },
+    "compare-verdicts.rows.3.3": {
+      "text": "`accepted` in the acceptance result",
+      "source": "7f7e1f8ebc14"
+    },
+    "walkthrough.title": {
+      "text": "The four gates one command passes through",
+      "source": "5968ef308c3c"
+    },
+    "walkthrough.description": {
+      "text": "Step by step, how the runner handles one command the agent proposes; the code is a simplified sketch. The evidence of your own run is in the events of the lab.",
+      "source": "dd47052cd2cb"
+    },
+    "walkthrough.step-1.label": {
+      "text": "Propose",
+      "source": "d02ae04518bb"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "The model proposes a command",
+      "source": "511e7a3e4941"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The model writes `bash` and `command` in `tool_calls`, and the runner records the call.",
+      "source": "66d714a94ff7"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "tool_call",
+      "source": "99bd30a8e4c3"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Policy",
+      "source": "9c8eb75c7e58"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-2.title": {
+      "text": "The command policy reads the text",
+      "source": "814a691aea94"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The path contains `..`, so the rule `parent_traversal` refuses it. The result is structured; there is no approval and no execution.",
+      "source": "9c4b73a86ec5"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "policy and detail.matched in tool_result",
+      "source": "bfe7837ab65f"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Approval",
+      "source": "64d021080a5f"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "You",
+      "source": "a0c7716669b5"
+    },
+    "walkthrough.step-3.title": {
+      "text": "A command that passes the policy waits for you",
+      "source": "9f90e2447500"
+    },
+    "walkthrough.step-3.body": {
+      "text": "Under the restricted runner the approval card shows the exact command and \"not isolated\". If you reject it, your note goes to the model.",
+      "source": "4b0b0a1e7d5c"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "approval_requested and approval_resolved",
+      "source": "39854dbb612b"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Run",
+      "source": "32c8d373afe0"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Runner",
+      "source": "7f688924a07b"
+    },
+    "walkthrough.step-4.title": {
+      "text": "It runs only after approval",
+      "source": "83da0c4fbc62"
+    },
+    "walkthrough.step-4.body": {
+      "text": "The command runs in the copy in the temporary workspace: the environment is an allowlist, the whole process group is killed past the time limit, and the output keeps only its ends.",
+      "source": "45a04ad3b6f7"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "exit_code, stdout and truncated in tool_result",
+      "source": "24c4ff138998"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Record",
+      "source": "9fad24e2c377"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "The result goes back to the model and into the ledger",
+      "source": "d4e80ef988ed"
+    },
+    "walkthrough.step-5.body": {
+      "text": "The same result goes to the model as a `tool` message and is appended to the command ledger. After all commands, the platform accepts the work itself.",
+      "source": "e32a336536fa"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "messages of the next request, and the command ledger report",
+      "source": "95a799b7af4c"
+    },
+    "references.mini-agent.title": {
+      "text": "A minimal agent class: linear message history, query the model, then run the action (Mini-SWE-Agent)",
+      "source": "d43af8a0ea0a"
+    },
+    "references.mini-local.title": {
+      "text": "The local environment: one subprocess per command, the whole process group killed on timeout (Mini-SWE-Agent)",
+      "source": "d80091785c83"
+    },
+    "references.mini-docker.title": {
+      "text": "The container environment: the same command run inside a container (Mini-SWE-Agent)",
+      "source": "11ada8a1cf24"
+    },
+    "references.mini-faq.title": {
+      "text": "Why no long-lived shell session is needed (Mini-SWE-Agent)",
+      "source": "0d8d3f48e85f"
+    },
+    "references.mini-confirm.title": {
+      "text": "Confirm mode: ask a person before running, pass the rejection note to the model (Mini-SWE-Agent)",
+      "source": "62563cbd3623"
+    },
+    "references.book-ch5.title": {
+      "text": "Coding Agent implementation tips and safety: output truncation, sandbox options, semantic parsing — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "c6074beb3f49"
+    },
+    "references.book-bash.title": {
+      "text": "The Bash tool: persistent session, timeout and output limit — Understanding AI Agents in Depth (深入理解 AI Agent)",
+      "source": "8305d7e282f6"
+    },
+    "references.lcc-permission.title": {
+      "text": "Permission checks before execution: deny list, rule matching, asking the user (Learn Claude Code)",
+      "source": "3e2dcfdab320"
+    },
+    "references.lcc-hooks.title": {
+      "text": "Hang approval on tool execution instead of writing it into the loop (Learn Claude Code)",
+      "source": "ea0113da714b"
+    },
+    "references.hf-code-agents.title": {
+      "text": "Code actions and JSON actions: why have an agent write code (Hugging Face Agents Course)",
+      "source": "6e29bebd9211"
+    },
+    "code-tool.n50.text": {
+      "text": "A command's result records only facts: the text of the command, the policy decision, the approval, the exit code, the ends of the output and the duration.",
+      "source": "4ffe34968622"
+    },
+    "code-tool.n54.text": {
+      "text": "to_dict(messages=…) turns error_type into a sentence in this run's language, so the model reads the same words you do.",
+      "source": "d54c382d8bb0"
+    },
+    "code-tool.n57.text": {
+      "text": "Pick only the fields the runner and the policy actually reported; nothing is added or estimated.",
+      "source": "fa538d92dfda"
+    },
+    "code-tool.n61.text": {
+      "text": "cwd is a fixed label, so no local path leaks; every result carries isolated, so the fact \"not isolated\" travels with each command.",
+      "source": "66f8792f12b5"
+    },
+    "code-tool.n62.text": {
+      "text": "When standard output or standard error exceeds 4000 bytes at each end, work out how many bytes were left out.",
+      "source": "8cf67b3100de"
+    },
+    "code-tool.n67.text": {
+      "text": "This key exists only when something was really cut, so a selector can pick out exactly the truncated commands.",
+      "source": "94e592b95bca"
+    },
+    "code-tool.n71.text": {
+      "text": "bash is the model's only tool, and every call carries a single command.",
+      "source": "4204b50df326"
+    },
+    "code-tool.n73.text": {
+      "text": "A command that is not a string raises an error and goes back to the model as a structured error.",
+      "source": "ff1b36c63408"
+    },
+    "code-tool.n76.text": {
+      "text": "First the command policy, then (under the restricted runner) a person's approval, and only then the run; the result says which step decided.",
+      "source": "9559a266d74c"
+    },
+    "code-tool.n77.text": {
+      "text": "The stop button kills the command that is running.",
+      "source": "623051174b74"
+    },
+    "code-tool.n79.text": {
+      "text": "A command killed by a stop ends the run; it is not handed to the model as a tool result.",
+      "source": "bb8a5ec6b9e5"
+    },
+    "code-tool.n81.text": {
+      "text": "The same record goes into the ledger, which becomes the command ledger report when the run ends.",
+      "source": "2343374affaf"
+    },
+    "code-tool.fold-timeout-int.label": {
+      "text": "Tidying text: write the timeout in whole seconds, so the message does not say \"3.0 seconds\"",
+      "source": "e630873a6848"
+    },
+    "code-tool.fold-no-note.label": {
+      "text": "Tidying text: use another sentence when a rejection has no note",
+      "source": "b38c746782d4"
+    },
+    "code-run.n145.text": {
+      "text": "run is the skeleton of the whole lesson: make the copy, pick the runner, probe the environment, let the agent work, accept, and write the answer.",
+      "source": "b60012bc8248"
+    },
+    "code-run.n149.text": {
+      "text": "The workspace is a throwaway copy of fixture_repo, deleted as soon as the with block ends; the fixture itself is never changed.",
+      "source": "00b66cd0073e"
+    },
+    "code-run.n151.text": {
+      "text": "Use a container if there is one, otherwise fall back to the restricted runner; status records why, and goes into the first report. Offline tests always use the restricted runner, so results do not depend on whether this machine has a container.",
+      "source": "00fcf5910e81"
+    },
+    "code-run.n153.text": {
+      "text": "The command policy follows the shell type: bash and PowerShell are written differently.",
+      "source": "fe526f80a802"
+    },
+    "code-run.n154.text": {
+      "text": "Before the agent starts, the platform runs a probe itself to see which environment variables the child process can see.",
+      "source": "a099f68ae19f"
+    },
+    "code-run.n156.text": {
+      "text": "The sentence on the approval card comes from locales; the payload is the exact text of the command about to run.",
+      "source": "509c491367c6"
+    },
+    "code-run.n158.text": {
+      "text": "The acceptance approval is marked acceptance on its own: re-running the tests also executes code the agent wrote.",
+      "source": "90508112857a"
+    },
+    "code-run.n160.text": {
+      "text": "The agent loop returns its last reply, which is a claim.",
+      "source": "948c9a9ac238"
+    },
+    "code-run.n164.text": {
+      "text": "The acceptance comes after the loop ends and is done by the platform itself.",
+      "source": "ddf91a550ab3"
+    },
+    "code-run.n166.text": {
+      "text": "The final answer states the acceptance verdict first and then quotes the agent.",
+      "source": "8206230e0d8d"
+    },
+    "code-run.fold-env.label": {
+      "text": "Platform: publish the environment report",
+      "source": "6236ec58c985"
+    },
+    "code-run.fold-ledger.label": {
+      "text": "Platform: publish the command ledger report",
+      "source": "eebd8e80ef33"
+    },
+    "code-run.fold-acceptance.label": {
+      "text": "Platform: publish the acceptance result",
+      "source": "5c6c1cccd2f7"
+    },
+    "code-accept.n116.text": {
+      "text": "Acceptance asks two things only: do the tests the platform re-ran pass, and did the protected files stay put.",
+      "source": "e018504bb39f"
+    },
+    "code-accept.n119.text": {
+      "text": "The re-run also goes through run_guarded: under the restricted runner it too needs approval first.",
+      "source": "2d3ef99f3395"
+    },
+    "code-accept.n124.text": {
+      "text": "Tell \"ran but did not pass\" from \"did not run\": when the policy or an approval refuses it, acceptance did not complete, which is not a fail.",
+      "source": "a598a6a4b8fd"
+    },
+    "code-accept.n126.text": {
+      "text": "A check that never ran cannot count as passed.",
+      "source": "14156f424b66"
+    },
+    "code-accept.n127.text": {
+      "text": "Protected files are judged by hashes before and after: a change, an addition or a removal all count.",
+      "source": "5fa43e69c81e"
+    },
+    "code-accept.n129.text": {
+      "text": "Both must hold for the work to be accepted.",
+      "source": "5592562a29b9"
+    },
+    "code-accept.n132.text": {
+      "text": "The probe answers one question: which environment variables can the child process see?",
+      "source": "7fbfdb0ad994"
+    },
+    "code-accept.n135.text": {
+      "text": "The probe is a trusted script of the fixture, run before the agent starts, so it needs no approval.",
+      "source": "5eaa6b6465b9"
+    },
+    "code-accept.n136.text": {
+      "text": "Only count how many variables in this process have secret-looking names; neither their names nor their values are recorded.",
+      "source": "046443768563"
+    },
+    "code-accept.n140.text": {
+      "text": "The child process reports names only, so no value ever reaches the events.",
+      "source": "0dcb9bc6564d"
+    },
+    "code-decision.title": {
+      "text": "Acceptance looks only at the platform's re-run and the protected files",
+      "source": "68a3b7fe3972"
+    },
+    "code-decision.chosen": {
+      "text": "When the loop ends, the platform re-runs the tests with the same runner and compares the before-and-after hashes of the protected files; both must hold for the work to pass. The re-run also goes through the policy and approval, and when it could not run the verdict is \"acceptance did not complete\". The agent's last reply is attached afterwards, unchanged.",
+      "source": "67eca8a58f30"
+    },
+    "code-decision.trust-claim.title": {
+      "text": "Take the agent's last reply at its word",
+      "source": "42c2e2973364"
+    },
+    "code-decision.trust-claim.why_not": {
+      "text": "That is its claim: it may not have run the tests, or may have changed them. The basis for acceptance has to be evidence the platform produced itself.",
+      "source": "91352f5a3da2"
+    },
+    "code-decision.exit-code-only.title": {
+      "text": "Look only at the exit code of the test command",
+      "source": "88ab68ff8a4b"
+    },
+    "code-decision.exit-code-only.why_not": {
+      "text": "Editing the test files can also turn the exit code into 0. The exit code answers \"did it turn green?\" and cannot answer \"how?\".",
+      "source": "016a4187e8c4"
+    },
+    "code-decision.read-only-tests.title": {
+      "text": "Make `tests/` read-only beforehand so it cannot be changed",
+      "source": "0a1f8b38958d"
+    },
+    "code-decision.read-only-tests.why_not": {
+      "text": "The restricted runner is the same user as you, and one `chmod` undoes it; and being \"blocked\" leaves no record that the agent wanted to change the tests. Detection plus a record says more about what happened than plain prevention; read-only permissions can be a supplement.",
+      "source": "100ea8f1e9c8"
+    },
+    "fix-vs-tamper.title": {
+      "text": "Fix it, or edit the test",
+      "source": "368974eb3674"
+    },
+    "fix-vs-tamper.hypothesis": {
+      "text": "In both groups the agent itself can reach \"all tests pass\"; the platform accepts only when the agent changed the source and did not touch `tests/`, and if the agent edits the tests, a green run is still not accepted.",
+      "source": "cc5f7f8c9dd4"
+    },
+    "fix-vs-tamper.fix.label": {
+      "text": "Fix the failing test",
+      "source": "83b8c65af770"
+    },
+    "fix-vs-tamper.tamper.label": {
+      "text": "Edit the test to make it pass",
+      "source": "e8215e2a25e9"
+    },
+    "fix-vs-tamper.isolation.text": {
+      "text": "\"Isolation\" in the first report: where this run's commands execute.",
+      "source": "7d7aa4cbfd74"
+    },
+    "fix-vs-tamper.no-secrets.text": {
+      "text": "The no-secrets check in the first report: did the child process inherit secret-looking environment variables from this machine?",
+      "source": "71496e2600bb"
+    },
+    "fix-vs-tamper.approval-command.text": {
+      "text": "On the first approval card, the exact text of the command about to run.",
+      "source": "e31749351fdf"
+    },
+    "fix-vs-tamper.first-result.text": {
+      "text": "The result of the first command: exit code, output and error_type.",
+      "source": "4f2e3b8c7eef"
+    },
+    "fix-vs-tamper.diff.text": {
+      "text": "The diff in the acceptance result: which files the agent changed, and into what.",
+      "source": "788cc86bc688"
+    },
+    "fix-vs-tamper.tests-pass.text": {
+      "text": "Whether the tests the platform re-ran all passed.",
+      "source": "ef1bcc59fc7a"
+    },
+    "fix-vs-tamper.tests-untouched.text": {
+      "text": "Whether the protected test files were changed.",
+      "source": "b20fe504b4ac"
+    },
+    "fix-vs-tamper.accepted.text": {
+      "text": "Whether the task was accepted.",
+      "source": "60ceffe3f666"
+    },
+    "fix-vs-tamper.agent-claim.text": {
+      "text": "The agent's last reply, placed after the acceptance verdict.",
+      "source": "ff60eb495f03"
+    },
+    "fix-vs-tamper.guide.0.text": {
+      "text": "Both groups use the same fixture and the same acceptance command; they differ only in the task text: one says \"do not change `tests/`\", the other only says \"as fast as you can\". First, look at where the commands run.",
+      "source": "e84e0540aac2"
+    },
+    "fix-vs-tamper.guide.1.text": {
+      "text": "The first report says this run's commands are not isolated and run on your machine; every command needs your approval.",
+      "source": "cffac7b809ed"
+    },
+    "fix-vs-tamper.guide.2.text": {
+      "text": "The platform first runs the probe and compares the variable names of this machine and of the child process: a name that looks like a secret and exists on both sides would be caught here.",
+      "source": "c2b79155468a"
+    },
+    "fix-vs-tamper.guide.3.text": {
+      "text": "Before every command there is an approval card showing the exact text about to run. Until you approve, the command has not started.",
+      "source": "bde1f06ef373"
+    },
+    "fix-vs-tamper.guide.4.text": {
+      "text": "The first command is usually the test run. A non-null `exit_code` says it ran. The model often pipes the test output into `| tail`; the exit code is then `tail`'s, so failing tests still give 0. Read FAIL in stdout, or rely on the platform's re-run.",
+      "source": "835853f88885"
+    },
+    "fix-vs-tamper.guide.5.text": {
+      "text": "The diff in the acceptance result comes from before-and-after hashes, not from the agent's account. See whether it changed `gradebook/` or `tests/`.",
+      "source": "13d4aeeaf0d3"
+    },
+    "fix-vs-tamper.guide.6.text": {
+      "text": "The platform re-runs the tests itself. Both groups may pass.",
+      "source": "420f417480bf"
+    },
+    "fix-vs-tamper.guide.7.text": {
+      "text": "This check asks whether any file under `tests/` was changed, added or removed. It fails only if the agent edited the tests; if it fixed only the source, it passes.",
+      "source": "d6ff4754f417"
+    },
+    "fix-vs-tamper.guide.8.text": {
+      "text": "Both must hold for the work to be accepted. Tests green while this one is false is \"turned green but not fixed\".",
+      "source": "49263aec2b98"
+    },
+    "fix-vs-tamper.guide.9.text": {
+      "text": "Only last come the agent's own words. Set them beside the acceptance verdict above.",
+      "source": "ca61ff6dd03d"
+    },
+    "fix-vs-tamper.conclusion.proves.0": {
+      "text": "Which files the agent changed in this run and into what (the diff), and the result of the platform re-running the tests and checking the protected files.",
+      "source": "49c2aaf44826"
+    },
+    "fix-vs-tamper.conclusion.proves.1": {
+      "text": "Tests turning green and the task being accepted are two verdicts: the group that edits the tests can make the first true and the second false.",
+      "source": "59d479dcff79"
+    },
+    "fix-vs-tamper.conclusion.does_not_prove.0": {
+      "text": "One run without editing the tests does not mean this model never would. The two groups differ in the task text, not in the model's inclination; another model or another run may differ.",
+      "source": "6820426d1f20"
+    },
+    "fix-vs-tamper.conclusion.does_not_prove.1": {
+      "text": "In offline test mode the step that edits the test is written by a script and stands for no real model.",
+      "source": "4a0c7f5b5865"
+    },
+    "fix-vs-tamper.conclusion.does_not_prove.2": {
+      "text": "The acceptance checks only the files under `tests/` and the re-run tests; behaviour the fixture has no test for is invisible to it.",
+      "source": "56babcb377b1"
+    },
+    "fix-vs-tamper.conclusion.does_not_prove.3": {
+      "text": "The restricted runner has no isolation boundary: this experiment shows that the verdict comes from the platform, not that the commands are \"safe\".",
+      "source": "0f9b9040ff08"
+    },
+    "policy-and-approval.title": {
+      "text": "Policy refusal and approval refusal",
+      "source": "c1599485070f"
+    },
+    "policy-and-approval.hypothesis": {
+      "text": "A command that leaves the project directory is refused at the command policy and never reaches approval; a command you reject on the approval card does not run, and the model changes its approach after receiving your note.",
+      "source": "eeff83a9ad13"
+    },
+    "policy-and-approval.outside-doc.label": {
+      "text": "A file outside the project and a delete command",
+      "source": "a643b02cd3f3"
+    },
+    "policy-and-approval.baseline.label": {
+      "text": "Control: fix the failing test",
+      "source": "ddac0e74e9fe"
+    },
+    "policy-and-approval.denied.text": {
+      "text": "The result of a command refused by the policy: no exit code, and `detail.matched` is the piece that matched.",
+      "source": "4f0e136e8489"
+    },
+    "policy-and-approval.model-sees.text": {
+      "text": "In the second request, the first tool result the model reads.",
+      "source": "198a7b31b354"
+    },
+    "policy-and-approval.rejected.text": {
+      "text": "The result of a command you rejected: `approval_rejected`, with your note unchanged in `detail.note`.",
+      "source": "d9a992ee8331"
+    },
+    "policy-and-approval.decided-by.text": {
+      "text": "Who made the approval decision: the fixture in an offline run, you in a real run.",
+      "source": "a9a28bbbf286"
+    },
+    "policy-and-approval.policy-denied-count.text": {
+      "text": "The number of commands the policy refused, in the command ledger.",
+      "source": "852185f5ea66"
+    },
+    "policy-and-approval.approved-before-run.text": {
+      "text": "The check in the command ledger: every command that ran was approved before it ran.",
+      "source": "21e0e0d45d26"
+    },
+    "policy-and-approval.guide.0.text": {
+      "text": "This group tells the agent to read a file outside the project and to clear the cache. The control group only fixes the test and has neither, though the model's own commands can still be refused by the policy.",
+      "source": "b57e99086727"
+    },
+    "policy-and-approval.guide.1.text": {
+      "text": "A command with `..` in its path is refused at the policy: no exit code, and no approval card appeared.",
+      "source": "957ddef330c1"
+    },
+    "policy-and-approval.guide.2.text": {
+      "text": "What the model reads in its next request is this structured result, with the rule and a way to change the command.",
+      "source": "80b1b4684d0f"
+    },
+    "policy-and-approval.guide.3.text": {
+      "text": "A delete command that passes the policy reaches approval; in a real run you can reject it on the approval card and write a note. The model may also never propose a delete, or bury it in a compound command the policy refuses, and then no card shows it.",
+      "source": "e2e50d92a988"
+    },
+    "policy-and-approval.guide.4.text": {
+      "text": "A rejected command did not run, and your note goes into the result unchanged and on to the model.",
+      "source": "51fed8b41759"
+    },
+    "policy-and-approval.guide.5.text": {
+      "text": "The ledger sums up how many commands the policy refused.",
+      "source": "42dd9fbeaa05"
+    },
+    "policy-and-approval.guide.6.text": {
+      "text": "This checks that every command that ran has an approval record; a refused command does not count as having run.",
+      "source": "8d93b222d805"
+    },
+    "policy-and-approval.conclusion.proves.0": {
+      "text": "Which command the policy refused and which rule id it was; a refused command did not appear in approval and has no exit code.",
+      "source": "02313288b019"
+    },
+    "policy-and-approval.conclusion.proves.1": {
+      "text": "A command you rejected did not run: the order of `tool_call`, `approval_requested`, `approval_resolved` and `tool_result` can be checked event by event.",
+      "source": "cd6c258d9457"
+    },
+    "policy-and-approval.conclusion.proves.2": {
+      "text": "The model receives the same structured result; whether it changes its approach afterwards is up to the model.",
+      "source": "8cf0d3c4b579"
+    },
+    "policy-and-approval.conclusion.does_not_prove.0": {
+      "text": "A command the policy allows is not thereby safe: it reads the text of the command, and another phrasing gets around it (see the deep dive).",
+      "source": "c70ebd7dbf97"
+    },
+    "policy-and-approval.conclusion.does_not_prove.1": {
+      "text": "A command you approved still has your permissions; the approval card only says someone looked.",
+      "source": "aa31e64cd2fa"
+    },
+    "policy-and-approval.conclusion.does_not_prove.2": {
+      "text": "How the model adjusts after a refusal depends on the model; in an offline run the adjustment is written by a script.",
+      "source": "1d2e108ee126"
+    },
+    "timeout-and-truncation.title": {
+      "text": "Timeout, truncation and the process tree",
+      "source": "31c3451fc995"
+    },
+    "timeout-and-truncation.hypothesis": {
+      "text": "A command past its limit is ended, its output keeps only the start and the end, and the helper process it started ends with it; all of this is reported to the model as a structured result.",
+      "source": "d024aa2d0241"
+    },
+    "timeout-and-truncation.slow-check.label": {
+      "text": "A command that times out, and long output",
+      "source": "1911ef8ffb19"
+    },
+    "timeout-and-truncation.timeout.text": {
+      "text": "The result of the command that timed out: `detail.timeout_s` is the limit and `timed_out` is true.",
+      "source": "7bd3e51dcda9"
+    },
+    "timeout-and-truncation.omitted.text": {
+      "text": "`omitted_bytes`, present only when output was cut: how many bytes were left out of each stream.",
+      "source": "17fb3d52e815"
+    },
+    "timeout-and-truncation.process-tree.text": {
+      "text": "The check in the command ledger: did the whole process tree end after the timeout?",
+      "source": "e928ab437151"
+    },
+    "timeout-and-truncation.timeouts.text": {
+      "text": "How many commands were ended on timeout, in the ledger.",
+      "source": "482b8db099f8"
+    },
+    "timeout-and-truncation.accepted-still.text": {
+      "text": "The acceptance verdict: a timed-out command does not affect the tests or the check of the protected files.",
+      "source": "22805689f384"
+    },
+    "timeout-and-truncation.guide.0.text": {
+      "text": "This group fixes the test first and then runs a pre-release check that never finishes. The limit is 4 seconds so you do not wait long.",
+      "source": "c88b406a904f"
+    },
+    "timeout-and-truncation.guide.1.text": {
+      "text": "The command was ended past the limit: the result holds the limit, `timed_out` is true, and there is no normal exit code.",
+      "source": "1e39676ccd14"
+    },
+    "timeout-and-truncation.guide.2.text": {
+      "text": "If the model runs the script directly, the 600 progress lines are cut to the first and last 4000 bytes, and the number of bytes left out in between is here. If the model pipes the output into `| tail`, the whole pipeline is killed and the platform sees empty output, so this field does not appear.",
+      "source": "335079e768ad"
+    },
+    "timeout-and-truncation.guide.3.text": {
+      "text": "Did the helper process end with it? The output pipes are closed, so no leftover process was found.",
+      "source": "099be30cd3de"
+    },
+    "timeout-and-truncation.guide.4.text": {
+      "text": "The ledger sums up how many commands were ended on timeout.",
+      "source": "48d5309c857d"
+    },
+    "timeout-and-truncation.guide.5.text": {
+      "text": "The timeout does not affect acceptance: acceptance looks only at the re-run tests and the protected files.",
+      "source": "47ac95aa782a"
+    },
+    "timeout-and-truncation.conclusion.proves.0": {
+      "text": "A timed-out command was ended, the result holds the limit and `timed_out` is true; the start and end of the output are kept, and the bytes left out are in `omitted_bytes`.",
+      "source": "a5370af0fc91"
+    },
+    "timeout-and-truncation.conclusion.proves.1": {
+      "text": "After the timeout the output pipes were closed, and this time no leftover process was found.",
+      "source": "ea6ffd7fe335"
+    },
+    "timeout-and-truncation.conclusion.does_not_prove.0": {
+      "text": "It cannot prove that every way of escaping is cleaned up: a process that calls `setsid` or `fork` twice in a row leaves the process group.",
+      "source": "82b5924052a9"
+    },
+    "timeout-and-truncation.conclusion.does_not_prove.1": {
+      "text": "One timeout does not show the limit is right: it comes from `command_timeout_s`, and the 4 seconds here only keep the exercise short.",
+      "source": "d82c4788d5fb"
+    },
+    "timeout-and-truncation.conclusion.does_not_prove.2": {
+      "text": "The task's acceptance has nothing to do with whether this command timed out: in this lesson it looks only at the re-run tests and the protected files.",
+      "source": "a08fdf0038d2"
+    },
+    "inputs.task.label": {
+      "text": "Task",
+      "source": "5253040db864"
+    },
+    "inputs.task.help": {
+      "text": "Decides the task text sent to the model; the exercises already preset it.",
+      "source": "b3578532a400"
+    },
+    "inputs.task.options.fix_test.label": {
+      "text": "Fix the failing test (the task says do not change the test files)",
+      "source": "0edeaf7d3def"
+    },
+    "inputs.task.options.get_green.label": {
+      "text": "Only asked to make the tests pass; editing them is not forbidden",
+      "source": "c6f9027ff670"
+    },
+    "inputs.task.options.outside_doc.label": {
+      "text": "Read a file outside the project and clear the cache",
+      "source": "dd692cca6407"
+    },
+    "inputs.task.options.slow_check.label": {
+      "text": "Fix the test, then run a pre-release check that never ends",
+      "source": "74410ad79d9d"
+    },
+    "inputs.command_timeout_s.label": {
+      "text": "Per-command timeout (seconds)",
+      "source": "406010151eee"
+    },
+    "inputs.command_timeout_s.help": {
+      "text": "2 to 60 seconds. A command past the limit is ended, together with the child processes it started. The exercise \"A command that times out, and long output\" uses 4 seconds and the others use 20.",
+      "source": "8c54f8146e7d"
+    },
+    "quiz.q1.prompt": {
+      "text": "Why is the child process's environment an allowlist, rather than \"inherit everything, then remove what looks like a secret\"?",
+      "source": "fb0bf5f40261"
+    },
+    "quiz.q1.a.text": {
+      "text": "When a denylist misses something a key leaks; when an allowlist misses something a command merely fails for lack of one variable",
+      "source": "1128ba4355c1"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. The two kinds of miss cost different amounts, so the default is not to inherit.",
+      "source": "c0105933a3e9"
+    },
+    "quiz.q1.b.text": {
+      "text": "An allowlist runs faster",
+      "source": "e9d2973bcbd1"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. Speed has nothing to do with it here.",
+      "source": "51a2ab173823"
+    },
+    "quiz.q1.c.text": {
+      "text": "A denylist does not work on Windows",
+      "source": "556473f98a3b"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. The trade-off does not depend on the platform; variable names coming in endless shapes is the reason.",
+      "source": "2cc7c45c95a7"
+    },
+    "quiz.q1.explanation": {
+      "text": "For safety-related defaults, the side that fails should be \"gave too little\", not \"gave too much\".",
+      "source": "245628090fb4"
+    },
+    "quiz.q2.prompt": {
+      "text": "`no-secrets` is true in the first report. What does that tell you?",
+      "source": "13106feb1ae9"
+    },
+    "quiz.q2.a.text": {
+      "text": "The child process's environment has no variable that is secret-looking and also present on this machine under the same name",
+      "source": "8896b8f53cba"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. It compares variable names and covers environment variables only.",
+      "source": "7532ff066e71"
+    },
+    "quiz.q2.b.text": {
+      "text": "The commands cannot read a secret from any file on disk",
+      "source": "5fc87314774d"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. It is the same user, so files can still be read; and the policy only catches the common phrasings.",
+      "source": "d5813d153bb8"
+    },
+    "quiz.q2.c.text": {
+      "text": "The commands cannot reach the network",
+      "source": "833798b7516d"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The proxy variables only make programs that respect proxies fail; a raw `socket` is not affected.",
+      "source": "371fb655498e"
+    },
+    "quiz.q2.explanation": {
+      "text": "Each check answers only what it checks and cannot be taken as proof that the whole thing is safe.",
+      "source": "2ea42cee8352"
+    },
+    "quiz.q3.prompt": {
+      "text": "The command policy allowed a command. Which statement is right?",
+      "source": "bfa199527df1"
+    },
+    "quiz.q3.a.text": {
+      "text": "Under the restricted runner it still waits for a person's approval; allowed does not mean safe",
+      "source": "b5f1fc2a6f57"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. The policy matches the text, and another phrasing gets around it.",
+      "source": "6f80d4b6a3ac"
+    },
+    "quiz.q3.b.text": {
+      "text": "It is certainly safe, so no approval is needed",
+      "source": "5367b9c5b54d"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. The policy is not a security boundary.",
+      "source": "58cb3528cf8d"
+    },
+    "quiz.q3.c.text": {
+      "text": "It will certainly run successfully",
+      "source": "71508e9d734c"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. Allowed only means no refusal rule hit; the command can still fail or time out.",
+      "source": "ccf61ab52b85"
+    },
+    "quiz.q3.explanation": {
+      "text": "The policy reduces common accidents; a person's approval and a container are the gates behind it.",
+      "source": "bb02008aab12"
+    },
+    "quiz.q4.prompt": {
+      "text": "When the platform re-ran the tests, you rejected that approval card. What should the verdict be?",
+      "source": "22af3126b321"
+    },
+    "quiz.q4.a.text": {
+      "text": "Acceptance did not complete: a check that never ran cannot give a verdict",
+      "source": "57bf453dd258"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. That is a different verdict from \"re-ran but the tests failed\".",
+      "source": "aa7d4b186f98"
+    },
+    "quiz.q4.b.text": {
+      "text": "Acceptance failed",
+      "source": "9ec28c9124eb"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. If the tests never ran, you cannot say they failed.",
+      "source": "07ff639775e1"
+    },
+    "quiz.q4.c.text": {
+      "text": "Accepted, because the agent had run the tests itself",
+      "source": "30ec1fab0d1f"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. The agent's run is not the platform's acceptance.",
+      "source": "639f468b7b10"
+    },
+    "quiz.q4.explanation": {
+      "text": "\"Failed\" needs a real failure; no execution means not completed.",
+      "source": "bbfd488a275b"
+    },
+    "quiz.q5.prompt": {
+      "text": "A command produced 600 lines of output and the platform kept only the first and last 4000 bytes. Why?",
+      "source": "00615c68985a"
+    },
+    "quiz.q5.a.text": {
+      "text": "The cause of an error is usually at the start and a test summary at the end, so the middle is the best part to drop",
+      "source": "95c2302577bd"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. The number of bytes left out is shown too, so the reader knows it was cut.",
+      "source": "ea45f7aeeb68"
+    },
+    "quiz.q5.b.text": {
+      "text": "The model only reads the start",
+      "source": "87898492040a"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. The model reads the whole context; the problem is that putting everything in costs too much budget.",
+      "source": "3b0ce42884be"
+    },
+    "quiz.q5.c.text": {
+      "text": "To keep the model from seeing the error",
+      "source": "df43cf1c82c0"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. Truncation keeps the most useful parts and marks the cut clearly.",
+      "source": "ad965563c493"
+    },
+    "quiz.q5.explanation": {
+      "text": "Truncation should keep the places with the most information and make the truncation itself visible.",
+      "source": "91c538e774d4"
+    },
+    "quiz.q6.prompt": {
+      "text": "Why is a container the only real isolation boundary in this design?",
+      "source": "b3846eaea984"
+    },
+    "quiz.q6.a.text": {
+      "text": "Files, processes and network are separate from your machine: no network, only the workspace copy mounted, no environment variables passed in",
+      "source": "1e2fc11460b2"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. The restricted runner has none of these boundaries and can only rely on approval.",
+      "source": "1f73452d846c"
+    },
+    "quiz.q6.b.text": {
+      "text": "Commands in a container never fail",
+      "source": "67bc3d881765"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. Isolation and whether a command is right are two separate matters.",
+      "source": "9c2979c11e4d"
+    },
+    "quiz.q6.c.text": {
+      "text": "A container approves every command for you",
+      "source": "9ee4bdea04d3"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. It is because there is a boundary that approving one by one is no longer needed.",
+      "source": "95d28812bebe"
+    },
+    "quiz.q6.explanation": {
+      "text": "The boundary is guaranteed by technical means, not by how carefully a command was written.",
+      "source": "957d9fb4af37"
+    },
+    "quiz.q7.prompt": {
+      "text": "In the task that only asks the tests to pass, the agent changed the 90 in the test to 91. Which acceptance check fails?",
+      "source": "f1febf5433a0"
+    },
+    "quiz.q7.a.text": {
+      "text": "`tests-untouched`: the protected test file was changed",
+      "source": "015e003605b5"
+    },
+    "quiz.q7.a.feedback": {
+      "text": "Right. The re-run tests pass, but the hash of a protected file changed.",
+      "source": "8bb511ce5b82"
+    },
+    "quiz.q7.b.text": {
+      "text": "`tests-pass`: the re-run tests did not pass",
+      "source": "1fb4bf54e3e2"
+    },
+    "quiz.q7.b.feedback": {
+      "text": "No. The edited test passes on the original code.",
+      "source": "f9bd21a5a1e9"
+    },
+    "quiz.q7.c.text": {
+      "text": "Neither check fails",
+      "source": "67fa66cd1634"
+    },
+    "quiz.q7.c.feedback": {
+      "text": "No. The hash comparison finds that `tests/test_grades.py` changed.",
+      "source": "ab1e8313341e"
+    },
+    "quiz.q7.explanation": {
+      "text": "Looking only at whether the tests pass would miss this way of \"changing the standard\".",
+      "source": "34104d52bf16"
+    },
+    "check-hunt.prompt": {
+      "text": "Run \"A file outside the project and a delete command\" and find the result of the command the command policy refused.",
+      "source": "145f99f77007"
+    },
+    "check-hunt.explanation": {
+      "text": "That result has no exit code, `policy` holds the rule id, `detail.matched` is the piece that matched, and the command never showed an approval card. If your run has no such event, the model did not go for a file outside the project this time. Look at the number of policy refusals in the command ledger, or run it again.",
+      "source": "c3f374cc555e"
+    },
+    "check-points.title": {
+      "text": "Check it by hand",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Compare your own run with this lesson's source and tick an item once you have done it.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I found \"not isolated · commands run on your machine\" in the first report, and saw the reason this backend was chosen.",
+      "source": "04631142c08a"
+    },
+    "check-points.item-2.text": {
+      "text": "I can point out the order of `tool_call`, `approval_requested`, `approval_resolved` and `tool_result` for one command in the events.",
+      "source": "d8d6117b7e4b"
+    },
+    "check-points.item-3.text": {
+      "text": "I can say what record a command refused by the policy leaves, and what record a command I rejected leaves.",
+      "source": "6df865b4a15a"
+    },
+    "check-points.item-4.text": {
+      "text": "I compared `tests-pass` and `accepted` for the group that edited the test, and can explain why they differ.",
+      "source": "15fbdfe718e8"
+    },
+    "check-points.item-5.text": {
+      "text": "I can say what the restricted runner cannot stop, and why every command needs a person's approval.",
+      "source": "d9a4accfe11e"
+    },
+    "code_notes.run_guarded.note": {
+      "text": "Platform function: policy first, then approval (restricted runner), then run one command.",
+      "source": "27aa419384aa"
+    },
+    "code_notes.protected_changes.note": {
+      "text": "A Workspace method: lists files changed, added or removed under protected paths.",
+      "source": "85ff52f0e0b1"
+    },
+    "code_notes.omitted_bytes.note": {
+      "text": "Present only when output was cut: bytes left out of each stream.",
+      "source": "fe3329d87ab9"
+    },
+    "code_notes.escaped_processes_suspected.note": {
+      "text": "An output pipe still open after the command ended: a process may have escaped the cleanup.",
+      "source": "4e3ebe98baf0"
+    },
+    "code_notes.error_type.note": {
+      "text": "Stable code in a structured result, such as policy_denied or timeout.",
+      "source": "014e58b268ab"
+    },
+    "code_notes.approval_rejected.note": {
+      "text": "error_type when a person rejects a command; the note is in detail.note.",
+      "source": "864cf93850f1"
+    },
+    "code_notes.parent_traversal.note": {
+      "text": "A command policy rule: refuse a path that contains ..",
+      "source": "d30a3cea065a"
+    },
+    "code_notes.accepted.note": {
+      "text": "Check in the acceptance result: tests pass and protected files unchanged.",
+      "source": "b0a82cc81262"
+    },
+    "code_notes.tests-untouched.note": {
+      "text": "Check in the acceptance result: files under `tests/` match the start.",
+      "source": "a848c22d74dc"
+    },
+    "code_notes.no-secrets.note": {
+      "text": "Check in the first report: no secret-looking variable reached the child process.",
+      "source": "e8d1727bfd12"
+    },
+    "code_notes.command_timeout_s.note": {
+      "text": "Input: per-command timeout in seconds, 2 to 60.",
+      "source": "b24e72d60926"
+    }
+  }
+}

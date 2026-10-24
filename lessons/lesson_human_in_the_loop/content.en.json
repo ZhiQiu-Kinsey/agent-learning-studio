@@ -1,0 +1,1438 @@
+{
+  "schema_version": 1,
+  "locale": "en",
+  "texts": {
+    "hero.eyebrow": {
+      "text": "HUMAN-IN-THE-LOOP / CHECKPOINT",
+      "source": "ce3d43dfb7af"
+    },
+    "hero.headline": {
+      "text": "Before a step that changes the world,",
+      "source": "6c7fc1b44cae"
+    },
+    "hero.highlight": {
+      "text": "stop, save your place, then go on.",
+      "source": "423cfa127e31"
+    },
+    "hero.takeaway": {
+      "text": "A person confirms before the write, the position goes into a checkpoint, and a resume looks up the operation id first: however many times you resume, one save runs once.",
+      "source": "5e5db1a405c3"
+    },
+    "concepts.01-human.label": {
+      "text": "01 / HUMAN",
+      "source": "79b40635f144"
+    },
+    "concepts.01-human.title": {
+      "text": "Pause before the write",
+      "source": "dd9db21d2848"
+    },
+    "concepts.01-human.description": {
+      "text": "Human-in-the-Loop: pause before a step with a side effect, let a person approve, edit or reject it, then continue.",
+      "source": "d9b9e8dde13a"
+    },
+    "concepts.02-checkpoint.label": {
+      "text": "02 / CHECKPOINT",
+      "source": "23dc2f390ea8"
+    },
+    "concepts.02-checkpoint.title": {
+      "text": "Save the position",
+      "source": "f3a1dab92f5d"
+    },
+    "concepts.02-checkpoint.description": {
+      "text": "A Checkpoint stores the position and state of a run at one step; the Thread ID is the number shared by a run and every run resumed from it.",
+      "source": "97ae485c4998"
+    },
+    "concepts.03-operation.label": {
+      "text": "03 / OPERATION",
+      "source": "c9f017f9d2ce"
+    },
+    "concepts.03-operation.title": {
+      "text": "Give the side effect a number",
+      "source": "a1047206bc0b"
+    },
+    "concepts.03-operation.description": {
+      "text": "An Operation ID is made before a step with a side effect runs and is saved with the checkpoint. After a resume you look it up first to see whether the step already ran.",
+      "source": "54eeab398fe1"
+    },
+    "concepts.04-idempotent.label": {
+      "text": "04 / IDEMPOTENT",
+      "source": "9861c7b304ee"
+    },
+    "concepts.04-idempotent.title": {
+      "text": "A resume is not a redo",
+      "source": "cf83e0874845"
+    },
+    "concepts.04-idempotent.description": {
+      "text": "Idempotency: running one operation once or many times has the same effect. A checkpoint does not give you that for free.",
+      "source": "d2a94feef4a1"
+    },
+    "section-1.title": {
+      "text": "When a person is needed",
+      "source": "7c63accf50a4"
+    },
+    "section-1.paragraphs.0": {
+      "text": "When a step has a side effect, cannot be undone or lacks evidence, hand the decision to a person. The task of this lesson is to let the model write one practice exercise on a topic and then save it into a local exercise bank. Writing the draft is one model call: if you dislike it you try again and nothing has changed. Saving appends a row to the bank, and every later run can read it. The two steps cost differently, so the gate sits only before the second one: the write is allowed once a person has seen the draft.",
+      "source": "f947434ccdfc"
+    },
+    "section-1.paragraphs.1": {
+      "text": "How do you decide whether a step needs a person? Ask three things. Can it be undone? Can anyone outside the run see the result? Can the runtime check by itself whether it is right? For reading a file or adding two numbers all three answers are reassuring, so leave the person alone. For sending an email, charging money or overwriting a file, the first two answers are already “no”. Whether an exercise is good, the runtime cannot check; only someone who read it knows. If any one of the three holds, stop. If none holds and you stop anyway, people click approve out of habit and the gate becomes decoration. An invented example: of 40 approvals a day, 39 are for reading a file, people soon stop reading the content, and the 40th, a really risky write, also gets approved.",
+      "source": "1079d6b199d9"
+    },
+    "section-1.paragraphs.2": {
+      "text": "Apply that to the two steps of this lesson. Writing the draft: it can be undone (just throw it away), nobody outside can see it, and a program can check its format though not its quality, so there is no gate. Saving: deleting a row is easy, but once the row is in the bank another run may already have read it, so the undo is not clean; nobody checks the quality here either, so the gate sits here. Stopping uses the approval from {{lesson:hooks-approval}}: `request_approval` puts the run into the `paused` state, `approval_requested` records the full parameters and their digest, and once a person decides `approval_resolved` records the outcome.",
+      "source": "eb4f07874c15"
+    },
+    "section-1.paragraphs.3": {
+      "text": "This lesson does not teach approval itself; it cares about what comes after. The run may wait here for minutes or even hours, the service may restart while it waits, and everything inside that run is lost. Pausing, a terminal state and being resumable are three different things. Pausing means the run is still alive, waiting at the approval point for a person; a terminal state means the run is over: `completed`, `error`, `cancelled`, or `interrupted` when a service restart cut it off; resumable means that after the run ended or was cut off, a new run can still start from a saved position. This lesson adds a business status: `saved` means the bank holds the row, `suspended` means the run stopped at one step by its parameters and waits to be resumed. A run that is `completed` is not necessarily `saved`: a `suspended` run is `completed` too.",
+      "source": "c1a553a2fa61"
+    },
+    "section-2.title": {
+      "text": "Checkpoints",
+      "source": "199a0dbda6dd"
+    },
+    "section-2.paragraphs.0": {
+      "text": "Save the execution position and state, so that after a pause you can restore it as it was. Without that, one service restart makes the run that waits for approval vanish: the draft the model wrote is wasted and the call already paid for is wasted. An invented example: the draft took 8 seconds and 600 tokens; without a checkpoint you redo all of it, with one the new run continues from `drafted` and does only what is left.",
+      "source": "38029ce6b50d"
+    },
+    "section-2.paragraphs.1": {
+      "text": "Think of a game save. A save records the position and the inventory, not the whole picture on screen; after loading it, the game starts running again from that position. A checkpoint works the same way: it does not store the Python process but a JSON state that the lesson picked itself, by the rule “the least information needed to continue”: stuffing in the whole message history takes space and drags in content that has changed since. This lesson stores seven fields: `step` (how far the run got), `operation_id`, `draft` (the model's draft), `approved` (what the person approved), `approved_digest`, `edited` and `saved_id`.",
+      "source": "596dde38f913"
+    },
+    "section-2.paragraphs.2": {
+      "text": "`context.checkpoint(name, state)` records a `checkpoint` event and returns an id such as `cp-1`. The state must serialize to JSON, stay under 64000 characters, and a run may save at most 100. The event also carries `state_digest` (the digest of the state), `thread_id` and `source_hash` (the hash of the lesson source, used later when a resume is refused). This lesson saves at three places: `drafted` (the draft exists, no person asked yet), `approved` (a person approved this content) and `saved` (the write is done). A normal run records 3 `checkpoint` events; open one in the event detail and you see the complete state, the most direct way to inspect it.",
+      "source": "118884ac2ce4"
+    },
+    "section-2.paragraphs.3": {
+      "text": "The thread id ties related runs together. The first run uses its own run id as `thread_id`, and every run resumed from its checkpoints keeps it. This lesson uses it to give each thread its own bank folder: all runs of one thread read and write the same bank, and another thread cannot see it. A checkpoint stores only what the lesson hands it: the model's raw response, the rows in the bank and Python variables are not inside. It tells you where the run got to, not what the outside world looks like now.",
+      "source": "06442d921e69"
+    },
+    "predict-checkpoints.prompt": {
+      "text": "Before running “Normal flow: save after approval”, guess how many checkpoint events this run records.",
+      "source": "423f0905b789"
+    },
+    "mq-paused-vs-suspended.paused-suspended.prompt": {
+      "text": "In the “pause after approval, restart and resume” run the run status is `completed` and the business status in the report is `suspended`. What does that tell you?",
+      "source": "eb6838b5da6d"
+    },
+    "mq-paused-vs-suspended.paused-suspended.a.text": {
+      "text": "The run ended without error, but the exercise is not saved and waits at one step to be resumed",
+      "source": "fe58d10fea48"
+    },
+    "mq-paused-vs-suspended.paused-suspended.a.feedback": {
+      "text": "Right. The run status says whether this run ended; the business status says how far the task got.",
+      "source": "0a570a0e85c5"
+    },
+    "mq-paused-vs-suspended.paused-suspended.b.text": {
+      "text": "The run failed, which is why it needs a resume",
+      "source": "62c2abe461b8"
+    },
+    "mq-paused-vs-suspended.paused-suspended.b.feedback": {
+      "text": "No. A failed run is `error`; this one ended on purpose by its parameters, with no error.",
+      "source": "015476799d94"
+    },
+    "mq-paused-vs-suspended.paused-suspended.c.text": {
+      "text": "The run is still waiting at the approval point",
+      "source": "d2161c24392a"
+    },
+    "mq-paused-vs-suspended.paused-suspended.c.feedback": {
+      "text": "No. The approval is decided and the run is over; waiting for a person is `paused`.",
+      "source": "cf07d7239b4b"
+    },
+    "mq-paused-vs-suspended.paused-suspended.explanation": {
+      "text": "Read the run status and the business status separately: `completed` together with `suspended` is a normal pair.",
+      "source": "6b23227124c4"
+    },
+    "section-3.title": {
+      "text": "Editing the state by hand",
+      "source": "9e9d10b5a963"
+    },
+    "section-3.paragraphs.0": {
+      "text": "A person can change the parameters or the plan, and the change itself must be recorded. The title of the draft is too long, or the difficulty is wrong: pressing “reject” to start over costs another model call, while letting the person edit saves money and time. A person may also add information the draft lacks. This lesson puts all of that through one entrance, the approval: the approval request carries `editable=True`, so the parameters on the approval card can be changed, and what to change is up to the person.",
+      "source": "74e92076d9d5"
+    },
+    "section-3.paragraphs.1": {
+      "text": "The change is recorded in `approval_resolved`: `edited` is true, `payload` is the version the person approved, `payload_digest` is its digest and `requested_digest` is the digest of the original. Two different digests are the evidence of an edit, with no need to compare field by field. The digest is the sha256 of the canonical JSON of the parameters, so the order of keys does not matter: `{\"a\":1,\"b\":2}` and `{\"b\":2,\"a\":1}` give the same digest, and a value that differs by one character gives a different one. A digest has a second use: comparing content against it later to see whether it was touched, which a resume does.",
+      "source": "ee36a8212225"
+    },
+    "section-3.paragraphs.2": {
+      "text": "A person may type something the bank would never accept, such as a difficulty of `impossible`. So the edit is checked again like the draft: if it fails, the run ends as `failed` with the reason `invalid_edit`, leaves no `approved` checkpoint and certainly writes nothing; only an acceptable edit gets a checkpoint. In the `approved` checkpoint, `draft` is still the model's original, `approved` is the version the person approved and `approved_digest` is its digest. The draft, the approved version and the row in the bank sit side by side in the field comparison table of the report, so afterwards you can tell who changed what.",
+      "source": "c41cf4976e2f"
+    },
+    "section-3.paragraphs.3": {
+      "text": "Be clear about what the platform lets you change. A person can edit only the parameters to approve, at the approval point; `POST /api/runs/{id}/resume` accepts only a checkpoint id, and an attempt to slip in a change to the state of a checkpoint is refused (422). To change content that is already saved, resume from the `drafted` checkpoint, let it go through the approval once more and edit again; the old checkpoint stays untouched. LangGraph's `update_state` works in a similar spirit: it branches a new checkpoint off an existing one and leaves the history alone.",
+      "source": "9ca12e5224e3"
+    },
+    "mq-edit.edit-trail.prompt": {
+      "text": "A person changes the difficulty to “Challenge” on the approval card. How can you tell, without comparing field by field, that the content was edited?",
+      "source": "c1e3816ebc1a"
+    },
+    "mq-edit.edit-trail.a.text": {
+      "text": "In `approval_resolved`, `payload_digest` differs from `requested_digest` and `edited` is true",
+      "source": "4c0d69519d38"
+    },
+    "mq-edit.edit-trail.a.feedback": {
+      "text": "Right. The two digests are canonical hashes of their own parameters; different means edited.",
+      "source": "86cb7a819b04"
+    },
+    "mq-edit.edit-trail.b.text": {
+      "text": "The id of the `approved` checkpoint got larger",
+      "source": "ee65eeb3d080"
+    },
+    "mq-edit.edit-trail.b.feedback": {
+      "text": "No. The checkpoint id only says which one it is, not what it holds.",
+      "source": "0585a6a2ea7a"
+    },
+    "mq-edit.edit-trail.c.text": {
+      "text": "The run status turns into `error`",
+      "source": "9ba5d32d7e81"
+    },
+    "mq-edit.edit-trail.c.feedback": {
+      "text": "No. A human edit is a normal path and the run status does not change.",
+      "source": "d47b97154d39"
+    },
+    "mq-edit.edit-trail.explanation": {
+      "text": "A digest is the fingerprint of the content: change the content and the digest changes; same digest, same content.",
+      "source": "88396470b97e"
+    },
+    "deep-dive-langgraph.title": {
+      "text": "LangGraph checkpoints and `interrupt`: the interrupted node restarts from its beginning",
+      "source": "cec9535ed3ad"
+    },
+    "deep-dive-langgraph.summary": {
+      "text": "LangGraph stores each step's state with a `checkpointer` and pauses with `interrupt`; on resume the interrupted node runs again from its start.",
+      "source": "8c23e3f4bd4a"
+    },
+    "deep-dive-langgraph.paragraphs.0": {
+      "text": "The graph of {{lesson:langgraph-state}} can be compiled with a `checkpointer`, and every call carries a `thread_id`: the same value continues the same state, a new value is a brand-new thread with empty state. A node calls `interrupt()` to pause and hands a serializable value to the caller; the caller resumes with `Command(resume=...)` and that value becomes the return value of `interrupt()`. The statements below were checked against the official LangChain documentation (2026-10-21); the version you installed decides the details.",
+      "source": "a7f734556b0f"
+    },
+    "deep-dive-langgraph.paragraphs.1": {
+      "text": "The most important rule: on resume the interrupted node restarts from its beginning, so the code before `interrupt()` runs again. That is why the official documentation warns that side effects before `interrupt()` should be idempotent, for example an `upsert`, or moved after the `interrupt()` call into a separate node; appending a record or creating a new object before it repeats on every resume. The platform resume of this lesson differs: it starts a new run and the lesson code decides from `step` where to continue, so completed steps are not rerun as a whole. But the duty of look-then-write falls on your code just the same; the framework does not do it for you.",
+      "source": "2ea9dee94e96"
+    },
+    "deep-dive-langgraph.paragraphs.2": {
+      "text": "Storage decides whether a checkpoint survives a restart. `InMemorySaver` keeps checkpoints in memory and loses them when the process restarts; the documentation recommends `PostgresSaver` for production and `SqliteSaver` for local development. The checkpoints of this lesson live in the run store (SQLite) and are still there after a restart. Do not mix up two more ideas: `update_state` does not rewind the thread but creates a new checkpoint branching off the one you name, leaving the history; replay reruns the nodes after an old checkpoint, and model calls and API requests may return different results, so replay is not the same as resume.",
+      "source": "37569fc764d0"
+    },
+    "section-4.title": {
+      "text": "Resuming after a restart",
+      "source": "7b365c051049"
+    },
+    "section-4.paragraphs.0": {
+      "text": "After a process restart, continue from the checkpoint without repeating side effects that already happened. The second half of that sentence is the one people get wrong. Imagine saving takes three steps: draft, approve, write. The write succeeded, but the process died before the `saved` checkpoint was stored: the last checkpoint on disk is `approved`, and `saved_id` in the state is still empty. What happens if you simply continue from the checkpoint? It says “the next step is the write”, so the runner writes. The bank had 1 row and now has 2, and both rows carry the `operation_id` `save-a1b2c3d4-1` (an invented example).",
+      "source": "017f6c2e0102"
+    },
+    "section-4.paragraphs.1": {
+      "text": "The checkpoint did not lie: it faithfully recorded the last position saved before the crash. The mistake is treating the position as the state of the outside world. The lesson saves the position itself; the outside world has to be asked. The way out is to look first and write second: before writing, the runner calls `lookup_operation` and asks the bank whether this operation id was already written. If so, it skips the write and records the existing row id in the state; if not, it calls `save_exercise`. That is one way to get idempotency: running one operation once or many times has the same effect. The operation id is made in the first run, saved in the checkpoint and used by every later resume.",
+      "source": "fd4db69a4c40"
+    },
+    "section-4.paragraphs.2": {
+      "text": "Idempotency has another form: let the store deduplicate by itself, with the details in {{lesson:reliable-tools}}. The bank of this lesson deliberately has no uniqueness constraint, so the same operation id can produce two rows; keeping duplicates out is the job of the lesson code, which is what makes “what if you do not look first” visible. Set `resume_guard` to `blind` and a resume skips the lookup and just writes. Look-then-write also has a gap: between the lookup and the write another writer can slip in. That is acceptable for one local user with runs that exclude each other; with several processes the id must live inside the store's transaction.",
+      "source": "73d724f35e60"
+    },
+    "section-4.paragraphs.3": {
+      "text": "Resuming goes through `POST /api/runs/{run_id}/resume` with just one checkpoint id. The platform starts a new run with the lesson, exercise, question, inputs and run language of the source run; the `run_start` of the new run records `resumed_from`, and the lesson reads the saved state from `resume_state`. Not one request or tool call of the source run is replayed: the resumed run contains only the requests it really sends anew. Checkpoints live in the run store (SQLite) and are still there after a service restart; a run cut off by a restart and marked `interrupted` can also be resumed from its last checkpoint.",
+      "source": "e0791a66c21a"
+    },
+    "deep-dive-stop-points.title": {
+      "text": "What each of the three stop points leaves behind",
+      "source": "0597717a9743"
+    },
+    "deep-dive-stop-points.summary": {
+      "text": "Work out by hand what is on disk after each `stop_at` and what a resume does.",
+      "source": "cc977a2825a3"
+    },
+    "deep-dive-stop-points.paragraphs.0": {
+      "text": "`stop_at` has three effective values, matching three kinds of interruption. `after_draft`: only the `drafted` checkpoint is stored, the bank has 0 rows and there was no approval; a resume asks for approval again and writes only after it. `before_save`: `drafted` and `approved` are stored, the bank has 0 rows; after the resume the lookup says “not found”, so it writes and records `saved`. `after_save`: the checkpoints also stop at `approved`, but the bank already has 1 row; after the resume the lookup says “found”, it skips the write and records `already_saved`.",
+      "source": "d1c24181aa1f"
+    },
+    "deep-dive-stop-points.paragraphs.1": {
+      "text": "Put the last two side by side: the last checkpoint is `approved` in both, yet the bank has 0 rows in one and 1 in the other. From the checkpoint alone you cannot tell them apart; only asking the bank tells. That is why the lookup before a resume cannot be skipped, and why you cannot infer “not yet written” from “the checkpoint is `approved`”. Conversely, resuming from a `saved` checkpoint also looks once: if the state says saved and the bank has no row, that is `ledger_mismatch`, and the run must stop and hand it to a person instead of quietly writing.",
+      "source": "4bb4cc59c839"
+    },
+    "deep-dive-stop-points.paragraphs.2": {
+      "text": "There is one stop point this lesson does not make: a write that is half done. The bank is SQLite and one write is one transaction, so either the whole row is written or nothing is; no half row can appear. When an outside service has no transaction, “half done” is itself a state you cannot judge, such as whether an email left. Then you can only rely on a query interface or an idempotency key from the other side, and without either of them the model should not be allowed to retry automatically; the decision goes back to a person.",
+      "source": "9267e9d2821f"
+    },
+    "mq-duplicate.rows-after-crash.prompt": {
+      "text": "The last checkpoint is `approved`. How many rows does the bank hold for this operation id?",
+      "source": "25bcb958f6ee"
+    },
+    "mq-duplicate.rows-after-crash.a.text": {
+      "text": "Maybe 0 rows and maybe 1 row; you have to ask the bank",
+      "source": "ad194c85de6a"
+    },
+    "mq-duplicate.rows-after-crash.a.feedback": {
+      "text": "Right. The write may have happened before the crash or not; the checkpoint cannot tell.",
+      "source": "400700c22daa"
+    },
+    "mq-duplicate.rows-after-crash.b.text": {
+      "text": "Always 0, because the checkpoint has not reached `saved`",
+      "source": "c323b7aded00"
+    },
+    "mq-duplicate.rows-after-crash.b.feedback": {
+      "text": "No. The “crash after the write” run has 1 row.",
+      "source": "b3e4a1a72e26"
+    },
+    "mq-duplicate.rows-after-crash.c.text": {
+      "text": "Always 1, because the approval already went through",
+      "source": "db22e5dfbea5"
+    },
+    "mq-duplicate.rows-after-crash.c.feedback": {
+      "text": "No. An approval only allows the write; it does not mean the write happened. The “pause after approval” run has 0 rows.",
+      "source": "b67ef5edb979"
+    },
+    "mq-duplicate.rows-after-crash.explanation": {
+      "text": "One `approved` checkpoint matches two realities, which is why a resume looks first.",
+      "source": "b8b5b5fcc39d"
+    },
+    "misconception-checkpoint-idempotent.claim": {
+      "text": "With a checkpoint, resuming from it never repeats any action.",
+      "source": "f66da68b27d3"
+    },
+    "misconception-checkpoint-idempotent.correction": {
+      "text": "A checkpoint only records a position. The write happens before the next checkpoint is stored, so after a resume the position still sits before the write, and following it writes again. In the “crash after the write” run, the last checkpoint is `approved` while the bank already has 1 row. You need the operation id plus look-then-write; the checkpoint itself guarantees no idempotency.",
+      "source": "f58d1995dbfe"
+    },
+    "section-5.title": {
+      "text": "Who may resume and what happens when it fails",
+      "source": "c6f856974259"
+    },
+    "section-5.paragraphs.0": {
+      "text": "Say clearly who can resume and what happens when a resume fails. Permission first: this platform binds only to 127.0.0.1 and serves a single learner, so whoever can open the page can resume. In a real system a resume, like an approval, has consequences and needs sign-in, roles and an audit trail. What this lesson can do is something smaller: a resume does not inherit an approval. When resuming from the `approved` checkpoint, the runner first computes the digest of the `approved` content and compares it with `approved_digest` in the checkpoint; if they differ, it refuses to write and records `failed` with the reason `unapproved`.",
+      "source": "60601bda55ba"
+    },
+    "section-5.paragraphs.1": {
+      "text": "Resuming from the `drafted` checkpoint has no approval to inherit, so the runner asks for approval again. The approval travels with the digest: whatever content was approved is the only content that may be written. The platform itself refuses a resume in four cases. The source run is still executing: `run_still_active`. There is no such checkpoint: `checkpoint_not_found`. Another run holds the execution lock: `run_busy`. The lesson source changed after the checkpoint was saved: `checkpoint_stale`, because the position in the checkpoint belongs to the old code and the new code may no longer have that step.",
+      "source": "30c30e60c635"
+    },
+    "section-5.paragraphs.2": {
+      "text": "What the platform cannot stop, the lesson handles itself. The write fails (`save_failed`): the bank gained no row, the checkpoint is still at `approved` and you can resume again. The checkpoint says saved but the bank has no such row (`ledger_mismatch`): nothing is rewritten on a guess, and a person has to check. The draft has the wrong format (`bad_draft`) or the person broke it with an edit (`invalid_edit`): the run does not go on to the next step. Each case has a clear business status and a reason, instead of one vague “something went wrong”. `checkpoint_stale` is decided by the `source_hash` in the checkpoint, computed by the same rule as the source hash of lesson recordings.",
+      "source": "bbc0cfbc3ee4"
+    },
+    "section-5.paragraphs.3": {
+      "text": "Finally, be clear about who guarantees what. That a checkpoint exists says only that the position was saved; it does not say that outside actions are naturally idempotent. The platform guarantees that the position is kept, that a new run replays nothing and that a changed source is refused; the lesson code guarantees that the approval matches and that a lookup precedes the write. Only when both sides do their part can you say a resume did not write twice; missing either side breaks it. The table lists both sides.",
+      "source": "69cede9c2d83"
+    },
+    "compare-guarantees.title": {
+      "text": "What the platform guarantees and what the lesson code guarantees",
+      "source": "8f78d1a3c734"
+    },
+    "compare-guarantees.paragraphs.0": {
+      "text": "The two right columns are each side's duty; a cell that says “not guaranteed” is a place the lesson code has to fill itself.",
+      "source": "57a6a822b769"
+    },
+    "compare-guarantees.columns.0": {
+      "text": "Matter",
+      "source": "d5cf03811bc4"
+    },
+    "compare-guarantees.columns.1": {
+      "text": "Platform",
+      "source": "910887705c7a"
+    },
+    "compare-guarantees.columns.2": {
+      "text": "Lesson code",
+      "source": "d48636ed88e4"
+    },
+    "compare-guarantees.rows.0.0": {
+      "text": "The position is kept",
+      "source": "24d85c09f946"
+    },
+    "compare-guarantees.rows.0.1": {
+      "text": "The `checkpoint` event is written to the run store and readable after a restart",
+      "source": "40e0e43f7a1f"
+    },
+    "compare-guarantees.rows.0.2": {
+      "text": "Chooses which fields to save; the state must serialize to JSON",
+      "source": "f0d24d2e0a5e"
+    },
+    "compare-guarantees.rows.1.0": {
+      "text": "No replay of old requests",
+      "source": "be475c886cf4"
+    },
+    "compare-guarantees.rows.1.1": {
+      "text": "A new run does not resend the requests and tool calls of the source run",
+      "source": "93d5913cfa6a"
+    },
+    "compare-guarantees.rows.1.2": {
+      "text": "Does only the steps still to do, decided by `step`",
+      "source": "9d79efff53dc"
+    },
+    "compare-guarantees.rows.2.0": {
+      "text": "The source changed",
+      "source": "4c153196291e"
+    },
+    "compare-guarantees.rows.2.1": {
+      "text": "Refuses the resume (`checkpoint_stale`)",
+      "source": "52f036b0ade8"
+    },
+    "compare-guarantees.rows.2.2": {
+      "text": "Nothing to do; the old checkpoint is void automatically",
+      "source": "714c07fe6f1b"
+    },
+    "compare-guarantees.rows.3.0": {
+      "text": "Is the approval valid",
+      "source": "713a1a220f53"
+    },
+    "compare-guarantees.rows.3.1": {
+      "text": "Records the approval request, the decision and both digests",
+      "source": "7aa1fdffb669"
+    },
+    "compare-guarantees.rows.3.2": {
+      "text": "Checks `approved_digest` at resume time",
+      "source": "825c73654d58"
+    },
+    "compare-guarantees.rows.4.0": {
+      "text": "The outside write happens once",
+      "source": "d705a24d7921"
+    },
+    "compare-guarantees.rows.4.1": {
+      "text": "Not guaranteed",
+      "source": "c516cd0ea191"
+    },
+    "compare-guarantees.rows.4.2": {
+      "text": "Operation id plus look-then-write",
+      "source": "e2e9a7aae7d6"
+    },
+    "compare-guarantees.rows.5.0": {
+      "text": "The checkpoint and reality disagree",
+      "source": "5d01b3f9cb12"
+    },
+    "compare-guarantees.rows.5.1": {
+      "text": "Not guaranteed",
+      "source": "c516cd0ea191"
+    },
+    "compare-guarantees.rows.5.2": {
+      "text": "Stops at `ledger_mismatch` and hands it to a person",
+      "source": "7820c4b47822"
+    },
+    "mq-stale.stale-reason.prompt": {
+      "text": "You changed the lesson's `runtime.py` and resume from an old checkpoint; the platform returns `checkpoint_stale`. Why does it refuse?",
+      "source": "4fa5152d0ad7"
+    },
+    "mq-stale.stale-reason.a.text": {
+      "text": "The position in the checkpoint belongs to the old code; the new code may no longer have that step, and continuing could do the wrong thing",
+      "source": "265be9774df8"
+    },
+    "mq-stale.stale-reason.a.feedback": {
+      "text": "Right. The checkpoint recorded the `source_hash` at save time, and a mismatch is refused.",
+      "source": "3057ad09cea2"
+    },
+    "mq-stale.stale-reason.b.text": {
+      "text": "The checkpoint was stored too long ago and expired",
+      "source": "5bf76074fb3f"
+    },
+    "mq-stale.stale-reason.b.feedback": {
+      "text": "No. The platform does not expire checkpoints by time; it only compares source hashes.",
+      "source": "15c8b9118df6"
+    },
+    "mq-stale.stale-reason.c.text": {
+      "text": "The source run is still executing",
+      "source": "032fcebcd6c8"
+    },
+    "mq-stale.stale-reason.c.feedback": {
+      "text": "No. That is `run_still_active`.",
+      "source": "1c37afd60994"
+    },
+    "mq-stale.stale-reason.explanation": {
+      "text": "Refusing is safer than continuing from a position that may be wrong; running again gives a fresh checkpoint.",
+      "source": "2f1b2e4de3dd"
+    },
+    "deep-dive-idempotent.title": {
+      "text": "Two ways to idempotency, and resuming by position versus by result",
+      "source": "78b5f9b94acd"
+    },
+    "deep-dive-idempotent.summary": {
+      "text": "The book groups idempotency into deduplicating by a unique id and look-then-change; the workflow of Learn Claude Code caches the results of finished calls under stable keys.",
+      "source": "c7eefe042002"
+    },
+    "deep-dive-idempotent.paragraphs.0": {
+      "text": "Chapter 4 of the book asks: when a call is cancelled or times out, did its side effect happen or not? A transfer that times out and returns failure may or may not have moved the money. The core remedy is idempotency, in two common forms: the operation carries a unique id and the server deduplicates by it, returning the first result to a repeat; or look-then-change, where before a retry you query the current state of the target resource and act only if it is not done. The `operation_id` plus `lookup_operation` of this lesson is the second; the idempotency key of {{lesson:reliable-tools}} is the first. What they share: the evidence for “was it done” lives in the outside world, not in the caller's memory.",
+      "source": "02e426897c44"
+    },
+    "deep-dive-idempotent.paragraphs.1": {
+      "text": "Not every operation can be made idempotent: sending an email, placing a call or transferring money outward is, each time it runs, an irreversible real-world event. For these the book uses a two-phase “pre-check then confirm”: first validate, for example check the balance, confirm the payee and generate the content to send; then execute for real; if the execution phase fails, do not retry blindly. The `approved` checkpoint of this lesson is the line between the two phases: before it you may redo freely, after it every step looks first. The example of the Microsoft course waits synchronously inside `input()` for the approval, and when the process dies the wait is gone; this lesson turns the wait into a resumable checkpoint, which is the difference.",
+      "source": "9e43d58deb06"
+    },
+    "deep-dive-idempotent.paragraphs.2": {
+      "text": "`s16_workflow_runtime` of Learn Claude Code takes another road. The workflow script runs again from the top, but every `agent()` call gets a stable hash over its content (kind, label, prompt, schema) as its key, and when the journal file already holds that key the cached result is taken without asking the model. It stores the results of finished calls, and since the key does not depend on the order in which concurrent calls finish, a resume does not misalign. Compare the two ideas: a checkpoint stores the position, a journal stores results. This lesson resumes by position because the “result” of the side effect sits in the outside bank, not in our hands, and can only be asked for.",
+      "source": "1eb68237f9e6"
+    },
+    "walkthrough.title": {
+      "text": "Walk through the “crash after the write” run",
+      "source": "e1fd831cab4c"
+    },
+    "walkthrough.description": {
+      "text": "In order, the “crash after the write: resume without saving twice” run plus one resume. The code is simplified for illustration. The evidence of your own run is in the lab's events.",
+      "source": "091b0f87e148"
+    },
+    "walkthrough.step-1.label": {
+      "text": "drafted",
+      "source": "094b7ade939c"
+    },
+    "walkthrough.step-1.actor": {
+      "text": "Model",
+      "source": "c98e118e0a43"
+    },
+    "walkthrough.step-1.title": {
+      "text": "Draft, then the first checkpoint",
+      "source": "de343298ed8e"
+    },
+    "walkthrough.step-1.body": {
+      "text": "The model writes the exercise, the runner makes the operation id and saves draft and id together into the `drafted` checkpoint.",
+      "source": "61884da92785"
+    },
+    "walkthrough.step-1.evidence": {
+      "text": "request / response, checkpoint",
+      "source": "04c4fe419f14"
+    },
+    "walkthrough.step-2.label": {
+      "text": "Approve",
+      "source": "8cbe697b1573"
+    },
+    "walkthrough.step-2.actor": {
+      "text": "Person",
+      "source": "50f5d65d5729"
+    },
+    "walkthrough.step-2.title": {
+      "text": "Approve the content",
+      "source": "4b8349647a2b"
+    },
+    "walkthrough.step-2.body": {
+      "text": "The parameters on the approval card are the draft; after the approval the runner saves the approved content and its digest into the `approved` checkpoint.",
+      "source": "6e747ca8d34c"
+    },
+    "walkthrough.step-2.evidence": {
+      "text": "approval_resolved, checkpoint",
+      "source": "62762c155ed4"
+    },
+    "walkthrough.step-3.label": {
+      "text": "Lookup",
+      "source": "bcd6771e08ec"
+    },
+    "walkthrough.step-3.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-3.title": {
+      "text": "Look first: not in the bank",
+      "source": "a2bb01b64a63"
+    },
+    "walkthrough.step-3.body": {
+      "text": "`lookup_operation` returns `found` false, so writing is allowed.",
+      "source": "3b5159962852"
+    },
+    "walkthrough.step-3.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "walkthrough.step-4.label": {
+      "text": "Write",
+      "source": "5c783c467965"
+    },
+    "walkthrough.step-4.actor": {
+      "text": "Tool",
+      "source": "5ca6730d4415"
+    },
+    "walkthrough.step-4.title": {
+      "text": "Write 1 row",
+      "source": "e81a641d09a8"
+    },
+    "walkthrough.step-4.body": {
+      "text": "`save_exercise` appends one row with id 1. The bank now holds 1 row.",
+      "source": "f84cf500f0c2"
+    },
+    "walkthrough.step-4.evidence": {
+      "text": "tool_result",
+      "source": "d5c41a8cba97"
+    },
+    "walkthrough.step-5.label": {
+      "text": "Stop",
+      "source": "f9d19345a067"
+    },
+    "walkthrough.step-5.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-5.title": {
+      "text": "The process stops here",
+      "source": "071069000199"
+    },
+    "walkthrough.step-5.body": {
+      "text": "`stop_at` is `after_save`: the run ends after the write and before the `saved` checkpoint. The last checkpoint on disk is `approved`, and its `saved_id` is empty.",
+      "source": "e59b0b397257"
+    },
+    "walkthrough.step-5.evidence": {
+      "text": "business status suspended in lesson.report",
+      "source": "cc376e66d995"
+    },
+    "walkthrough.step-6.label": {
+      "text": "Resume",
+      "source": "e0534b8a4e46"
+    },
+    "walkthrough.step-6.actor": {
+      "text": "Platform",
+      "source": "910887705c7a"
+    },
+    "walkthrough.step-6.title": {
+      "text": "Resume from approved",
+      "source": "9df5e73cf9f5"
+    },
+    "walkthrough.step-6.body": {
+      "text": "The new run reads the `approved` state and the approval digest matches; not one request of the source run is replayed.",
+      "source": "fb56c703c566"
+    },
+    "walkthrough.step-6.evidence": {
+      "text": "resumed_from inside run_start",
+      "source": "0e7090b4dfa5"
+    },
+    "walkthrough.step-7.label": {
+      "text": "Lookup again",
+      "source": "ebe2463c88fb"
+    },
+    "walkthrough.step-7.actor": {
+      "text": "Runner",
+      "source": "5d95b5424c18"
+    },
+    "walkthrough.step-7.title": {
+      "text": "Look again: already in the bank",
+      "source": "d7df79f6a22b"
+    },
+    "walkthrough.step-7.body": {
+      "text": "`found` is true with row id 1: skip the write, save the `saved` checkpoint and end with `already_saved`. The bank still holds 1 row.",
+      "source": "c4082d8f765c"
+    },
+    "walkthrough.step-7.evidence": {
+      "text": "tool_result, lesson.report",
+      "source": "b8164eb85c39"
+    },
+    "wrap-up.title": {
+      "text": "Summary",
+      "source": "6bf8bdb1f6ee"
+    },
+    "wrap-up.paragraphs.0": {
+      "text": "This lesson splits one task with a side effect into three positions: draft, approval and write, each with a checkpoint. While paused, a person can approve, edit or reject; after a restart, a new run reads the state back from the checkpoint, looks up the operation id and only then decides whether to write.",
+      "source": "d3038342781c"
+    },
+    "wrap-up.paragraphs.1": {
+      "text": "Three rules to take away: have an approval before the write; let the saved position carry an operation id; after a resume, ask the outside world first instead of inferring from the checkpoint. The next lesson, {{lesson:bash-coding-agent}}, swaps the write for real command execution, a bigger side effect that needs these three rules even more.",
+      "source": "cd4dd6b877ae"
+    },
+    "wrap-up.paragraphs.2": {
+      "text": "Work in this order: run the normal flow and count the three checkpoints; then the pause after the approval and resume once; then the crash after the write and resume twice; finally set `resume_guard` to `blind` for one contrast. At every step check against the checks in the report and the number of rows in the bank, not by feel.",
+      "source": "f138bffd3761"
+    },
+    "references.hf-building-blocks.title": {
+      "text": "Building blocks of LangGraph: state, nodes and edges (Hugging Face Agents Course)",
+      "source": "d4a827075cfc"
+    },
+    "references.book-tools.title": {
+      "text": "Idempotency and cancellation semantics of tools (Understanding AI Agents, chapter 4)",
+      "source": "80bc56a3e661"
+    },
+    "references.book-async.title": {
+      "text": "Interrupting and resuming an asynchronous agent (Understanding AI Agents, chapter 6)",
+      "source": "9b5afe85b66d"
+    },
+    "references.lcc-workflow.title": {
+      "text": "Workflow runtime: journal and resume by stable keys (Learn Claude Code)",
+      "source": "ae59c0f72ad1"
+    },
+    "references.ms-trustworthy.title": {
+      "text": "Building trustworthy AI agents: human in the loop (Microsoft AI Agents for Beginners)",
+      "source": "fac184234023"
+    },
+    "references.langgraph-interrupts.title": {
+      "text": "LangGraph `interrupt` and resuming (LangChain documentation, checked 2026-10-21)",
+      "source": "1e6f657659df"
+    },
+    "references.langgraph-time-travel.title": {
+      "text": "LangGraph time travel: update_state and replay (LangChain documentation, checked 2026-10-21)",
+      "source": "dc9f52fa635e"
+    },
+    "code-flow.n-run.text": {
+      "text": "The whole flow is a small state machine: every step looks only at `step` in the state to decide whether to run.",
+      "source": "c97821facb12"
+    },
+    "code-flow.n-inputs.text": {
+      "text": "Inputs go through Pydantic first: `stop_at` and `resume_guard` are `Literal`, so a wrong value is rejected before the run starts.",
+      "source": "90a842f9828d"
+    },
+    "code-flow.n-trace.text": {
+      "text": "A non-empty `resume_state` means a resumed run; `trace` only collects the facts the report needs.",
+      "source": "2952079b9e6b"
+    },
+    "code-flow.n-bank.text": {
+      "text": "The bank lives in the thread's folder: a resumed run has a new run id and still opens the same bank.",
+      "source": "74cdc6c7c5bd"
+    },
+    "code-flow.n-start.text": {
+      "text": "A resume takes the saved state and does not draft again; only a fresh run enters `draft_step`.",
+      "source": "0653bff7ad61"
+    },
+    "code-flow.n-approve-gate.text": {
+      "text": "Approval is requested only when the position is `drafted`; `trace.stop` returns true when the run is over or a stop is to be simulated.",
+      "source": "b0c49ae175ec"
+    },
+    "code-flow.n-commit-gate.text": {
+      "text": "Both `approved` and `saved` enter the write step: the first writes (or finds it already written), the second only verifies.",
+      "source": "114e99531942"
+    },
+    "code-flow.n-finish.text": {
+      "text": "The ending is in one place, `finish`: read the bank, work out the business status, send the receipt request and publish the reports.",
+      "source": "8079c8bf7c37"
+    },
+    "code-flow.n-draft.text": {
+      "text": "The draft is the one model request of the flow that a resume never sends again.",
+      "source": "9d0bd4b70b55"
+    },
+    "code-flow.n-complete.text": {
+      "text": "The request goes through `context.complete`, so the platform records request and response; `max_tokens` bounds the draft length.",
+      "source": "173257c4fee1"
+    },
+    "code-flow.n-parse.text": {
+      "text": "The draft needs a title line and a body; a wrong format ends as `failed` and never reaches approval.",
+      "source": "7eaa5e5e1a3b"
+    },
+    "code-flow.n-bad.text": {
+      "text": "A failure is an explicit business status plus a reason, not just a raised exception.",
+      "source": "490d69e8de3c"
+    },
+    "code-flow.n-opid.text": {
+      "text": "The operation id is made once, here, and then travels with the state; every resume of the same thread uses it.",
+      "source": "713816c6deb2"
+    },
+    "code-flow.n-cp-drafted.text": {
+      "text": "The first checkpoint: draft and operation id are inside, and no person has been asked yet.",
+      "source": "6eeebdfce8f6"
+    },
+    "code-flow.fold-parse.label": {
+      "text": "Lesson: parse the format of the model's draft (first line title, the rest the body)",
+      "source": "98bf3e8658dd"
+    },
+    "code-approve.n-approve.text": {
+      "text": "The approval step takes a state and returns a new one; the person's decision enters only through `decision`.",
+      "source": "270bf91592e3"
+    },
+    "code-approve.n-request.text": {
+      "text": "The run stops here (status `paused`). `editable=True` lets the person edit the parameters; `risk` is only a hint for the person.",
+      "source": "6acef2af8434"
+    },
+    "code-approve.n-payload.text": {
+      "text": "What goes to approval is a copy of the draft; the original stays in the state.",
+      "source": "4851dba60f9a"
+    },
+    "code-approve.n-trace-approval.text": {
+      "text": "Who decided, the outcome and whether it was edited are noted; the “Approval” metric of the report comes from here.",
+      "source": "3770b3d334ac"
+    },
+    "code-approve.n-rejected.text": {
+      "text": "Rejection and timeout raise nothing: the run ends as `rejected` or `timed_out`, with no `approved` checkpoint and so no write.",
+      "source": "662a5c2c830f"
+    },
+    "code-approve.n-edit-check.text": {
+      "text": "What the person edited is checked again: a difficulty of `impossible` is stopped right here.",
+      "source": "77dff4a84e51"
+    },
+    "code-approve.n-approved-state.text": {
+      "text": "The new state keeps both `draft` (the original) and `approved` (the approved version), plus the digest of the approved content.",
+      "source": "765baf2a1ef9"
+    },
+    "code-approve.n-cp-approved.text": {
+      "text": "The second checkpoint: whatever a resume writes later can only be this content.",
+      "source": "45f8ebeaa2a0"
+    },
+    "code-commit.n-commit.text": {
+      "text": "The write step: a resumed run and a first run walk through the same code.",
+      "source": "d3d1b52ac76b"
+    },
+    "code-commit.n-digest.text": {
+      "text": "The approval travels with the digest: if the content no longer matches the digest it was approved with, nothing is written and the state is `unapproved`.",
+      "source": "eef381e428f9"
+    },
+    "code-commit.n-guard.text": {
+      "text": "`check_first` asks the bank first; `blind` skips this step to show what not looking costs.",
+      "source": "e4419022ca9c"
+    },
+    "code-commit.n-lookup.text": {
+      "text": "The lookup is a tool call too and lands in the events: a learner can see that “look first” really happened.",
+      "source": "3db82abc3c2e"
+    },
+    "code-commit.n-lookup-state.text": {
+      "text": "The lookup result goes into the report: found, not found or skipped.",
+      "source": "1ba93354035d"
+    },
+    "code-commit.n-mismatch.text": {
+      "text": "The checkpoint says saved and the bank has nothing: do not rewrite; end with `ledger_mismatch` and let a person check.",
+      "source": "045d127a20ad"
+    },
+    "code-commit.n-skip.text": {
+      "text": "If found, skip the write and reuse the existing row id: however many resumes, the bank holds this one row.",
+      "source": "3c1bacd27c42"
+    },
+    "code-commit.n-cancel.text": {
+      "text": "Honor a stop request before the side effect: once a stop has arrived, do not write.",
+      "source": "962855b4c730"
+    },
+    "code-commit.n-save.text": {
+      "text": "The real write: with the operation id and the approved content; `origin` records whether the first run or a resumed run wrote it.",
+      "source": "b1f2af7386a8"
+    },
+    "code-commit.n-save-failed.text": {
+      "text": "The write failed: the bank is unchanged and the checkpoint is still at `approved`, so you can resume again.",
+      "source": "5aa93bdd2f6c"
+    },
+    "code-commit.n-stop-after.text": {
+      "text": "The simulated stop: the write has happened, the checkpoint below is not stored yet, and the position on disk is still `approved`.",
+      "source": "bb0d434b02e3"
+    },
+    "code-commit.n-cp-saved.text": {
+      "text": "The third checkpoint: records the row id; this operation is done.",
+      "source": "bec22c4b047a"
+    },
+    "code-decision.title": {
+      "text": "Look-then-write is done by the lesson code, and the store deliberately does not stop a repeat",
+      "source": "0f80deed700c"
+    },
+    "code-decision.chosen": {
+      "text": "The operation id is made in the first run and saved in the checkpoint; on a resume the runner calls `lookup_operation` first and skips the write if it finds the id. The bank has no uniqueness constraint, so not looking first writes a second row. The approval travels with the checkpoint as a digest, and a digest that does not match means no write.",
+      "source": "d33411b11467"
+    },
+    "code-decision.unique-key.title": {
+      "text": "Make the operation id a uniqueness constraint of the store",
+      "source": "66b6fc010985"
+    },
+    "code-decision.unique-key.why_not": {
+      "text": "That is sturdier and is what {{lesson:reliable-tools}} does. This lesson deliberately does not use it, so that “what if you do not look first” is visible; a real system should have both.",
+      "source": "fbc92606518f"
+    },
+    "code-decision.replay-tools.title": {
+      "text": "Replay the tool calls of the source run on resume and let the tool decide",
+      "source": "12201dc76afc"
+    },
+    "code-decision.replay-tools.why_not": {
+      "text": "The platform replays no request or tool call of the source run; and replaying hands the duty of judging “was it done” to every tool, which is easy to miss.",
+      "source": "ad047e3ed48d"
+    },
+    "code-decision.permanent-approval.title": {
+      "text": "Store the approval as a permission that stays valid",
+      "source": "66824f57dbbe"
+    },
+    "code-decision.permanent-approval.why_not": {
+      "text": "An approval concerns that one piece of content. When the content changes the old approval no longer applies, so the digest is stored and checked again before the write.",
+      "source": "b02cad71918d"
+    },
+    "code-decision.framework-interrupt.title": {
+      "text": "Implement the pause with LangGraph's `interrupt`",
+      "source": "3143d5567545"
+    },
+    "code-decision.framework-interrupt.why_not": {
+      "text": "On resume the node of an `interrupt` restarts from its beginning, so the side effect has to sit in another node. This lesson wants to show the relation between “position” and “side effect” directly, and the platform checkpoint is plainer for that; the deep dive compares the two.",
+      "source": "20fe23e778b7"
+    },
+    "approval-gate.title": {
+      "text": "Confirming before the write, and editing by hand",
+      "source": "cf39697647da"
+    },
+    "approval-gate.hypothesis": {
+      "text": "Before the approval the bank has no row for this operation; only after the approval does the runner call `save_exercise`. What the person edited goes into the `approved` checkpoint, the model's draft stays as it was and the two digests differ.",
+      "source": "9a8ce767f3a9"
+    },
+    "approval-gate.approve-save.label": {
+      "text": "Normal flow: save after approval",
+      "source": "4200b66a9b73"
+    },
+    "approval-gate.edit-state.label": {
+      "text": "Resume after a human edit",
+      "source": "b08c3026e25d"
+    },
+    "approval-gate.approval-request.text": {
+      "text": "The approval request: the full parameters and their digest.",
+      "source": "48e2dbc05555"
+    },
+    "approval-gate.approval-result.text": {
+      "text": "The approval outcome: whether `edited` is true.",
+      "source": "dc2ff8deb9f8"
+    },
+    "approval-gate.approved-state.text": {
+      "text": "The `approved` checkpoint: the approved content and its digest, with the draft still in the same state.",
+      "source": "010fe714c26a"
+    },
+    "approval-gate.lookup-result.text": {
+      "text": "The lookup before the write: does the bank have this operation.",
+      "source": "c316f502e090"
+    },
+    "approval-gate.save-call.text": {
+      "text": "The write call: it appears only after the approval.",
+      "source": "402ce84bc5e1"
+    },
+    "approval-gate.gate-check.text": {
+      "text": "The approval gate check: no approval, no write.",
+      "source": "886e1b8ab44b"
+    },
+    "approval-gate.edit-check.text": {
+      "text": "The edit check: the approved content differs from the draft and the state keeps both.",
+      "source": "20ea2e3e8f8e"
+    },
+    "approval-gate.guide.0.text": {
+      "text": "Start with the normal-flow run: draft, approval, write, with one checkpoint at each of the three positions.",
+      "source": "014d8b27010d"
+    },
+    "approval-gate.guide.1.text": {
+      "text": "Once the draft exists the run stops at the approval point and waits for you to decide on the approval card. The request holds the full parameters and their digest, and that is exactly what you see.",
+      "source": "8467e6121b5c"
+    },
+    "approval-gate.guide.2.text": {
+      "text": "After you decide, `approval_resolved` records the outcome. In the normal flow you approve as is and `edited` is false; in the human-edit run you first change the difficulty and title on the card and then approve, and only then is `edited` true.",
+      "source": "b4b5a46a4fb8"
+    },
+    "approval-gate.guide.3.text": {
+      "text": "The approved content and digest went into the `approved` checkpoint. In the human-edit run it differs from the draft, and the draft is still in the same state.",
+      "source": "be239c6410d2"
+    },
+    "approval-gate.guide.4.text": {
+      "text": "Before the write comes the lookup: only when the bank has no such operation does the write follow.",
+      "source": "e4842b791ee6"
+    },
+    "approval-gate.guide.5.text": {
+      "text": "The write call comes after the approval. Drag the timeline back to before the approval and the bank has no row at all.",
+      "source": "05f1f09f6621"
+    },
+    "approval-gate.guide.6.text": {
+      "text": "The checks in the report are computed from the bank's rows and the saved state: no approval, no write.",
+      "source": "7bf059ec5350"
+    },
+    "approval-gate.guide.7.text": {
+      "text": "Only the human-edit run has this check: the approved content differs from the draft and the state keeps both.",
+      "source": "7446d7af3e20"
+    },
+    "approval-gate.conclusion.proves.0": {
+      "text": "The write call appears only after the approval; before it the bank has no row for the operation.",
+      "source": "d6d608def4cd"
+    },
+    "approval-gate.conclusion.proves.1": {
+      "text": "What the person edited went into the `approved` checkpoint while the original was kept, and the two digests in `approval_resolved` differ.",
+      "source": "d972e8175b34"
+    },
+    "approval-gate.conclusion.does_not_prove.0": {
+      "text": "In the offline test mode the approval comes from a fixed script, not from a real person's decision; in a real run the decision belongs to the person.",
+      "source": "b227998a9b89"
+    },
+    "approval-gate.conclusion.does_not_prove.1": {
+      "text": "An approval only says a person agreed to this content, not that the exercise is good.",
+      "source": "8a48dfec9213"
+    },
+    "approval-gate.conclusion.does_not_prove.2": {
+      "text": "The three checkpoint positions are this lesson's choice; they do not mean every flow should save at these three places.",
+      "source": "d9f2ca5ad119"
+    },
+    "restart-resume.title": {
+      "text": "Pausing, restarting and resuming",
+      "source": "9afd586cb4c8"
+    },
+    "restart-resume.hypothesis": {
+      "text": "A run that ends after the approval and before the write leaves everything needed to continue in the `approved` checkpoint; the new run resumed from it keeps the same thread id, sends just one new request and writes one row.",
+      "source": "3636c1a9d34d"
+    },
+    "restart-resume.restart-resume.label": {
+      "text": "Pause after approval, restart and resume",
+      "source": "1c0108cd9b14"
+    },
+    "restart-resume.drafted-state.text": {
+      "text": "The `drafted` checkpoint: the operation id is made here.",
+      "source": "41af2b0d04fd"
+    },
+    "restart-resume.approved-cp.text": {
+      "text": "The `approved` checkpoint: the approved content and digest.",
+      "source": "1ca973855578"
+    },
+    "restart-resume.status.text": {
+      "text": "The business status: a `completed` run can also be `suspended`.",
+      "source": "a3cd6c3c88ea"
+    },
+    "restart-resume.thread.text": {
+      "text": "The thread id: the number of the first run, kept by every resumed run.",
+      "source": "a7f358fd8d93"
+    },
+    "restart-resume.resumed-from.text": {
+      "text": "Which checkpoint of which run this run resumed from.",
+      "source": "9132c9fef4db"
+    },
+    "restart-resume.model-calls.text": {
+      "text": "Model calls: in the resumed run this should be 1, only the receipt is new.",
+      "source": "faa4320dfc99"
+    },
+    "restart-resume.draft-once.text": {
+      "text": "The draft request was not sent again: 1 in the first run, 0 in a resumed run.",
+      "source": "217344a05c4d"
+    },
+    "restart-resume.guide.0.text": {
+      "text": "By its parameters this run ends after the approval and before the write, simulating a process that stops. The run status is `completed` and the business status is `suspended`.",
+      "source": "233c4bc7dea7"
+    },
+    "restart-resume.guide.1.text": {
+      "text": "The operation id was made when the `drafted` checkpoint was saved, and every later resume uses it.",
+      "source": "910e7817fa7c"
+    },
+    "restart-resume.guide.2.text": {
+      "text": "The `approved` checkpoint stores the approved content and digest, and that is what a resume uses.",
+      "source": "d7f5fb94d097"
+    },
+    "restart-resume.guide.3.text": {
+      "text": "The business status is in the report: `suspended` is neither a failure nor a completion.",
+      "source": "7fe0407aeb0e"
+    },
+    "restart-resume.guide.4.text": {
+      "text": "The thread id is the id of this run; a resumed run keeps it.",
+      "source": "18bee230be86"
+    },
+    "restart-resume.guide.5.text": {
+      "text": "Now do it: open the `approved` checkpoint in the events and press “Resume from “approved””. To get closer to reality, restart the backend first and then press it: checkpoints live in the run store and a restart does not lose them.",
+      "source": "fd43b638ad40"
+    },
+    "restart-resume.guide.6.text": {
+      "text": "In the resumed run this entry says which run and which checkpoint it started from.",
+      "source": "fa9c73adbcfb"
+    },
+    "restart-resume.guide.7.text": {
+      "text": "Model calls should be 1: only the receipt request is new and the draft request is not replayed.",
+      "source": "2f95419f43cd"
+    },
+    "restart-resume.guide.8.text": {
+      "text": "This check judges whether the draft request was resent by “1 in the first run, 0 in a resumed run”.",
+      "source": "33b307d9941f"
+    },
+    "restart-resume.conclusion.proves.0": {
+      "text": "The `approved` checkpoint holds all the state needed to continue; the resumed run does not resend the draft request, keeps the same thread id and writes one row.",
+      "source": "239c547486cf"
+    },
+    "restart-resume.conclusion.does_not_prove.0": {
+      "text": "`stop_at` makes the run end by itself and is not a real process crash; a real crash leaves the `interrupted` status and the platform likewise lets you resume from the last checkpoint.",
+      "source": "213019def414"
+    },
+    "restart-resume.conclusion.does_not_prove.1": {
+      "text": "Being able to resume after a restart only shows the position was kept; whether the outside write happened is for the next experiment.",
+      "source": "8a16268921b9"
+    },
+    "no-duplicate.title": {
+      "text": "Crash after the write, resume without saving twice",
+      "source": "a4d17fd2d134"
+    },
+    "no-duplicate.hypothesis": {
+      "text": "The run is cut off after the write and before the `saved` checkpoint: the last checkpoint is still `approved` while the bank already has 1 row. A resume that looks up the operation id first writes nothing more; with `resume_guard` set to `blind` the same operation id ends up with two rows.",
+      "source": "5bf8e94e56e8"
+    },
+    "no-duplicate.crash-after-write.label": {
+      "text": "Crash after the write: resume without saving twice",
+      "source": "76189fffc478"
+    },
+    "no-duplicate.lookup-call.text": {
+      "text": "The lookup call before the write.",
+      "source": "5bfcf9627f39"
+    },
+    "no-duplicate.save-result.text": {
+      "text": "The result of the write tool: the id of the new row.",
+      "source": "832f1aac65f6"
+    },
+    "no-duplicate.ledger-rows.text": {
+      "text": "The rows in the bank, read straight from the database.",
+      "source": "c30a1046795f"
+    },
+    "no-duplicate.rows-metric.text": {
+      "text": "How many rows the bank holds for this operation id.",
+      "source": "6b873bb4d644"
+    },
+    "no-duplicate.lookup-metric.text": {
+      "text": "The result of the lookup before the write: found, not found or skipped.",
+      "source": "fec1e3c5005e"
+    },
+    "no-duplicate.write-metric.text": {
+      "text": "Whether the write happened.",
+      "source": "454fcbaf5527"
+    },
+    "no-duplicate.once-check.text": {
+      "text": "One operation id is written once.",
+      "source": "8ba510e656ce"
+    },
+    "no-duplicate.guide.0.text": {
+      "text": "This run ends after the write and before the `saved` checkpoint, so the last checkpoint is still `approved`.",
+      "source": "6f0abe9de59e"
+    },
+    "no-duplicate.guide.1.text": {
+      "text": "The lookup comes before the write: this time the bank has no such operation, so the write goes ahead.",
+      "source": "7fb66c581a2a"
+    },
+    "no-duplicate.guide.2.text": {
+      "text": "The write succeeds and the new row has id 1.",
+      "source": "522e2ddb0657"
+    },
+    "no-duplicate.guide.3.text": {
+      "text": "The rows in the report are read straight from the database: the bank already holds 1 row and the checkpoint has not recorded it.",
+      "source": "d3df48b55b9b"
+    },
+    "no-duplicate.guide.4.text": {
+      "text": "This operation id has 1 row in the bank; keep it as the baseline before the resume.",
+      "source": "75da3beb8930"
+    },
+    "no-duplicate.guide.5.text": {
+      "text": "Now resume from the `approved` checkpoint. The runner looks first and, finding the row, does not write.",
+      "source": "2ad204b4d494"
+    },
+    "no-duplicate.guide.6.text": {
+      "text": "In the resumed run the lookup result is “found: this operation is already done”.",
+      "source": "1a31a9645e94"
+    },
+    "no-duplicate.guide.7.text": {
+      "text": "The write entry says “not written (operation id already done)”.",
+      "source": "a0430b9826af"
+    },
+    "no-duplicate.guide.8.text": {
+      "text": "The check is computed from the number of rows in the bank: this operation id still has 1 row.",
+      "source": "169dde52c029"
+    },
+    "no-duplicate.guide.9.text": {
+      "text": "Run a contrast: set `resume_guard` to `blind`, run again and resume. The same operation id gets 2 rows and this check fails.",
+      "source": "1d96557b3565"
+    },
+    "no-duplicate.conclusion.proves.0": {
+      "text": "When the last checkpoint is `approved` the bank can already hold 1 row; look-then-write keeps the resume from repeating, and without the lookup the same operation is written twice.",
+      "source": "22278d1c37c5"
+    },
+    "no-duplicate.conclusion.does_not_prove.0": {
+      "text": "Look-then-write is not atomic: with another writer between the lookup and the write it can still repeat; with several processes the id must go into the store's transaction.",
+      "source": "efa85202e3f0"
+    },
+    "no-duplicate.conclusion.does_not_prove.1": {
+      "text": "The bank is local SQLite. Actions with no query interface, like sending an email or a transfer, cannot use this method.",
+      "source": "cdf768830e7e"
+    },
+    "inputs.topic.label": {
+      "text": "Exercise topic",
+      "source": "503d41a7c036"
+    },
+    "inputs.topic.help": {
+      "text": "The topic the model writes an exercise about.",
+      "source": "42a72a838dd9"
+    },
+    "inputs.difficulty.label": {
+      "text": "Difficulty",
+      "source": "87b1bf8b511b"
+    },
+    "inputs.difficulty.help": {
+      "text": "The difficulty written into the draft; a person can change it on the approval card.",
+      "source": "10f72edadc86"
+    },
+    "inputs.difficulty.options.easy.label": {
+      "text": "Beginner",
+      "source": "9f4d8636b824"
+    },
+    "inputs.difficulty.options.medium.label": {
+      "text": "Intermediate",
+      "source": "5e70230a9631"
+    },
+    "inputs.difficulty.options.hard.label": {
+      "text": "Challenge",
+      "source": "4eed57b5a12b"
+    },
+    "inputs.stop_at.label": {
+      "text": "Where the first run ends",
+      "source": "212a1e31b7d2"
+    },
+    "inputs.stop_at.help": {
+      "text": "Simulates a process stopping; a resumed run does not stop again.",
+      "source": "ed395406e8dd"
+    },
+    "inputs.stop_at.options.none.label": {
+      "text": "Do not stop",
+      "source": "b8e51aa55b67"
+    },
+    "inputs.stop_at.options.after_draft.label": {
+      "text": "After the draft",
+      "source": "819cdaf38572"
+    },
+    "inputs.stop_at.options.before_save.label": {
+      "text": "After the approval, before the write",
+      "source": "bce2d39395eb"
+    },
+    "inputs.stop_at.options.after_save.label": {
+      "text": "After the write, before the checkpoint",
+      "source": "9ec264a23108"
+    },
+    "inputs.resume_guard.label": {
+      "text": "Look up the operation id before the write",
+      "source": "5d1241161f41"
+    },
+    "inputs.resume_guard.help": {
+      "text": "`blind` skips the lookup to show a repeated write.",
+      "source": "267cfcd33b8d"
+    },
+    "inputs.resume_guard.options.check_first.label": {
+      "text": "Look first",
+      "source": "e6af78a86480"
+    },
+    "inputs.resume_guard.options.blind.label": {
+      "text": "Write blindly",
+      "source": "83bcf42a5ddf"
+    },
+    "quiz.q1.prompt": {
+      "text": "A run with status `completed` and business status `suspended`: does the bank have a row for the operation?",
+      "source": "645284539692"
+    },
+    "quiz.q1.a.text": {
+      "text": "It depends where it stopped: `after_save` has 1 row, the other two stop points have 0",
+      "source": "fd41d2432e3a"
+    },
+    "quiz.q1.a.feedback": {
+      "text": "Right. The business status only says “stopped”; the row count depends on where, or you read the bank directly.",
+      "source": "4c21229171e1"
+    },
+    "quiz.q1.b.text": {
+      "text": "Never: suspended means not saved yet",
+      "source": "b73bf3c9c677"
+    },
+    "quiz.q1.b.feedback": {
+      "text": "No. The `after_save` run already wrote 1 row.",
+      "source": "c4fd5d6076d6"
+    },
+    "quiz.q1.c.text": {
+      "text": "Always: the run is already completed",
+      "source": "6e4fdee1b392"
+    },
+    "quiz.q1.c.feedback": {
+      "text": "No. `completed` only says the run ended, not that the task is done.",
+      "source": "44d739e53ff9"
+    },
+    "quiz.q1.explanation": {
+      "text": "The run status, the business status and the bank's row count are three different levels of fact.",
+      "source": "5b103b8242fc"
+    },
+    "quiz.q2.prompt": {
+      "text": "How many `request` events does a run resumed from the `approved` checkpoint contain?",
+      "source": "d8bab948782e"
+    },
+    "quiz.q2.a.text": {
+      "text": "1: only the receipt request; the draft request is not resent",
+      "source": "0583b2233c11"
+    },
+    "quiz.q2.a.feedback": {
+      "text": "Right. Not one request of the source run is replayed; what a resume sends is new.",
+      "source": "8da2680321cb"
+    },
+    "quiz.q2.b.text": {
+      "text": "2: both draft and receipt are sent again",
+      "source": "c90117842263"
+    },
+    "quiz.q2.b.feedback": {
+      "text": "No. The draft is already in the checkpoint.",
+      "source": "3d0f6eaf7d21"
+    },
+    "quiz.q2.c.text": {
+      "text": "0: a resume needs no model",
+      "source": "5636861a0c68"
+    },
+    "quiz.q2.c.feedback": {
+      "text": "No. The receipt of this lesson is a new request in which the model writes one sentence from the facts.",
+      "source": "f3c76c6ce84a"
+    },
+    "quiz.q2.explanation": {
+      "text": "Every request in a resume is a real new request, not a replay of an old one.",
+      "source": "5f9d70c85bd9"
+    },
+    "quiz.q3.prompt": {
+      "text": "A person changes the difficulty to `impossible`. What happens?",
+      "source": "9f9a646f6c9b"
+    },
+    "quiz.q3.a.text": {
+      "text": "The run ends as `failed` with the reason `invalid_edit`, with no `approved` checkpoint and no write",
+      "source": "656946814859"
+    },
+    "quiz.q3.a.feedback": {
+      "text": "Right. An edit is checked again like a draft.",
+      "source": "187fe16ea9db"
+    },
+    "quiz.q3.b.text": {
+      "text": "It is written anyway; the bank accepts it",
+      "source": "041c0ce33125"
+    },
+    "quiz.q3.b.feedback": {
+      "text": "No. The bank accepts only `easy`, `medium` and `hard`.",
+      "source": "f2169a959f63"
+    },
+    "quiz.q3.c.text": {
+      "text": "The platform rejects the approval decision",
+      "source": "851b1c29d181"
+    },
+    "quiz.q3.c.feedback": {
+      "text": "No. The platform only cares about the digest and whether editing is allowed; whether the content is acceptable is the lesson's call.",
+      "source": "81df9026e7ee"
+    },
+    "quiz.q3.explanation": {
+      "text": "Who may edit and what it may become are two questions: the platform handles the first and the lesson the second.",
+      "source": "1d082a7dd2b3"
+    },
+    "quiz.q4.prompt": {
+      "text": "Which of these keeps the write after a resume from repeating?",
+      "source": "512a59346df1"
+    },
+    "quiz.q4.a.text": {
+      "text": "Look up the bank by operation id before writing",
+      "source": "be87df254816"
+    },
+    "quiz.q4.a.feedback": {
+      "text": "Right. The evidence for “was it done” lives in the outside world.",
+      "source": "81bdc035a083"
+    },
+    "quiz.q4.b.text": {
+      "text": "That a checkpoint exists",
+      "source": "52ad23defaf9"
+    },
+    "quiz.q4.b.feedback": {
+      "text": "No. A checkpoint records only a position and guarantees no idempotency.",
+      "source": "ed90703ada9d"
+    },
+    "quiz.q4.c.text": {
+      "text": "Telling the model “do not save twice”",
+      "source": "b2478d23bcee"
+    },
+    "quiz.q4.c.feedback": {
+      "text": "No. The write is not done by the model; it is a tool the runner calls.",
+      "source": "351cae9f09c1"
+    },
+    "quiz.q4.explanation": {
+      "text": "Idempotency is the lesson code's duty: operation id plus look-then-write.",
+      "source": "c07f0263c956"
+    },
+    "quiz.q5.prompt": {
+      "text": "The platform returns `run_still_active`. What does it mean?",
+      "source": "2f011296600e"
+    },
+    "quiz.q5.a.text": {
+      "text": "The source run has not ended; you can resume from its checkpoint only after it ends or is stopped",
+      "source": "ad4df740fa45"
+    },
+    "quiz.q5.a.feedback": {
+      "text": "Right. Only one run executes at a time.",
+      "source": "f673f726dcce"
+    },
+    "quiz.q5.b.text": {
+      "text": "The checkpoint id is wrong",
+      "source": "459d798e2d78"
+    },
+    "quiz.q5.b.feedback": {
+      "text": "No. That is `checkpoint_not_found`.",
+      "source": "e984eec2521c"
+    },
+    "quiz.q5.c.text": {
+      "text": "The lesson source changed",
+      "source": "5b99dd2a142f"
+    },
+    "quiz.q5.c.feedback": {
+      "text": "No. That is `checkpoint_stale`.",
+      "source": "e59be25442e4"
+    },
+    "quiz.q5.explanation": {
+      "text": "The four refusal codes each match one specific reason, so the lesson need not guess.",
+      "source": "6ffad4670ba3"
+    },
+    "quiz.q6.prompt": {
+      "text": "Why does a resume from the `drafted` checkpoint ask for approval again?",
+      "source": "e958c0a173c3"
+    },
+    "quiz.q6.a.text": {
+      "text": "That checkpoint holds no approval yet; an approval travels only with the digest in the `approved` checkpoint",
+      "source": "db20191a2c6e"
+    },
+    "quiz.q6.a.feedback": {
+      "text": "Right. A resume does not inherit an approval.",
+      "source": "95fea46e162a"
+    },
+    "quiz.q6.b.text": {
+      "text": "Because approvals expire every 5 minutes",
+      "source": "3825a3fa147a"
+    },
+    "quiz.q6.b.feedback": {
+      "text": "No. A timeout happens only inside the run that waits for the approval.",
+      "source": "545c62580805"
+    },
+    "quiz.q6.c.text": {
+      "text": "Because the platform demands an approval at every resume",
+      "source": "c92ca0a79a10"
+    },
+    "quiz.q6.c.feedback": {
+      "text": "No. The platform does not handle that; it is the lesson's own rule.",
+      "source": "1c53c52a3538"
+    },
+    "quiz.q6.explanation": {
+      "text": "An approval concerns one concrete piece of content; content that was never approved cannot be written.",
+      "source": "a342cce33be8"
+    },
+    "check-hunt.prompt": {
+      "text": "Run “Crash after the write: resume without saving twice” and find the result the write tool returned; read the id of the new row.",
+      "source": "a8f03bd0e820"
+    },
+    "check-hunt.explanation": {
+      "text": "The tool result of `save_exercise` holds `exercise_id` and `operation_id`. This run is cut off only after the write, so `exercise_id` here is 1, while `saved_id` in the last checkpoint `approved` is still empty: the row is in the bank and the state does not know yet.",
+      "source": "4a819c458ef7"
+    },
+    "check-points.title": {
+      "text": "Check it yourself",
+      "source": "acb143f64420"
+    },
+    "check-points.prompt": {
+      "text": "Check against your own runs and this lesson's source, and tick only what you really did.",
+      "source": "ce4bd6298521"
+    },
+    "check-points.item-1.text": {
+      "text": "I can say what each of the three checkpoints stores and why a resumed run does not resend the draft request.",
+      "source": "ab92ff8b655e"
+    },
+    "check-points.item-2.text": {
+      "text": "I ran the crash-after-write exercise and resumed from `approved` twice, and the operation always had 1 row in the bank.",
+      "source": "71e888c2e2f4"
+    },
+    "check-points.item-3.text": {
+      "text": "I set `resume_guard` to `blind` and saw the same operation id appear in two rows myself.",
+      "source": "00f76b184671"
+    },
+    "check-points.item-4.text": {
+      "text": "I edited the parameters on the approval card and found the change in the checkpoint and the bank.",
+      "source": "7f7a1b6ba821"
+    },
+    "code_notes.operation_id.note": {
+      "text": "The save operation's number made in the first run, kept in the checkpoint and used to query the bank after a resume.",
+      "source": "0e00b4cfd80e"
+    },
+    "code_notes.approved_digest.note": {
+      "text": "The digest of the approved content; checked against the current content before a resumed write.",
+      "source": "06101ac928bc"
+    },
+    "code_notes.resume_state.note": {
+      "text": "The checkpoint state a resumed run reads; empty in a fresh run.",
+      "source": "923f82fa7760"
+    },
+    "code_notes.stop_at.note": {
+      "text": "Ends the first run after a step to simulate a process stopping.",
+      "source": "7a6064dc1b58"
+    },
+    "code_notes.resume_guard.note": {
+      "text": "check_first looks up the operation id before the write; blind writes without looking.",
+      "source": "e1558eeea926"
+    },
+    "code_notes.lookup_operation.note": {
+      "text": "Read only: how many rows this operation id has written in the bank.",
+      "source": "4b6824ee440c"
+    },
+    "code_notes.save_exercise.note": {
+      "text": "Write: append one row to the bank; the store itself does not stop a repeat.",
+      "source": "5b9a0d6b8d0a"
+    },
+    "code_notes.ledger_mismatch.note": {
+      "text": "The checkpoint says saved but the bank has nothing: do not rewrite, hand it to a person.",
+      "source": "18bb81c55b1b"
+    },
+    "code_notes.thread_id.note": {
+      "text": "The number shared by a run and its resumed runs; the bank has one folder per thread.",
+      "source": "69157469580e"
+    }
+  }
+}

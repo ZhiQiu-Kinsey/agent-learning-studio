@@ -1,4 +1,9 @@
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { t } from "./i18n";
 import { lessonView } from "../src/content/view";
 import { selectEvents } from "../src/content/selector";
@@ -60,17 +65,21 @@ test("progress records only real local actions and survives a reload", async ({
   );
   const questions = lessonView(detail.learning).quiz;
   for (const [index, question] of questions.entries()) {
-    const group = page.getByRole("group", { name: question.prompt, exact: true });
+    const group = page.getByRole("group", {
+      name: question.prompt,
+      exact: true,
+    });
     await group
-      .getByRole("radiogroup", { name: t("quiz:confidence.region"), exact: true })
+      .getByRole("radiogroup", {
+        name: t("quiz:confidence.region"),
+        exact: true,
+      })
       .getByRole("radio", { name: t("quiz:confidence.high"), exact: true })
       .click();
     const option = question.options.find((item) =>
       index === 0 ? item.id !== question.correct : item.id === question.correct,
     )!;
-    await group
-      .getByRole("radio", { name: option.text, exact: true })
-      .click();
+    await group.getByRole("radio", { name: option.text, exact: true }).click();
   }
   await page
     .getByRole("button", { name: t("quiz:submit"), exact: true })
@@ -114,11 +123,15 @@ test("trace hunt uses the learner's own run, and review shows exactly the local 
   page,
   request,
 }) => {
+  // 验的是进度记录，不是动效；无头浏览器没有 GPU，WebGL 背景靠软件渲染会让这条用例超过 30 秒。
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() =>
     localStorage.setItem("agent-lab-entry", "lesson"),
   );
   await page.goto("/");
-  const detail: Detail = await (await request.get("/api/lessons/chat-request")).json();
+  const detail: Detail = await (
+    await request.get("/api/lessons/chat-request")
+  ).json();
   const curriculum: CurriculumData = await (
     await request.get("/api/curriculum")
   ).json();
