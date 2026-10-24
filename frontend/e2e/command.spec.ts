@@ -3,6 +3,11 @@ import type { CurriculumData, Lesson } from "../src/types";
 import { isRunCreation, runOffline } from "./runs";
 import { t } from "./i18n";
 import { openLessonById } from "./navigation";
+import {
+  PLANNED_FIXTURE,
+  routePlannedLesson,
+  withPlannedLesson,
+} from "./catalog";
 
 // ⌘K 命令面板与实验快捷键。回放只读已有事件，全程只允许一次创建运行的请求。
 test.beforeEach(async ({ page }) => {
@@ -45,6 +50,9 @@ async function catalog(page: Page) {
 test("⌘K opens the palette, finds lessons by slug, number or title and enters them", async ({
   page,
 }) => {
+  // 验的是命令面板查课，不是动效；无头浏览器没有 GPU，WebGL 背景靠软件渲染拖慢每次点击，
+  // 对话框遮罩的淡出动画还会挡住紧接着的点击，CI 上因此贴着 30 秒上限超时。
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const { available } = await catalog(page);
@@ -132,9 +140,27 @@ test("planned lessons are listed with a badge but cannot be entered", async ({
   page.on("request", (request) => {
     if (isRunCreation(request)) runs++;
   });
-  const { available, planned } = await catalog(page);
-  test.skip(!planned.length, "curriculum has no planned lessons");
-  const lesson = planned[0];
+  // 课程已全部开放：只在浏览器里把一门课改回 planned（e2e/catalog.ts）。后端本来就不在
+  // /api/lessons 里列出 planned 课，这里同样从可进入的课程列表里去掉它。
+  await routePlannedLesson(page);
+  await page.route(
+    (url) => url.pathname === "/api/lessons",
+    async (route) => {
+      const response = await route.fetch();
+      const body: { lessons: Lesson[] } = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          lessons: body.lessons.filter((item) => item.id !== PLANNED_FIXTURE),
+        },
+      });
+    },
+  );
+  const { available } = await catalog(page);
+  const lesson = withPlannedLesson(
+    await (await page.request.get("/api/curriculum")).json(),
+  ).lessons.find((item) => item.id === PLANNED_FIXTURE)!;
   await page.goto("/");
   await expect(
     page.getByRole("heading", {

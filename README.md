@@ -18,6 +18,8 @@ hand-write the agent loop in plain Python, then watch every model request, respo
 
 **English** · [简体中文](README.zh-CN.md)
 
+**Website:** [zhiqiu-kinsey.github.io/agent-learning-studio](https://zhiqiu-kinsey.github.io/agent-learning-studio/) — an introduction with the curriculum map and read-only replays of real runs. The platform itself runs on your machine.
+
 <img alt="Agent Learning Studio home page" src="docs/assets/screenshots/en/home.png" width="900">
 
 </div>
@@ -106,15 +108,10 @@ The full syllabus — difficulty, estimated time, whether a lesson calls a model
 git clone https://github.com/ZhiQiu-Kinsey/agent-learning-studio.git
 cd agent-learning-studio
 
-uv sync --dev                     # Python dependencies
-npm --prefix frontend ci          # frontend dependencies
-npm --prefix frontend run build   # type-check and build the UI
-.venv/bin/python run_web.py       # start the server
+uv run lab.py
 ```
 
-On Windows (PowerShell), use `npm.cmd` instead of `npm` and `.\.venv\Scripts\python.exe run_web.py` to start, or simply run `start-web.ps1`.
-
-Open **http://127.0.0.1:8765**. Next time you only need the last command.
+The same command works on Windows (PowerShell), macOS and Linux. It installs the Python and frontend dependencies, builds the UI when its sources changed and starts the server; steps that are already done are skipped. Open **http://127.0.0.1:8765**. Next time, `uv run lab.py` is all you need.
 
 ## Connecting a model
 
@@ -175,6 +172,7 @@ server/        FastAPI routes, lesson discovery & validation, content schema, ev
 lessons/       one folder per lesson: lesson.json, content.json, Python code, fixtures, tests
 curriculum/    catalog.json (single source of truth), glossary.json, onboarding, JSON Schemas
 frontend/      React + TypeScript + Vite + Tailwind CSS 4
+site/          static website (GitHub Pages): curriculum map and read-only replays of lesson recordings
 scripts/       validation, code generation, lesson scaffolding, recordings, terminology reports
 tests/         Python tests (browser tests live in frontend/e2e/)
 docs/          syllabus and architecture docs
@@ -185,14 +183,11 @@ Run records are stored redacted in `.runtime/runs.sqlite3`; learning progress li
 ## Development
 
 ```bash
-uv run python -m unittest discover -s tests       # all Python tests (incl. every lesson's test_lesson.py)
-uv run python scripts/validate_lessons.py         # manifests, content, glossary, wording, recordings, translations
-uv run python scripts/translation_kit.py status --locale en   # translation coverage per lesson / onboarding / catalog / glossary
-uv run python scripts/cjk_baseline.py --check     # hardcoded Chinese in lesson and platform code only goes down
-npm --prefix frontend run build                   # type-check and build
-npm --prefix frontend run test                    # frontend unit tests (vitest)
-npm --prefix frontend run i18n:check              # translation keys are consistent
+uv run lab.py check   # everything CI checks except browser tests: validators, sync checks, frontend build and tests, Python tests
+uv run lab.py site    # build and preview the website (site/)
 ```
+
+The individual commands behind `check` (for example `uv run python scripts/validate_lessons.py` or `npm --prefix frontend run test`) are listed in [AGENTS.md](AGENTS.md) and [Validation](docs/architecture/validation.en.md).
 
 Browser tests (Playwright, system Chrome): build the frontend, start the backend, then run `npx playwright test` in `frontend/`. Set `AGENT_LAB_URL` to test against another port.
 

@@ -44,6 +44,7 @@ Agent Learning Studio 是一个本地运行的 Agent 可视化教学平台，面
 | `lessons/lesson_*/` | 每课一个目录：`lesson.json`（实现清单）、`content.json`（教学内容 v2）、Python 实现、`locales/`（运行时文本，每种运行语言一份）、`fixtures.py`、`test_lesson.py`、README（英文 `README.md`，中文 `README.zh-CN.md`） |
 | `curriculum/` | `catalog.json`（课程目录唯一数据源）、`glossary.json`（术语表）、`onboarding.json`（前置导学）、`schema/`（导出的 JSON Schema） |
 | `frontend/src/` | 前端，结构见 `docs/architecture/frontend-workspace.md` |
+| `site/` | 官网静态站（GitHub Pages）：构建时从课程目录和随课录制生成，回放复用 `frontend/src` 的组件，见 `site/README.md` |
 | `tests/`、`frontend/e2e/` | Python 测试、Playwright 浏览器测试；前端单元测试在各模块的 `__tests__/` |
 | `scripts/` | 校验、生成、脚手架、录制导出、用词报告 |
 | `docs/` | `course-plan.md` / `course-plan.en.md`（由目录生成的中英文课程大纲）与 `architecture/`（架构约定与作者指南） |
@@ -52,13 +53,17 @@ Agent Learning Studio 是一个本地运行的 Agent 可视化教学平台，面
 
 ## 常用命令
 
-在仓库根目录执行。Windows 用 PowerShell；macOS/Linux 把 `.\.venv\Scripts\python.exe` 换成 `.venv/bin/python`，`npm.cmd` 换成 `npm`。
+在仓库根目录执行。日常只需要 `lab.py` 的三个命令，各平台写法相同：
 
 ```powershell
-uv sync --dev                                   # Python 依赖
-npm.cmd --prefix frontend ci                    # 前端依赖（按锁文件）
-npm.cmd --prefix frontend run build             # 类型检查并构建前端
-.\.venv\Scripts\python.exe run_web.py           # 启动服务：http://127.0.0.1:8765
+uv run lab.py          # 装依赖、前端源码有变化时重新构建，然后启动 http://127.0.0.1:8765
+uv run lab.py check    # 提交前：与 CI 相同的检查（浏览器测试除外），任何一步失败就停
+uv run lab.py site     # 构建并预览官网（site/）
+```
+
+下面是单项命令，只想跑其中一项时用。Windows 用 PowerShell；macOS/Linux 把 `.\.venv\Scripts\python.exe` 换成 `.venv/bin/python`，`npm.cmd` 换成 `npm`。
+
+```powershell
 npm.cmd --prefix frontend run dev               # Vite 开发服务器，/api 代理到 8765
 ```
 
@@ -83,7 +88,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 
 浏览器测试的步骤：
 
-1. 先构建前端并启动后端。
+1. 先构建前端并启动后端：`uv run lab.py` 两步都会做。
 2. 在 `frontend/` 下执行 `npx.cmd playwright test`。
 
 注意：
@@ -91,7 +96,7 @@ npm.cmd --prefix frontend run i18n:check                           # 各语言�
 - 测试使用系统 Chrome。后端执行互斥，测试按顺序运行。
 - 要测别的端口，用环境变量 `AGENT_LAB_URL` 指定。
 - **自动化代理请另起端口**，不要停止或占用使用者正在用的 8765 服务。例如：
-  - 启动：`.\.venv\Scripts\python.exe -m uvicorn server.app:app --host 127.0.0.1 --port 8790`
+  - 启动：`uv run lab.py start --port 8790`
   - 测试：`$env:AGENT_LAB_URL = "http://127.0.0.1:8790"`
 
 ## 架构要点

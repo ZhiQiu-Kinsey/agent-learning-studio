@@ -18,6 +18,8 @@
 
 [English](README.md) · **简体中文**
 
+**官网：**[zhiqiu-kinsey.github.io/agent-learning-studio](https://zhiqiu-kinsey.github.io/agent-learning-studio/)：课程地图与真实运行的只读回放。平台本身在你的电脑上运行。
+
 <img alt="Agent Learning Studio 首页" src="docs/assets/screenshots/zh-CN/home.png" width="900">
 
 </div>
@@ -106,15 +108,10 @@
 git clone https://github.com/ZhiQiu-Kinsey/agent-learning-studio.git
 cd agent-learning-studio
 
-uv sync --dev                     # Python 依赖
-npm --prefix frontend ci          # 前端依赖
-npm --prefix frontend run build   # 类型检查并构建前端
-.venv/bin/python run_web.py       # 启动服务
+uv run lab.py
 ```
 
-Windows（PowerShell）把 `npm` 换成 `npm.cmd`，用 `.\.venv\Scripts\python.exe run_web.py` 启动，也可以直接运行 `start-web.ps1`。
-
-打开 **http://127.0.0.1:8765**。之后只需执行最后一行。
+Windows（PowerShell）、macOS 和 Linux 都用这一条命令。它会安装 Python 和前端依赖，前端源码有变化时重新构建，然后启动服务；已经做过的步骤会跳过。打开 **http://127.0.0.1:8765**。以后每次只需 `uv run lab.py`。
 
 ## 连接模型
 
@@ -175,6 +172,7 @@ server/        FastAPI 接口、课程发现与校验、内容 schema、事件�
 lessons/       每课一个目录：lesson.json、content.json、Python 实现、测试夹具与测试
 curriculum/    课程目录 catalog.json（唯一数据源）、术语表、前置导学、JSON Schema
 frontend/      React + TypeScript + Vite + Tailwind CSS 4
+site/          官网（GitHub Pages 静态站）：课程地图与随课录制的只读回放
 scripts/       校验、生成、新课脚手架、录制导出、用词报告
 tests/         Python 测试（浏览器测试在 frontend/e2e/）
 docs/          课程大纲与架构文档
@@ -185,14 +183,11 @@ docs/          课程大纲与架构文档
 ## 开发
 
 ```bash
-uv run python -m unittest discover -s tests       # 全部 Python 测试（含各课 test_lesson.py）
-uv run python scripts/validate_lessons.py         # 实现清单、内容、术语表、用词、录制、译文层
-uv run python scripts/translation_kit.py status --locale en   # 各课、导学、目录、术语表的译文覆盖率
-uv run python scripts/cjk_baseline.py --check     # 课程与平台代码里的硬编码中文只许减少
-npm --prefix frontend run build                   # 类型检查并构建
-npm --prefix frontend run test                    # 前端单元测试（vitest）
-npm --prefix frontend run i18n:check              # 各语言翻译键一致
+uv run lab.py check   # CI 做的检查（浏览器测试除外）：校验、同步检查、前端构建与测试、Python 测试
+uv run lab.py site    # 构建并预览官网（site/）
 ```
+
+`check` 背后的单项命令（例如 `uv run python scripts/validate_lessons.py`、`npm --prefix frontend run test`）见 [AGENTS.md](AGENTS.md) 和[开发验证](docs/architecture/validation.md)。
 
 浏览器测试（Playwright，使用系统 Chrome）：先构建前端并启动后端，再在 `frontend/` 下执行 `npx playwright test`。要测别的端口，用环境变量 `AGENT_LAB_URL` 指定。
 
