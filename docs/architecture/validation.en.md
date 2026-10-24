@@ -6,6 +6,14 @@
 
 The backend tests check the following: the course catalog, manifests, the content v2 schema, migrations and the translation layer, the illustration contract, whether experiment selectors hit, lesson vocabulary (terms, bilingual pairing, bare English words, code notes), English text (no Chinese, "not reported", no Chinese-plus-gloss quotes), the pacing and code-reading rules (at most 5 new concepts per lesson, `predict` before the first quick check, annotation anchors and density, no hard-coded lesson numbers in lesson text or source), input validation, execution budgets, cancellation, model adapters, the event envelope, the run store, recordings and SQLite memory. The frontend unit tests (vitest) cover stage derivation, the replay clock, selectors, the guided tour, predictions, progress migration and keyboard shortcuts. The browser tests cover the home page, the onboarding, the curriculum map, the five scenes, running and replay, the command palette, themes, reduced motion, responsive layout, accessibility (axe-core) and the fallback of trusted extensions.
 
+## One command
+
+```powershell
+uv run lab.py check
+```
+
+Runs the validators and sync checks listed below, the frontend build, vitest, the translation-key check and the full Python suite, the same as CI except the browser tests. It stops at the first failing step and names it. The individual commands follow, for when you only want one of them.
+
 ## Backend and lesson data
 
 Run from the project root:

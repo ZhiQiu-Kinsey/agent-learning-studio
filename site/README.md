@@ -26,12 +26,10 @@ Agent Learning Studio 的静态介绍站，发布在 <https://zhiqiu-kinsey.gith
 ## 本地预览
 
 ```bash
-npm --prefix site ci
-npm --prefix site run build
-npm --prefix site run preview     # http://127.0.0.1:4173/agent-learning-studio/
+uv run lab.py site     # 按需安装依赖、构建，然后预览 http://127.0.0.1:4173/agent-learning-studio/
 ```
 
-开发时用 `npm --prefix site run dev`。
+它依次做的是 `npm --prefix site ci`（依赖没装或锁文件变了时）、`npm --prefix site run build`、`npm --prefix site run preview`。开发时用 `npm --prefix site run dev`。
 
 部署路径默认是 `/agent-learning-studio/`。要在根路径预览，用 `SITE_BASE=/ npm --prefix site run build`。
 

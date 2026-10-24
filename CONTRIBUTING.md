@@ -32,20 +32,23 @@ Each of these is guarded by tests or validators. If your change needs to break o
 Prerequisites: Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ and npm.
 
 ```bash
-uv sync --dev                     # Python dependencies
-npm --prefix frontend ci          # frontend dependencies (from the lockfile)
-npm --prefix frontend run build   # type-check and build the UI
-uv run python run_web.py          # http://127.0.0.1:8765
+uv run lab.py                     # install dependencies, build the UI when needed, start http://127.0.0.1:8765
 npm --prefix frontend run dev     # optional: Vite dev server, proxies /api to 8765
 ```
 
-On Windows (PowerShell) use `npm.cmd` and `.\.venv\Scripts\python.exe` instead of `npm` and `uv run python`.
+`uv run lab.py` is the same on Windows (PowerShell), macOS and Linux. For the optional dev server on Windows, use `npm.cmd`.
 
 You don't need a model API key to run the tests or validators. To try lessons in the browser, configure a provider as described in the README. Copy `local_config.example.py` to `local_config.py` for Bailian; that file is git-ignored.
 
 ## Checks
 
-Run from the repository root. CI runs the same commands (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
+Run from the repository root. One command runs everything CI checks except the browser tests:
+
+```bash
+uv run lab.py check
+```
+
+The individual commands, the same ones CI runs (see [.github/workflows/ci.yml](.github/workflows/ci.yml)):
 
 ```bash
 # Python
