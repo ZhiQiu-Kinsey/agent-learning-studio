@@ -9,10 +9,7 @@ import { useSiteLocale } from "./useSiteLocale";
 const COMMANDS = [
   ["$", "git clone https://github.com/ZhiQiu-Kinsey/agent-learning-studio.git"],
   ["$", "cd agent-learning-studio"],
-  ["$", "uv sync --dev"],
-  ["$", "npm --prefix frontend ci"],
-  ["$", "npm --prefix frontend run build"],
-  ["$", ".venv/bin/python run_web.py"],
+  ["$", "uv run lab.py"],
 ] as const;
 
 export function QuickStart() {
@@ -46,7 +43,7 @@ export function QuickStart() {
               ))}
             </code>
           </pre>
-          <p className="site-terminal-note">{t("windows")}</p>
+          <p className="site-terminal-note">{t("platforms")}</p>
         </FadeContent>
         <ul className="site-notes">
           {notes.map(({ id, Icon }, index) => (
